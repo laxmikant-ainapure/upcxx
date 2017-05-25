@@ -1,0 +1,46 @@
+# common build directory name
+build
+
+# backup files
+*~
+*.bak
+BAK
+
+# vim tmp files
+.*.swp
+
+# objects and libraries
+*.o
+*.lo
+*.a
+*.la
+
+# autotools dirs
+.deps
+.libs
+
+# generated files
+Makefile
+Makefile.in
+config.h
+config.in
+config.h.in~
+aclocal.m4
+autom4te.cache
+compile
+config.guess
+config.log
+config.status
+config.sub
+configure
+depcomp
+install-sh
+libtool
+ltmain.sh
+missing
+stamp-h1
+m4/libtool.m4
+m4/lt~obsolete.m4
+m4/ltoptions.m4
+m4/ltsugar.m4
+m4/ltversion.m4
