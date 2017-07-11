@@ -1,10 +1,15 @@
 
-UPCXX_CPPFLAGS += -I$(SRC_DIR)
-UPCXX_CXXFLAGS += $(UPCXX_CPPFLAGS) $(GASNET_CPPFLAGS)  -DUSE_GASNET_FAST_SEGMENT -DONLY_MSPACES
+include $(GASNET_DIR)/include/$(GASNET_CONDUIT)-conduit/$(GASNET_CONDUIT)-par.mak
+
+#GASNET_CPPFLAGS = -I$(GASNET_DIR)/include \
+#       -I$(GASNET_DIR)/include/$(GASNET_CONDUIT)-conduit \
+#       -DUSE_GASNET_FAST_SEGMENT -DGASNET_PAR
+UPCXX_CPPFLAGS += -I$(SRC_DIR) $(GASNET_CPPFLAGS)
+UPCXX_CXXFLAGS += $(UPCXX_CPPFLAGS) -DONLY_MSPACES -std=c++11 $(CXXFLAGS)
 
 UPCXX_SRCS=$(notdir $(wildcard $(SRC_DIR)*.cpp $(SRC_DIR)*.c))
-UPCXX_DEPS=$(subst .c,.d,$(UPCXX_SRCS))
-UPCXX_OBJS=$(subst .c,.o,$(UPCXX_SRCS))
+UPCXX_DEPS=$(subst .c,.d,$(subst .cpp,.d,$(UPCXX_SRCS)))
+UPCXX_OBJS=$(subst .c,.o,$(subst .cpp,.o,$(UPCXX_SRCS)))
 
 %.o: $(SRC_DIR)%.cpp
 	$(CXX) $(UPCXX_CXXFLAGS) -o $@ -c $<
@@ -13,13 +18,17 @@ UPCXX_OBJS=$(subst .c,.o,$(UPCXX_SRCS))
 	$(CXX) $(UPCXX_CXXFLAGS) -o $@ -c $<
 
 %.d: $(SRC_DIR)%.c
-	$(CXX) -MM $< > $@
+	$(CXX) $(UPCXX_CPPFLAGS) -MM $< > $@
+
+%.d: $(SRC_DIR)%.cpp
+	$(CXX) $(UPCXX_CPPFLAGS) -MM $< > $@
+
+all: depends objs
 
 depends: $(UPCXX_DEPS)
 
 objs: $(UPCXX_OBJS)
 
-all: depends objs
 
 .PHONY: distclean install uninstall
 

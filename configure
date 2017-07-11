@@ -14,14 +14,15 @@ if __name__ == "__main__":
                         help="location of existing GASNet installation [default=/usr/local/gasnet]",
                         default="/usr/local/gasnet")
     parser.add_argument("--conduit",
-                        help="which GASNet conduit will UPC++ use [default to sole conduit if GASNet has only a single conduit installed]")
+                        help="which GASNet conduit will UPC++ use [default to sole conduit if GASNet has only a single conduit installed]",
+                        default="udp")
     parser.add_argument("--defines",
                         help="preprocessing macros: -Dxx -Dyy",
                         default="")
     parser.add_argument("--undefines",
                         help="preprocessing macros to be undefined",
                         default="")
-    parser.add_argument("--comp",
+    parser.add_argument("--compiler",
                         help="compiler",
                         choices=["CC","g++","icpc","clang++","xlC"],
                         default="CC")
@@ -35,9 +36,12 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     f = open("GNUmakefile","w")
+    
     f.write("GASNET_DIR = " +args.gasnet.strip() + "\n")
+    f.write("GASNET_CONDUIT = " +args.conduit.strip() +"\n")
     f.write("UPCXX_INSTALL_DIR = " + args.prefix.strip() + "\n")
     f.write("SRC_DIR= "+path+"/src/\n")
+    f.write("CXX = " + args.compiler.strip() + "\n")
     if args.debug == "yes":
 	f.write("CXXFLAGS=-g \n")
     else:
