@@ -1,0 +1,42 @@
+
+UPCXX_CPPFLAGS += -I$(SRC_DIR)
+UPCXX_CXXFLAGS += $(UPCXX_CPPFLAGS) $(GASNET_CPPFLAGS)  -DUSE_GASNET_FAST_SEGMENT -DONLY_MSPACES
+
+UPCXX_SRCS=$(notdir $(wildcard $(SRC_DIR)*.cpp $(SRC_DIR)*.c))
+UPCXX_DEPS=$(subst .c,.d,$(UPCXX_SRCS))
+UPCXX_OBJS=$(subst .c,.o,$(UPCXX_SRCS))
+
+%.o: $(SRC_DIR)%.cpp
+	$(CXX) $(UPCXX_CXXFLAGS) -o $@ -c $<
+
+%.o: $(SRC_DIR)%.c
+	$(CXX) $(UPCXX_CXXFLAGS) -o $@ -c $<
+
+%.d: $(SRC_DIR)%.c
+	$(CXX) -MM $< > $@
+
+depends: $(UPCXX_DEPS)
+
+objs: $(UPCXX_OBJS)
+
+all: depends objs
+
+.PHONY: distclean install uninstall
+
+vars:
+	@echo UPCXX_SRCS $(UPCXX_SRCS)
+	@echo UPCXX_DEPS $(UPCXX_DEPS)
+	@echo UPCXX_FLAGS $(UPCXX_CXXFLAGS)
+	@echo CXX $(CXX)
+	@echo SRC_DIR $(SRC_DIR)
+
+distclean: realclean
+	$(SILENT) $(RM) GNUmakefile
+
+install: install_lib install_headers 
+
+uninstall:
+	@echo Uninstalling...
+
+-include $(UPCXX_DEPS)
+
