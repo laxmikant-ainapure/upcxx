@@ -27,7 +27,7 @@ depends: $(UPCXX_DEPS)
 objs: $(UPCXX_OBJS)
 
 
-.PHONY: distclean install uninstall
+.PHONY: clean distclean install uninstall
 
 vars:
 	@echo UPCXX_SRCS $(UPCXX_SRCS)
@@ -38,7 +38,10 @@ vars:
 	@echo CC $(CC)
 	@echo SRC_DIR $(SRC_DIR)
 
-distclean: realclean
+clean:
+	-rm -f $(UPCXX_OBJS) $(UPCXX_DEPS)	
+
+distclean: clean
 	$(SILENT) $(RM) GNUmakefile
 
 install: install_lib install_headers 
