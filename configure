@@ -22,10 +22,14 @@ if __name__ == "__main__":
     parser.add_argument("--undefines",
                         help="preprocessing macros to be undefined",
                         default="")
-    parser.add_argument("--compiler",
-                        help="compiler",
-                        choices=["CC","g++","icpc","clang++","xlC"],
-                        default="CC")
+    parser.add_argument("--CC",
+                        help="C++ compiler",
+                        choices=["$(GASNET_CXX)","CC","g++","icpc","clang++","xlC"],
+                        default="$(GASNET_CXX)")
+    parser.add_argument("--cc",
+                        help="C compiler",
+                        choices=["$(GASNET_CC)","cc","gcc","icc","clang","xlc"],
+                        default="$(GASNET_CC)")
     parser.add_argument("--prefix",
                         help=" location where headers and library are installed",
                         default=".")
@@ -41,7 +45,8 @@ if __name__ == "__main__":
     f.write("GASNET_CONDUIT = " +args.conduit.strip() +"\n")
     f.write("UPCXX_INSTALL_DIR = " + args.prefix.strip() + "\n")
     f.write("SRC_DIR= "+path+"/src/\n")
-    f.write("CXX = " + args.compiler.strip() + "\n")
+    f.write("CXX = " + args.CC.strip() + "\n")
+    f.write("CC = " + args.cc.strip() + "\n")
     if args.debug == "yes":
 	f.write("CXXFLAGS=-g \n")
     else:

@@ -1,9 +1,6 @@
 
 include $(GASNET_DIR)/include/$(GASNET_CONDUIT)-conduit/$(GASNET_CONDUIT)-par.mak
 
-#GASNET_CPPFLAGS = -I$(GASNET_DIR)/include \
-#       -I$(GASNET_DIR)/include/$(GASNET_CONDUIT)-conduit \
-#       -DUSE_GASNET_FAST_SEGMENT -DGASNET_PAR
 UPCXX_CPPFLAGS += -I$(SRC_DIR) $(GASNET_CPPFLAGS)
 UPCXX_CXXFLAGS += $(UPCXX_CPPFLAGS) -DONLY_MSPACES -std=c++11 $(CXXFLAGS)
 
@@ -15,10 +12,10 @@ UPCXX_OBJS=$(subst .c,.o,$(subst .cpp,.o,$(UPCXX_SRCS)))
 	$(CXX) $(UPCXX_CXXFLAGS) -o $@ -c $<
 
 %.o: $(SRC_DIR)%.c
-	$(CXX) $(UPCXX_CXXFLAGS) -o $@ -c $<
+	$(CC) $(UPCXX_CFLAGS) -o $@ -c $<
 
 %.d: $(SRC_DIR)%.c
-	$(CXX) $(UPCXX_CPPFLAGS) -MM $< > $@
+	$(CC) $(UPCXX_CPPFLAGS) -MM $< > $@
 
 %.d: $(SRC_DIR)%.cpp
 	$(CXX) $(UPCXX_CPPFLAGS) -MM $< > $@
@@ -35,8 +32,10 @@ objs: $(UPCXX_OBJS)
 vars:
 	@echo UPCXX_SRCS $(UPCXX_SRCS)
 	@echo UPCXX_DEPS $(UPCXX_DEPS)
-	@echo UPCXX_FLAGS $(UPCXX_CXXFLAGS)
+	@echo UPCXX_CXXFLAGS $(UPCXX_CXXFLAGS)
+	@echo UPCXX_CFLAGS $(UPCXX_CFLAGS)
 	@echo CXX $(CXX)
+	@echo CC $(CC)
 	@echo SRC_DIR $(SRC_DIR)
 
 distclean: realclean
