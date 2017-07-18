@@ -1,0 +1,33 @@
+function upcxx_sourceme {
+  if [ ! -n "$BASH" ]; then
+   echo "Please run this script using bash."
+   return
+  fi
+  
+  # useful utility for printing ifdef/define guards to be pasted into
+  # header files.
+  function uuifdef {
+    x="_$(uuidgen|tr \\- _)"
+    echo "#ifndef $x"
+    echo "#define $x"
+    echo "#endif"
+  }
+
+  # use the current directory as the root for the build tree
+  NOBS_ROOT="$(python -c 'import os; import sys; sys.stdout.write(os.path.abspath(os.getcwd()));')"
+  NOBS_PATH="${NOBS_ROOT}/nobs"
+  
+  if [ ! -e "$NOBS_PATH" ]; then
+    echo "This script must be run from the toplevel of the upcxx source tree."
+    return
+  fi
+  
+  export NOBS_ROOT
+  export NOBS_PATH
+  
+  function nobs {
+    "${NOBS_PATH}/tool.py" "$@"
+  }
+}
+
+upcxx_sourceme

@@ -1,5 +1,8 @@
-# common build directory name
-build
+# The nobs database
+.nobs
+
+# Python bytecode
+*.pyc
 
 # backup files
 *~
@@ -18,29 +21,3 @@ BAK
 # autotools dirs
 .deps
 .libs
-
-# generated files
-Makefile
-Makefile.in
-config.h
-config.in
-config.h.in~
-aclocal.m4
-autom4te.cache
-compile
-config.guess
-config.log
-config.status
-config.sub
-configure
-depcomp
-install-sh
-libtool
-ltmain.sh
-missing
-stamp-h1
-m4/libtool.m4
-m4/lt~obsolete.m4
-m4/ltoptions.m4
-m4/ltsugar.m4
-m4/ltversion.m4
