@@ -8,7 +8,7 @@
 #include <cstddef> // ptrdiff_t
 #include <iostream> // ostream
 #include <type_traits> // is_const, is_volatile
-#include "boost_utils.h" // hash_combine
+#include "boost_utils.hpp" // hash_combine
 #include "upcxx_runtime.h"
 
 namespace upcxx {
