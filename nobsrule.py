@@ -113,7 +113,7 @@ def cxx11_pp(cxt, src):
   cxx11 = cxt.cxx() + cxt.lang_cxx11()
   ipt = yield cxt.include_paths_tree()
   libs = yield cxt.libraries(src)
-  yield cxx11 + ['-I'+ipt] + sum(zip(*libs.values())[0], [])
+  yield cxx11 + ['-I'+ipt] + sum(zip(([],[]), *libs.values())[0], [])
 
 @rule()
 def cg_optlev(cxt):
@@ -182,8 +182,10 @@ def libraries(cxt, src):
   File-specific library set required to compile and eventually link the
   file `src`.
   """
-  # Um, should be smarter. Right now everyone just depends on gasnet.
-  return cxt.libgasnet()
+  if src == here('test','gasnet_hello.cpp'):
+    return cxt.libgasnet()
+  else:
+    return {}
 
 @rule()
 def gasnet_conduit(cxt):
