@@ -601,6 +601,7 @@ def _everything():
           import tempfile
           fd, path = tempfile.mkstemp()
           os.close(fd)
+          os.remove(path)
           me._temps.append(path)
           return path
         

@@ -8,6 +8,8 @@ import sys
 
 from nobs import subexec
 
+cxx_exts = ('.cpp','.cxx','.c++','.C','.C++')
+
 def env(name, otherwise):
   """
   Read `name` from the environment returning it as an integer if it
@@ -22,22 +24,44 @@ def env(name, otherwise):
   except KeyError:
     return otherwise
 
-def merge_libs_inplace(dst, src):
-  """
-  Merge the library set of `src` into `dst`.
-  
-  Library sets are encoded as a dictionary of the type:
-    {libname:str: None | (ppflags:[str], libflags:[str])}.
-  
-  That is each key is the short name of the library (like 'm') and the 
-  value is either None for system-installed libraries, or a tuple 
-  containing the necessary preprocessor and link-time command-line 
-  token lists.
-  """
+"""
+Library sets are encoded as a dictionary of the type:
+  {libname:str: {
+      'ld':[str],
+      'ppflags':[str],
+      'cgflags':[str],
+      'ldflags':[str],
+      'libflags':[str],
+      'deplibs':[str]
+    }, ...
+  }.
+
+That is, each key is the short name of the library (like 'm') and the 
+value is a dictionary containing the linker command, various flags
+lists, and the list of libraries short-names it is dependent on. If
+'libflags' is absent it defaults to ['-l'+libname].
+"""
+
+def libset_merge_inplace(dst, src):
   for k,v in src.items():
     if dst.get(k,v) != v:
       raise Exception("Multiple '%s' libraries with differing configurations." % k)
     dst[k] = v
+
+def libset_ld(libset):
+  lds = set(tuple(x.get('ld',())) for x in libset.values())
+  lds.discard(())
+  if len(lds) == 0:
+    return None
+  if len(lds) != 1:
+    raise Exception("Multiple linkers demanded:" + ''.join(map(lambda x:'\n  '+' '.join(x), lds)))
+  return list(lds.pop())
+
+def libset_flags(libset, kind):
+  flags = []
+  for x in libset.values():
+    flags.extend(x.get(kind+'flags', []))
+  return flags
 
 @cached
 def output_of(cmd_args):
@@ -113,7 +137,7 @@ def cxx11_pp(cxt, src):
   cxx11 = cxt.cxx() + cxt.lang_cxx11()
   ipt = yield cxt.include_paths_tree()
   libs = yield cxt.libraries(src)
-  yield cxx11 + ['-I'+ipt] + sum(zip(([],[]), *libs.values())[0], [])
+  yield cxx11 + ['-I'+ipt] + libset_flags(libs, 'pp')
 
 @rule()
 def cg_optlev(cxt):
@@ -146,7 +170,15 @@ def cxx11_pp_cg(cxt, src):
   cxx11_pp = yield cxt.cxx11_pp(src)
   optlev = cxt.cg_optlev_forfile(src)
   dbgsym = cxt.cg_dbgsym()
-  yield cxx11_pp + ['-O%d'%optlev] + (['-g'] if dbgsym else []) + ['-Wall']
+  libset = yield cxt.libraries(src)
+  
+  yield (
+    cxx11_pp +
+    ['-O%d'%optlev] +
+    (['-g'] if dbgsym else []) +
+    ['-Wall'] +
+    libset_flags(libset, 'cg')
+  )
 
 @rule(path_arg='src')
 @coroutine
@@ -159,33 +191,17 @@ def compiler(cxt, src):
   cxx11_pp_cg = yield cxt.cxx11_pp_cg(src)
   yield lambda outfile: cxx11_pp_cg + ['-c', src, '-o', outfile]
 
-@rule()
-def linker(cxt):
-  """
-  The linker lambda. Returns a function taking a path to the executable
-  to generate as well as a list of object file paths to link together
-  and returns the argument list excluding library dependency flags.
-  """
-  cxx = cxt.cxx()
-  return lambda exe,objs: cxx + ['-o', exe] + objs
-
-@rule()
-def linker_version(cxt):
-  """
-  Value identifying the linker.
-  """
-  return cxt.cxx_version()
-
 @rule(path_arg='src')
+@coroutine
 def libraries(cxt, src):
   """
   File-specific library set required to compile and eventually link the
   file `src`.
   """
   if src == here('test','gasnet_hello.cpp'):
-    return cxt.libgasnet()
+    yield cxt.libgasnet()
   else:
-    return {}
+    yield {}
 
 @rule()
 def gasnet_conduit(cxt):
@@ -197,7 +213,7 @@ def gasnet_conduit(cxt):
 @rule()
 def gasnet_syncmode(cxt):
   """
-  GASNet sync mode to use.
+  GASNet sync-mode to use.
   """
   # this should be computed based off the choice of upcxx backend
   return 'seq'
@@ -219,7 +235,6 @@ class includes:
   Ask compiler for all the non-system headers pulled in by preprocessing
   the given source file. Returns the list of header paths.
   """
-  
   @traced
   @coroutine
   def get_cxx11_pp_and_src(me, cxt, src):
@@ -278,10 +293,13 @@ class executable:
   compiled object files and link them along with their library
   dependencies to proudce an executable. Path to executable returned.
   """
-  
   @traced
   def main_src(me, cxt, main_src):
     return main_src
+  
+  @traced
+  def cxx(me, cxt, main_src):
+    return cxt.cxx()
   
   @traced
   def do_includes(me, cxt, main_src, src):
@@ -292,18 +310,12 @@ class executable:
     return futurize(cxt.compile(src), cxt.libraries(src))
   
   @traced
-  def get_linker(me, cxt, main_src):
-    linker = cxt.linker()
-    me.depend_fact(key=None, value=cxt.linker_version())
-    return linker
-  
-  @traced
   def find_src_exts(me, cxt, main_src, base):
     def exists(ext):
       path = base + ext
       me.depend_files(path)
       return os.path.exists(path)
-    return filter(exists, ('.c','.C','.cpp','.cxx','.c++','.C++'))
+    return filter(exists, ('.c',) + cxx_exts)
   
   @coroutine
   def execute(me):
@@ -312,7 +324,7 @@ class executable:
     # compile object files
     incs_seen = set()
     objs = []
-    libs = {}
+    libset = {}
     
     def fresh_src(src):
       return async.when_succeeded(
@@ -339,7 +351,7 @@ class executable:
     
     def compile_done(obj, more_libs):
       objs.append(obj)
-      merge_libs_inplace(libs, more_libs)
+      libset_merge_inplace(libset, more_libs)
     
     # wait for all compilations
     yield fresh_src(main_src)
@@ -349,24 +361,33 @@ class executable:
     sorted_libs = set()
     def topsort(xs):
       for x in xs:
-        if libs.get(x) is None:
-          libflags, deps = ['-l'+x], []
-        else:
-          _, libflags, deps = libs[x]
+        rec = libset.get(x, {})
+        libflags = rec.get('libflags', ['-l'+x])
+        deplibs = rec.get('deplibs', [])
         
-        topsort(deps)
+        topsort(deplibs)
         
         if x not in sorted_libs:
           sorted_libs.add(x)
           sorted_libflags.append(libflags)
     
-    topsort(libs)
+    topsort(libset)
     sorted_libflags = sum(reversed(sorted_libflags), [])
     
     # link
     exe = me.mkpath('exe', suffix='.x')
-    linker = yield me.get_linker()
-    yield subexec.launch(linker(exe, objs) + sorted_libflags)
+    
+    ld = libset_ld(libset)
+    cxx = me.cxx()
+    if ld is None:
+      ld = cxx
+    ld = [cxx[0]] + ld[1:] 
+    
+    ldflags = libset_flags(libset, 'ld')
+    
+    yield subexec.launch(
+      ld + ldflags + ['-o',exe] + objs + sorted_libflags
+    )
     
     yield exe
 
@@ -394,19 +415,6 @@ class download:
     print>>sys.stderr, 'Finished    %s' % url
     
     yield dest
-
-def makefile_extract(makefile, varname):
-  """
-  Extract a variable's value from a makefile.
-  """
-  import subprocess as sp
-  p = sp.Popen(['make','-f','-','gimme'], stdin=sp.PIPE, stdout=sp.PIPE, stderr=sp.PIPE)
-  tmp = ('include {0}\n' + 'gimme:\n' + '\t@echo $({1})\n').format(makefile, varname)
-  val, _ = p.communicate(tmp)
-  if p.returncode != 0:
-    raise Exception('Makefile %s not found.'%makefile)
-  val = val.strip(' \t\n')
-  return val
 
 @rule_memoized()
 class libgasnet_source:
@@ -509,12 +517,35 @@ class libgasnet:
       '%s-%s.mak'%(conduit, syncmode)
     )
     
-    # TODO: Need to extract GASNET_LDFLAGS and use GASNET_CXXFLAGS!
+    GASNET_LD = makefile_extract(makefile, 'GASNET_LD').split()
+    GASNET_LDFLAGS = makefile_extract(makefile, 'GASNET_LDFLAGS').split()
     GASNET_CXXCPPFLAGS = makefile_extract(makefile, 'GASNET_CXXCPPFLAGS').split()
     GASNET_CXXFLAGS = makefile_extract(makefile, 'GASNET_CXXFLAGS').split()
     GASNET_LIBS = makefile_extract(makefile, 'GASNET_LIBS').split()
     
-    yield {'gasnet': (GASNET_CXXCPPFLAGS, GASNET_LIBS, [])}
+    yield {
+      'gasnet': {
+        'ld': GASNET_LD,
+        'ldflags': GASNET_LDFLAGS,
+        'ppflags': GASNET_CXXCPPFLAGS,
+        'cgflags': GASNET_CXXFLAGS,
+        'libflags': GASNET_LIBS,
+        'deplibs': []
+      }
+    }
+
+def makefile_extract(makefile, varname):
+  """
+  Extract a variable's value from a makefile.
+  """
+  import subprocess as sp
+  p = sp.Popen(['make','-f','-','gimme'], stdin=sp.PIPE, stdout=sp.PIPE, stderr=sp.PIPE)
+  tmp = ('include {0}\n' + 'gimme:\n' + '\t@echo $({1})\n').format(makefile, varname)
+  val, _ = p.communicate(tmp)
+  if p.returncode != 0:
+    raise Exception('Makefile %s not found.'%makefile)
+  val = val.strip(' \t\n')
+  return val
 
 @rule(cli='run', path_arg='main_src')
 @coroutine
