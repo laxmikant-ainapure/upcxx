@@ -4,6 +4,7 @@
  * allocate.hpp
  */
 
+#include <algorithm> // max
 #include <cassert> // assert
 #include <cmath> // ceil
 #include <cstddef> // max_align_t
@@ -62,9 +63,9 @@ namespace upcxx {
     static_assert(std::is_default_constructible<T>::value,
                   "T must be default constructible");
     // padding for storage to keep track of number of elements
-    size_t padding = static_cast<size_t>(std::ceil(sizeof(size_t) /
-                                                   sizeof(T)));
-    void *ptr = allocate((n + padding) * sizeof(T));
+    size_t padding = std::max(alignof(size_t),
+                              std::max(alignof(T), sizeof(size_t)));
+    void *ptr = allocate(n * sizeof(T) + padding);
     if (ptr == nullptr) {
       if (throws) {
         throw std::bad_alloc();
@@ -72,7 +73,8 @@ namespace upcxx {
       return nullptr;
     }
     *(reinterpret_cast<size_t*>(ptr)) = n; // store size for deallocation
-    T *tptr = reinterpret_cast<T*>(ptr) + padding; // ptr to actual data
+    T *tptr = reinterpret_cast<T*>(reinterpret_cast<char*>(ptr) +
+                                   padding); // ptr to actual data
     new(tptr) T[n]; // array placement new
     return global_ptr<T>(tptr);
   }
@@ -109,11 +111,11 @@ namespace upcxx {
       //       "delete_array must be called by owner of global pointer");
       T *tptr = gptr.local();
       // padding to keep track of number of elements
-      size_t padding = static_cast<size_t>(std::ceil(sizeof(size_t) /
-                                                     sizeof(T)));
-      void *ptr = reinterpret_cast<void*>(tptr - padding);
-      size_t size = *reinterpret_cast<size_t*>(ptr);
+      size_t padding = std::max(alignof(size_t),
+                                std::max(alignof(T), sizeof(size_t)));
+      void *ptr = reinterpret_cast<char*>(tptr) - padding;
       if (!std::is_trivially_destructible<T>::value) {
+        size_t size = *reinterpret_cast<size_t*>(ptr);
         for (size_t i = 0; i < size; ++i) {
           tptr[i].~T(); // destroy each element
         }
