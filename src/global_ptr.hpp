@@ -100,27 +100,28 @@ namespace upcxx {
       return place != rhs.place || raw_ptr != rhs.raw_ptr;
     }
 
+    // Comparison operators specify partial order
     bool operator<(global_ptr rhs) const {
-      return (place < rhs.place ||
-              (place == rhs.place && raw_ptr < rhs.raw_ptr));
+      return raw_ptr < rhs.raw_ptr;
     }
 
     bool operator<=(global_ptr rhs) const {
-      return (place < rhs.place ||
-              (place == rhs.place && raw_ptr <= rhs.raw_ptr));
+      return raw_ptr <= rhs.raw_ptr;
     }
 
     bool operator>(global_ptr rhs) const {
-      return (place > rhs.place ||
-              (place == rhs.place && raw_ptr > rhs.raw_ptr));
+      return raw_ptr > rhs.raw_ptr;
     }
 
     bool operator>=(global_ptr rhs) const {
-      return (place > rhs.place ||
-              (place == rhs.place && raw_ptr >= rhs.raw_ptr));
+      return raw_ptr >= rhs.raw_ptr;
     }
 
   private:
+    friend struct std::less<global_ptr<T>>;
+    friend struct std::less_equal<global_ptr<T>>;
+    friend struct std::greater<global_ptr<T>>;
+    friend struct std::greater_equal<global_ptr<T>>;
     friend struct std::hash<global_ptr<T>>;
 
     template<typename U, typename V>
@@ -155,11 +156,13 @@ namespace upcxx {
 
 // Specializations of standard function objects
 namespace std {
+  // Comparators specify total order
   template<typename T>
   struct less<upcxx::global_ptr<T>> {
     constexpr bool operator()(upcxx::global_ptr<T> lhs,
                               upcxx::global_ptr<T> rhs) const {
-      return lhs < rhs;
+      return (lhs.place < rhs.place ||
+              (lhs.place == rhs.place && lhs.raw_ptr < rhs.raw_ptr));
     }
   };
 
@@ -167,7 +170,8 @@ namespace std {
   struct less_equal<upcxx::global_ptr <T>> {
     constexpr bool operator()(upcxx::global_ptr<T> lhs,
                               upcxx::global_ptr<T> rhs) const {
-      return lhs <= rhs;
+      return (lhs.place < rhs.place ||
+              (lhs.place == rhs.place && lhs.raw_ptr <= rhs.raw_ptr));
     }
   };
 
@@ -175,7 +179,8 @@ namespace std {
   struct greater<upcxx::global_ptr <T>> {
     constexpr bool operator()(upcxx::global_ptr<T> lhs,
                               upcxx::global_ptr<T> rhs) const {
-      return lhs > rhs;
+      return (lhs.place > rhs.place ||
+              (lhs.place == rhs.place && lhs.raw_ptr > rhs.raw_ptr));
     }
   };
 
@@ -183,7 +188,8 @@ namespace std {
   struct greater_equal<upcxx::global_ptr <T>> {
     constexpr bool operator()(upcxx::global_ptr<T> lhs,
                               upcxx::global_ptr<T> rhs) const {
-      return lhs >= rhs;
+      return (lhs.place > rhs.place ||
+              (lhs.place == rhs.place && lhs.raw_ptr >= rhs.raw_ptr));
     }
   };
 
