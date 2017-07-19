@@ -1,8 +1,8 @@
-/**
- * global_ptr.h
- */
-
 #pragma once
+
+/**
+ * global_ptr.hpp
+ */
 
 #include <cassert> // assert
 #include <cstddef> // ptrdiff_t
@@ -23,7 +23,7 @@ namespace upcxx {
   template<typename T>
   class global_ptr {
   public:
-    static_assert(!std::is_const<T> && !std::is_volatile<T>,
+    static_assert(!std::is_const<T>::value && !std::is_volatile<T>::value,
                   "global_ptr<T> does not support cv qualification on T");
 
     using element_type = T;
@@ -120,8 +120,7 @@ namespace upcxx {
     }
 
   private:
-    template<typename U>
-    friend struct hash<global_ptr<U>>;
+    friend struct std::hash<global_ptr<T>>;
 
     template<typename U, typename V>
     friend global_ptr<U> reinterpret_pointer_cast(global_ptr<V> ptr);
@@ -148,7 +147,7 @@ namespace upcxx {
   }
 
   template<typename T>
-  std::ostream& operator<<(std::ostream &os, global_ptr<U> ptr) {
+  std::ostream& operator<<(std::ostream &os, global_ptr<T> ptr) {
     return os << "(gp: " << ptr.place << ", " << ptr.raw_ptr << ")";
   }
 } // namespace upcxx
