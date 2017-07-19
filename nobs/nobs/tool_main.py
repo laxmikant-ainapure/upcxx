@@ -47,9 +47,10 @@ def main():
     # Return a single string:
     return '\n'.join(trimmed)
   
-  db = memodb.MemoDb(os.environ.get('NOBS_ROOT', os.getcwd()))
+  path_root = os.environ.get('NOBS_ROOT', os.getcwd())
   
-  hooks = ruletree.cli_hooks('.', db)
+  db = memodb.MemoDb(path_root)
+  hooks = ruletree.cli_hooks(path_root, db)
   
   cmd = sys.argv[1]
   

@@ -1,5 +1,5 @@
 """
-This is a nobs rule-file. See nobs/nobs/ruletree.puy for documentation
+This is a nobs rule-file. See nobs/nobs/ruletree.py for documentation
 on the structure and interpretation of a rule-file.
 """
 
@@ -55,14 +55,14 @@ def cxx(cxt):
   """
   String list for the C++ compiler. Defaults to g++.
   """
-  return [env('CXX','g++')]
+  return env('CXX', otherwise='g++').split()
 
 @rule(cli='cc11')
 def cc(cxt):
   """
   String list for the C compiler. Defaults to gcc.
   """
-  return [env('CC','gcc')]
+  return env('CC', otherwise='gcc').split()
 
 @rule()
 def lang_c11(cxt):
@@ -146,7 +146,7 @@ def cxx11_pp_cg(cxt, src):
   cxx11_pp = yield cxt.cxx11_pp(src)
   optlev = cxt.cg_optlev_forfile(src)
   dbgsym = cxt.cg_dbgsym()
-  yield cxx11_pp + ['-O%d'%optlev] + (['-g'] if dbgsym else [])
+  yield cxx11_pp + ['-O%d'%optlev] + (['-g'] if dbgsym else []) + ['-Wall']
 
 @rule(path_arg='src')
 @coroutine
@@ -248,11 +248,10 @@ class compile:
   Compile the given source file. Returns path to object file.
   """
   @traced
-  
   @coroutine
   def get_src_compiler(me, cxt, src):
     compiler = yield cxt.compiler(src)
-    me.depend_fact(key=None, value=cxt.cxx_version())
+    me.depend_fact(key='CXX', value=cxt.cxx_version())
     
     includes = yield cxt.includes(src)
     me.depend_files(src)
@@ -320,6 +319,9 @@ class executable:
       )
     
     os_path_splitext = os.path.splitext
+    os_path_relpath = os.path.relpath
+    src_dir = here('src')
+    dot_dot_slash = '..' + os.path.sep
     
     def includes_done(incs):
       tasks = []
@@ -327,7 +329,7 @@ class executable:
         inc, _ = os_path_splitext(inc)
         if inc not in incs_seen:
           incs_seen.add(inc)
-          if not os.path.relpath(inc, here('src')).startswith('..' + os.path.sep):
+          if not os_path_relpath(inc, src_dir).startswith(dot_dot_slash):
             for ext in me.find_src_exts(inc):
               tasks.append(fresh_src(inc + ext))
       
@@ -404,45 +406,63 @@ def makefile_extract(makefile, varname):
   val = val.strip(' \t\n')
   return val
 
-@rule_memoized(cli='libgasnet')
-class libgasnet:
+@rule_memoized()
+class libgasnet_source:
   """
-  Download and build gasnet. Returns the library-set dictionary pertaining
-  to gasnet and all of its library depdencies (see merge_libs_inplace).
+  Download and extract gasnet source tree.
   """
-  @traced
-  def do_download(me, cxt):
-    import base64
-    gasnetex_tarball_url = base64.b64decode('aHR0cDovL2dhc25ldC5sYmwuZ292L0VYL0dBU05ldC0yMDE3LjYuMC50YXIuZ3o=')
-    return cxt.download(gasnetex_tarball_url)
-  
-  @traced
-  def get_config(me, cxt):
-    me.depend_fact('CC', cxt.cc_version())
-    me.depend_fact('CXX', cxt.cxx_version())
-    return (
-      cxt.cc() + ['-O%d'%cxt.cg_optlev()],
-      cxt.cxx() + ['-O%d'%cxt.cg_optlev()],
-      cxt.cg_dbgsym(),
-      cxt.gasnet_conduit(),
-      cxt.gasnet_syncmode()
-    )
-  
   @coroutine
   def execute(me):
-    cc, cxx, debug, conduit, syncmode = me.get_config()
+    import base64
+    gasnetex_tgz_url = base64.b64decode('aHR0cDovL2dhc25ldC5sYmwuZ292L0VYL0dBU05ldC0yMDE3LjYuMC50YXIuZ3o=')
     
-    tgz = yield me.do_download()
+    tgz = me.mktemp()
     
-    untar_dir = me.mkdtemp()
-    build_dir = me.mkdtemp()
-    install_dir = me.mkpath(key='install')
-    os.makedirs(install_dir)
+    @async.launched
+    def download():
+      import urllib
+      urllib.urlretrieve(gasnetex_tgz_url, tgz)
+    
+    print>>sys.stderr, 'Downloading %s' % gasnetex_tgz_url 
+    yield download()
+    print>>sys.stderr, 'Finished    %s' % gasnetex_tgz_url
+    
+    untar_dir = me.mkpath(key=None)
+    os.makedirs(untar_dir)
     
     import tarfile
     with tarfile.open(tgz) as f:
-      gasnet_dir = os.path.join(untar_dir, f.members[0].name)
+      source_dir = os.path.join(untar_dir, f.members[0].name)
       f.extractall(untar_dir)
+    
+    yield source_dir
+
+@rule_memoized()
+class libgasnet_configured:
+  """
+  Configure gasnet build directory.
+  """
+  @traced
+  def get_config(me, cxt):
+    me.depend_fact(key='CC', value=cxt.cc_version())
+    me.depend_fact(key='CXX', value=cxt.cxx_version())
+    return (
+      cxt.cc() + ['-O%d'%cxt.cg_optlev()],
+      cxt.cxx() + ['-O%d'%cxt.cg_optlev()],
+      cxt.cg_dbgsym()
+    )
+  
+  @traced
+  def get_soruce_dir(me, cxt):
+    return cxt.libgasnet_source()
+  
+  @coroutine
+  def execute(me):
+    cc, cxx, debug = me.get_config()
+    source_dir = yield me.get_soruce_dir()
+    
+    build_dir = me.mkpath(key=None)
+    os.makedirs(build_dir)
     
     env1 = dict(os.environ)
     env1['CC'] = ' '.join(cc)
@@ -450,23 +470,44 @@ class libgasnet:
     
     print>>sys.stderr, 'Configuring GASNet...'
     yield subexec.launch(
-      [os.path.join(gasnet_dir, 'configure')] +
-      ['--prefix=' + install_dir] +
-      (['--enable-debug'] if debug else []) +
-      ['--disable-auto-conduit-detect','--enable-%s'%conduit] +
-      (['--disable-seq'] if syncmode != 'seq' else []) +
-      (['--disable-parsync'] if syncmode != 'parsync' else []) +
-      (['--disable-par'] if syncmode != 'par' else []),
+      [os.path.join(source_dir, 'configure')] +
+      (['--enable-debug'] if debug else []),
       cwd = build_dir,
       env = env1
     )
     
-    print>>sys.stderr, 'Building GASNet...'
-    yield subexec.launch(['make'], cwd=build_dir, env=env1)
-    yield subexec.launch(['make','install'], cwd=build_dir, env=env1)
+    yield build_dir
+
+@rule_memoized(cli='libgasnet')
+class libgasnet:
+  """
+  Build gasnet. Return library dependencies dictionary.
+  """
+  @traced
+  def get_config(me, cxt):
+    return futurize(
+      cxt.gasnet_conduit(),
+      cxt.gasnet_syncmode(),
+      cxt.libgasnet_configured()
+    )
+  
+  @coroutine
+  def execute(me):
+    conduit, syncmode, build_dir = yield me.get_config()
     
-    makefile = os.path.join(install_dir, 'include', '%s-conduit'%conduit, '%s-%s.mak'%(conduit, syncmode))
+    print>>sys.stderr, 'Building GASNet (conduit=%s, threading=%s)...'%(conduit, syncmode)
+    yield subexec.launch(
+      ['make', syncmode],
+      cwd = os.path.join(build_dir, '%s-conduit'%conduit)
+    )
     
+    makefile = os.path.join(
+      build_dir,
+      '%s-conduit'%conduit,
+      '%s-%s.mak'%(conduit, syncmode)
+    )
+    
+    # TODO: Need to extract GASNET_LDFLAGS and use GASNET_CXXFLAGS!
     GASNET_CXXCPPFLAGS = makefile_extract(makefile, 'GASNET_CXXCPPFLAGS').split()
     GASNET_CXXFLAGS = makefile_extract(makefile, 'GASNET_CXXFLAGS').split()
     GASNET_LIBS = makefile_extract(makefile, 'GASNET_LIBS').split()

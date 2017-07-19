@@ -1,5 +1,6 @@
 """
-nobs.ruletree: Loading and evaluating no-bs rule files from a directory tree.
+nobs.ruletree: Loading and evaluating no-bs rule files from a directory
+tree.
 
 A rule-file is a regular python file (but always named nobsrule.py) 
 that is interpreted in a slightly modified context. The objective of a 
@@ -89,7 +90,7 @@ Memoization of heavyweight rules is achieved by declaring them with the
 construct of decoration is no longer a function but a python class, 
 though invoking the rule will still behave as function-like. The 
 decorated class must have one `execute` method, and usually at least 
-one method declared with the "traced" decorator. The `execute` method 
+one method declared with the `traced` decorator. The `execute` method 
 is the function which will run if the memoization database does not 
 contain an entry for this work having been previously done. The traced 
 functions are how `execute` can access the arguments it was called 
@@ -138,32 +139,34 @@ def some_outer_rule(cxt):
 ```
 
 The list of implicitly available global definitions for a rule-file is:
-
+  
   async: Implicit import of the `nobs.async` module.
-
-  coroutine: See `async.coroutine`. Decorates a generator function for use
-  as a coroutine. Yielded futures will be waited for. The last yield
-  will be the return of the coroutine. Invocation of the decorated function
-  will return a future proxying the final yield of the generator.
-
-  digest_of: See `valhash.digest_of`. Hashes generic (but acyclic) python
-  values into 20-byte SHA1 hashes.
-
-  futurize: See `async.futurize`. Creates a future from argument(s) if
+  
+  coroutine: See `async.coroutine`. Decorates a generator function for 
+  use as a coroutine. Yielded futures will be waited for. The last 
+  yield will be the return of the coroutine. Invocation of the 
+  decorated function will return a future proxying the final yield of 
+  the generator.
+  
+  digest_of: See `valhash.digest_of`. Hashes generic (but acyclic) 
+  python values into 20-byte SHA1 hashes.
+  
+  futurize: See `async.futurize`. Creates a future from argument(s) if 
   not already a future.
-
-  here: returns absolute path of joining directory containing this
-  rule-fule with supplied argument list.
-
-  cached: Decorates a function for short-lived memoization that only lives
-  as long the process.
-
+  
+  here: returns os.path.join of absolute path to directory containing 
+  this rule-fule with supplied argument list.
+  
+  cached: Decorates a function for short-lived memoization that only 
+  lives as long the process.
+  
   rule: Decorates a function as a rule.
-
-  rule_memoized: Decorates a class as a long-term memoized rule (survives
-  across process lifetimes).
-
-  traced: Decorates a method in a memoization class as a traced function.
+  
+  rule_memoized: Decorates a class as a long-term memoized rule 
+  (survives across process lifetimes).
+  
+  traced: Decorates a method in a memoization class as a traced 
+  function.
 """
 def _everything():
   import __builtin__
@@ -302,7 +305,7 @@ def _everything():
     
     The methods available on memoization context objects for traced 
     functions are as follows:
-      
+    
       <<name of traced function>>(*trace_args):
         Calls the traced function of the given name with `trace_args` as
         the trace invocation arguments. Returns the trace function's
@@ -312,7 +315,7 @@ def _everything():
         Registers the given file paths as memoization dependencies.
         Changes in the contents of these files will trigger re-execution
         of the rule.
-        
+      
       depend_fact(key, value):
         Register the `key,value` pair as a dependency of this rule.
         Detected changes in values will trigger re-execution of the rule.

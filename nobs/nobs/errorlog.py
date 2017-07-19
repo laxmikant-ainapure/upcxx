@@ -55,7 +55,7 @@ def _everything():
     return map(int, ans)
 
   t_rows, t_cols = terminal_rows_cols()
-  BAR = YELLOW + u'~'*t_cols + RESET
+  BAR = YELLOW + '~'*t_cols + RESET
   
   _fatal = [None]
   _log = [] # [(title,message)]

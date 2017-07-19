@@ -597,6 +597,13 @@ def _everything():
           enter(path, entries)
           return path
         
+        def mktemp(me):
+          import tempfile
+          fd, path = tempfile.mkstemp()
+          os.close(fd)
+          me._temps.append(path)
+          return path
+        
         def mkdtemp(me):
           import tempfile
           path = tempfile.mkdtemp()
