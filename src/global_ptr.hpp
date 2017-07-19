@@ -6,6 +6,7 @@
 
 #include <cassert> // assert
 #include <cstddef> // ptrdiff_t
+#include <cstdint> // uintptr_t
 #include <iostream> // ostream
 #include <type_traits> // is_const, is_volatile
 #include "boost_utils.hpp" // hash_combine
@@ -189,7 +190,8 @@ namespace std {
   template<typename T>
   struct hash<upcxx::global_ptr<T>> {
     std::size_t operator()(upcxx::global_ptr<T> gptr) const {
-      return upcxx::hash_combine(gptr.place, gptr.raw_ptr);
+      return upcxx::hash_combine(gptr.place,
+                                 reinterpret_cast<uintptr_t>(gptr.raw_ptr));
     }
   };
 } // namespace std
