@@ -38,13 +38,13 @@ namespace upcxx {
       }
       
       template<int ...i>
-      struct results_refs_function {
-        typedef std::tuple<decltype(std::declval<FuArg>().impl_.results_refs_getter())...> getters_tuple;
+      struct result_lrefs_function {
+        typedef std::tuple<decltype(std::declval<FuArg>().impl_.result_lrefs_getter())...> getters_tuple;
         
         getters_tuple getters_;
         
-        results_refs_function(std::tuple<FuArg...> const &args):
-          getters_{std::get<i>(args).impl_.results_refs_getter()...} {
+        result_lrefs_function(std::tuple<FuArg...> const &args):
+          getters_{std::get<i>(args).impl_.result_lrefs_getter()...} {
         }
         
         auto operator()() const
@@ -54,10 +54,23 @@ namespace upcxx {
       };
       
       template<int ...i>
-      results_refs_function<i...> results_refs_getter_(upcxx::index_sequence<i...>) const {
-        return results_refs_function<i...>{this->args_};
+      result_lrefs_function<i...> result_lrefs_getter_(
+          upcxx::index_sequence<i...>
+        ) const {
+        return result_lrefs_function<i...>{this->args_};
       }
-    
+      
+      template<int ...i>
+      auto result_rvals_(upcxx::index_sequence<i...>)
+        -> decltype(std::tuple_cat(
+            std::get<i>(this->args_).impl_.result_rvals()...
+          )
+        ) {
+        return std::tuple_cat(
+          std::get<i>(this->args_).impl_.result_rvals()...
+        );
+      }
+      
     public:
       future_impl_when_all(FuArg ...args):
         args_{std::move(args)...} {
@@ -67,29 +80,31 @@ namespace upcxx {
         return this->ready_(upcxx::make_index_sequence<sizeof...(FuArg)>());
       }
       
-      auto results_refs_getter() const
-        -> decltype(this->results_refs_getter_(upcxx::make_index_sequence<sizeof...(FuArg)>())) {
-        return this->results_refs_getter_(upcxx::make_index_sequence<sizeof...(FuArg)>());
+      auto result_lrefs_getter() const
+        -> decltype(this->result_lrefs_getter_(upcxx::make_index_sequence<sizeof...(FuArg)>())) {
+        return this->result_lrefs_getter_(upcxx::make_index_sequence<sizeof...(FuArg)>());
       }
       
-      template<int i=0>
-      typename std::tuple_element<i,std::tuple<T...>>::type result() const {
-        // implementing this to use a reference if the underlying future::result<j>()
-        // (where j is the index within the correct sub-future) uses
-        // a reference is too hard, just doing value copy.
-        return std::get<i>(this->results_refs_getter());
+      auto result_rvals()
+        -> decltype(this->result_rvals_(upcxx::make_index_sequence<sizeof...(FuArg)>())) {
+        return this->result_rvals_(upcxx::make_index_sequence<sizeof...(FuArg)>());
       }
-    
-    public:
+      
+      //////////////////////////////////////////////////////////////////
+      // *** Performance opportunity missed ***
+      // Given knowledge that all of our arguments are trivially ready,
+      // we could elide building a body just to see that it's immediately
+      // active.
+      
       typedef future_header_ops_general header_ops;
       
       future_header* steal_header() {
         future_header_dependent *hdr = new future_header_dependent;
         
         typedef future_body_pure<future1<future_kind_when_all<FuArg...>,T...>> body_type;
-        void *body_mem = operator new(sizeof(body_type));
+        void *body_mem = ::operator new(sizeof(body_type));
         
-        hdr->body_ = new(body_mem) body_type{body_mem, hdr, std::move(*this)};
+        hdr->body_ = ::new(body_mem) body_type{body_mem, hdr, std::move(*this)};
         
         if(hdr->status_ == future_header::status_active)
           hdr->entered_active();
@@ -159,12 +174,14 @@ namespace upcxx {
         )...);
       }
       
-      struct results_refs_function {
-        std::tuple<decltype(std::declval<future_dependency<Arg>>().results_refs_getter())...> getters_;
+      struct result_lrefs_function {
+        std::tuple<
+            decltype(std::declval<future_dependency<Arg>>().result_lrefs_getter())...
+          > getters_;
         
-        results_refs_function(this_t const *me):
+        result_lrefs_function(this_t const *me):
           getters_{
-            static_cast<future_dependency_when_all_arg<i,Arg> const*>(me)->dep_.results_refs_getter()...
+            static_cast<future_dependency_when_all_arg<i,Arg> const*>(me)->dep_.result_lrefs_getter()...
           } {
         }
         
@@ -174,8 +191,8 @@ namespace upcxx {
         }
       };
       
-      results_refs_function results_refs_getter() const {
-        return results_refs_function{this};
+      result_lrefs_function result_lrefs_getter() const {
+        return result_lrefs_function{this};
       }
     };
     
@@ -200,8 +217,8 @@ namespace upcxx {
       
       future_header* cleanup_ready_get_header() {
         future_header *hdr = new future_header_result<T...>{
-          /*anon_deps_n=*/0,
-          this->results_refs_getter()()
+          /*not_ready=*/false,
+          /*values=*/this->result_lrefs_getter()()
         };
         this->cleanup_ready();
         return hdr;

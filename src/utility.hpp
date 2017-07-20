@@ -158,84 +158,182 @@ namespace upcxx {
   struct tuple_decay<std::tuple<T...>> {
     typedef std::tuple<typename std::decay<T>::type...> type;
   };
-    
-  template<typename ...T>
-  std::tuple<const T&...> tuple_crefs(const std::tuple<T...> &x) {
-    return std::tuple<const T&...>(x);
-  }
+  
+  //////////////////////////////////////////////////////////////////////
+  // tuple_lrefs: Get individual lvalue-references to tuple componenets.
+  // For components which are already `&` or `&&` types you'll get those
+  // back unmodified. If the tuple itself isn't passed in with `&`
+  // then this will only work if all components are `&` or `&&`.
   
   namespace detail {
-    template<typename ...T, int ...i>
-    std::tuple<T&...> tuple_refs(std::tuple<T...> &x, index_sequence<i...>) {
-      return std::tuple<T&...>{std::get<i>(x)...};
-    }
+    template<typename Tup, int i,
+             typename Ti = typename std::tuple_element<i, typename std::decay<Tup>::type>::type>
+    struct tuple_lrefs_get;
     
-    template<typename ...T, int ...i>
-    std::tuple<T&&...> tuple_rrefs(std::tuple<T...> &x, index_sequence<i...>) {
-      return std::tuple<T&&...>{static_cast<T&&>(std::get<i>(x))...};
+    template<typename Tup, int i, typename Ti>
+    struct tuple_lrefs_get<Tup&, i, Ti> {
+      Ti& operator()(Tup &tup) const {
+        return std::get<i>(tup);
+      }
+    };
+    template<typename Tup, int i, typename Ti>
+    struct tuple_lrefs_get<Tup&, i, Ti&&> {
+      Ti&& operator()(Tup &tup) const {
+        return static_cast<Ti&&>(std::get<i>(tup));
+      }
+    };
+    template<typename Tup, int i, typename Ti>
+    struct tuple_lrefs_get<Tup&&, i, Ti&> {
+      Ti& operator()(Tup &&tup) const {
+        return std::get<i>(tup);
+      }
+    };
+    template<typename Tup, int i, typename Ti>
+    struct tuple_lrefs_get<Tup&&, i, Ti&&> {
+      Ti&& operator()(Tup &&tup) const {
+        return std::get<i>(tup);
+      }
+    };
+    
+    template<typename Tup, int ...i>
+    inline auto tuple_lrefs(Tup &&tup, index_sequence<i...>)
+      -> std::tuple<decltype(tuple_lrefs_get<Tup&&, i>()(tup))...> {
+      return std::tuple<decltype(tuple_lrefs_get<Tup&&, i>()(tup))...>{
+        tuple_lrefs_get<Tup&&, i>()(tup)...
+      };
     }
-    template<typename ...T, int ...i>
-    std::tuple<T&&...> tuple_rrefs(std::tuple<T&...> x, index_sequence<i...>) {
-      return std::tuple<T&&...>{static_cast<T&&>(std::get<i>(x))...};
+  }
+  
+  template<typename Tup>
+  inline auto tuple_lrefs(Tup &&tup)
+    -> decltype(
+      detail::tuple_lrefs(
+        std::forward<Tup>(tup),
+        make_index_sequence<std::tuple_size<typename std::decay<Tup>::type>::value>()
+      )
+    ) {
+    return detail::tuple_lrefs(
+      std::forward<Tup>(tup),
+      make_index_sequence<std::tuple_size<typename std::decay<Tup>::type>::value>()
+    );
+  }
+  
+  //////////////////////////////////////////////////////////////////////
+  // tuple_rvals: Get a tuple of rvalue-references to tuple componenets.
+  // Components which are already `&` or `&&` are returned unmodified.
+  // Non-reference componenets are returned as `&&` only if the tuple is
+  // passed by non-const `&', otherwise the non-reference type is used
+  // and the value is moved or copied from the input to output tuple.
+  
+  namespace detail {
+    template<typename Tup, int i,
+             typename Ti = typename std::tuple_element<i, typename std::decay<Tup>::type>::type>
+    struct tuple_rvals_get;
+    
+    // tuple passed by &
+    template<typename Tup, int i, typename Ti>
+    struct tuple_rvals_get<Tup&, i, Ti&> {
+      Ti& operator()(Tup &tup) const {
+        return std::get<i>(tup);
+      }
+    };
+    template<typename Tup, int i, typename Ti>
+    struct tuple_rvals_get<Tup&, i, Ti&&> {
+      Ti&& operator()(Tup &tup) const {
+        return std::get<i>(tup);
+      }
+    };
+    template<typename Tup, int i, typename Ti>
+    struct tuple_rvals_get<Tup&, i, Ti> {
+      Ti&& operator()(Tup &tup) const {
+        return static_cast<Ti&&>(std::get<i>(tup));
+      }
+    };
+    
+    // tuple passed by const&
+    template<typename Tup, int i, typename Ti>
+    struct tuple_rvals_get<Tup const&, i, Ti&> {
+      Ti& operator()(Tup const &tup) const {
+        return std::get<i>(tup);
+      }
+    };
+    template<typename Tup, int i, typename Ti>
+    struct tuple_rvals_get<Tup const&, i, Ti&&> {
+      Ti&& operator()(Tup const &tup) const {
+        return std::get<i>(tup);
+      }
+    };
+    template<typename Tup, int i, typename Ti>
+    struct tuple_rvals_get<Tup const&, i, Ti> {
+      Ti const& operator()(Tup const &tup) const {
+        return std::get<i>(tup);
+      }
+    };
+    
+    // tuple passed by &&
+    template<typename Tup, int i, typename Ti>
+    struct tuple_rvals_get<Tup&&, i, Ti&> {
+      Ti& operator()(Tup &&tup) const {
+        return std::get<i>(tup);
+      }
+    };
+    template<typename Tup, int i, typename Ti>
+    struct tuple_rvals_get<Tup&&, i, Ti&&> {
+      Ti&& operator()(Tup &&tup) const {
+        return std::get<i>(tup);
+      }
+    };
+    template<typename Tup, int i, typename Ti>
+    struct tuple_rvals_get<Tup&&, i, Ti> {
+      Ti operator()(Tup &&tup) const {
+        return Ti{static_cast<Ti&&>(std::get<i>(tup))};
+      }
+    };
+    
+    template<typename Tup, int ...i>
+    inline auto tuple_rvals(Tup &&tup, index_sequence<i...>)
+      -> std::tuple<decltype(tuple_rvals_get<Tup&&, i>()(tup))...> {
+      return std::tuple<decltype(tuple_rvals_get<Tup&&, i>()(tup))...>{
+        tuple_rvals_get<Tup&&, i>()(tup)...
+      };
     }
   }
   
-  //////////////////////////////////////////////////////////////////////
-  // tuple_refs: Get individual references to tuple componenets.
-  
-  template<typename ...T>
-  std::tuple<T&...> tuple_refs(std::tuple<T...> &x) {
-    return detail::tuple_refs(x, make_index_sequence<sizeof...(T)>());
-  }
-  template<typename ...T>
-  std::tuple<T&...> tuple_refs(std::tuple<T&...> x) {
-    return x;
-  }
-  inline std::tuple<> tuple_refs(std::tuple<>) {
-    return std::tuple<>{};
-  }
-  
-  //////////////////////////////////////////////////////////////////////
-  // tuple_rvalues: Get rvalue-references to tuple componenets if
-  // possible, otherwise just values.
-  
-  template<typename ...T>
-  std::tuple<T...> tuple_rvalues(std::tuple<T...> x) {
-    return std::move(x);
-  }
-  template<typename ...T>
-  std::tuple<T&&...> tuple_rvalues(std::tuple<T...> &x) {
-    return detail::tuple_rrefs(x, make_index_sequence<sizeof...(T)>());
-  }
-  template<typename ...T>
-  std::tuple<T&&...> tuple_rvalues(std::tuple<T&...> x) {
-    return detail::tuple_rrefs(x, make_index_sequence<sizeof...(T)>());
-  }
-  template<typename ...T>
-  std::tuple<T&&...> tuple_rvalues(std::tuple<T&&...> x) {
-    return std::move(x);
-  }
-  inline std::tuple<> tuple_rvalues(std::tuple<>) {
-    return std::tuple<>{};
+  template<typename Tup>
+  inline auto tuple_rvals(Tup &&tup)
+    -> decltype(
+      detail::tuple_rvals(
+        std::forward<Tup>(tup),
+        make_index_sequence<std::tuple_size<typename std::decay<Tup>::type>::value>()
+      )
+    ) {
+    return detail::tuple_rvals(
+      std::forward<Tup>(tup),
+      make_index_sequence<std::tuple_size<typename std::decay<Tup>::type>::value>()
+    );
   }
   
   //////////////////////////////////////////////////////////////////////
-
-  template<typename Fn, typename Tup, int ...i>
-  inline auto apply_tupled_impl(Fn &&fn, Tup &&args, index_sequence<i...>) 
-    -> decltype(fn(std::get<i>(args)...)) {
-    return fn(std::get<i>(args)...);
+  // apply_tupled: Apply a callable against an argument list wrapped
+  // in a tuple.
+  
+  namespace detail {
+    template<typename Fn, typename Tup, int ...i>
+    inline auto apply_tupled(Fn &&fn, Tup &&args, index_sequence<i...>) 
+      -> decltype(fn(std::get<i>(args)...)) {
+      return fn(std::get<i>(args)...);
+    }
   }
-      
+  
   template<typename Fn, typename Tup>
   inline auto apply_tupled(Fn &&fn, Tup &&args)
     -> decltype(
-      apply_tupled_impl(
+      detail::apply_tupled(
         std::forward<Fn>(fn), std::forward<Tup>(args),
         make_index_sequence<std::tuple_size<Tup>::value>()
       )
     ) {
-    return apply_tupled_impl(
+    return detail::apply_tupled(
       std::forward<Fn>(fn), std::forward<Tup>(args),
       make_index_sequence<std::tuple_size<Tup>::value>()
     );

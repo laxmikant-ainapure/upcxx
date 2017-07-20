@@ -480,7 +480,7 @@ namespace upcxx {
           future_body *body = hdr1->body_;
           void *storage = body->storage_;
           body->destruct_early();
-          operator delete(storage);
+          ::operator delete(storage);
           delete hdr1;
         }
       }
@@ -578,7 +578,7 @@ namespace upcxx {
         if(a->status_ == status_proxying)
           a_body->link_.unlink();
         // proxy bodies are trivially destructible
-        operator delete(a_body->storage_);
+        ::operator delete(a_body->storage_);
         // proxying headers are dependents
         delete static_cast<future_header_dependent*>(a);
       }

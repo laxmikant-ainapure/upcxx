@@ -35,35 +35,35 @@ namespace upcxx {
         return this->arg_.impl_.ready();
       }
       
-      struct results_refs_function {
+      struct result_lrefs_function {
         typedef future_apply_return_t<Fn(FuArg)> fn_return_t;
-        typedef decltype(std::declval<fn_return_t>().impl_.results_refs_getter()) fn_return_getter_t;
+        typedef decltype(std::declval<fn_return_t>().impl_.result_lrefs_getter()) fn_return_getter_t;
         
         fn_return_t result_;
         fn_return_getter_t getter_;
         
-        results_refs_function(fn_return_t result):
+        result_lrefs_function(fn_return_t result):
           result_{std::move(result)},
-          getter_{result_.impl_.results_refs_getter()} {
+          getter_{result_.impl_.result_lrefs_getter()} {
         }
         
-        results_refs_function(const results_refs_function &that):
+        result_lrefs_function(const result_lrefs_function &that):
           result_{that.result_},
-          getter_{this->result_.impl_.results_refs_getter()} {
+          getter_{this->result_.impl_.result_lrefs_getter()} {
         }
-        results_refs_function& operator=(const results_refs_function &that) {
+        result_lrefs_function& operator=(const result_lrefs_function &that) {
           this->result_ = that.result_;
-          this->getter_ = this->result_.impl_.results_refs_getter();
+          this->getter_ = this->result_.impl_.result_lrefs_getter();
           return *this;
         }
         
-        results_refs_function(results_refs_function &&that):
+        result_lrefs_function(result_lrefs_function &&that):
           result_{std::move(that.result_)},
-          getter_{this->result_.impl_.results_refs_getter()} {
+          getter_{this->result_.impl_.result_lrefs_getter()} {
         }
-        results_refs_function& operator=(results_refs_function &&that) {
+        result_lrefs_function& operator=(result_lrefs_function &&that) {
           this->result_ = std::move(that.result_);
-          this->getter_ = this->result_.impl_.results_refs_getter();
+          this->getter_ = this->result_.impl_.result_lrefs_getter();
           return *this;
         }
         
@@ -73,20 +73,33 @@ namespace upcxx {
         }
       };
       
-      results_refs_function results_refs_getter() const {
-        return results_refs_function{
-          future_apply<Fn(FuArg)>::apply(
+      result_lrefs_function result_lrefs_getter() const {
+        return result_lrefs_function{
+          future_apply<Fn(FuArg)>()(
             this->fn_,
-            this->arg_.impl_.results_refs_getter()()
+            this->arg_.impl_.result_lrefs_getter()()
           )
         };
       }
       
-      template<int i=0>
-      typename std::tuple_element<i,std::tuple<T...>>::type value() const {
-        return std::get<i>(this->results_refs_getter());
+      auto result_rvals()
+        -> decltype(
+          future_apply<Fn(FuArg)>()(
+            this->fn_,
+            this->arg_.impl_.result_lrefs_getter()()
+          ).impl_.result_rvals()
+        ) {
+        return std::tuple<T...>{
+          future_apply<Fn(FuArg)>()(
+            this->fn_,
+            // Important not to use arg_.impl_.result_rvals() since that
+            // could lead to inadvertent move construction if lambda fn_
+            // takes an argument by value (likely).
+            this->arg_.impl_.result_lrefs_getter()()
+          ).impl_.result_lrefs_getter()()
+        };
       }
-    
+      
     public:
       typedef future_header_ops_general header_ops;
       
@@ -94,7 +107,7 @@ namespace upcxx {
         future_header_dependent *hdr = new future_header_dependent;
         
         typedef future_body_pure<future1<future_kind_mapped<FuArg,Fn>,T...>> body_type;
-        void *body_mem = operator new(sizeof(body_type));
+        void *body_mem = ::operator new(sizeof(body_type));
         
         body_type *body = new(body_mem) body_type{
           body_mem, hdr, std::move(*this)
@@ -131,21 +144,21 @@ namespace upcxx {
       void cleanup_early() { dep_.cleanup_early(); }
       void cleanup_ready() { dep_.cleanup_ready(); }
       
-      typedef typename future_impl_mapped<FuArg,Fn,T...>::results_refs_function results_refs_function;
+      typedef typename future_impl_mapped<FuArg,Fn,T...>::result_lrefs_function result_lrefs_function;
       
-      results_refs_function results_refs_getter() const {
-        return results_refs_function{
+      result_lrefs_function result_lrefs_getter() const {
+        return result_lrefs_function{
           future_apply<Fn(FuArg)>()(
             this->fn_,
-            this->dep_.results_refs_getter()()
+            this->dep_.result_lrefs_getter()()
           )
         };
       }
       
       future_header* cleanup_ready_get_header() {
         future_header *hdr = new future_header_result<T...>{
-          /*anon_deps_n=*/0,
-          this->results_refs_getter()()
+          /*not_ready=*/false,
+          this->result_lrefs_getter()()
         };
         
         dep_.cleanup_ready();

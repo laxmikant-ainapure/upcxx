@@ -62,13 +62,21 @@ future<int> fib(int i) {
   else
     return when_all(fib(i-1), fib(i-2))
       >> [=](int x1, int x2)->future<int> {
-        //std::cout<<"  sum "<<x1<<" + "<<x2<<" = "<<x1+x2<<'\n';
-        auto *p = new promise<int>;
-        p->require_anonymous(1);
-        UPCXX_ASSERT(x1 + x2 == fib_smart(i), "i="<<i<<" x1="<<x1<<" x2="<<x2);
-        p->fulfill_result(x1 + x2);
-        the_q.push(p);
-        return p->get_future();
+        static int iter = 0;
+        
+        // branches are equivalent, they just test more of future's
+        // internal codepaths.
+        if(iter++ & 1) {
+          auto *p = new promise<int>;
+          p->require_anonymous(1);
+          UPCXX_ASSERT(x1 + x2 == fib_smart(i), "i="<<i<<" x1="<<x1<<" x2="<<x2);
+          p->fulfill_result(x1 + x2);
+          the_q.push(p);
+          return p->get_future();
+        }
+        else {
+          return make_future(x1 + x2);
+        }
       };
 }
 
@@ -98,11 +106,12 @@ int main() {
         when_all(),
         ans0,
         when_all(ans1),
-        ans1.then_pure([](int x) { return x*x; })
+        ans1.then_pure([](int x) { return x*x; }),
+        make_future<const int&>(arg)
       ),
       make_future<std::vector<int>>({0*0, 1*1, 2*2, 3*3, 4*4})
     ).then(
-      [=](int ans0, int ans1, int ans1_sqr, const std::vector<int> &some_vec) {
+      [=](int ans0, int ans1, int ans1_sqr, int arg, const std::vector<int> &some_vec) {
         std::cout << "fib("<<arg <<") = "<<ans0<<'\n';
         std::cout << "fib("<<ans0+1<<") = "<<ans1<<'\n';
         std::cout << "fib("<<ans0+1<<")**2 = "<<ans1_sqr<<'\n';

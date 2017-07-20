@@ -33,13 +33,13 @@ namespace detail {
       if(0 == hdr->refs_drop(1)) { // left active queue
         this->dep_.cleanup_ready();
         this->~future_body_pure();
-        operator delete(storage);
+        ::operator delete(storage);
         delete hdr;
       }
       else {
         future_header *result = this->dep_.cleanup_ready_get_header();
         this->~future_body_pure();
-        operator delete(storage);
+        ::operator delete(storage);
         
         hdr->enter_ready(result);
       }

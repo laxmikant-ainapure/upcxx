@@ -137,13 +137,23 @@ namespace upcxx {
         return HeaderOps::is_trivially_ready_result || hdr_->status_ == future_header::status_ready;
       }
       
-      upcxx::constant_function<std::tuple<T&...>> results_refs_getter() const {
-        return {upcxx::tuple_refs(future_header_result<T...>::results_of(hdr_->result_))};
+      upcxx::constant_function<std::tuple<T&...>> result_lrefs_getter() const {
+        return {
+          upcxx::tuple_lrefs(
+            future_header_result<T...>::results_of(hdr_->result_)
+          )
+        };
       }
       
-      template<int i=0>
-      typename std::tuple_element<i,std::tuple<T...>>::type& result() const {
-        return std::get<i>(future_header_result<T...>::results_of(hdr_->result_));
+      auto result_rvals()
+        -> decltype(
+          upcxx::tuple_rvals(
+            future_header_result<T...>::results_of(hdr_->result_)
+          )
+        ) {
+        return upcxx::tuple_rvals(
+          future_header_result<T...>::results_of(hdr_->result_)
+        );
       }
       
       typedef HeaderOps header_ops;
@@ -238,8 +248,12 @@ namespace upcxx {
         future_header_ops_result_ready::template decref_header<T...>(this->header_());
       }
       
-      upcxx::constant_function<std::tuple<T&...>> results_refs_getter() const {
-        return {upcxx::tuple_refs(future_header_result<T...>::results_of(this->header_()))};
+      upcxx::constant_function<std::tuple<T&...>> result_lrefs_getter() const {
+        return {
+          upcxx::tuple_lrefs(
+            future_header_result<T...>::results_of(this->header_())
+          )
+        };
       }
       
       future_header* cleanup_ready_get_header() {

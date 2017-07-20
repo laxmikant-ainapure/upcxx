@@ -5,13 +5,52 @@
 
 namespace upcxx {
   //////////////////////////////////////////////////////////////////////
+  /* FutureImpl concept:
+   * 
+   * struct FutureImpl {
+   *   FutureImpl(FutureImpl const&);
+   *   FutureImpl& operator=(FutureImpl const&);
+   * 
+   *   FutureImpl(FutureImpl&&);
+   *   FutureImpl& operator=(FutureImpl&&);
+   * 
+   *   bool ready() const;
+   * 
+   *   // Return a no-argument callable which returns a tuple of lvalue-
+   *   // references to results. The references are valid so long as
+   *   // both this FutureImpl and the callable are alive. Tuple
+   *   // componenets which are already reference type (& or &&) will
+   *   // just have their type unaltered.
+   *   LRefsGetter result_lrefs_getter() const;
+   * 
+   *   // Return result tuple where each component is either a value or
+   *   // rvalue-reference depending on whether the reference
+   *   // would be valid for as long as this future lives.
+   *   // Therefor we guarantee that references will be valid as long
+   *   // as this future lives. If any T are already & or && then they
+   *   // are returned unaltered.
+   *   tuple<(T or T&&)...> result_rvals();
+   *   
+   *   // Returns a future_header (with refcount included for consumer)
+   *   // for this future. Leaves us in an undefined state (only safe
+   *   // operations are (copy/move)-(construction/assignment), and
+   *   // destruction).
+   *   detail::future_header* steal_header();
+   *   
+   *   // One of the header operations classes for working with the
+   *   // header produced by steal_header().
+   *   typedef detail::future_header_ops_? header_ops;
+   * };
+   */
+  
+  //////////////////////////////////////////////////////////////////////
   // future1: The actual type users get (aliased as future<>).
   
   template<typename Kind, typename ...T>
   struct future1 {
     typedef Kind kind_type;
     typedef std::tuple<T...> results_type;
-    typedef typename Kind::template with_types<T...> impl_type;
+    typedef typename Kind::template with_types<T...> impl_type; // impl_type is a FutureImpl.
     
     impl_type impl_;
     
@@ -45,22 +84,30 @@ namespace upcxx {
       return *this;
     }
     
-    inline bool ready() const {
+    bool ready() const {
       return impl_.ready();
     }
     
     template<int i=0>
     typename std::tuple_element<i, results_type>::type result() const {
-      return impl_.template result<i>();
+      return typename std::tuple_element<i, results_type>::type{
+        std::get<i>(impl_.template result_lrefs_getter()())
+      };
     }
     
     results_type results() const {
-      return results_type{impl_.template results_refs_getter()()};
+      return results_type{impl_.template result_rvals()};
+    }
+    
+    template<int i=0>
+    auto result_moved()
+      -> decltype(std::get<i>(impl_.template result_rvals())) {
+      return std::get<i>(impl_.template result_rvals());
     }
     
     auto results_moved()
-      -> decltype(upcxx::tuple_rvalues(impl_.template results_refs_getter()())) {
-      return upcxx::tuple_rvalues(impl_.template results_refs_getter()());
+      -> decltype(impl_.template result_rvals()) {
+      return impl_.template results_rvals();
     }
     
     template<typename Fn>

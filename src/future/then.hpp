@@ -30,14 +30,14 @@ namespace upcxx {
         // another for active queue.
         if(0 == hdr->refs_drop(pure ? 1 : 2)) {
           // we died
-          operator delete(storage);
+          ::operator delete(storage);
           delete hdr;
         }
         else {
           future_header *proxied_hdr = proxied.impl_.steal_header();
           
           if(Kind::template with_types<T...>::header_ops::is_trivially_ready_result) {
-            operator delete(storage); // body dead
+            ::operator delete(storage); // body dead
             // we know proxied_hdr is its own result
             hdr->enter_ready(proxied_hdr);
           }
@@ -71,7 +71,7 @@ namespace upcxx {
       void leave_active(future_header_dependent *hdr) {
         auto proxied = future_apply<Fn(FuArg)>()(
           this->fn_,
-          this->dep_.results_refs_getter()()
+          this->dep_.result_lrefs_getter()()
         );
         
         void *me_mem = this->storage_;
@@ -108,9 +108,9 @@ namespace upcxx {
       }
       
       void leave_active(future_header_dependent *hdr) {
-        auto proxied = future_apply<Fn(FuArg)>::apply(
+        auto proxied = future_apply<Fn(FuArg)>()(
           this->fn_,
-          this->dep_.results_refs_getter()()
+          this->dep_.result_lrefs_getter()()
         );
         
         void *me_mem = this->storage_;
@@ -141,7 +141,7 @@ namespace upcxx {
           future_body_then<Arg,Fn> then;
           future_body_proxy<FnRetT...> proxy;
         };
-        void *storage = operator new(sizeof(body_union_t));
+        void *storage = ::operator new(sizeof(body_union_t));
         
         future_body_then<Arg,Fn> *body =
           new(storage) future_body_then<Arg,Fn>(
@@ -210,7 +210,7 @@ namespace upcxx {
           future_body_then_pure<Arg,Fn> then;
           future_body_proxy<FnRetT...> proxy;
         };
-        void *body_mem = operator new(sizeof(body_union_t));
+        void *body_mem = ::operator new(sizeof(body_union_t));
         
         hdr->body_ = new(body_mem) future_body_then_pure<Arg,Fn>(
           body_mem, hdr,

@@ -242,9 +242,9 @@ void future_header_dependent::enter_proxying(
     }
   }
   
-  if(deferred_delete_1) operator delete(deferred_delete_1);
+  if(deferred_delete_1) ::operator delete(deferred_delete_1);
   if(deferred_delete_2) delete deferred_delete_2;
-  if(deferred_delete_3) operator delete(deferred_delete_3);
+  if(deferred_delete_3) ::operator delete(deferred_delete_3);
 }
 
 void future_body_proxy_::leave_active(future_header_dependent *hdr) {
@@ -255,14 +255,14 @@ void future_body_proxy_::leave_active(future_header_dependent *hdr) {
     
     // discard the body. no destructor needed since future_body_proxy<T...>
     // is trivially destructible and we dont want to decref the proxied pointer.
-    operator delete(this->storage_);
+    ::operator delete(this->storage_);
     
     hdr->enter_ready(result);
   }
   else { // only reference is active queue, just delete it
     void *storage = this->storage_;
     this->destruct_early();
-    operator delete(storage);
+    ::operator delete(storage);
     delete hdr;
   }
 }
