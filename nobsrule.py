@@ -177,6 +177,7 @@ def cxx11_pp_cg(cxt, src):
     ['-O%d'%optlev] +
     (['-g'] if dbgsym else []) +
     ['-Wall'] +
+    ['-D_GNU_SOURCE=1'] + # Required for full latest POSIX on some systems
     libset_flags(libset, 'cg')
   )
 
