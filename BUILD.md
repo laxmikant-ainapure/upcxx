@@ -68,7 +68,9 @@ go in the hashed junkyard. Another benefit is that nobs can use part
 of the  current state of the OS environment in naming the artifact
 (reflected in the hash). For instance, you can already use the $OPTLEV
 and $DBGSYM environment variables to control the `-O<level>` and `-g`
-compiler options and produce different artifacts.
+compiler options and produce different artifacts. Also, whatever you
+have in $CC and $CXX are used as the compilers (defaulting to gcc/g++
+otherwise).
 
 ```
 export DBGSYM=1

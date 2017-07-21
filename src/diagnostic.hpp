@@ -28,7 +28,7 @@ namespace upcxx {
 
 #define UPCXX_FAIL() ::upcxx::assert_failed(__FILE__, __LINE__)
 
-#define UPCXX_VERIFY(ok) \
+#define UPCXX_ASSERT_ALWAYS(ok) \
   do { \
     if(!(ok)) \
       ::upcxx::assert_failed(__FILE__, __LINE__); \

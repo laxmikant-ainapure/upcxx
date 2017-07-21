@@ -9,6 +9,7 @@ import sys
 from nobs import subexec
 
 cxx_exts = ('.cpp','.cxx','.c++','.C','.C++')
+c_exts = ('.c',)
 
 def env(name, otherwise):
   """
@@ -128,6 +129,9 @@ def cc_version(cxt):
   cc = cxt.cc()
   return output_of(cc + ['--version'])
 
+# TODO: Refactor [cxx/cc]11_pp_cg rules into separate compiler,
+# pp_flags, and cg_flags rules.
+
 @rule(path_arg='src')
 @coroutine
 def cxx11_pp(cxt, src):
@@ -137,7 +141,40 @@ def cxx11_pp(cxt, src):
   cxx11 = cxt.cxx() + cxt.lang_cxx11()
   ipt = yield cxt.include_paths_tree()
   libs = yield cxt.libraries(src)
+  
   yield cxx11 + ['-I'+ipt] + libset_flags(libs, 'pp')
+
+@rule(path_arg='src')
+@coroutine
+def c11_pp(cxt, src):
+  """
+  File-specific C11 compiler with preprocessor flags.
+  """
+  c11 = cxt.cc() + cxt.lang_c11()
+  ipt = yield cxt.include_paths_tree()
+  libs = yield cxt.libraries(src)
+  
+  yield c11 + ['-I'+ipt] + libset_flags(libs, 'pp')
+
+# upcxx_backend is a pseudo library used to inject the
+# "-DUPCXX_BACKEND=X" preprocessor flag, and to rope in gasnet.
+@rule()
+def upcxx_backend(cxt):
+  libs = {
+    'upcxx': {
+      'ppflags': ['-D%s=%s'%(
+          'UPCXX_BACKEND',
+          env("UPCXX_BACKEND", otherwise="gasnet1_seq")
+        )],
+      'libflags': [],
+      'deplibs': ['gasnet']
+    }
+  }
+  
+  gasnet = yield cxt.libgasnet()
+  libset_merge_inplace(libs, gasnet)
+  
+  yield libs
 
 @rule()
 def cg_optlev(cxt):
@@ -160,6 +197,26 @@ def cg_dbgsym(cxt):
   Include debugging symbols and instrumentation in compiled files.
   """
   return env('DBGSYM', 0)
+
+@rule(path_arg='src')
+@coroutine
+def c11_pp_cg(cxt, src):
+  """
+  File-specific C++11 compiler with preprocessor and code-gen flags.
+  """
+  c11_pp = yield cxt.c11_pp(src)
+  optlev = cxt.cg_optlev_forfile(src)
+  dbgsym = cxt.cg_dbgsym()
+  libset = yield cxt.libraries(src)
+  
+  yield (
+    c11_pp +
+    ['-O%d'%optlev] +
+    (['-g'] if dbgsym else []) +
+    ['-Wall'] +
+    ['-D_GNU_SOURCE=1'] + # Required for full latest POSIX on some systems
+    libset_flags(libset, 'cg')
+  )
 
 @rule(path_arg='src')
 @coroutine
@@ -189,8 +246,16 @@ def compiler(cxt, src):
   function that given a path of where to place the object file, returns
   the argument list to invoke as a child process.
   """
-  cxx11_pp_cg = yield cxt.cxx11_pp_cg(src)
-  yield lambda outfile: cxx11_pp_cg + ['-c', src, '-o', outfile]
+  _, ext = os.path.splitext(src)
+  
+  if ext in cxx_exts:
+    comp_pp_cg = yield cxt.cxx11_pp_cg(src)
+  elif ext in c_exts:
+    comp_pp_cg = yield cxt.c11_pp_cg(src)
+  else:
+    raise Exception("Unrecognized source file extension: "+src)
+  
+  yield lambda outfile: comp_pp_cg + ['-c', src, '-o', outfile]
 
 @rule(path_arg='src')
 @coroutine
@@ -201,6 +266,11 @@ def libraries(cxt, src):
   """
   if src == here('test','gasnet_hello.cpp'):
     yield cxt.libgasnet()
+  elif src in [
+      here('src','backend','gasnet1_seq','backend.cpp'),
+      here('test','rpc_barrier.cpp'),
+    ]:
+    yield cxt.upcxx_backend()
   else:
     yield {}
 
@@ -247,6 +317,9 @@ class includes:
   @coroutine
   def execute(me):
     cxx11_pp, src = yield me.get_cxx11_pp_and_src()
+    
+    # See here for getting this to work with other compilers:
+    #  https://projects.coin-or.org/ADOL-C/browser/trunk/autoconf/depcomp?rev=357
     cmd = cxx11_pp + ['-MM','-MT','x',src]
     
     mk = yield subexec.launch(cmd, capture_stdout=True)
@@ -281,7 +354,7 @@ class compile:
   def execute(me):
     src, compiler = yield me.get_src_compiler()
     
-    objfile = me.mkpath(None, suffix='.o')
+    objfile = me.mkpath(None, suffix=os.path.basename(src)+'.o')
     yield subexec.launch(compiler(objfile))
     yield objfile
 
@@ -458,8 +531,9 @@ class libgasnet_configured:
     me.depend_fact(key='CC', value=cxt.cc_version())
     me.depend_fact(key='CXX', value=cxt.cxx_version())
     return (
-      cxt.cc() + ['-O%d'%cxt.cg_optlev()],
-      cxt.cxx() + ['-O%d'%cxt.cg_optlev()],
+      cxt.cc(),
+      cxt.cxx(),
+      cxt.cg_optlev(),
       cxt.cg_dbgsym()
     )
   
@@ -469,15 +543,15 @@ class libgasnet_configured:
   
   @coroutine
   def execute(me):
-    cc, cxx, debug = me.get_config()
+    cc, cxx, optlev, debug = me.get_config()
     source_dir = yield me.get_soruce_dir()
     
     build_dir = me.mkpath(key=None)
     os.makedirs(build_dir)
     
     env1 = dict(os.environ)
-    env1['CC'] = ' '.join(cc)
-    env1['CXX'] = ' '.join(cxx)
+    env1['CC'] = ' '.join(cc + ['-O%d'%optlev])
+    env1['CXX'] = ' '.join(cxx + ['-O%d'%optlev])
     
     print>>sys.stderr, 'Configuring GASNet...'
     yield subexec.launch(
