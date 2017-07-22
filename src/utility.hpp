@@ -139,16 +139,18 @@ namespace upcxx {
 
   //////////////////////////////////////////////////////////////////////
 
-  template<int n, int ...s>
-  struct _make_index_sequence: _make_index_sequence<n-1, n-1, s...> {};
+  namespace detail {
+    template<int n, int ...s>
+    struct make_index_sequence: make_index_sequence<n-1, n-1, s...> {};
 
-  template<int ...s>
-  struct _make_index_sequence<0, s...> {
-    typedef index_sequence<s...> type;
-  };
-
+    template<int ...s>
+    struct make_index_sequence<0, s...> {
+      typedef index_sequence<s...> type;
+    };
+  }
+  
   template<int n>
-  using make_index_sequence = typename _make_index_sequence<n>::type;
+  using make_index_sequence = typename detail::make_index_sequence<n>::type;
 
   //////////////////////////////////////////////////////////////////////
 

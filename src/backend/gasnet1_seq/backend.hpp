@@ -24,7 +24,7 @@ namespace gasnet1_seq {
   rma_callback* make_rma_cb(Fn fn);
   
   // Send AM (packed command), receiver executes in handler.
-  void send_am_restricted(
+  void send_am_medium_restricted(
     intrank_t recipient,
     void *command_buf,
     std::size_t buf_size
@@ -35,7 +35,7 @@ namespace gasnet1_seq {
   void send_am_restricted(intrank_t recipient, Fn &&fn);
   
   // Send AM (packed command), receiver executes in `level` progress.
-  void send_am_queued(
+  void send_am_medium_queued(
     progress_level level,
     intrank_t recipient,
     void *command_buf,
@@ -84,7 +84,7 @@ void upcxx::backend::send_am(intrank_t recipient, Fn &&fn) {
   command_pack(w, fn, ub.size());
   
   if(small)
-    gasnet1_seq::send_am_queued(level, recipient, buf, w.size(), w.alignment());
+    gasnet1_seq::send_am_medium_queued(level, recipient, buf, w.size(), w.alignment());
   else
     gasnet1_seq::send_am_rdzv(level, recipient, buf, w.size(), w.alignment());
 }
@@ -95,7 +95,7 @@ namespace upcxx {
 namespace backend {
 namespace gasnet1_seq {
   //////////////////////////////////////////////////////////////////////
-  // make_callback
+  // make_rma_cb
   
   template<typename Fn>
   struct rma_callback_impl final: rma_callback {
@@ -103,7 +103,13 @@ namespace gasnet1_seq {
     rma_callback_impl(Fn fn): fn_{std::move(fn)} {}
     
     void fire_and_delete() {
+      // Do our job.
       this->fn_();
+      
+      // The benefit of merging fire & delete in one-shot callbacks is
+      // destruction can be inlined as long as we mark the class `final`.
+      // With seperate fire() and delete() we would incur a virtual
+      // call for each.
       delete this;
     }
   };
@@ -134,9 +140,12 @@ namespace gasnet1_seq {
     command_pack(w, fn, ub.size());
     
     if(small)
-      gasnet1_seq::send_am_restricted(recipient, buf, w.size());
+      gasnet1_seq::send_am_medium_restricted(recipient, buf, w.size());
     else
-      gasnet1_seq::send_am_rdzv(progress_level_internal, recipient, buf, w.size(), w.alignment());
+      gasnet1_seq::send_am_rdzv(
+        progress_level_internal,
+        recipient, buf, w.size(), w.alignment()
+      );
   }
 }}}
 #endif

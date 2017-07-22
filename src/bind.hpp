@@ -19,7 +19,7 @@ namespace upcxx {
     std::tuple<Binds...> b_;
     
     template<typename Me, int ...bi, typename ...Arg>
-    static auto _apply(
+    static auto apply_(
         Me &&me,
         upcxx::index_sequence<bi...> b_seq,
         Arg &&...a
@@ -43,12 +43,12 @@ namespace upcxx {
     template<typename ...Arg>
     auto operator()(Arg &&...a) const
       -> decltype(
-        _apply(*this,
+        apply_(*this,
           upcxx::make_index_sequence<sizeof...(Binds)>(),
           std::forward<Arg>(a)...
         )
       ) {
-      return _apply(*this,
+      return apply_(*this,
         upcxx::make_index_sequence<sizeof...(Binds)>(),
         std::forward<Arg>(a)...
       );
@@ -57,12 +57,12 @@ namespace upcxx {
     template<typename ...Arg>
     auto operator()(Arg &&...a)
       -> decltype(
-        _apply(*this,
+        apply_(*this,
           upcxx::make_index_sequence<sizeof...(Binds)>(),
           std::forward<Arg>(a)...
         )
       ) {
-      return _apply(*this,
+      return apply_(*this,
         upcxx::make_index_sequence<sizeof...(Binds)>(),
         std::forward<Arg>(a)...
       );

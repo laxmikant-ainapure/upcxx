@@ -143,7 +143,7 @@ namespace upcxx {
       std::size_t p = lay_.add_bytes(n*sizeof(T), alignof(T));
       
       Mem *__restrict w = (Mem*)(buf_ + p);
-      const Mem *__restrict r = reinterpret_cast<const Mem*>(x);
+      Mem const *__restrict r = reinterpret_cast<const Mem*>(x);
       for(std::size_t m=n; m!=0; m--)
         *w++ = *r++;
       
@@ -154,7 +154,7 @@ namespace upcxx {
     void* put_trivial_unaligned(const T &x) {
       std::size_t p = lay_.add_bytes(sizeof(T));
       for(std::size_t i=0; i != sizeof(T); i++)
-        buf_[p+i] = ((const char*)&x)[i];
+        buf_[p+i] = ((char const*)&x)[i];
       return buf_ + p;
     }
     template<typename T>
@@ -162,7 +162,7 @@ namespace upcxx {
       std::size_t p = lay_.add_bytes(n*sizeof(T));
       
       char *__restrict w = buf_ + p;
-      const char *__restrict r = (const char*)x;
+      char const *__restrict r = (char const*)x;
       
       for(std::size_t m=n; m!=0; m--) {
         for(std::size_t i=0; i != sizeof(T); i++)
@@ -263,9 +263,13 @@ namespace upcxx {
    */
   template<typename T>
   struct packing /*{
-    static void size_ubound(parcel_layout &ub, const T &x);
-    static void pack(parcel_writer &w, const T &x);
+    // Compute an upper-bound on the size of the packed message.
+    static void size_ubound(parcel_layout &ub, T const &x);
     
+    // Pack the value into the parcel.
+    static void pack(parcel_writer &w, T const &x);
+    
+    // Read value out of parcel.
     static T unpack(parcel_reader &r);
     -- or --
     typedef ... unpacking_type; // type to be used as T in: packing<T>::unpack(...)

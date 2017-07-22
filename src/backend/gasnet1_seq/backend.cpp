@@ -38,12 +38,12 @@ size_t gasnet1_seq::am_size_rdzv_cutover;
 
 namespace {
   enum {
-    id_am_restricted = 128,
-    id_am_queued
+    id_am_medium_restricted = 128,
+    id_am_medium_queued
   };
     
-  void am_restricted(gasnet_token_t, void *buf, size_t buf_size);
-  void am_queued(gasnet_token_t, void *buf, size_t buf_size, gasnet_handlerarg_t buf_align_and_level);
+  void am_medium_restricted(gasnet_token_t, void *buf, size_t buf_size);
+  void am_medium_queued(gasnet_token_t, void *buf, size_t buf_size, gasnet_handlerarg_t buf_align_and_level);
   
   struct message {
     message *next;
@@ -58,6 +58,7 @@ namespace {
     message_queue() = default;
     message_queue(message_queue const&) = delete;
     
+    void enqueue(message *m);
     bool burst(int burst_n = 100);
   };
   
@@ -72,6 +73,7 @@ namespace {
     rma_queue() = default;
     rma_queue(rma_queue const&) = delete;
     
+    void enqueue(rma_callback *rma);
     bool burst(int burst_n = 100);
   };
   
@@ -101,8 +103,8 @@ void upcxx::init() {
   UPCXX_ASSERT_ALWAYS(ok == GASNET_OK);
   
   gasnet_handlerentry_t am_table[] = {
-    {id_am_restricted, (void(*)())am_restricted},
-    {id_am_queued,     (void(*)())am_queued}
+    {id_am_medium_restricted, (void(*)())am_medium_restricted},
+    {id_am_medium_queued,     (void(*)())am_medium_queued}
   };
   
   size_t segment_size = os_env<size_t>("UPCXX_SEGMENT_MB", 128<<20);
@@ -171,13 +173,13 @@ void upcxx::deallocate(void *p) {
 ////////////////////////////////////////////////////////////////////////
 // from: upcxx/backend/gasnet1_seq/backend.hpp
 
-void gasnet1_seq::send_am_restricted(
+void gasnet1_seq::send_am_medium_restricted(
     intrank_t recipient,
     void *buf,
     std::size_t buf_size
   ) {
   
-  gasnet_AMRequestMedium0(recipient, id_am_restricted, buf, buf_size);
+  gasnet_AMRequestMedium0(recipient, id_am_medium_restricted, buf, buf_size);
   operator delete(buf);
   
   // Always check for new internal actions after a gasnet call.
@@ -185,7 +187,7 @@ void gasnet1_seq::send_am_restricted(
   rmas_internal.burst(4); // scanning is expensive, focus on front
 }
 
-void gasnet1_seq::send_am_queued(
+void gasnet1_seq::send_am_medium_queued(
     progress_level level,
     intrank_t recipient,
     void *buf,
@@ -195,7 +197,7 @@ void gasnet1_seq::send_am_queued(
   
   gasnet_AMRequestMedium1(
     recipient,
-    id_am_queued,
+    id_am_medium_queued,
     buf, buf_size,
     buf_align<<1 | (level == progress_level_user ? 1 : 0)
   );
@@ -216,11 +218,9 @@ void gasnet1_seq::rma_get(
   ) {
   
   done->handle = (uintptr_t)gasnet_get_nb_bulk(buf_d, rank_s, buf_s, buf_size);
-  done->next = nullptr;
   
   rma_queue &q = done_level == progress_level_internal ? rmas_internal : rmas_user;
-  *q.tailp = done;
-  q.tailp = &done->next;
+  q.enqueue(done);
   
   // Always check for new internal actions after a gasnet call.
   msgs_internal.burst();
@@ -237,16 +237,11 @@ void gasnet1_seq::send_am_rdzv(
   
   intrank_t rank_s = backend::rank_me;
   
-  auto make_ack = [](void *buf_s) {
-    return [=]() {
-      upcxx::deallocate(buf_s);
-    };
-  };
-  
   backend::send_am<progress_level_internal>(
     rank_d,
     [=]() {
-      // TODO: Elide rma_get (copy) for node-local sends.
+      // TODO: Elide rma_get (copy) for node-local sends with pointer
+      // translation and execution directly from source buffer.
       
       void *buf_d = upcxx::allocate(buf_size);
       
@@ -255,13 +250,16 @@ void gasnet1_seq::send_am_rdzv(
       
       gasnet1_seq::rma_get(
         buf_d, rank_s, buf_s, buf_size,
+        
         /*done_level*/level,
+        
         /*done*/make_rma_cb([=]() {
-          backend::send_am<progress_level_internal>(
-            rank_s,
-            make_ack(buf_s)
+          // Notify source rank it can free buffer.
+          gasnet1_seq::send_am_restricted(rank_s,
+            [=]() { upcxx::deallocate(buf_s); }
           );
           
+          // Execute buffer.
           parcel_reader r{buf_d};
           command_unpack_and_execute(r);
           
@@ -273,6 +271,12 @@ void gasnet1_seq::send_am_rdzv(
 }
 
 ////////////////////////////////////////////////////////////////////////
+
+inline void message_queue::enqueue(message *m) {
+  m->next = nullptr;
+  *this->tailp = m;
+  this->tailp = &m->next;
+}
 
 bool message_queue::burst(int burst_n) {
   if(this->bursting)
@@ -301,6 +305,12 @@ bool message_queue::burst(int burst_n) {
   this->bursting = false;
   
   return did_something;
+}
+
+inline void rma_queue::enqueue(rma_callback *rma) {
+  rma->next = nullptr;
+  *this->tailp = rma;
+  this->tailp = &rma->next;
 }
 
 bool rma_queue::burst(int burst_n) {
@@ -355,14 +365,23 @@ void upcxx::progress(progress_level lev) {
     
     did_something_ever |= did_something;
   }
-  // try really hard to do stuff before leaving attentiveness.
+  // Try really hard to do stuff before leaving attentiveness.
   while(did_something && rounds++ < 4);
   
   if(!did_something_ever) {
-    static int nothings = 0;
-    if(++nothings == 10)
+    /* In SMP tests we typically oversubscribe ranks to cpus. This is
+     * an attempt at heuristically determining if this rank is just
+     * spinning fruitlessly hogging the cpu from another who needs it.
+     * It would be a lot more effective if we included knowledge of
+     * whether outgoing communication was generated between progress
+     * calls, then we would really know that we're just idle.
+     */
+    static int consecutive_nothings = 0;
+    
+    if(++consecutive_nothings == 10) {
       sched_yield();
-    nothings = 0;
+      consecutive_nothings = 0;
+    }
   }
 }
 
@@ -370,7 +389,7 @@ void upcxx::progress(progress_level lev) {
 // anonymous namespace
 
 namespace {
-  void am_restricted(
+  void am_medium_restricted(
       gasnet_token_t,
       void *buf,
       size_t buf_size
@@ -379,7 +398,7 @@ namespace {
     command_unpack_and_execute(r);
   }
   
-  void am_queued(
+  void am_medium_queued(
       gasnet_token_t id,
       void *buf,
       size_t buf_size,
@@ -402,13 +421,14 @@ namespace {
     UPCXX_ASSERT((reinterpret_cast<uintptr_t>(msg_buf) & (buf_align-1)) == 0);
     
     message *m = new(msg_buf + msg_offset) message;
-    m->next = nullptr;
     m->payload = msg_buf;
     
-    message_queue &q = level_user ? msgs_user : msgs_internal;
-    *q.tailp = m;
-    q.tailp = &m->next;
-    
+    // TODO: Use a for-loop of word-copies since we know commands and
+    // gasnet AM buffers at least that much aligned, or communicate
+    // that to memcpy by using typed-pointers.
     std::memcpy(msg_buf, buf, buf_size);
+    
+    message_queue &q = level_user ? msgs_user : msgs_internal;
+    q.enqueue(m);
   }
 }
