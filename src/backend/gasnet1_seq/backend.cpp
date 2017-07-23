@@ -38,12 +38,12 @@ size_t gasnet1_seq::am_size_rdzv_cutover;
 
 namespace {
   enum {
-    id_am_medium_restricted = 128,
-    id_am_medium_queued
+    id_am_eager_restricted = 128,
+    id_am_eager_queued
   };
     
-  void am_medium_restricted(gasnet_token_t, void *buf, size_t buf_size);
-  void am_medium_queued(gasnet_token_t, void *buf, size_t buf_size, gasnet_handlerarg_t buf_align_and_level);
+  void am_eager_restricted(gasnet_token_t, void *buf, size_t buf_size);
+  void am_eager_queued(gasnet_token_t, void *buf, size_t buf_size, gasnet_handlerarg_t buf_align_and_level);
   
   struct message {
     message *next;
@@ -103,8 +103,8 @@ void upcxx::init() {
   UPCXX_ASSERT_ALWAYS(ok == GASNET_OK);
   
   gasnet_handlerentry_t am_table[] = {
-    {id_am_medium_restricted, (void(*)())am_medium_restricted},
-    {id_am_medium_queued,     (void(*)())am_medium_queued}
+    {id_am_eager_restricted, (void(*)())am_eager_restricted},
+    {id_am_eager_queued,     (void(*)())am_eager_queued}
   };
   
   size_t segment_size = os_env<size_t>("UPCXX_SEGMENT_MB", 128<<20);
@@ -122,11 +122,14 @@ void upcxx::init() {
   
   size_t am_medium_size = gasnet_AMMaxMedium();
   
-  /* TODO: Think about this more, or better yet, use *some* evidence to
-   * back it up. The aim is to to rarely clog the pipes with eagerly
-   * sent payloads (am mediums). So we only send small things eagerly
-   * and  everything else uses rendezvous. Just make sure we set the credit 
-   * count high enough!
+  /* TODO: I pulled this from thin air. We want to lean towards only
+   * sending very small messages eagerly so as not to clog the landing
+   * zone, which would force producers to block on their next send. By
+   * using a low threshold for rendezvous we increase the probability
+   * of there being enough landing space to send the notification of
+   * yet another rendezvous. I'm using the max medium size as a heuristic
+   * means to approximate the landing zone size. This is not at all
+   * accurate, we should be doing something conduit dependent.
    */
   gasnet1_seq::am_size_rdzv_cutover =
     am_medium_size < 1<<10 ? 256 :
@@ -173,13 +176,13 @@ void upcxx::deallocate(void *p) {
 ////////////////////////////////////////////////////////////////////////
 // from: upcxx/backend/gasnet1_seq/backend.hpp
 
-void gasnet1_seq::send_am_medium_restricted(
+void gasnet1_seq::send_am_eager_restricted(
     intrank_t recipient,
     void *buf,
     std::size_t buf_size
   ) {
   
-  gasnet_AMRequestMedium0(recipient, id_am_medium_restricted, buf, buf_size);
+  gasnet_AMRequestMedium0(recipient, id_am_eager_restricted, buf, buf_size);
   operator delete(buf);
   
   // Always check for new internal actions after a gasnet call.
@@ -187,7 +190,7 @@ void gasnet1_seq::send_am_medium_restricted(
   rmas_internal.burst(4); // scanning is expensive, focus on front
 }
 
-void gasnet1_seq::send_am_medium_queued(
+void gasnet1_seq::send_am_eager_queued(
     progress_level level,
     intrank_t recipient,
     void *buf,
@@ -197,7 +200,7 @@ void gasnet1_seq::send_am_medium_queued(
   
   gasnet_AMRequestMedium1(
     recipient,
-    id_am_medium_queued,
+    id_am_eager_queued,
     buf, buf_size,
     buf_align<<1 | (level == progress_level_user ? 1 : 0)
   );
@@ -217,7 +220,8 @@ void gasnet1_seq::rma_get(
     rma_callback *done
   ) {
   
-  done->handle = (uintptr_t)gasnet_get_nb_bulk(buf_d, rank_s, buf_s, buf_size);
+  gasnet_handle_t handle = gasnet_get_nb_bulk(buf_d, rank_s, buf_s, buf_size);
+  done->handle = reinterpret_cast<uintptr_t>(handle);
   
   rma_queue &q = done_level == progress_level_internal ? rmas_internal : rmas_user;
   q.enqueue(done);
@@ -324,8 +328,9 @@ bool rma_queue::burst(int burst_n) {
   
   while(burst_n-- && *pp != nullptr) {
     rma_callback *p = *pp;
+    gasnet_handle_t handle = reinterpret_cast<gasnet_handle_t>(p->handle);
     
-    if(GASNET_OK == gasnet_try_syncnb((gasnet_handle_t)p->handle)) {
+    if(GASNET_OK == gasnet_try_syncnb(handle)) {
       // remove from queue
       *pp = p->next;
       if(*pp == nullptr)
@@ -374,7 +379,10 @@ void upcxx::progress(progress_level lev) {
      * spinning fruitlessly hogging the cpu from another who needs it.
      * It would be a lot more effective if we included knowledge of
      * whether outgoing communication was generated between progress
-     * calls, then we would really know that we're just idle.
+     * calls, then we would really know that we're just idle. Well,
+     * almost. There would still exist the case where this rank is
+     * receiving nothing, sending nothing, but is loaded with compute
+     * and is only periodically progressing to be "nice".
      */
     static int consecutive_nothings = 0;
     
@@ -389,19 +397,14 @@ void upcxx::progress(progress_level lev) {
 // anonymous namespace
 
 namespace {
-  void am_medium_restricted(
-      gasnet_token_t,
-      void *buf,
-      size_t buf_size
-    ) {
+  void am_eager_restricted(gasnet_token_t, void *buf, size_t) {
     parcel_reader r{buf};
     command_unpack_and_execute(r);
   }
   
-  void am_medium_queued(
-      gasnet_token_t id,
-      void *buf,
-      size_t buf_size,
+  void am_eager_queued(
+      gasnet_token_t,
+      void *buf, size_t buf_size,
       gasnet_handlerarg_t buf_align_and_level
     ) {
     
@@ -423,10 +426,9 @@ namespace {
     message *m = new(msg_buf + msg_offset) message;
     m->payload = msg_buf;
     
-    // TODO: Use a for-loop of word-copies since we know commands and
-    // gasnet AM buffers at least that much aligned, or communicate
-    // that to memcpy by using typed-pointers.
-    std::memcpy(msg_buf, buf, buf_size);
+    // The (void**) casts *might* inform memcpy that it can assume word
+    // alignment.
+    std::memcpy((void**)msg_buf, (void**)buf, buf_size);
     
     message_queue &q = level_user ? msgs_user : msgs_internal;
     q.enqueue(m);

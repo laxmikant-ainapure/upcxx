@@ -24,7 +24,7 @@ namespace gasnet1_seq {
   rma_callback* make_rma_cb(Fn fn);
   
   // Send AM (packed command), receiver executes in handler.
-  void send_am_medium_restricted(
+  void send_am_eager_restricted(
     intrank_t recipient,
     void *command_buf,
     std::size_t buf_size
@@ -35,7 +35,7 @@ namespace gasnet1_seq {
   void send_am_restricted(intrank_t recipient, Fn &&fn);
   
   // Send AM (packed command), receiver executes in `level` progress.
-  void send_am_medium_queued(
+  void send_am_eager_queued(
     progress_level level,
     intrank_t recipient,
     void *command_buf,
@@ -71,9 +71,9 @@ void upcxx::backend::send_am(intrank_t recipient, Fn &&fn) {
   parcel_layout ub;
   command_size_ubound(ub, fn);
   
-  bool small = ub.size() <= gasnet1_seq::am_size_rdzv_cutover;
+  bool eager = ub.size() <= gasnet1_seq::am_size_rdzv_cutover;
   
-  void *buf = small
+  void *buf = eager
     ? operator new(ub.size())
     : upcxx::allocate(ub.size());
   
@@ -83,8 +83,8 @@ void upcxx::backend::send_am(intrank_t recipient, Fn &&fn) {
   parcel_writer w{buf};
   command_pack(w, fn, ub.size());
   
-  if(small)
-    gasnet1_seq::send_am_medium_queued(level, recipient, buf, w.size(), w.alignment());
+  if(eager)
+    gasnet1_seq::send_am_eager_queued(level, recipient, buf, w.size(), w.alignment());
   else
     gasnet1_seq::send_am_rdzv(level, recipient, buf, w.size(), w.alignment());
 }
@@ -127,9 +127,9 @@ namespace gasnet1_seq {
     parcel_layout ub;
     command_size_ubound(ub, fn);
     
-    bool small = ub.size() <= gasnet1_seq::am_size_rdzv_cutover;
+    bool eager = ub.size() <= gasnet1_seq::am_size_rdzv_cutover;
     
-    void *buf = small
+    void *buf = eager
       ? operator new(ub.size())
       : upcxx::allocate(ub.size());
     
@@ -139,8 +139,8 @@ namespace gasnet1_seq {
     parcel_writer w{buf};
     command_pack(w, fn, ub.size());
     
-    if(small)
-      gasnet1_seq::send_am_medium_restricted(recipient, buf, w.size());
+    if(eager)
+      gasnet1_seq::send_am_eager_restricted(recipient, buf, w.size());
     else
       gasnet1_seq::send_am_rdzv(
         progress_level_internal,

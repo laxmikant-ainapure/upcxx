@@ -118,8 +118,8 @@ namespace upcxx {
   }
   
   template<typename Fn>
-  Fn bind(Fn fn) {
-    return std::move(fn);
+  Fn&& bind(Fn &&fn) {
+    return std::forward<Fn>(fn);
   }
 }
 
@@ -167,6 +167,11 @@ namespace upcxx {
       upcxx::make_index_sequence<sizeof...(Parm)-1>(),
       std::integral_constant<int, sizeof...(Parm)-1>()
     );
+  }
+  
+  template<typename Fn>
+  Fn&& bind_last(Fn &&fn) {
+    return std::forward<Fn>(fn);
   }
 }
 #endif

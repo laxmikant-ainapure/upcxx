@@ -92,7 +92,7 @@ namespace upcxx {
   };
   
   //////////////////////////////////////////////////////////////////////
-  // detail::future_apply: computes continuation return type
+  // detail::future_apply: Computes continuation return type.
   // implemented in: upcxx/future/apply.hpp
   
   namespace detail {
@@ -101,6 +101,22 @@ namespace upcxx {
     
     template<typename App>
     using future_apply_return_t = typename future_apply<App>::return_type;
+  }
+
+  //////////////////////////////////////////////////////////////////////
+  // detail::future_from_tuple: Generate future1 type from a Kind and
+  // result types in a tuple.
+  
+  namespace detail {
+    template<typename Kind, typename Tup>
+    struct future_from_tuple;
+    template<typename Kind, typename ...T>
+    struct future_from_tuple<Kind, std::tuple<T...>> {
+      using type = future1<Kind, T...>;
+    };
+    
+    template<typename Kind, typename Tup>
+    using future_from_tuple_t = typename future_from_tuple<Kind,Tup>::type;
   }
   
   //////////////////////////////////////////////////////////////////////
@@ -385,7 +401,14 @@ namespace upcxx {
       template<typename ...U>
       void construct_results(U &&...values) {
         UPCXX_ASSERT(this->status_ == status_results_no);
-        ::new(&this->results_) std::tuple<T...>{std::forward<U>(values)...};
+        new(&this->results_) std::tuple<T...>{std::forward<U>(values)...};
+        this->status_ = status_results_yes;
+      }
+      
+      template<typename ...U>
+      void construct_results(std::tuple<U...> &&values) {
+        UPCXX_ASSERT(this->status_ == status_results_no);
+        new(&this->results_) std::tuple<T...>{std::move(values)};
         this->status_ = status_results_yes;
       }
       
@@ -441,6 +464,7 @@ namespace upcxx {
       }
       
       void construct_results() {}
+      void construct_results(std::tuple<>) {}
       
       void delete_me_ready() { delete this; }
       void delete_me() { delete this; }

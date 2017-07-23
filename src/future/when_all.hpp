@@ -9,16 +9,6 @@ namespace upcxx {
   // when_all()
   
   namespace detail {
-    // build a future1 type given Kind and its types in a tuple
-    template<typename Kind, typename Tuple>
-    struct future_from_tuple;
-    template<typename Kind, typename ...T>
-    struct future_from_tuple<Kind, std::tuple<T...>> {
-      typedef future1<Kind,T...> type;
-    };
-    template<typename Kind, typename Tuple>
-    using future_from_tuple_t = typename future_from_tuple<Kind,Tuple>::type;
-    
     // compute return type of when_all
     template<typename ...Arg>
     using when_all_return_t = 

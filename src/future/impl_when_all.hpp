@@ -104,7 +104,7 @@ namespace upcxx {
         typedef future_body_pure<future1<future_kind_when_all<FuArg...>,T...>> body_type;
         void *body_mem = ::operator new(sizeof(body_type));
         
-        hdr->body_ = ::new(body_mem) body_type{body_mem, hdr, std::move(*this)};
+        hdr->body_ = new(body_mem) body_type{body_mem, hdr, std::move(*this)};
         
         if(hdr->status_ == future_header::status_active)
           hdr->entered_active();

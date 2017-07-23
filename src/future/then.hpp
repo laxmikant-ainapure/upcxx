@@ -125,10 +125,11 @@ namespace upcxx {
   } // namespace detail
   
   namespace detail {
-    template<typename Arg, typename Fn, typename FnRetKind, typename ...FnRetT>
+    template<typename Arg, typename Fn,
+             typename FnRetKind, typename ...FnRetT>
     struct future_then<
-        Arg, Fn, future1<FnRetKind,FnRetT...>,
-        /*arg_trivial=*/false
+        Arg, Fn,
+        future1<FnRetKind,FnRetT...>, /*arg_trivial=*/false
       > {
       
       template<typename Fn1>
@@ -158,16 +159,17 @@ namespace upcxx {
       }
     };
     
-    template<typename Arg, typename Fn, typename FnRetKind, typename ...FnRetT>
+    template<typename Arg, typename Fn,
+             typename FnRetKind, typename ...FnRetT>
     struct future_then<
-        Arg, Fn, future1<FnRetKind,FnRetT...>,
-        /*arg_trivial=*/true
+        Arg, Fn,
+        future1<FnRetKind,FnRetT...>, /*arg_trivial=*/true
       > {
       
       template<typename Fn1>
       future1<future_kind_shref<future_header_ops_general>, FnRetT...>
       operator()(Arg arg, Fn1 &&fn) {
-        return future_apply<Fn(Arg)>()(fn, arg.impl_.results_refs());
+        return future_apply<Fn(Arg)>()(fn, arg.impl_.result_lrefs_getter()());
       }
     };
   } // namespace detail
@@ -233,7 +235,7 @@ namespace upcxx {
       > {
       template<typename Fn1>
       future1<FnRetKind, FnRetT...> operator()(Arg arg, Fn1 &&fn) {
-        return future_apply<Fn(Arg)>()(fn, arg.impl_.results_refs());
+        return future_apply<Fn(Arg)>()(fn, arg.impl_.result_lrefs_getter());
       }
     };
     

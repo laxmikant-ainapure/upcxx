@@ -13,36 +13,39 @@ namespace detail {
   struct future_apply1;
   
   template<typename Fn, typename Kind, typename ...Arg>
-  struct future_apply1<Fn, future1<Kind,Arg...>, void> {
+  struct future_apply1<
+      Fn, future1<Kind,Arg...>, void
+    > {
     typedef decltype(upcxx::make_future<>()) return_type;
     
     template<typename Fn1, typename ArgTup>
-    return_type operator()(Fn1 &&lam, ArgTup &&argtup) {
-      upcxx::apply_tupled(lam, std::forward<ArgTup>(argtup));
+    return_type operator()(Fn1 &&fn, ArgTup &&argtup) {
+      upcxx::apply_tupled(fn, std::forward<ArgTup>(argtup));
       return upcxx::make_future<>();
     }
   };
   template<typename Fn, typename Kind, typename ...Arg, typename ResT>
-  struct future_apply1<Fn, future1<Kind,Arg...>, ResT> {
+  struct future_apply1<
+      Fn, future1<Kind,Arg...>, ResT
+    > {
     typedef decltype(upcxx::make_future<ResT>(std::declval<ResT>())) return_type;
     
     template<typename Fn1, typename ArgTup>
-    return_type operator()(Fn1 &&lam, ArgTup &&argtup) {
+    return_type operator()(Fn1 &&fn, ArgTup &&argtup) {
       return upcxx::make_future<ResT>(
-        upcxx::apply_tupled(lam, std::forward<ArgTup>(argtup))
+        upcxx::apply_tupled(fn, std::forward<ArgTup>(argtup))
       );
     }
   };
   template<typename Fn, typename Kind, typename ...Arg, typename Kind1, typename ...ResT>
   struct future_apply1<
-      Fn, future1<Kind,Arg...>,
-      future1<Kind1,ResT...>
+      Fn, future1<Kind,Arg...>, future1<Kind1,ResT...>
     > {
     typedef future1<Kind1,ResT...> return_type;
     
     template<typename Fn1, typename ArgTup>
-    return_type operator()(Fn1 &&lam, ArgTup &&argtup) {
-      return upcxx::apply_tupled(lam, std::forward<ArgTup>(argtup));
+    return_type operator()(Fn1 &&fn, ArgTup &&argtup) {
+      return upcxx::apply_tupled(fn, std::forward<ArgTup>(argtup));
     }
   };
   
@@ -54,4 +57,23 @@ namespace detail {
     > {
   };
 }}
+
+namespace upcxx {
+  template<typename Fn, typename ArgTup>
+  auto apply_tupled_as_future(Fn &&fn, ArgTup &&argtup)
+    -> decltype(detail::future_apply<
+        Fn(detail::future_from_tuple_t<
+          detail::future_kind_result,
+          typename std::decay<ArgTup>::type
+        >)
+      >()(std::forward<Fn>(fn), std::forward<ArgTup>(argtup))
+    ) {
+    return detail::future_apply<
+        Fn(detail::future_from_tuple_t<
+          detail::future_kind_result,
+          typename std::decay<ArgTup>::type
+        >)
+      >()(std::forward<Fn>(fn), std::forward<ArgTup>(argtup));
+  }
+}
 #endif

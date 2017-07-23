@@ -92,11 +92,54 @@ void barrier() {
 int main() {
   upcxx::init();
   
-  for(int i=0; i < 20; i++) {
+  intrank_t rank_me = upcxx::rank_me();
+  intrank_t rank_n = upcxx::rank_n();
+  
+  for(int i=0; i < 10; i++) {
     barrier();
     
-    if(i % upcxx::rank_n() == upcxx::rank_me())
+    if(i % rank_n == rank_me) {
       std::cout << "Barrier "<<i<<"\n";
+      std::cout.flush();
+    }
+  }
+  
+  intrank_t right = (rank_me + 1) % rank_n;
+  intrank_t left = (rank_me + 1 + rank_n) % rank_n;
+  
+  {
+    future<int> fut = upcxx::rpc(right, []() {
+      std::cout << "From left\n";
+      std::cout.flush();
+      return 0xbeef;
+    });
+    
+    while(!fut.ready())
+      upcxx::progress();
+    
+    UPCXX_ASSERT(fut.result() == 0xbeef);
+  }
+  
+  barrier();
+  
+  if(rank_me == 0) {
+    std::cout << "Eyeball me! No 'rights' before this message, no 'lefts' after.\n";
+    std::cout.flush();
+  }
+  
+  barrier();
+  
+  {
+    future<int> fut = upcxx::rpc(left, [=]() {
+      std::cout << "From right\n";
+      std::cout.flush();
+      return rank_me;
+    });
+    
+    while(!fut.ready())
+      upcxx::progress();
+    
+    UPCXX_ASSERT(fut.result() == rank_me);
   }
   
   upcxx::finalize();

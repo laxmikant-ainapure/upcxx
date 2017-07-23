@@ -7,11 +7,26 @@
 #include <cstdint>
 
 namespace upcxx {
-  //////////////////////////////////////////////////////////////////////
-  // promise
-  
   template<typename ...T>
   class promise;
+  
+  //////////////////////////////////////////////////////////////////////
+  // detail::promise_like_t: generate type promise<T...> given some
+  // future<T...>
+  
+  namespace detail {
+    template<typename Fu>
+    struct promise_like;
+    template<typename Kind, typename ...T>
+    struct promise_like<future1<Kind,T...>> {
+      using type = promise<T...>;
+    };
+    template<typename Fu>
+    using promise_like_t = typename promise_like<Fu>::type;
+  }
+  
+  //////////////////////////////////////////////////////////////////////
+  // promise implemention
   
   template<typename ...T>
   class promise:
@@ -61,6 +76,15 @@ namespace upcxx {
     void fulfill_result(U &&...values) {
       auto *hdr = static_cast<detail::future_header_result<T...>*>(this->hdr_);
       hdr->construct_results(std::forward<U>(values)...);
+      if(0 == --this->countdown_)
+        hdr->readify();
+    }
+    
+    // *** not spec'd ***
+    template<typename ...U>
+    void fulfill_result(std::tuple<U...> &&values) {
+      auto *hdr = static_cast<detail::future_header_result<T...>*>(this->hdr_);
+      hdr->construct_results(std::move(values));
       if(0 == --this->countdown_)
         hdr->readify();
     }

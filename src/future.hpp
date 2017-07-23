@@ -3,6 +3,8 @@
 
 #include <upcxx/future/core.hpp>
 #include <upcxx/future/future1.hpp>
+
+#include <upcxx/future/apply.hpp>
 #include <upcxx/future/make_future.hpp>
 #include <upcxx/future/promise.hpp>
 #include <upcxx/future/then.hpp>

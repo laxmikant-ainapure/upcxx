@@ -321,7 +321,9 @@ namespace upcxx {
   
   namespace detail {
     template<typename Fn, typename Tup, int ...i>
-    inline auto apply_tupled(Fn &&fn, Tup &&args, index_sequence<i...>) 
+    inline auto apply_tupled(
+        Fn &&fn, Tup &&args, index_sequence<i...>
+      )
       -> decltype(fn(std::get<i>(args)...)) {
       return fn(std::get<i>(args)...);
     }
