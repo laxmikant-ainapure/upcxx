@@ -153,7 +153,20 @@ namespace upcxx {
   using make_index_sequence = typename detail::make_index_sequence<n>::type;
 
   //////////////////////////////////////////////////////////////////////
-
+  // add_lref_if_nonref: Add a lvalue-reference (&) to type T if T isn't
+  // already a reference (& or &&) type.
+  
+  template<typename T>
+  struct add_lref_if_nonref { using type = T&; };
+  
+  template<typename T>
+  struct add_lref_if_nonref<T&> { using type = T&; };
+  
+  template<typename T>
+  struct add_lref_if_nonref<T&&> { using type = T&&; };
+  
+  //////////////////////////////////////////////////////////////////////
+  
   template<typename Tup>
   struct tuple_decay;
   template<typename ...T>

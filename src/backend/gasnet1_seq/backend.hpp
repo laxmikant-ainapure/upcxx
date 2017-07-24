@@ -7,21 +7,17 @@
 #include <cstdint>
 
 ////////////////////////////////////////////////////////////////////////
+// gasnet_seq1 declarations
 
 namespace upcxx {
 namespace backend {
 namespace gasnet1_seq {
   extern std::size_t am_size_rdzv_cutover;
   
-  struct rma_callback {
+  struct rma_callback: backend::rma_callback {
     rma_callback *next;
     std::uintptr_t handle;
-    
-    virtual void fire_and_delete() = 0;
   };
-  
-  template<typename Fn>
-  rma_callback* make_rma_cb(Fn fn);
   
   // Send AM (packed command), receiver executes in handler.
   void send_am_eager_restricted(
@@ -43,17 +39,6 @@ namespace gasnet1_seq {
     std::size_t buf_align
   );
   
-  // Do a GET, execute `done` callback in `done_level` progress when finished.
-  // (xxx_d = dest, xxx_s = source)
-  void rma_get(
-    void *buf_d,
-    intrank_t rank_s,
-    void *buf_s,
-    std::size_t buf_size,
-    progress_level done_level,
-    rma_callback *done
-  );
-  
   // Send AM (packed command) via rendezvous, receiver executes druing `level`.
   void send_am_rdzv(
     progress_level level,
@@ -64,61 +49,70 @@ namespace gasnet1_seq {
 }}}
 
 //////////////////////////////////////////////////////////////////////
-// from: upcxx/backend.hpp
+// Implementations of: upcxx/backend.hpp
 
-template<upcxx::progress_level level, typename Fn>
-void upcxx::backend::send_am(intrank_t recipient, Fn &&fn) {
-  parcel_layout ub;
-  command_size_ubound(ub, fn);
+namespace upcxx {
+namespace backend {
+  //////////////////////////////////////////////////////////////////////
+  // send_am
   
-  bool eager = ub.size() <= gasnet1_seq::am_size_rdzv_cutover;
+  template<upcxx::progress_level level, typename Fn>
+  void send_am(intrank_t recipient, Fn &&fn) {
+    parcel_layout ub;
+    command_size_ubound(ub, fn);
+    
+    bool eager = ub.size() <= gasnet1_seq::am_size_rdzv_cutover;
+    
+    void *buf = eager
+      ? operator new(ub.size())
+      : upcxx::allocate(ub.size());
+    
+    // TODO: Handle large alignment requirements.
+    UPCXX_ASSERT(0 == (reinterpret_cast<uintptr_t>(buf) & (ub.alignment()-1)));
+    
+    parcel_writer w{buf};
+    command_pack(w, fn, ub.size());
+    
+    if(eager)
+      gasnet1_seq::send_am_eager_queued(level, recipient, buf, w.size(), w.alignment());
+    else
+      gasnet1_seq::send_am_rdzv(level, recipient, buf, w.size(), w.alignment());
+  }
   
-  void *buf = eager
-    ? operator new(ub.size())
-    : upcxx::allocate(ub.size());
+  //////////////////////////////////////////////////////////////////////
+  // make_rma_cb
   
-  // TODO: Handle large alignment requirements.
-  UPCXX_ASSERT(0 == (reinterpret_cast<uintptr_t>(buf) & (ub.alignment()-1)));
-  
-  parcel_writer w{buf};
-  command_pack(w, fn, ub.size());
-  
-  if(eager)
-    gasnet1_seq::send_am_eager_queued(level, recipient, buf, w.size(), w.alignment());
-  else
-    gasnet1_seq::send_am_rdzv(level, recipient, buf, w.size(), w.alignment());
-}
+  namespace gasnet1_seq {
+    template<typename Fn>
+    struct rma_callback_impl final: gasnet1_seq::rma_callback {
+      Fn fn_;
+      rma_callback_impl(Fn fn): fn_{std::move(fn)} {}
+      
+      void fire_and_delete() override {
+        // Do our job.
+        this->fn_();
+        
+        // The benefit of merging fire & delete in one-shot callbacks is
+        // destruction can be inlined as long as we mark the class `final`.
+        // With seperate fire() and delete() we would incur a virtual
+        // call for each.
+        delete this;
+      }
+    };
+  }
 
-////////////////////////////////////////////////////////////////////////
+  template<typename Fn>
+  inline rma_callback* make_rma_cb(Fn fn) {
+    return new gasnet1_seq::rma_callback_impl<Fn>(std::move(fn));
+  }
+}}
+
+//////////////////////////////////////////////////////////////////////
+// gasnet_seq1 implementations
 
 namespace upcxx {
 namespace backend {
 namespace gasnet1_seq {
-  //////////////////////////////////////////////////////////////////////
-  // make_rma_cb
-  
-  template<typename Fn>
-  struct rma_callback_impl final: rma_callback {
-    Fn fn_;
-    rma_callback_impl(Fn fn): fn_{std::move(fn)} {}
-    
-    void fire_and_delete() {
-      // Do our job.
-      this->fn_();
-      
-      // The benefit of merging fire & delete in one-shot callbacks is
-      // destruction can be inlined as long as we mark the class `final`.
-      // With seperate fire() and delete() we would incur a virtual
-      // call for each.
-      delete this;
-    }
-  };
-  
-  template<typename Fn>
-  inline rma_callback* make_rma_cb(Fn fn) {
-    return new rma_callback_impl<Fn>(std::move(fn));
-  }
-  
   //////////////////////////////////////////////////////////////////////
   // send_am_restricted
   

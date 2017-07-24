@@ -92,15 +92,27 @@ namespace upcxx {
   };
   
   //////////////////////////////////////////////////////////////////////
-  // detail::future_apply: Computes continuation return type.
+  // Future/continuation function-application support
   // implemented in: upcxx/future/apply.hpp
   
   namespace detail {
-    template<typename App> // App = Fn(Arg...)
-    struct future_apply;
+    // Apply function to tupled arguments lifting return to future.
+    // Defined in: future/apply.hpp
+    template<typename Fn, typename ArgTup>
+    struct apply_tupled_as_future/*{
+      typedef future1<Kind,U...> return_type;
+      return_type operator()(Fn &&fn, std::tuple<T...> &&arg);
+    }*/;
+    
+    // Apply function to results of future with return lifted to future.
+    template<typename App> // App = Fn(future1<Kind,T...>)
+    struct apply_futured_as_future/*{
+      typedef future1<Kind,U...> return_type;
+      return_type operator()(Fn &&fn, future1<Kind,T...> &&arg);
+    }*/;
     
     template<typename App>
-    using future_apply_return_t = typename future_apply<App>::return_type;
+    using apply_futured_as_future_return_t = typename apply_futured_as_future<App>::return_type;
   }
 
   //////////////////////////////////////////////////////////////////////
@@ -127,13 +139,13 @@ namespace upcxx {
   namespace detail {
     template<
       typename Arg, typename Fn,
-      typename FnRet = future_apply_return_t<Fn(Arg)>,
+      typename FnRet = apply_futured_as_future_return_t<Fn(Arg)>,
       bool arg_trivial = future_is_trivially_ready<Arg>::value>
     struct future_then;
     
     template<
       typename Arg, typename Fn,
-      typename FnRet = future_apply_return_t<Fn(Arg)>,
+      typename FnRet = apply_futured_as_future_return_t<Fn(Arg)>,
       bool arg_trivial = future_is_trivially_ready<Arg>::value,
       bool fnret_trivial = future_is_trivially_ready<FnRet>::value>
     struct future_then_pure;
@@ -155,15 +167,15 @@ namespace upcxx {
         // it simply decrements the dependent's status.
 
         // This future's dependencies have all finished, but this one
-        // needs its body's "leave_active()" called.
+        // needs its body's `leave_active()` called.
         status_active = 0,
         
-        // This future finished. Its result_ member points to a
+        // This future finished. Its `result_` member points to a
         // future_header_result<T...> containing the result value.
         status_ready = -1,
         
         // This future is proxying for another one which is not
-        // finished. Has body of type future_body_proxy<T...>.
+        // finished. Has body of type `future_body_proxy<T...>`.
         status_proxying = -2,
         
         // This future is proxying for another future which is ready.
@@ -213,7 +225,7 @@ namespace upcxx {
         int trash;
         (ref_n >= 0 ? this->ref_n_ : trash) = ref_n + n;
       }
-      inline int refs_drop(int n) {
+      inline int refs_drop(int n) { // returns new refcount
         int ref_n = this->ref_n_;
         bool write_back = ref_n >= 0;
         ref_n -= (ref_n >= 0 ? n : 0);
@@ -256,7 +268,7 @@ namespace upcxx {
       // future_body_proxy<T...> instance and the future to be proxied's header.
       void enter_proxying(future_body_proxy_ *body, future_header *proxied);
       
-      // override refcount arithmetic with more efficient form since we
+      // Override refcount arithmetic with more efficient form since we
       // know future_header_dependents are never statically allocated.
       inline void refs_add(int n) {
         this->ref_n_ += n;

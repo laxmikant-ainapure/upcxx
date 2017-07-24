@@ -66,14 +66,14 @@ namespace {
   message_queue msgs_user;
   
   struct rma_queue {
-    rma_callback *head = nullptr;
-    rma_callback **tailp = &this->head;
+    gasnet1_seq::rma_callback *head = nullptr;
+    gasnet1_seq::rma_callback **tailp = &this->head;
     bool bursting = false;
     
     rma_queue() = default;
     rma_queue(rma_queue const&) = delete;
     
-    void enqueue(rma_callback *rma);
+    void enqueue(gasnet1_seq::rma_callback *rma);
     bool burst(int burst_n = 100);
   };
   
@@ -173,6 +173,50 @@ void upcxx::deallocate(void *p) {
   #endif
 }
 
+void backend::rma_get(
+    void *buf_d,
+    intrank_t rank_s,
+    void *buf_s,
+    size_t buf_size,
+    progress_level done_level,
+    backend::rma_callback *done_
+  ) {
+  
+  gasnet1_seq::rma_callback *done = static_cast<gasnet1_seq::rma_callback*>(done_);
+  
+  gasnet_handle_t handle = gasnet_get_nb_bulk(buf_d, rank_s, buf_s, buf_size);
+  done->handle = reinterpret_cast<uintptr_t>(handle);
+  
+  rma_queue &q = done_level == progress_level_internal ? rmas_internal : rmas_user;
+  q.enqueue(done);
+  
+  // Always check for new internal actions after a gasnet call.
+  msgs_internal.burst();
+  rmas_internal.burst(4); // scanning is expensive, focus on front
+}
+
+void backend::rma_put(
+    intrank_t rank_d,
+    void *buf_d,
+    void *buf_s,
+    size_t buf_size,
+    progress_level done_level,
+    backend::rma_callback *done_
+  ) {
+  
+  gasnet1_seq::rma_callback *done = static_cast<gasnet1_seq::rma_callback*>(done_);
+  
+  gasnet_handle_t handle = gasnet_put_nb_bulk(rank_d, buf_d, buf_s, buf_size);
+  done->handle = reinterpret_cast<uintptr_t>(handle);
+  
+  rma_queue &q = done_level == progress_level_internal ? rmas_internal : rmas_user;
+  q.enqueue(done);
+  
+  // Always check for new internal actions after a gasnet call.
+  msgs_internal.burst();
+  rmas_internal.burst(4); // scanning is expensive, focus on front
+}
+
 ////////////////////////////////////////////////////////////////////////
 // from: upcxx/backend/gasnet1_seq/backend.hpp
 
@@ -211,26 +255,6 @@ void gasnet1_seq::send_am_eager_queued(
   rmas_internal.burst(4); // scanning is expensive, focus on front
 }
 
-void gasnet1_seq::rma_get(
-    void *buf_d,
-    intrank_t rank_s,
-    void *buf_s,
-    size_t buf_size,
-    progress_level done_level,
-    rma_callback *done
-  ) {
-  
-  gasnet_handle_t handle = gasnet_get_nb_bulk(buf_d, rank_s, buf_s, buf_size);
-  done->handle = reinterpret_cast<uintptr_t>(handle);
-  
-  rma_queue &q = done_level == progress_level_internal ? rmas_internal : rmas_user;
-  q.enqueue(done);
-  
-  // Always check for new internal actions after a gasnet call.
-  msgs_internal.burst();
-  rmas_internal.burst(4); // scanning is expensive, focus on front
-}
-
 void gasnet1_seq::send_am_rdzv(
     progress_level level,
     intrank_t rank_d,
@@ -252,7 +276,7 @@ void gasnet1_seq::send_am_rdzv(
       // TODO: Handle large alignments.
       UPCXX_ASSERT(0 == (reinterpret_cast<uintptr_t>(buf_d) & (buf_align-1)));
       
-      gasnet1_seq::rma_get(
+      backend::rma_get(
         buf_d, rank_s, buf_s, buf_size,
         
         /*done_level*/level,
@@ -275,6 +299,7 @@ void gasnet1_seq::send_am_rdzv(
 }
 
 ////////////////////////////////////////////////////////////////////////
+// anonymous namespace
 
 inline void message_queue::enqueue(message *m) {
   m->next = nullptr;
@@ -311,7 +336,7 @@ bool message_queue::burst(int burst_n) {
   return did_something;
 }
 
-inline void rma_queue::enqueue(rma_callback *rma) {
+inline void rma_queue::enqueue(gasnet1_seq::rma_callback *rma) {
   rma->next = nullptr;
   *this->tailp = rma;
   this->tailp = &rma->next;
@@ -324,10 +349,10 @@ bool rma_queue::burst(int burst_n) {
   this->bursting = true;
   
   bool did_something = false;
-  rma_callback **pp = &this->head;
+  gasnet1_seq::rma_callback **pp = &this->head;
   
   while(burst_n-- && *pp != nullptr) {
-    rma_callback *p = *pp;
+    gasnet1_seq::rma_callback *p = *pp;
     gasnet_handle_t handle = reinterpret_cast<gasnet_handle_t>(p->handle);
     
     if(GASNET_OK == gasnet_try_syncnb(handle)) {

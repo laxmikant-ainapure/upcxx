@@ -11,10 +11,10 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace upcxx {
-  //////////////////////////////////////////////////////////////////////
-  // User-facing:
+//////////////////////////////////////////////////////////////////////
+// Public API:
   
+namespace upcxx {
   typedef int intrank_t;
   typedef unsigned int uintrank_t;
   
@@ -34,22 +34,62 @@ namespace upcxx {
   void deallocate(void *p);
   
   void progress(progress_level lev = progress_level_user);
+}
+
+////////////////////////////////////////////////////////////////////////
+// Backend API:
+
+namespace upcxx {
+namespace backend {
+  extern intrank_t rank_n;
+  extern intrank_t rank_me;
   
-  //////////////////////////////////////////////////////////////////////
-  // Internals and implementation:
+  template<progress_level level, typename Fn>
+  void send_am(intrank_t recipient, Fn &&fn);
   
-  namespace backend {
-    extern intrank_t rank_n;
-    extern intrank_t rank_me;
-    
-    template<progress_level level, typename Fn>
-    void send_am(intrank_t recipient, Fn &&fn);
-  }
+  struct rma_callback {
+    virtual void fire_and_delete() = 0;
+  };
   
+  template<typename Fn>
+  rma_callback* make_rma_cb(Fn fn);
+  
+  // Do a GET, execute `done` callback in `done_level` progress when finished.
+  // (xxx_d = dest, xxx_s = source)
+  void rma_get(
+    void *buf_d,
+    intrank_t rank_s,
+    void *buf_s,
+    std::size_t buf_size,
+    progress_level done_level,
+    rma_callback *done
+  );
+  
+  // Do a PUT, execute `done` callback in `done_level` progress when finished.
+  // (xxx_d = dest, xxx_s = source)
+  void rma_put(
+    intrank_t rank_d,
+    void *buf_d,
+    void *buf_s,
+    std::size_t buf_size,
+    progress_level done_level,
+    rma_callback *done
+  );
+}}
+  
+////////////////////////////////////////////////////////////////////////
+// Public API implementations:
+
+namespace upcxx {
   inline intrank_t rank_n() { return backend::rank_n; }
   inline intrank_t rank_me() { return backend::rank_me; }
 }
-#endif
+
+#endif // #ifdef guard
+
+////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////
+// Include backend-specific headers:
 
 // We dispatch on backend type using preprocessor symbol which is
 // defined to be another symbol that otherwise doesn't exist. So we

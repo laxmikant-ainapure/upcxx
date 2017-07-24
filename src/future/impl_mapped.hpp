@@ -36,7 +36,7 @@ namespace upcxx {
       }
       
       struct result_lrefs_function {
-        typedef future_apply_return_t<Fn(FuArg)> fn_return_t;
+        typedef apply_futured_as_future_return_t<Fn(FuArg)> fn_return_t;
         typedef decltype(std::declval<fn_return_t>().impl_.result_lrefs_getter()) fn_return_getter_t;
         
         fn_return_t result_;
@@ -75,28 +75,14 @@ namespace upcxx {
       
       result_lrefs_function result_lrefs_getter() const {
         return result_lrefs_function{
-          future_apply<Fn(FuArg)>()(
-            this->fn_,
-            this->arg_.impl_.result_lrefs_getter()()
-          )
+          apply_futured_as_future<Fn(FuArg)>()(this->fn_, this->arg_)
         };
       }
       
-      auto result_rvals()
-        -> decltype(
-          future_apply<Fn(FuArg)>()(
-            this->fn_,
-            this->arg_.impl_.result_lrefs_getter()()
-          ).impl_.result_rvals()
-        ) {
+      std::tuple<T...> result_rvals() {
         return std::tuple<T...>{
-          future_apply<Fn(FuArg)>()(
-            this->fn_,
-            // Important not to use arg_.impl_.result_rvals() since that
-            // could lead to inadvertent move construction if lambda fn_
-            // takes an argument by value (likely).
-            this->arg_.impl_.result_lrefs_getter()()
-          ).impl_.result_lrefs_getter()()
+          apply_futured_as_future<Fn(FuArg)>()(this->fn_, this->arg_)
+            .impl_.result_lrefs_getter()()
         };
       }
       
@@ -148,10 +134,7 @@ namespace upcxx {
       
       result_lrefs_function result_lrefs_getter() const {
         return result_lrefs_function{
-          future_apply<Fn(FuArg)>()(
-            this->fn_,
-            this->dep_.result_lrefs_getter()()
-          )
+          apply_futured_as_future<Fn(FuArg)>()(this->fn_, this->dep_)
         };
       }
       
