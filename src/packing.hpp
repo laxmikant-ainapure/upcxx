@@ -28,6 +28,10 @@
 /* TODO: This is more permissive then we want. We aren't demanding
  * things without explicit packing support be trivially_copyable and
  * we byte-copy regardless.
+ * UPDATE: At least one very trivial [=] lambda is not reporting to be
+ * trivially_copyable by my GCC 5.4 so... welcome to the wild west.
+ * Every type unknown to this header file is assumed to be trivially
+ * serializable.
  */
 
 namespace upcxx {
@@ -131,19 +135,19 @@ namespace upcxx {
     
     template<typename T>
     T* put_trivial_aligned(const T &x) {
-      typedef typename std::aligned_storage<sizeof(T),alignof(T)>::type Mem;
+      using mem = typename std::aligned_storage<sizeof(T),alignof(T)>::type;
       std::size_t p = lay_.add_bytes(sizeof(T), alignof(T));
-      *(Mem*)(buf_ + p) = *reinterpret_cast<const Mem*>(&x);
+      *(mem*)(buf_ + p) = *reinterpret_cast<mem const*>(&x);
       return (T*)(buf_ + p);
     }
     
     template<typename T>
     T* put_trivial_aligned(const T *x, std::size_t n) {
-      typedef typename std::aligned_storage<sizeof(T),alignof(T)>::type Mem;
+      using mem = typename std::aligned_storage<sizeof(T),alignof(T)>::type;
       std::size_t p = lay_.add_bytes(n*sizeof(T), alignof(T));
       
-      Mem *__restrict w = (Mem*)(buf_ + p);
-      Mem const *__restrict r = reinterpret_cast<const Mem*>(x);
+      mem *__restrict w = (mem*)(buf_ + p);
+      mem const *__restrict r = reinterpret_cast<mem const*>(x);
       for(std::size_t m=n; m!=0; m--)
         *w++ = *r++;
       
@@ -227,10 +231,10 @@ namespace upcxx {
     
     template<typename T>
     T get_trivial_unaligned() {
-      typedef typename std::aligned_storage<sizeof(T),alignof(T)>::type Mem;
+      using mem = typename std::aligned_storage<sizeof(T),alignof(T)>::type;
       std::size_t p = lay_.add_bytes(sizeof(T));
       
-      Mem tmp;
+      mem tmp;
       char const *__restrict r = buf_ + p;
       for(std::size_t i=0; i != sizeof(T); i++)
         ((char*)&tmp)[i] = r[i];
@@ -298,12 +302,14 @@ namespace upcxx {
   struct packing_not_supported {
     static void size_ubound(parcel_layout &ub, const T &x) {}
     
+    #if 0
     static void pack(parcel_writer &w, const T &x) {
       UPCXX_FAIL();
     }
     static T unpack(parcel_reader &r) {
       UPCXX_FAIL();
     }
+    #endif
   };
   
   
@@ -370,15 +376,30 @@ namespace upcxx {
   //////////////////////////////////////////////////////////////////////
   // packing_opaque: Packs byte-wise satisfying alignment.
   
-  template<typename T, bool is_empty = std::is_empty<T>::value>
+  template<typename T,
+           bool is_empty = std::is_empty<T>::value,
+           bool is_trivially_copyable = std::is_trivially_copyable<T>::value>
   struct packing_opaque;
   
-  template<typename T>
-  struct packing_opaque<T, /*is_empty=*/true>:
+  template<typename T, bool is_trivially_copyable>
+  struct packing_opaque<T, /*is_empty=*/true, is_trivially_copyable>:
     packing_empty<T> {
   };
   template<typename T>
-  struct packing_opaque<T, /*is_empty=*/false>:
+  struct packing_opaque<T, /*is_empty=*/false, /*is_trivially_copyable=*/true>:
+    packing_trivial<T> {
+  };
+  
+  template<typename T>
+  struct packing_opaque<T, /*is_empty=*/false, /*is_trivially_copyable=*/false>:
+    // This is where we would refuse to serialize a non trivially-
+    // copyable type, except that it is implementation defined whether
+    // lambdas get this property. And in fact my GCC 5.4 does not make
+    // some pretty simple [=] capturing lambdas trivial.
+    // https://stackoverflow.com/questions/32986193/when-is-a-lambda-trivial
+    
+    // packing_not_supported<T> {
+    
     packing_trivial<T> {
   };
   
@@ -504,7 +525,23 @@ namespace upcxx {
   // packing_function_pointer
   
   namespace detail {
-    extern char packing_funptr_basis;
+    void packing_funptr_basis();
+
+    template<typename Fp>
+    static std::uintptr_t funptr_to_uintptr(Fp fp) {
+      using mem = typename std::aligned_storage<sizeof(Fp),alignof(Fp)>::type;
+      std::uintptr_t u;
+      *reinterpret_cast<mem*>(&u) = *reinterpret_cast<mem*>(&fp);
+      return u;
+    }
+    
+    template<typename Fp>
+    static Fp funptr_from_uintptr(std::uintptr_t u) {
+      using mem = typename std::aligned_storage<sizeof(Fp),alignof(Fp)>::type;
+      Fp fp;
+      *reinterpret_cast<mem*>(&fp) = *reinterpret_cast<mem*>(&u);
+      return fp;
+    }
   }
   
   template<typename T>
@@ -521,23 +558,18 @@ namespace upcxx {
     }
     
     static void pack(parcel_writer &w, T fp) {
-      std::uintptr_t basis = reinterpret_cast<std::uintptr_t>(&detail::packing_funptr_basis);
-      
-      std::uintptr_t u;
-      std:memcpy(&u, &fp, sizeof(T));
+      std::uintptr_t basis = detail::funptr_to_uintptr(detail::packing_funptr_basis);
+      std::uintptr_t u = detail::funptr_to_uintptr(fp);
       u -= basis;
-      
       // Use uint32_t? Should work unless final exe is larger than 2GB.
       w.put_trivial_aligned(u);
     }
     
     static T unpack(parcel_reader &r) {
-      std::uintptr_t basis = reinterpret_cast<std::uintptr_t>(&detail::packing_funptr_basis);
+      std::uintptr_t basis = detail::funptr_to_uintptr(detail::packing_funptr_basis);
       std::uintptr_t u = r.get_trivial_aligned<std::uintptr_t>();
       u += basis;
-      T fp;
-      std::memcpy(&fp, &u, sizeof(T));
-      return fp;
+      return detail::template funptr_from_uintptr<T>(u);
     }
   };
   
