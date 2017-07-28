@@ -34,6 +34,8 @@ namespace upcxx {
   void deallocate(void *p);
   
   void progress(progress_level lev = progress_level_user);
+  
+  void barrier();
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -44,36 +46,47 @@ namespace backend {
   extern intrank_t rank_n;
   extern intrank_t rank_me;
   
+  template<typename Fn>
+  void during_user(Fn &&fn);
+  void during_user(promise<> &&pro);
+  void during_user(promise<> *pro);
+  
+  template<typename Fn>
+  void during_level(progress_level level, Fn &&fn);
+
   template<progress_level level, typename Fn>
   void send_am(intrank_t recipient, Fn &&fn);
   
-  struct rma_callback {
-    virtual void fire_and_delete() = 0;
-  };
+  // Type definitions provided by backend.
+  struct rma_put_cb;
+  template<typename State>
+  struct rma_put_cb_wstate; // derives rma_put_cb
   
-  template<typename Fn>
-  rma_callback* make_rma_cb(Fn fn);
+  template<typename State, typename SrcCx, typename OpCx>
+  rma_put_cb_wstate<State>* make_rma_put_cb(State state, SrcCx src_cx, OpCx op_cx);
   
-  // Do a GET, execute `done` callback in `done_level` progress when finished.
-  // (xxx_d = dest, xxx_s = source)
-  void rma_get(
-    void *buf_d,
-    intrank_t rank_s,
-    void *buf_s,
-    std::size_t buf_size,
-    progress_level done_level,
-    rma_callback *done
-  );
-  
-  // Do a PUT, execute `done` callback in `done_level` progress when finished.
-  // (xxx_d = dest, xxx_s = source)
   void rma_put(
     intrank_t rank_d,
     void *buf_d,
     void *buf_s,
     std::size_t buf_size,
-    progress_level done_level,
-    rma_callback *done
+    rma_put_cb *cb
+  );
+  
+  // Type definitions provided by backend.
+  struct rma_get_cb;
+  template<typename State>
+  struct rma_get_cb_wstate; // derives rma_get_cb
+  
+  template<typename State, typename OpCx>
+  rma_get_cb_wstate<State>* make_rma_get_cb(State state, OpCx op_cx);
+  
+  void rma_get(
+    void *buf_d,
+    intrank_t rank_s,
+    void *buf_s,
+    std::size_t buf_size,
+    rma_get_cb *cb
   );
 }}
   

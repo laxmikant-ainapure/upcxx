@@ -54,7 +54,7 @@ namespace upcxx {
   };
 }
 
-void barrier() {
+void rpc_barrier() {
   intrank_t rank_n = upcxx::rank_n();
   intrank_t rank_me = upcxx::rank_me();
   
@@ -96,7 +96,7 @@ int main() {
   intrank_t rank_n = upcxx::rank_n();
   
   for(int i=0; i < 10; i++) {
-    barrier();
+    rpc_barrier();
     
     if(i % rank_n == rank_me) {
       std::cout << "Barrier "<<i<<"\n";
@@ -120,14 +120,14 @@ int main() {
     UPCXX_ASSERT(fut.result() == 0xbeef);
   }
   
-  barrier();
+  rpc_barrier();
   
   if(rank_me == 0) {
     std::cout << "Eyeball me! No 'rights' before this message, no 'lefts' after.\n";
     std::cout.flush();
   }
   
-  barrier();
+  rpc_barrier();
   
   {
     future<int> fut = upcxx::rpc(left, [=]() {

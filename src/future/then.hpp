@@ -194,6 +194,18 @@ namespace upcxx {
         std::forward<Fn1>(fn)
       );
   }
+  
+  template<typename Fn1, typename ...ArgT>
+  inline future<ArgT...>& operator>>=(future<ArgT...> &arg, Fn1 &&fn) {
+    arg = detail::future_then<
+        future<ArgT...>,
+        typename std::decay<Fn1>::type
+      >()(
+        std::move(arg),
+        std::forward<Fn1>(fn)
+      );
+    return arg;
+  }
     
   namespace detail {
     template<typename Arg, typename Fn, typename FnRetKind, typename ...FnRetT>

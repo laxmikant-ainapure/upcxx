@@ -259,6 +259,7 @@ def libraries(cxt, src):
   elif src in [
       here('src','backend','gasnet1_seq','backend.cpp'),
       here('test','rpc_barrier.cpp'),
+      here('test','rput.cpp'),
     ]:
     yield cxt.upcxx_backend()
   else:

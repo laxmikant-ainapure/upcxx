@@ -34,6 +34,11 @@ intrank_t backend::rank_me;
 
 size_t gasnet1_seq::am_size_rdzv_cutover;
 
+bool gasnet1_seq::in_user_progress_ = false;
+
+gasnet1_seq::action *gasnet1_seq::user_actions_head_ = nullptr;
+gasnet1_seq::action **gasnet1_seq::user_actions_tailp_ = &gasnet1_seq::user_actions_head_;
+
 ////////////////////////////////////////////////////////////////////////
 
 namespace {
@@ -42,7 +47,7 @@ namespace {
     id_am_eager_queued
   };
     
-  void am_eager_restricted(gasnet_token_t, void *buf, size_t buf_size);
+  void am_eager_restricted(gasnet_token_t, void *buf, size_t buf_size, gasnet_handlerarg_t buf_align);
   void am_eager_queued(gasnet_token_t, void *buf, size_t buf_size, gasnet_handlerarg_t buf_align_and_level);
   
   struct message {
@@ -62,23 +67,24 @@ namespace {
     bool burst(int burst_n = 100);
   };
   
-  message_queue msgs_internal;
-  message_queue msgs_user;
+  message_queue msgs_internal_;
+  message_queue msgs_user_;
   
   struct rma_queue {
-    gasnet1_seq::rma_callback *head = nullptr;
-    gasnet1_seq::rma_callback **tailp = &this->head;
+    rma_cb *head = nullptr;
+    rma_cb **tailp = &this->head;
     bool bursting = false;
     
     rma_queue() = default;
     rma_queue(rma_queue const&) = delete;
     
-    void enqueue(gasnet1_seq::rma_callback *rma);
+    void enqueue(rma_cb *rma);
     bool burst(int burst_n = 100);
   };
   
-  rma_queue rmas_internal;
-  rma_queue rmas_user;
+  rma_queue rmas_internal_;
+  
+  bool user_actions_burst(int burst_n = 100);
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -149,6 +155,10 @@ void upcxx::init() {
 }
 
 void upcxx::finalize() {
+  upcxx::barrier();
+}
+
+void upcxx::barrier() {
   gasnet_barrier_notify(0, GASNET_BARRIERFLAG_ANONYMOUS);
   
   while(GASNET_OK != gasnet_barrier_try(0, GASNET_BARRIERFLAG_ANONYMOUS))
@@ -178,21 +188,16 @@ void backend::rma_get(
     intrank_t rank_s,
     void *buf_s,
     size_t buf_size,
-    progress_level done_level,
-    backend::rma_callback *done_
+    backend::rma_get_cb *cb
   ) {
   
-  gasnet1_seq::rma_callback *done = static_cast<gasnet1_seq::rma_callback*>(done_);
-  
   gasnet_handle_t handle = gasnet_get_nb_bulk(buf_d, rank_s, buf_s, buf_size);
-  done->handle = reinterpret_cast<uintptr_t>(handle);
-  
-  rma_queue &q = done_level == progress_level_internal ? rmas_internal : rmas_user;
-  q.enqueue(done);
+  cb->handle = reinterpret_cast<uintptr_t>(handle);
+  rmas_internal_.enqueue(cb);
   
   // Always check for new internal actions after a gasnet call.
-  msgs_internal.burst();
-  rmas_internal.burst(4); // scanning is expensive, focus on front
+  msgs_internal_.burst();
+  rmas_internal_.burst(4); // scanning is expensive, focus on front
 }
 
 void backend::rma_put(
@@ -200,21 +205,16 @@ void backend::rma_put(
     void *buf_d,
     void *buf_s,
     size_t buf_size,
-    progress_level done_level,
-    backend::rma_callback *done_
+    backend::rma_put_cb *cb
   ) {
   
-  gasnet1_seq::rma_callback *done = static_cast<gasnet1_seq::rma_callback*>(done_);
-  
   gasnet_handle_t handle = gasnet_put_nb_bulk(rank_d, buf_d, buf_s, buf_size);
-  done->handle = reinterpret_cast<uintptr_t>(handle);
-  
-  rma_queue &q = done_level == progress_level_internal ? rmas_internal : rmas_user;
-  q.enqueue(done);
+  cb->handle = reinterpret_cast<uintptr_t>(handle);
+  rmas_internal_.enqueue(cb);
   
   // Always check for new internal actions after a gasnet call.
-  msgs_internal.burst();
-  rmas_internal.burst(4); // scanning is expensive, focus on front
+  msgs_internal_.burst();
+  rmas_internal_.burst(4); // scanning is expensive, focus on front
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -223,15 +223,15 @@ void backend::rma_put(
 void gasnet1_seq::send_am_eager_restricted(
     intrank_t recipient,
     void *buf,
-    std::size_t buf_size
+    std::size_t buf_size,
+    std::size_t buf_align
   ) {
   
-  gasnet_AMRequestMedium0(recipient, id_am_eager_restricted, buf, buf_size);
-  operator delete(buf);
+  gasnet_AMRequestMedium1(recipient, id_am_eager_restricted, buf, buf_size, buf_align);
   
   // Always check for new internal actions after a gasnet call.
-  msgs_internal.burst();
-  rmas_internal.burst(4); // scanning is expensive, focus on front
+  msgs_internal_.burst();
+  rmas_internal_.burst(4); // scanning is expensive, focus on front
 }
 
 void gasnet1_seq::send_am_eager_queued(
@@ -248,11 +248,10 @@ void gasnet1_seq::send_am_eager_queued(
     buf, buf_size,
     buf_align<<1 | (level == progress_level_user ? 1 : 0)
   );
-  operator delete(buf);
   
   // Always check for new internal actions after a gasnet call.
-  msgs_internal.burst();
-  rmas_internal.burst(4); // scanning is expensive, focus on front
+  msgs_internal_.burst();
+  rmas_internal_.burst(4); // scanning is expensive, focus on front
 }
 
 void gasnet1_seq::send_am_rdzv(
@@ -271,28 +270,29 @@ void gasnet1_seq::send_am_rdzv(
       // TODO: Elide rma_get (copy) for node-local sends with pointer
       // translation and execution directly from source buffer.
       
-      void *buf_d = upcxx::allocate(buf_size);
-      
-      // TODO: Handle large alignments.
-      UPCXX_ASSERT(0 == (reinterpret_cast<uintptr_t>(buf_d) & (buf_align-1)));
+      void *buf_d = upcxx::allocate(buf_size, buf_align);
       
       backend::rma_get(
         buf_d, rank_s, buf_s, buf_size,
         
-        /*done_level*/level,
-        
-        /*done*/make_rma_cb([=]() {
-          // Notify source rank it can free buffer.
-          gasnet1_seq::send_am_restricted(rank_s,
-            [=]() { upcxx::deallocate(buf_s); }
-          );
-          
-          // Execute buffer.
-          parcel_reader r{buf_d};
-          command_unpack_and_execute(r);
-          
-          upcxx::deallocate(buf_d);
-        })
+        make_rma_get_cb<progress_level>(
+          level,
+          [=](progress_level level) {
+            
+            // Notify source rank it can free buffer.
+            gasnet1_seq::send_am_restricted(rank_s,
+              [=]() { upcxx::deallocate(buf_s); }
+            );
+            
+            backend::during_level(level, [=]() {
+              // Execute buffer.
+              parcel_reader r{buf_d};
+              command_unpack_and_execute(r);
+              
+              upcxx::deallocate(buf_d);
+            });
+          }
+        )
       );
     }
   );
@@ -336,7 +336,7 @@ bool message_queue::burst(int burst_n) {
   return did_something;
 }
 
-inline void rma_queue::enqueue(gasnet1_seq::rma_callback *rma) {
+inline void rma_queue::enqueue(rma_cb *rma) {
   rma->next = nullptr;
   *this->tailp = rma;
   this->tailp = &rma->next;
@@ -349,10 +349,10 @@ bool rma_queue::burst(int burst_n) {
   this->bursting = true;
   
   bool did_something = false;
-  gasnet1_seq::rma_callback **pp = &this->head;
+  rma_cb **pp = &this->head;
   
   while(burst_n-- && *pp != nullptr) {
-    gasnet1_seq::rma_callback *p = *pp;
+    rma_cb *p = *pp;
     gasnet_handle_t handle = reinterpret_cast<gasnet_handle_t>(p->handle);
     
     if(GASNET_OK == gasnet_try_syncnb(handle)) {
@@ -373,10 +373,51 @@ bool rma_queue::burst(int burst_n) {
   return did_something;
 }
 
+namespace {
+bool user_actions_burst(int burst_n) {
+  bool did_something = false;
+  
+  action *tmp_head = user_actions_head_;
+  action **tmp_tailp = user_actions_tailp_;
+  user_actions_head_ = nullptr;
+  user_actions_tailp_ = &user_actions_head_;
+  
+  while(true) {
+    if(tmp_head != nullptr) {
+      action *next = tmp_head->next_;
+      tmp_head->fire_and_delete();
+      tmp_head = next;
+      did_something = true;
+      if(0 == --burst_n) break;
+    }
+    else {
+      tmp_tailp = &tmp_head;
+      
+      if(user_actions_head_ != nullptr) {
+        tmp_head = user_actions_head_;
+        tmp_tailp = user_actions_tailp_;
+        user_actions_head_ = nullptr;
+        user_actions_tailp_ = &user_actions_head_;
+      }
+      else
+        break;
+    }
+  }
+  
+  *tmp_tailp = user_actions_head_;
+  user_actions_head_ = tmp_head;
+  
+  return did_something;
+}
+}
+
 ////////////////////////////////////////////////////////////////////////
 // from: upcxx/backend.hpp
 
 void upcxx::progress(progress_level lev) {
+  UPCXX_ASSERT(!in_user_progress_);
+  in_user_progress_ = true;
+  
   int rounds = 0;
   bool did_something;
   bool did_something_ever = false;
@@ -385,12 +426,12 @@ void upcxx::progress(progress_level lev) {
     gasnet_AMPoll();
     
     did_something = false;
-    did_something |= rmas_internal.burst();
-    did_something |= msgs_internal.burst();
+    did_something |= rmas_internal_.burst();
+    did_something |= msgs_internal_.burst();
     
     if(lev == progress_level_user) {
-      did_something |= rmas_user.burst();
-      did_something |= msgs_user.burst();
+      did_something |= msgs_user_.burst();
+      did_something |= user_actions_burst();
     }
     
     did_something_ever |= did_something;
@@ -398,33 +439,54 @@ void upcxx::progress(progress_level lev) {
   // Try really hard to do stuff before leaving attentiveness.
   while(did_something && rounds++ < 4);
   
-  if(!did_something_ever) {
-    /* In SMP tests we typically oversubscribe ranks to cpus. This is
-     * an attempt at heuristically determining if this rank is just
-     * spinning fruitlessly hogging the cpu from another who needs it.
-     * It would be a lot more effective if we included knowledge of
-     * whether outgoing communication was generated between progress
-     * calls, then we would really know that we're just idle. Well,
-     * almost. There would still exist the case where this rank is
-     * receiving nothing, sending nothing, but is loaded with compute
-     * and is only periodically progressing to be "nice".
-     */
-    static int consecutive_nothings = 0;
-    
-    if(++consecutive_nothings == 10) {
-      sched_yield();
-      consecutive_nothings = 0;
-    }
+  /* In SMP tests we typically oversubscribe ranks to cpus. This is
+   * an attempt at heuristically determining if this rank is just
+   * spinning fruitlessly hogging the cpu from another who needs it.
+   * It would be a lot more effective if we included knowledge of
+   * whether outgoing communication was generated between progress
+   * calls, then we would really know that we're just idle. Well,
+   * almost. There would still exist the case where this rank is
+   * receiving nothing, sending nothing, but is loaded with compute
+   * and is only periodically progressing to be "nice".
+   */
+  static int consecutive_nothings = 0;
+  
+  if(did_something_ever)
+    consecutive_nothings = 0;
+  else if(++consecutive_nothings == 10) {
+    sched_yield();
+    consecutive_nothings = 0;
   }
+  
+  in_user_progress_ = false;
 }
 
 ////////////////////////////////////////////////////////////////////////
 // anonymous namespace
 
 namespace {
-  void am_eager_restricted(gasnet_token_t, void *buf, size_t) {
-    parcel_reader r{buf};
-    command_unpack_and_execute(r);
+  void am_eager_restricted(
+      gasnet_token_t,
+      void *buf, size_t buf_size,
+      gasnet_handlerarg_t buf_align
+    ) {
+    
+    if(0 == (reinterpret_cast<uintptr_t>(buf) & (buf_align-1))) {
+      parcel_reader r{buf};
+      command_unpack_and_execute(r);
+    }
+    else {
+      void *tmp;
+      int ok = posix_memalign(&tmp, buf_align, buf_size);
+      UPCXX_ASSERT_ALWAYS(ok == 0);
+      
+      std::memcpy((void**)tmp, (void**)buf, buf_size);
+      
+      parcel_reader r{tmp};
+      command_unpack_and_execute(r);
+      
+      std::free(tmp);
+    }
   }
   
   void am_eager_queued(
@@ -442,20 +504,18 @@ namespace {
     size_t msg_offset = msg_size;
     msg_size += sizeof(message);
     
-    char *msg_buf = (char*)operator new(msg_size);
+    void *msg_buf;
+    int ok = posix_memalign(&msg_buf, buf_align, msg_size);
+    UPCXX_ASSERT_ALWAYS(ok == 0);
     
-    // TODO: use posix_memalign instead of operator new to handle this
-    // case (could be caused by simd serialization code).
-    UPCXX_ASSERT((reinterpret_cast<uintptr_t>(msg_buf) & (buf_align-1)) == 0);
-    
-    message *m = new(msg_buf + msg_offset) message;
+    message *m = new((char*)msg_buf + msg_offset) message;
     m->payload = msg_buf;
     
     // The (void**) casts *might* inform memcpy that it can assume word
     // alignment.
     std::memcpy((void**)msg_buf, (void**)buf, buf_size);
     
-    message_queue &q = level_user ? msgs_user : msgs_internal;
+    message_queue &q = level_user ? msgs_user_ : msgs_internal_;
     q.enqueue(m);
   }
 }
