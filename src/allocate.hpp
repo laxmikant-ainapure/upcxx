@@ -1,104 +1,149 @@
-#pragma once
+#ifndef _fbcda049_eb37_438b_9a9c_a2ce81b8b8f5
+#define _fbcda049_eb37_438b_9a9c_a2ce81b8b8f5
 
 /**
  * allocate.hpp
  */
 
+#include <upcxx/backend.hpp>
+#include <upcxx/diagnostic.hpp>
+#include <upcxx/global_ptr.hpp>
+
 #include <algorithm> // max
-#include <cassert> // assert
 #include <cmath> // ceil
+#include <cstdint>
 #include <cstddef> // max_align_t
 #include <new> // bad_alloc
 #include <type_traits> // aligned_storage, is_default_constructible,
                        // is_destructible, is_trivially_destructible
-#include "global_ptr.hpp"
 
 namespace upcxx {
-  void* allocate(size_t size,
-                 size_t alignment = alignof(std::max_align_t));
-
-  template<typename T, size_t alignment = alignof(T)>
-  global_ptr<T> allocate(size_t n = 1) {
-    return allocate(n * sizeof(typename std::aligned_storage<sizeof(T),
-                                                             alignment>::type),
-                    alignment);
-  }
-
+  //////////////////////////////////////////////////////////////////////
+  /* Declared in: upcxx/backend.hpp
+  
+  void* allocate(std::size_t size,
+                 std::size_t alignment = alignof(std::max_align_t));
+  
   void deallocate(void* ptr);
+  */
+  
+  //////////////////////////////////////////////////////////////////////
+  
+  template<typename T, std::size_t alignment = alignof(T)>
+  global_ptr<T> allocate(std::size_t n = 1) {
+    void *p = upcxx::allocate(n * sizeof(T), alignment);
+    return p == nullptr
+      ? global_ptr<T>{nullptr}
+      : global_ptr<T>{
+        detail::global_ptr_ctor_internal{},
+        upcxx::rank_me(),
+        reinterpret_cast<T*>(p)
+      };
+  }
 
   template<typename T>
   void deallocate(global_ptr<T> gptr) {
     if (gptr != nullptr) {
-      //assert(gptr.where() == rank_me() &&
-      //       "deallocate must be called by owner of global pointer");
-      deallocate(gptr.local());
+      UPCXX_ASSERT(
+        gptr.rank_ == upcxx::rank_me(),
+        "upcxx::deallocate must be called by owner of global pointer"
+      );
+      
+      upcxx::deallocate(gptr.raw_ptr_);
     }
   }
 
-  template<typename T, typename ...Args>
-  global_ptr<T> _new_(bool throws, Args &&...args) {
-    void *ptr = allocate(sizeof(T), alignof(T));
-    if (ptr == nullptr) {
-      if (throws) {
-        throw std::bad_alloc();
+  namespace detail {
+    template<bool throws, typename T, typename ...Args>
+    global_ptr<T> new_(Args &&...args) {
+      void *ptr = allocate(sizeof(T), alignof(T));
+      
+      if (ptr == nullptr) {
+        if (throws) {
+          throw std::bad_alloc();
+        }
+        return nullptr;
       }
-      return nullptr;
+      
+      new(ptr) T(std::forward<Args>(args)...); // placement new
+      
+      return global_ptr<T>{
+        detail::global_ptr_ctor_internal{},
+        upcxx::rank_me(),
+        reinterpret_cast<T*>(ptr)
+      };
     }
-    new(ptr) T(std::forward<Args>(args)...); // placement new
-    return global_ptr<T>(reinterpret_cast<T*>(ptr));
   }
 
   template<typename T, typename ...Args>
   global_ptr<T> new_(Args &&...args) {
-    _new_<T>(true, std::forward<Args>(args)...);
+    return detail::new_</*throws=*/true, T>(std::forward<Args>(args)...);
   }
 
   template<typename T, typename ...Args>
   global_ptr<T> new_(const std::nothrow_t &tag, Args &&...args) {
-    _new_<T>(false, std::forward<Args>(args)...);
+    return detail::new_</*throws=*/false, T>(std::forward<Args>(args)...);
   }
 
-  template<typename T>
-  global_ptr<T> _new_array(size_t n, bool throws) {
-    static_assert(std::is_default_constructible<T>::value,
-                  "T must be default constructible");
-    // padding for storage to keep track of number of elements
-    size_t padding = std::max(alignof(size_t),
-                              std::max(alignof(T), sizeof(size_t)));
-    void *ptr = allocate(n * sizeof(T) + padding);
-    if (ptr == nullptr) {
-      if (throws) {
-        throw std::bad_alloc();
+  namespace detail {
+    template<bool throws, typename T>
+    global_ptr<T> new_array(std::size_t n) {
+      static_assert(std::is_default_constructible<T>::value,
+                    "T must be default constructible");
+      
+      std::size_t size = sizeof(std::size_t);
+      size = (size + alignof(T)-1) & -alignof(T);
+      std::size_t offset = size;
+      size += n * sizeof(T);
+      
+      void *ptr = upcxx::allocate(size, std::max(alignof(std::size_t), alignof(T)));
+      
+      if(ptr == nullptr) {
+        if(throws)
+          throw std::bad_alloc();
+        return nullptr;
       }
-      return nullptr;
+      
+      *reinterpret_cast<std::size_t*>(ptr) = n;
+      T *elts = reinterpret_cast<T*>((char*)ptr + offset);
+      
+      if(!std::is_trivially_constructible<T>::value) {
+        for(T *p=elts, *p1=elts+n; p != p1; p++)
+          new(p) T;
+      }
+      
+      return global_ptr<T>{
+        detail::global_ptr_ctor_internal{},
+        upcxx::rank_me(),
+        elts
+      };
     }
-    *(reinterpret_cast<size_t*>(ptr)) = n; // store size for deallocation
-    T *tptr = reinterpret_cast<T*>(reinterpret_cast<char*>(ptr) +
-                                   padding); // ptr to actual data
-    new(tptr) T[n]; // array placement new
-    return global_ptr<T>(tptr);
   }
 
   template<typename T>
-  global_ptr<T> new_array(size_t n) {
-    return _new_array<T>(n, true);
+  global_ptr<T> new_array(std::size_t n) {
+    return detail::new_array</*throws=*/true, T>(n);
   }
 
   template<typename T>
-  global_ptr<T> new_array(size_t n, const std::nothrow_t &tag) {
-    return _new_array<T>(n, false);
+  global_ptr<T> new_array(std::size_t n, const std::nothrow_t &tag) {
+    return detail::new_array</*throws=*/false, T>(n);
   }
 
   template<typename T>
   void delete_(global_ptr<T> gptr) {
     static_assert(std::is_destructible<T>::value,
                   "T must be destructible");
+    
     if (gptr != nullptr) {
-      //assert(gptr.where() == rank_me() &&
-      //       "delete_ must be called by owner of global pointer");
-      T *ptr = gptr.local();
+      UPCXX_ASSERT(
+        gptr.rank_ == upcxx::rank_me(),
+        "upcxx::delete_ must be called by owner of shared memory."
+      );
+      
+      T *ptr = gptr.raw_ptr_;
       ptr->~T();
-      deallocate(ptr);
+      upcxx::deallocate(ptr);
     }
   }
 
@@ -106,21 +151,30 @@ namespace upcxx {
   void delete_array(global_ptr<T> gptr) {
     static_assert(std::is_destructible<T>::value,
                   "T must be destructible");
+    
     if (gptr != nullptr) {
-      //assert(gptr.where() == rank_me() &&
-      //       "delete_array must be called by owner of global pointer");
+      UPCXX_ASSERT(
+        gptr.rank_ == upcxx::rank_me(),
+        "upcxx::delete_array must be called by owner of shared memory."
+      );
+      
       T *tptr = gptr.local();
+      
       // padding to keep track of number of elements
-      size_t padding = std::max(alignof(size_t),
-                                std::max(alignof(T), sizeof(size_t)));
+      std::size_t padding = sizeof(std::size_t);
+      padding = (padding + alignof(T)-1) & -alignof(T);
+      
       void *ptr = reinterpret_cast<char*>(tptr) - padding;
+      
       if (!std::is_trivially_destructible<T>::value) {
-        size_t size = *reinterpret_cast<size_t*>(ptr);
-        for (size_t i = 0; i < size; ++i) {
-          tptr[i].~T(); // destroy each element
-        }
+        std::size_t size = *reinterpret_cast<std::size_t*>(ptr);
+        for(T *p=tptr, p1=tptr+size; p != p1; p++)
+          p->~T();
       }
-      deallocate(ptr);
+      
+      upcxx::deallocate(ptr);
     }
   }
 } // namespace upcxx
+
+#endif

@@ -3,6 +3,7 @@
 
 #include <upcxx/backend.hpp>
 #include <upcxx/completion.hpp>
+#include <upcxx/global_ptr.hpp>
 
 namespace upcxx {
   namespace detail {
@@ -165,7 +166,7 @@ namespace upcxx {
            typename O = future_cx<0>>
   typename detail::rget_futures_of<detail::rget_byval<T>,R,O>::return_type
   rget(
-      intrank_t rank_s, T *ptr_s,
+      global_ptr<T> gp_s,
       completions<nil_cx,R,O> cxs = completions<nil_cx,R,O>{}
     ) {
     
@@ -175,7 +176,7 @@ namespace upcxx {
     
     backend::rma_get_cb_wstate<state_type> *cb = backend::make_rma_get_cb<state_type>(
       state_type{
-        rank_s, std::move(cxs)
+        gp_s.rank_, std::move(cxs)
       },
       /*operxn_cx*/[=](state_type &st) {
         st.r.completed(st.owner);
@@ -185,7 +186,7 @@ namespace upcxx {
     
     auto answerer = detail::rget_futures_of<detail::rget_byval<T>,R,O>(cb->state);
     
-    backend::rma_get(buf_d, rank_s, ptr_s, sizeof(T), cb);
+    backend::rma_get(buf_d, gp_s.rank_, gp_s.raw_ptr_, sizeof(T), cb);
     
     return answerer();
   }
@@ -195,7 +196,7 @@ namespace upcxx {
            typename O = future_cx<0>>
   typename detail::rget_futures_of<detail::rget_byref,R,O>::return_type
   rget(
-      intrank_t rank_s, T *ptr_s,
+      global_ptr<T> gp_s,
       T *buf_d, std::size_t n,
       completions<nil_cx,R,O> cxs = completions<nil_cx,R,O>{}
     ) {
@@ -204,7 +205,7 @@ namespace upcxx {
     
     backend::rma_get_cb_wstate<state_type> *cb = backend::make_rma_get_cb<state_type>(
       state_type{
-        rank_s, std::move(cxs)
+        gp_s.rank_, std::move(cxs)
       },
       /*operxn_cx*/[](state_type &st) {
         st.r.completed(st.owner);
@@ -214,7 +215,7 @@ namespace upcxx {
     
     auto answerer = detail::rget_futures_of<detail::rget_byref,R,O>(cb->state);
     
-    backend::rma_get(buf_d, rank_s, ptr_s, n*sizeof(T), cb);
+    backend::rma_get(buf_d, gp_s.rank_, gp_s.raw_ptr_, n*sizeof(T), cb);
     
     return answerer();
   }

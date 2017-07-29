@@ -3,6 +3,7 @@
 
 #include <upcxx/backend.hpp>
 #include <upcxx/completion.hpp>
+#include <upcxx/global_ptr.hpp>
 
 namespace upcxx {
   namespace detail {
@@ -162,7 +163,7 @@ namespace upcxx {
   typename detail::rput_futures_of<S,R,O>::return_type
   rput(
       T value_s,
-      intrank_t rank_d, T *ptr_d,
+      global_ptr<T> gp_d,
       completions<S,R,O> cxs = completions<S,R,O>{}
     ) {
     
@@ -170,7 +171,7 @@ namespace upcxx {
     
     backend::rma_put_cb_wstate<state_type> *cb = backend::make_rma_put_cb<state_type>(
       state_type{
-        std::move(value_s), rank_d, std::move(cxs)
+        std::move(value_s), gp_d.rank_, std::move(cxs)
       },
       /*source_cx*/[](state_type &st) {
         st.s.completed();
@@ -183,7 +184,7 @@ namespace upcxx {
     
     auto answerer = detail::rput_futures_of<S,R,O>(cb->state);
     
-    backend::rma_put(rank_d, ptr_d, &cb->state.buffer, sizeof(T), cb);
+    backend::rma_put(gp_d.rank_, gp_d.raw_ptr_, &cb->state.buffer, sizeof(T), cb);
     
     return answerer();
   }
@@ -195,7 +196,7 @@ namespace upcxx {
   typename detail::rput_futures_of<S,R,O>::return_type
   rput(
       T const *buf_s, std::size_t n,
-      intrank_t rank_d, T *ptr_d,
+      global_ptr<T> gp_d,
       completions<S,R,O> cxs = completions<S,R,O>{}
     ) {
     
@@ -203,7 +204,7 @@ namespace upcxx {
     
     backend::rma_put_cb_wstate<state_type> *cb = backend::make_rma_put_cb<state_type>(
       state_type{
-        rank_d, std::move(cxs)
+        gp_d.rank_, std::move(cxs)
       },
       /*source_cx*/[](state_type &st) {
         st.s.completed();
@@ -216,7 +217,7 @@ namespace upcxx {
     
     auto answerer = detail::rput_futures_of<S,R,O>(cb->state);
     
-    backend::rma_put(rank_d, ptr_d, buf_s, n*sizeof(T), cb);
+    backend::rma_put(gp_d.rank_, gp_d.raw_ptr_, buf_s, n*sizeof(T), cb);
     
     return answerer();
   }
