@@ -110,13 +110,13 @@ namespace upcxx {
   
   //////////////////////////////////////////////////////////////////////
 
-  template<template<typename> class Test, typename ...T>
+  template<template<typename...> class Test, typename ...T>
   struct trait_forall;
-  template<template<typename> class Test>
+  template<template<typename...> class Test>
   struct trait_forall<Test> {
     static constexpr bool value = true;
   };
-  template<template<typename> class Test, typename T, typename ...Ts>
+  template<template<typename...> class Test, typename T, typename ...Ts>
   struct trait_forall<Test,T,Ts...> {
     static constexpr bool value = Test<T>::value && trait_forall<Test,Ts...>::value;
   };

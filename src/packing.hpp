@@ -254,6 +254,9 @@ namespace upcxx {
    * T into/outof a parcel. May be specialized by user. Default case
    * inspects type traits of T to determine best packing strategy.
    * 
+   * TODO: Remove the asymmetry between packing and unpacking types.
+   * Put this in "command".
+   * 
    * It is a rare need, but packing and unpacking may not result in the
    * same type coming back out, so it may be the case that a different
    * type U may be needed for "packing<U>::unpack" to deserialize a parcel

@@ -258,8 +258,10 @@ def libraries(cxt, src):
     yield cxt.libgasnet()
   elif src in [
       here('src','backend','gasnet1_seq','backend.cpp'),
+      here('src','dist_object.cpp'),
       here('test','rpc_barrier.cpp'),
       here('test','rput.cpp'),
+      here('test','dist_object.cpp'),
     ]:
     yield cxt.upcxx_backend()
   else:
