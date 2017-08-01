@@ -21,10 +21,13 @@ int main() {
     
     future<int> f = when_all(
       upcxx::rpc(nebr,
-        [=](dist_object<int> &his1, dist_object<int> &his2) {
-          cout << me << "'s nebr values = "<< *his1 << ", " << *his2 << '\n';
-        },
-        obj1, obj2
+        upcxx::bind(
+          [=](dist_object<int> &his1, dist_object<int> &his2) {
+            cout << me << "'s nebr values = "<< *his1 << ", " << *his2 << '\n';
+          },
+          obj1
+        ),
+        obj2
       ),
       obj3.fetch(nebr)
     );

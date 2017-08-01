@@ -121,6 +121,13 @@ namespace upcxx {
     static constexpr bool value = Test<T>::value && trait_forall<Test,Ts...>::value;
   };
   
+  template<template<typename...> class Test, typename Tuple>
+  struct trait_forall_tupled;
+  template<template<typename...> class Test, typename ...T>
+  struct trait_forall_tupled<Test, std::tuple<T...>> {
+    static constexpr bool value = trait_forall<Test, T...>::value;
+  };
+  
   //////////////////////////////////////////////////////////////////////
 
   template<typename Tuple, template<typename...> class Into>
@@ -168,9 +175,9 @@ namespace upcxx {
   //////////////////////////////////////////////////////////////////////
   
   template<typename Tup>
-  struct tuple_decay;
+  struct decay_tupled;
   template<typename ...T>
-  struct tuple_decay<std::tuple<T...>> {
+  struct decay_tupled<std::tuple<T...>> {
     typedef std::tuple<typename std::decay<T>::type...> type;
   };
   
