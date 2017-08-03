@@ -181,7 +181,7 @@ namespace upcxx {
   
   
   //////////////////////////////////////////////////////////////////////
-  // parcel_reader: Reads trivial data out of buffer. Each "get" 
+  // parcel_reader: Reads trivial data out of buffer. Each "pop" 
   // advances state of reader to next position.
   
   class parcel_reader {
@@ -190,47 +190,50 @@ namespace upcxx {
     
   public:
     parcel_reader(void const *buf, std::size_t offset=0):
-      buf_((char const*)buf),
-      lay_(offset) {
+      buf_{(char const*)buf},
+      lay_{offset} {
+    }
+    ~parcel_reader() {
+      UPCXX_ASSERT(0 == (reinterpret_cast<std::uintptr_t>(buf_) & (lay_.alignment()-1)));
     }
     
     char const* buffer() const { return buf_; }
     parcel_layout layout() const { return lay_; }
     
-    char const* get(std::size_t size, std::size_t align) {
+    char const* pop(std::size_t size, std::size_t align) {
       std::size_t p = lay_.add_bytes(size, align);
       return buf_ + p;
     }
     
-    char get_char() {
+    char pop_char() {
       std::size_t p = lay_.add_bytes(1);
       char ans = buf_[p];
       return ans;
     }
-    std::uint8_t get_uint8() {
+    std::uint8_t pop_uint8() {
       std::size_t p = lay_.add_bytes(1);
       std::uint8_t ans = ((std::uint8_t const*)buf_)[p];
       return ans;
     }
-    std::int8_t get_int8() {
+    std::int8_t pop_int8() {
       std::size_t p = lay_.add_bytes(1);
       std::int8_t ans = ((std::int8_t const*)buf_)[p];
       return ans;
     }
     
     template<typename T>
-    T const& get_trivial_aligned() {
+    T const& pop_trivial_aligned() {
       std::size_t p = lay_.add_bytes(sizeof(T), alignof(T));
       return *(const T*)(buf_ + p);
     }
     template<typename T>
-    T const* get_trivial_aligned(std::size_t n) {
+    T const* pop_trivial_aligned(std::size_t n) {
       std::size_t p = lay_.add_bytes(n*sizeof(T), alignof(T));
       return (const T*)(buf_ + p);
     }
     
     template<typename T>
-    T get_trivial_unaligned() {
+    T pop_trivial_unaligned() {
       using mem = typename std::aligned_storage<sizeof(T),alignof(T)>::type;
       std::size_t p = lay_.add_bytes(sizeof(T));
       
@@ -242,7 +245,7 @@ namespace upcxx {
       return *reinterpret_cast<T*>(&tmp);
     }
     template<typename T>
-    char const* get_trivial_unaligned(std::size_t n) {
+    char const* pop_trivial_unaligned(std::size_t n) {
       std::size_t p = lay_.add_bytes(n*sizeof(T));
       return buf_ + p;
     }
@@ -253,20 +256,6 @@ namespace upcxx {
   /* packing<T>: Class of static hooks for packing/unpacking a value of
    * T into/outof a parcel. May be specialized by user. Default case
    * inspects type traits of T to determine best packing strategy.
-   * 
-   * TODO: Remove the asymmetry between packing and unpacking types.
-   * Put this in "command".
-   * 
-   * It is a rare need, but packing and unpacking may not result in the
-   * same type coming back out, so it may be the case that a different
-   * type U may be needed for "packing<U>::unpack" to deserialize a parcel
-   * produced by "packing<T>::pack". In this case, packing<T> should
-   * instead of defining "unpack()", define a typedef "unpacking_type = U".
-   * 
-   * Sugar classes exist for dealing with this type asymmetry.
-   * "unpacking<T>::unpack" will map to "packing<packing<T>::unpacking_type>::unpack"
-   * when necessary. "unpacking<T>::type" will map to "packing<T>::unpacking_type"
-   * when it exists and to "T" otherwise.
    */
   template<typename T>
   struct packing /*{
@@ -278,25 +267,7 @@ namespace upcxx {
     
     // Read value out of parcel.
     static T unpack(parcel_reader &r);
-    -- or --
-    typedef ... unpacking_type; // type to be used as T in: packing<T>::unpack(...)
   }*/;
-  
-  // packing<T>::unpacking_type does not exist
-  template<typename T, typename=void>
-  struct unpacking: packing<T> {
-    typedef T type;
-  };
-  
-  // packing<T>::unpacking_type does exist
-  template<typename T>
-  struct unpacking<
-      T,
-      typename std::enable_if<!std::is_same<T, typename packing<T>::unpacking_type>::value>::type
-    >:
-    unpacking<typename packing<T>::unpacking_type> {
-  };
-  
   
   //////////////////////////////////////////////////////////////////////
   // packing_not_supported
@@ -315,24 +286,23 @@ namespace upcxx {
     #endif
   };
   
-  
   //////////////////////////////////////////////////////////////////////
   // packing_is_trivial
   
-  template<typename T, typename trivial=std::false_type>
+  template<typename T, typename false_ = std::false_type>
   struct packing_is_trivial {
-    static constexpr bool value = trivial::value;
+    static constexpr bool value = false;
   };
   template<typename T>
-  struct packing_is_trivial<T, std::integral_constant<bool, packing<T>::is_trivial>> {
+  struct packing_is_trivial<T, std::integral_constant<bool, false & packing<T>::is_trivial>> {
     static constexpr bool value = packing<T>::is_trivial;
   };
-    
   
   //////////////////////////////////////////////////////////////////////
   // packing_empty
   
-  template<typename T, bool is_default_constructible=std::is_default_constructible<T>::value>
+  template<typename T,
+           bool is_default_constructible = std::is_default_constructible<T>::value>
   struct packing_empty;
   
   template<typename T>
@@ -356,7 +326,6 @@ namespace upcxx {
     }
   };
   
-  
   //////////////////////////////////////////////////////////////////////
   // packing_trivial: Packs byte-wise satisfying alignment.
   
@@ -371,10 +340,9 @@ namespace upcxx {
       w.put_trivial_aligned(x);
     }
     static T unpack(parcel_reader &r) {
-      return r.get_trivial_aligned<T>();
+      return r.pop_trivial_aligned<T>();
     }
   };
-  
   
   //////////////////////////////////////////////////////////////////////
   // packing_opaque: Packs byte-wise satisfying alignment.
@@ -400,10 +368,12 @@ namespace upcxx {
     // lambdas get this property. And in fact my GCC 5.4 does not make
     // some pretty simple [=] capturing lambdas trivial.
     // https://stackoverflow.com/questions/32986193/when-is-a-lambda-trivial
-    
-    // packing_not_supported<T> {
-    
-    packing_trivial<T> {
+    #if 1
+      packing_trivial<T>
+    #else
+      packing_not_supported<T> {
+    #endif
+    {
   };
   
   // Reflection visitor for calling packing::size_ubound.
@@ -466,7 +436,7 @@ namespace upcxx {
   };
   
   template<typename T,
-    bool is_default_constructible = std::is_default_constructible<T>::value>
+           bool is_default_constructible = std::is_default_constructible<T>::value>
   struct packing_reflected;
   
   template<typename T>
@@ -570,7 +540,7 @@ namespace upcxx {
     
     static T unpack(parcel_reader &r) {
       std::uintptr_t basis = detail::funptr_to_uintptr(detail::packing_funptr_basis);
-      std::uintptr_t u = r.get_trivial_aligned<std::uintptr_t>();
+      std::uintptr_t u = r.pop_trivial_aligned<std::uintptr_t>();
       u += basis;
       return detail::template funptr_from_uintptr<T>(u);
     }
@@ -616,93 +586,84 @@ namespace upcxx {
   template<typename T>
   struct packing<T&&>: packing_not_supported<T&&> {};
   
-  
   //////////////////////////////////////////////////////////////////////
   // packing<std::tuple>
   
-  template<typename Tuple,
-           typename IxSeq = upcxx::make_index_sequence<std::tuple_size<Tuple>::value>>
-  struct tuple_storage;
-  
-  template<typename Tuple, int i>
-  struct tuple_storage_element {
-    typedef typename std::tuple_element<i,Tuple>::type element_type;
-    
-    typename std::aligned_storage<sizeof(element_type),alignof(element_type)>::type storage;
-    
-    element_type& element() { return reinterpret_cast<element_type&>(storage); }
-    void destruct() { reinterpret_cast<element_type&>(storage).~element_type(); }
-  };
-  
-  template<typename ...T, int ...i>
-  struct tuple_storage<std::tuple<T...>, upcxx::index_sequence<i...>>:
-    tuple_storage_element<std::tuple<T...>, i>... {
-    
-    template<typename ...A>
-    static void force_(A ...) {}
-    
-    std::tuple<T...> as_tuple_and_destruct() {
-      std::tuple<T...> ans{
-        std::move(static_cast<tuple_storage_element<std::tuple<T...>,i>*>(this)->element())...
-      };
+  namespace detail {
+    template<int n, int i, typename ...T>
+    struct packing_tuple_each {
+      typedef typename std::tuple_element<i,std::tuple<T...>>::type Ti;
       
-      force_((
-        static_cast<tuple_storage_element<std::tuple<T...>,i>*>(this)->destruct(),
-        0
-      )...);
+      static void size_ubound(parcel_layout &ub, const std::tuple<T...> &x) {
+        packing<Ti>::size_ubound(ub, std::get<i>(x));
+        packing_tuple_each<n, i+1, T...>::size_ubound(ub, x);
+      }
       
-      return ans;
-    }
-  };
-  
-  template<int n, int i, typename ...T>
-  struct packing_tuple_at {
-    typedef typename std::tuple_element<i,std::tuple<T...>>::type Ti;
+      static void pack(parcel_writer &w, const std::tuple<T...> &x) {
+        packing<Ti>::pack(w, std::get<i>(x));
+        packing_tuple_each<n, i+1, T...>::pack(w, x);
+      }
+      
+      template<typename Storage>
+      static void unpack_into(parcel_reader &r, Storage &storage) {
+        new(&std::get<i>(storage)) Ti{packing<Ti>::unpack(r)};
+        packing_tuple_each<n, i+1, T...>::unpack_into(r, storage);
+      }
+      
+      template<typename Storage>
+      static void destruct(Storage &storage) {
+        reinterpret_cast<Ti&>(std::get<i>(storage)).~Ti();
+        packing_tuple_each<n, i+1, T...>::destruct(storage);
+      }
+    };
     
-    static void size_ubound(parcel_layout &ub, const std::tuple<T...> &x) {
-      packing<Ti>::size_ubound(ub, std::get<i>(x));
-      packing_tuple_at<n, i+1, T...>::size_ubound(ub, x);
-    }
-    static void pack(parcel_writer &w, const std::tuple<T...> &x) {
-      packing<Ti>::pack(w, std::get<i>(x));
-      packing_tuple_at<n, i+1, T...>::pack(w, x);
-    }
-    template<typename UnpackedTuple, typename Storage>
-    static void unpack(parcel_reader &r, Storage &storage) {
-      tuple_storage_element<UnpackedTuple,i> *elmt = static_cast<tuple_storage_element<UnpackedTuple,i>*>(&storage);
-      ::new(&elmt->storage) typename std::tuple_element<i,UnpackedTuple>::type{unpacking<Ti>::unpack(r)};
-      packing_tuple_at<n, i+1, T...>::template unpack<UnpackedTuple, Storage>(r, storage);
-    }
-  };
-  
-  template<int n, typename ...T>
-  struct packing_tuple_at<n, n, T...> {
-    static void size_ubound(parcel_layout &ub, const std::tuple<T...> &x) {}
-    static void pack(parcel_writer &w, const std::tuple<T...> &x) {}
-    template<typename UnpackedTuple, typename Storage>
-    static void unpack(parcel_reader &r, Storage &storage) {}
-  };
+    template<int n, typename ...T>
+    struct packing_tuple_each<n, n, T...> {
+      static void size_ubound(parcel_layout &ub, const std::tuple<T...> &x) {}
+      static void pack(parcel_writer &w, const std::tuple<T...> &x) {}
+      template<typename Storage>
+      static void unpack_into(parcel_reader &r, Storage&) {}
+      template<typename Storage>
+      static void destruct(Storage&) {}
+    };
+  }
   
   template<typename ...T>
   struct packing<std::tuple<T...>> {
     static void size_ubound(parcel_layout &ub, const std::tuple<T...> &x) {
-      packing_tuple_at<sizeof...(T), 0, T...>::size_ubound(ub, x);
+      detail::packing_tuple_each<sizeof...(T), 0, T...>::size_ubound(ub, x);
     }
+    
     static void pack(parcel_writer &w, const std::tuple<T...> &x) {
-      packing_tuple_at<sizeof...(T), 0, T...>::pack(w, x);
+      detail::packing_tuple_each<sizeof...(T), 0, T...>::pack(w, x);
     }
     
-    typedef std::tuple<typename unpacking<T>::type...> unpacking_type;
+    template<typename Storage, int ...i>
+    static std::tuple<T...> move_from_storage(
+        Storage &storage,
+        upcxx::index_sequence<i...>
+      ) {
+      return std::tuple<T...>{
+        reinterpret_cast<T&&>(std::get<i>(storage))...
+      };
+    }
     
-    typedef std::tuple<decltype(unpacking<T>::unpack(std::declval<parcel_reader&>()))...> unpack_return_type;
-    
-    static unpack_return_type unpack(parcel_reader &r) {
-      tuple_storage<unpack_return_type> storage;
-      packing_tuple_at<sizeof...(T), 0, T...>::template unpack<unpack_return_type>(r, storage);
-      return storage.as_tuple_and_destruct();
+    static std::tuple<T...> unpack(parcel_reader &r) {
+      std::tuple<
+          typename std::aligned_storage<sizeof(T),alignof(T)>::type...
+        > storage;
+      
+      detail::packing_tuple_each<sizeof...(T), 0, T...>::unpack_into(r, storage);
+      
+      std::tuple<T...> ans{
+        move_from_storage(storage, upcxx::make_index_sequence<sizeof...(T)>())
+      };
+      
+      detail::packing_tuple_each<sizeof...(T), 0, T...>::destruct(storage);
+      
+      return ans;
     }
   };
-  
   
   //////////////////////////////////////////////////////////////////////
   // packing<std::pair>
@@ -713,24 +674,16 @@ namespace upcxx {
       packing<A>::size_ubound(ub, x.first);
       packing<B>::size_ubound(ub, x.second);
     }
+    
     static void pack(parcel_writer &w, const std::pair<A,B> &x) {
       packing<A>::pack(w, x.first);
       packing<B>::pack(w, x.second);
     }
     
-    typedef std::pair<
-        typename unpacking<A>::type,
-        typename unpacking<B>::type
-      > unpacking_type;
-    
-    static auto unpack(parcel_reader &r) ->
-      std::pair<
-        decltype(unpacking<A>::unpack(r)),
-        decltype(unpacking<B>::unpack(r))
-      > {
-      auto a = unpacking<A>::unpack(r);
-      auto b = unpacking<B>::unpack(r);
-      return std::make_pair(std::move(a), std::move(b));
+    static std::pair<A,B> unpack(parcel_reader &r) {
+      auto a = packing<A>::unpack(r);
+      auto b = packing<B>::unpack(r);
+      return std::pair<A,B>{std::move(a), std::move(b)};
     }
   };
   
@@ -744,23 +697,20 @@ namespace upcxx {
       for(std::size_t i=0; i != n; i++)
         packing<T>::size_ubound(ub, x[i]);
     }
+    
     static void pack(parcel_writer &w, const std::array<T,n> &x) {
       for(std::size_t i=0; i != n; i++)
         packing<T>::pack(w, x[i]);
     }
     
-    typedef std::array<typename unpacking<T>::type, n> unpacking_type;
-    
-    typedef decltype(unpacking<T>::unpack(std::declval<parcel_reader&>())) U;
-    
-    static std::array<U,n> unpack(parcel_reader &r) {
-      typedef std::array<U,n> A;
+    static std::array<T,n> unpack(parcel_reader &r) {
+      typedef std::array<T,n> A;
       typename std::aligned_storage<sizeof(A), alignof(A)>::type tmp;
       
       for(std::size_t i=0; i != n; i++)
-        new(&reinterpret_cast<A&>(tmp)[i]) U(unpacking<T>::unpack(r));
+        new(&reinterpret_cast<A&>(tmp)[i]) T{packing<T>::unpack(r)};
       
-      A ans = reinterpret_cast<A&>(tmp);
+      A ans{reinterpret_cast<A&&>(tmp)};
       reinterpret_cast<A&>(tmp).~A();
       return ans;
     }
@@ -777,16 +727,18 @@ namespace upcxx {
       packing<std::size_t>::size_ubound(ub, n);
       ub.add_bytes(n);
     }
+    
     static void pack(parcel_writer &w, const std::string &x) {
       std::size_t n = x.size();
       packing<std::size_t>::pack(w, n);
       w.put_trivial_aligned(x.data(), n);
     }
+    
     static std::string unpack(parcel_reader &r) {
       std::size_t n = packing<std::size_t>::unpack(r);
       std::string s;
       s.resize(n+1);
-      s.assign(r.get_trivial_aligned<char>(n), n);
+      s.assign(r.pop_trivial_aligned<char>(n), n);
       return s;
     }
   };
@@ -803,12 +755,14 @@ namespace upcxx {
       for(std::size_t i=0; i != n; i++)
         packing<T>::size_ubound(ub, x[i]);
     }
+    
     static void pack(parcel_writer &w, const std::vector<T> &x) {
       std::size_t n = x.size();
       packing<std::size_t>::pack(w, n);
       for(std::size_t i=0; i != n; i++)
         packing<T>::pack(w, x[i]);
     }
+    
     static std::vector<T> unpack(parcel_reader &r) {
       std::size_t n = packing<std::size_t>::unpack(r);
       std::vector<T> v;
@@ -830,12 +784,14 @@ namespace upcxx {
       for(const T &x: xs)
         packing<T>::size_ubound(ub, x);
     }
+    
     static void pack(parcel_writer &w, const std::unordered_set<T> &xs) {
       std::size_t n = xs.size();
       packing<std::size_t>::pack(w, n);
       for(const T &x: xs)
         packing<T>::pack(w, x);
     }
+    
     static std::unordered_set<T> unpack(parcel_reader &r) {
       std::size_t n = packing<std::size_t>::unpack(r);
       std::unordered_set<T> xs(n/4);
@@ -857,12 +813,14 @@ namespace upcxx {
       for(const std::pair<const K,V> &x: xs)
         packing<std::pair<const K,V>>::size_ubound(ub, x);
     }
+    
     static void pack(parcel_writer &w, const std::unordered_map<K,V> &xs) {
       std::size_t n = xs.size();
       packing<std::size_t>::pack(w, n);
       for(const std::pair<const K,V> &x: xs)
         packing<std::pair<const K,V>>::pack(w, x);
     }
+    
     static std::unordered_map<K,V> unpack(parcel_reader &r) {
       std::size_t n = packing<std::size_t>::unpack(r);
       std::unordered_map<K,V> xs(n/4);

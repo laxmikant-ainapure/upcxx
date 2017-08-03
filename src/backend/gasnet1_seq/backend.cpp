@@ -287,9 +287,9 @@ void gasnet1_seq::send_am_rdzv(
             backend::during_level(level, [=]() {
               // Execute buffer.
               parcel_reader r{buf_d};
-              command_unpack_and_execute(r);
-              
-              upcxx::deallocate(buf_d);
+              command_execute(r) >> [=]() {
+                upcxx::deallocate(buf_d);
+              };
             });
           }
         )
@@ -318,10 +318,13 @@ bool message_queue::burst(int burst_n) {
   
   while(burst_n-- && m != nullptr) {
     parcel_reader r{m->payload};
-    command_unpack_and_execute(r);
+    future<> buf_done = command_execute(r);
     
     message *m_next = m->next;
-    operator delete(m->payload); // contains message struct too
+    
+    buf_done >> [=]() {
+      operator delete(m->payload);
+    };
     
     did_something = true;
     m = m_next;
@@ -361,6 +364,7 @@ bool rma_queue::burst(int burst_n) {
       if(*pp == nullptr)
         this->tailp = pp;
       
+      // do it!
       p->fire_and_delete();
       did_something = true;
     }
@@ -377,20 +381,28 @@ namespace {
 bool user_actions_burst(int burst_n) {
   bool did_something = false;
   
+  // steal the global action list into a temporary
   action *tmp_head = user_actions_head_;
   action **tmp_tailp = user_actions_tailp_;
+  // reset global action list to empty
   user_actions_head_ = nullptr;
   user_actions_tailp_ = &user_actions_head_;
   
   while(true) {
+    // is local list occupied?
     if(tmp_head != nullptr) {
       action *next = tmp_head->next_;
+      
+      // do the action, this could push new work onto global list
       tmp_head->fire_and_delete();
+      
       tmp_head = next;
       did_something = true;
       if(0 == --burst_n) break;
     }
     else {
+      // local list exhausted, steal from global list again if possible
+      
       tmp_tailp = &tmp_head;
       
       if(user_actions_head_ != nullptr) {
@@ -404,6 +416,7 @@ bool user_actions_burst(int burst_n) {
     }
   }
   
+  // prepend local list to global list
   *tmp_tailp = user_actions_head_;
   user_actions_head_ = tmp_head;
   
@@ -471,9 +484,11 @@ namespace {
       gasnet_handlerarg_t buf_align
     ) {
     
+    future<> buf_done;
+    
     if(0 == (reinterpret_cast<uintptr_t>(buf) & (buf_align-1))) {
       parcel_reader r{buf};
-      command_unpack_and_execute(r);
+      buf_done = command_execute(r);
     }
     else {
       void *tmp;
@@ -483,10 +498,12 @@ namespace {
       std::memcpy((void**)tmp, (void**)buf, buf_size);
       
       parcel_reader r{tmp};
-      command_unpack_and_execute(r);
+      buf_done = command_execute(r);
       
       std::free(tmp);
     }
+    
+    UPCXX_ASSERT(buf_done.ready());
   }
   
   void am_eager_queued(

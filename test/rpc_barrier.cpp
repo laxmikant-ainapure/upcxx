@@ -47,8 +47,8 @@ namespace upcxx {
     }
     
     static barrier_action unpack(parcel_reader &r) {
-      barrier_action x = r.get_trivial_aligned<barrier_action>();
-      r.get(x.extra(), 1); // empty bytes
+      barrier_action x = r.pop_trivial_aligned<barrier_action>();
+      r.pop(x.extra(), 1); // empty bytes
       return x;
     }
   };

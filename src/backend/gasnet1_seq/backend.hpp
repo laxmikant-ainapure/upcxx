@@ -144,7 +144,7 @@ namespace backend {
       buf = upcxx::allocate(ub.size(), ub.alignment());
     
     parcel_writer w{buf};
-    command_pack(w, fn, ub.size());
+    command_pack(w, ub.size(), fn);
     
     if(eager) {
       gasnet1_seq::send_am_eager_queued(level, recipient, buf, w.size(), w.alignment());
@@ -259,7 +259,7 @@ namespace gasnet1_seq {
       buf = upcxx::allocate(ub.size(), ub.alignment());
     
     parcel_writer w{buf};
-    command_pack(w, fn, ub.size());
+    command_pack(w, ub.size(), fn);
     
     if(eager) {
       gasnet1_seq::send_am_eager_restricted(recipient, buf, w.size(), w.alignment());
