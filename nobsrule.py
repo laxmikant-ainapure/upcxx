@@ -321,7 +321,7 @@ class includes:
     import shlex
     deps = shlex.split(mk.replace("\\\n",""))[1:] # first is source file
     deps = map(os.path.abspath, deps)
-    me.depend_files(*deps)    
+    me.depend_files(*deps)
     deps = map(os.path.realpath, deps)
     
     yield deps
@@ -382,7 +382,10 @@ class executable:
       path = base + ext
       me.depend_files(path)
       return os.path.exists(path)
-    return filter(exists, ('.c',) + cxx_exts)
+    srcs = filter(exists, c_exts + cxx_exts)
+    srcs = map(realcase, srcs)
+    srcs = list(set(srcs))
+    return srcs
   
   @coroutine
   def execute(me):
@@ -624,3 +627,38 @@ def run(cxt, main_src, *args):
   """
   exe = yield cxt.executable(main_src)
   os.execvp(exe, [exe] + map(str, args))
+
+# Detct case insensitive filesystem, provide `realcase` for determining
+# correct caseing of a give path.
+if len(set(map(os.path.normcase, ['A','a']))) == 2:
+  def realcase(path):
+    return path
+else:
+  def realcase():
+    os_path_split = os.path.split
+    os_path_normcase = os.path.normcase
+    
+    # memoize os.listdir
+    def listdir():
+      os_listdir = os.listdir
+      memo = {}
+      def listdir(dirpath):
+        if dirpath not in memo:
+          memo[dirpath] = os_listdir(dirpath)
+        return memo[dirpath]
+      return listdir
+    listdir = listdir()
+    
+    memo = {}
+    def realcase(path):
+      if path not in memo:
+        head, tail = os_path_split(path)
+        if head == path:
+          memo[path] = path
+        else:
+          sibs = listdir(head)
+          sibmap = dict((os_path_normcase(sib), sib) for sib in sibs)
+          memo[path] = os_path_join(realcase(head), sibmap[os_path_normcase(tail)])
+      return memo[path]
+    return realcase
+  realcase = realcase()
