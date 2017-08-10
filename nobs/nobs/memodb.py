@@ -15,7 +15,8 @@ def _everything():
   
   from . import async
   from . import valhash
-
+  from . import os_extra
+  
   def export(x):
     globals()[x.__name__] = x
     return x
@@ -57,7 +58,7 @@ def _everything():
   
   os_path_abspath = os.path.abspath
   os_path_dirname = os.path.dirname
-  os_path_exists = os.path.exists
+  #os_path_exists = os.path.exists
   os_path_expanduser = os.path.expanduser
   os_path_isabs = os.path.isabs
   os_path_isdir = os.path.isdir
@@ -87,20 +88,12 @@ def _everything():
   
   hashlib_sha1 = hashlib.sha1
   
+  os_extra_exists = os_extra.exists
+  os_extra_link_or_copy = os_extra.link_or_copy
+  os_extra_rmtree = os_extra.rmtree
+  
   valhash_eat = valhash.eat
   digest_of = valhash.digest_of
-  
-  def rmtree(path):
-    try:
-      os_remove(path)
-    except OSError as e:
-      if e.errno == 21: # is a directory
-        try:
-          for f in os_listdir(path):
-            rmtree(os_path_join(path, f))
-          os_rmdir(path)
-        except OSError:
-          pass
   
   @export
   def traced(fn):
@@ -138,7 +131,7 @@ def _everything():
       try: os_makedirs(path_art)
       except OSError: pass
       
-      if not os_path_exists(path_db):
+      if not os_extra_exists(path_db):
         # db_tree:Tree, Tree = {name_dig: (0, full_dig, call_name, call_args, Tree)
         #                               | (1, full_dig, changed:Promise)
         #                               | (2, full_dig, result_vals, result_kws, artifacts)
@@ -262,7 +255,7 @@ def _everything():
         return mt
       
       def file_digest(apath):
-        if not os_path_exists(apath):
+        if not os_extra_exists(apath):
           return 'D.N.E.'
         
         mtime = db_mtimes_get(apath)
@@ -373,7 +366,7 @@ def _everything():
                   raise AssertionError('Same trace and instance generated different full hashes.')
                 elif tag == 2:
                   for art in node[4]:
-                    rmtree(artifact_path(*art))
+                    os_extra_rmtree(artifact_path(*art))
               
               prune_arts(node)
             
@@ -427,7 +420,7 @@ def _everything():
         _, _, subtree_changed = cxt_tree_tip[name]
         
         for tmp in cxt._temps:
-          rmtree(tmp)
+          os_extra_rmtree(tmp)
         
         if isinstance(result, async_Result):
           cxt_tree_tip[name] = (2, full, result.values(), result.kws(), cxt_artifacts)
@@ -445,7 +438,7 @@ def _everything():
           
           if True: # delete artifacts of failed jobs
             for art in cxt_artifacts:
-              rmtree(artifact_path(*art))
+              os_extra_rmtree(artifact_path(*art))
           
           db_failed_name_seqs.append(zip(*trace_seq)[2])
         else:
@@ -566,7 +559,7 @@ def _everything():
           art = (prefix, dig, suffix)
           me._artifacts.append(art)
           apath = artifact_path(prefix, dig, suffix)
-          rmtree(apath)
+          os_extra_rmtree(apath)
           return apath
           
         def mktree(me, entries, symlinks=True):
@@ -583,7 +576,7 @@ def _everything():
                   os_symlink(e_val, path_and_name)
                 else:
                   if os_path_isfile(e_val):
-                    os_link(e_val, path_and_name)
+                    os_extra_link_or_copy(e_val, path_and_name)
                   elif os_path_isdir(e_val):
                     enter(
                       path_and_name,

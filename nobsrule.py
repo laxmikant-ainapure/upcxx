@@ -6,6 +6,7 @@ on the structure and interpretation of a rule-file.
 import os
 import sys
 
+from nobs import os_extra
 from nobs import subexec
 
 cxx_exts = ('.cpp','.cxx','.c++','.C','.C++')
@@ -48,6 +49,12 @@ def libset_merge_inplace(dst, src):
     if dst.get(k,v) != v:
       raise Exception("Multiple '%s' libraries with differing configurations." % k)
     dst[k] = v
+
+def libset_merge(*libsets):
+  ans = {}
+  for x in libsets:
+    libset_merge_inplace(ans, x)
+  return ans
 
 def libset_ld(libset):
   lds = set(tuple(x.get('ld',())) for x in libset.values())
@@ -247,6 +254,16 @@ def compiler(cxt, src):
   
   yield lambda outfile: comp_pp_cg + ['-c', src, '-o', outfile]
 
+# Rule overriden in sub-nobsrule files.
+@rule(path_arg='src')
+def requires_gasnet(cxt, src):
+  return False
+
+# Rule overriden in sub-nobsrule files.
+@rule(path_arg='src')
+def requires_upcxx_backend(cxt, src):
+  return False
+
 @rule(path_arg='src')
 @coroutine
 def libraries(cxt, src):
@@ -254,18 +271,17 @@ def libraries(cxt, src):
   File-specific library set required to compile and eventually link the
   file `src`.
   """
-  if src == here('test','gasnet_hello.cpp'):
-    yield cxt.libgasnet()
-  elif src in [
-      here('src','backend','gasnet1_seq','backend.cpp'),
-      here('src','dist_object.cpp'),
-      here('test','rpc_barrier.cpp'),
-      here('test','rput.cpp'),
-      here('test','dist_object.cpp'),
-    ]:
-    yield cxt.upcxx_backend()
+  if cxt.requires_gasnet(src):
+    maybe_libgasnet = yield cxt.libgasnet()
   else:
-    yield {}
+    maybe_libgasnet = {}
+  
+  if cxt.requires_upcxx_backend(src):
+    maybe_upcxx_backend = yield cxt.upcxx_backend()
+  else:
+    maybe_upcxx_backend = {}
+  
+  yield cxt.libset_merge(maybe_libgasnet, maybe_upcxx_backend)
 
 @rule()
 def gasnet_conduit(cxt):
@@ -381,10 +397,8 @@ class executable:
     def exists(ext):
       path = base + ext
       me.depend_files(path)
-      return os.path.exists(path)
+      return os_extra.exists(path)
     srcs = filter(exists, c_exts + cxx_exts)
-    srcs = map(realcase, srcs)
-    srcs = list(set(srcs))
     return srcs
   
   @coroutine
@@ -633,38 +647,3 @@ def run(cxt, main_src, *args):
   """
   exe = yield cxt.executable(main_src)
   os.execvp(exe, [exe] + map(str, args))
-
-# Detct case insensitive filesystem, provide `realcase` for determining
-# correct caseing of a give path.
-if len(set(map(os.path.normcase, ['A','a']))) == 2:
-  def realcase(path):
-    return path
-else:
-  def realcase():
-    os_path_split = os.path.split
-    os_path_normcase = os.path.normcase
-    
-    # memoize os.listdir
-    def listdir():
-      os_listdir = os.listdir
-      memo = {}
-      def listdir(dirpath):
-        if dirpath not in memo:
-          memo[dirpath] = os_listdir(dirpath)
-        return memo[dirpath]
-      return listdir
-    listdir = listdir()
-    
-    memo = {}
-    def realcase(path):
-      if path not in memo:
-        head, tail = os_path_split(path)
-        if head == path:
-          memo[path] = path
-        else:
-          sibs = listdir(head)
-          sibmap = dict((os_path_normcase(sib), sib) for sib in sibs)
-          memo[path] = os_path_join(realcase(head), sibmap[os_path_normcase(tail)])
-      return memo[path]
-    return realcase
-  realcase = realcase()

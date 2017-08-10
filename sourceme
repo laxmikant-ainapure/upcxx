@@ -28,6 +28,10 @@ function upcxx_sourceme {
   function nobs {
     "${NOBS_PATH}/tool.py" "$@"
   }
+  
+  if [ -e "./sourceme.ext" ]; then
+    . ./sourceme.ext
+  fi
 }
 
 upcxx_sourceme
