@@ -548,11 +548,17 @@ class libgasnet_configured:
     env1 = dict(os.environ)
     env1['CC'] = ' '.join(cc + ['-O%d'%optlev])
     env1['CXX'] = ' '.join(cxx + ['-O%d'%optlev])
+
+    misc_conf_opts = [
+       # disable non-EX conduits to prevent configure failures when that hardware is detected
+       '--disable-psm','--disable-mxm','--disable-portals4','--disable-ofi',
+    ]
     
     print>>sys.stderr, 'Configuring GASNet...'
     yield subexec.launch(
       [os.path.join(source_dir, 'configure')] +
-      (['--enable-debug'] if debug else []),
+      (['--enable-debug'] if debug else []) +
+      misc_conf_opts,
       cwd = build_dir,
       env = env1
     )
