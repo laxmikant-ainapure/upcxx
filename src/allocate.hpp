@@ -65,8 +65,14 @@ namespace upcxx {
         return nullptr;
       }
       
-      new(ptr) T(std::forward<Args>(args)...); // placement new
-      
+      try {
+        new(ptr) T(std::forward<Args>(args)...); // placement new
+      } catch (...) {
+        // reclaim memory and rethrow the exception
+        deallocate(ptr);
+        throw;
+      }
+
       return global_ptr<T>{
         detail::global_ptr_ctor_internal{},
         upcxx::rank_me(),
@@ -108,8 +114,20 @@ namespace upcxx {
       T *elts = reinterpret_cast<T*>((char*)ptr + offset);
       
       if(!std::is_trivially_constructible<T>::value) {
-        for(T *p=elts, *p1=elts+n; p != p1; p++)
-          new(p) T;
+        T *p = elts;
+        try {
+          for(T *p1=elts+n; p != p1; p++)
+            new(p) T;
+        } catch (...) {
+          // destruct constructed elements, reclaim memory, and
+          // rethrow the exception
+          if(!std::is_trivially_destructible<T>::value) {
+            for(T *p2=p-1; p2 >= elts; p2--)
+              p2->~T();
+          }
+          deallocate(ptr);
+          throw;
+        }
       }
       
       return global_ptr<T>{
