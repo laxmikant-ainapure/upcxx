@@ -114,7 +114,7 @@ namespace backend {
   inline void during_level(progress_level level, Fn1 &&fn) {
     using Fn = typename std::decay<Fn1>::type;
     
-    if(level == progress_level_internal || gasnet1_seq::in_user_progress_)
+    if(level == progress_level::internal || gasnet1_seq::in_user_progress_)
       fn();
     else {
       auto *a = new gasnet1_seq::action_impl<Fn>{std::forward<Fn1>(fn)};
@@ -267,7 +267,7 @@ namespace gasnet1_seq {
     }
     else {
       gasnet1_seq::send_am_rdzv(
-        progress_level_internal,
+        progress_level::internal,
         recipient, buf, w.size(), w.alignment()
       );
     }

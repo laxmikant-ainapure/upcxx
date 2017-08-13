@@ -105,7 +105,7 @@ namespace upcxx {
       }
       
       void completed(intrank_t owner) {
-        backend::send_am<progress_level_user>(owner, std::move(fn));
+        backend::send_am<progress_level::user>(owner, std::move(fn));
       }
     };
     

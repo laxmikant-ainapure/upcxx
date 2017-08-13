@@ -18,9 +18,9 @@ namespace upcxx {
   typedef int intrank_t;
   typedef unsigned int uintrank_t;
   
-  enum progress_level {
-    progress_level_internal,
-    progress_level_user
+  enum class progress_level {
+    internal,
+    user
   };
   
   void init();
@@ -33,7 +33,7 @@ namespace upcxx {
                  std::size_t alignment = alignof(std::max_align_t));
   void deallocate(void *p);
   
-  void progress(progress_level lev = progress_level_user);
+  void progress(progress_level lev = progress_level::user);
   
   void barrier();
 }

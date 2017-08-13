@@ -246,7 +246,7 @@ void gasnet1_seq::send_am_eager_queued(
     recipient,
     id_am_eager_queued,
     buf, buf_size,
-    buf_align<<1 | (level == progress_level_user ? 1 : 0)
+    buf_align<<1 | (level == progress_level::user ? 1 : 0)
   );
   
   // Always check for new internal actions after a gasnet call.
@@ -264,7 +264,7 @@ void gasnet1_seq::send_am_rdzv(
   
   intrank_t rank_s = backend::rank_me;
   
-  backend::send_am<progress_level_internal>(
+  backend::send_am<progress_level::internal>(
     rank_d,
     [=]() {
       // TODO: Elide rma_get (copy) for node-local sends with pointer
@@ -442,7 +442,7 @@ void upcxx::progress(progress_level lev) {
     did_something |= rmas_internal_.burst();
     did_something |= msgs_internal_.burst();
     
-    if(lev == progress_level_user) {
+    if(lev == progress_level::user) {
       did_something |= msgs_user_.burst();
       did_something |= user_actions_burst();
     }

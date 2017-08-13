@@ -11,7 +11,7 @@ namespace upcxx {
   
   template<typename Fn, typename ...Args>
   void rpc_ff(intrank_t recipient, Fn &&fn, Args &&...args) {
-    backend::template send_am<progress_level_user>(
+    backend::template send_am<progress_level::user>(
       recipient,
       upcxx::bind(std::forward<Fn>(fn), std::forward<Args>(args)...)
     );
@@ -34,7 +34,7 @@ namespace upcxx {
           std::forward<Args>(args)...
         };
         
-        backend::template send_am<progress_level_user>(
+        backend::template send_am<progress_level::user>(
           initiator_,
           upcxx::bind(
             [=](decltype(results) const &results1) {
@@ -70,7 +70,7 @@ namespace upcxx {
     intrank_t initiator = backend::rank_me;
     Pro *pro = new Pro;
     
-    backend::template send_am<progress_level_user>(
+    backend::template send_am<progress_level::user>(
       recipient,
       upcxx::bind(
         [=](decltype(fn_bound) &fn_bound1) {
@@ -101,7 +101,7 @@ namespace upcxx {
     intrank_t initiator = backend::rank_me;
     promise<T...> *pro = &prom;
     
-    backend::template send_am<progress_level_user>(
+    backend::template send_am<progress_level::user>(
       recipient,
       upcxx::bind(
         [=](decltype(fn_bound) &fn_bound1) {
