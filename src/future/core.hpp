@@ -71,7 +71,7 @@ namespace upcxx {
   // implemented in: upcxx/future/future1.hpp
   
   template<typename Kind, typename ...T>
-  class future1;
+  struct future1;
   
   //////////////////////////////////////////////////////////////////////
   // future: An alias for future1 using a shared reference implementation.
