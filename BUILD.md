@@ -13,8 +13,6 @@ deficiencies which will need to be resolved before release:
 
   1. Can only build fully linked executables. Need a way to produce
      upcxx library artifact and associated metadata.
-  2. Internally manages its own GASNet builds. Need to support
-     externally supplied GASNet.
 
 ## Workflow ##
 
