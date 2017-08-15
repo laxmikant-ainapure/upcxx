@@ -15,9 +15,6 @@ deficiencies which will need to be resolved before release:
      upcxx library artifact and associated metadata.
   2. Internally manages its own GASNet builds. Need to support
      externally supplied GASNet.
-  3. Only GASNet conduit supported is SMP, need to extend to high-perf
-     conduits of our target supercomputers. Requires using the
-     "contrib/" configure scripts for some.
 
 ## Workflow ##
 
@@ -121,3 +118,51 @@ there beyond enhancing it w.r.t to its obvious deficiencies stated
 previously.
 
 Enjoy.
+
+## Compilers ##
+
+The compiler choice in `nobs` is dictated by the following list in order
+of decreasing precedence:
+
+1. Cross-compilation setting.
+2. User specified `CC` and `CXX` environment variables.
+3. `cc` and `CC` when running on NERSC's Cori or Edison.
+4. `gcc` and `g++` otherwise.
+
+## GASNet Conduit ##
+
+The gasnet conduit will be pulled from this precedence list:
+
+1. `GASNET_CONDUIT` enviornment variable.
+2. Cross-compilation setting.
+3. `smp` otherwise.
+
+## Cross-Compilation at NERSC ##
+
+Cross compilation is currently supported for Cori and Edison. Have the 
+`CROSS=cray-aries-slurm` environment variable set while invoking `nobs` 
+to use the configuration settings found in gasnet's `other/contrib` 
+directory. This will use the current module's compilers and set gasnet 
+to the `aries` conduit. Without the `CROSS` variable, things default to 
+the usual compiler defaults and the `smp` conduit.
+
+The following should be sufficient to run `test/hello_upcxx.cpp` on
+the Cori/Edison compute nodes:
+
+```
+export CROSS=cray-aries-slurm
+srun -n 10 $(nobs exe test/hello_upcxx.cpp)
+```
+
+## Errors ##
+
+Build errors will happen. `nobs` will present them in a `less` 
+instance, since, when dealing with really long C++ errors you'll likely 
+just want to see the first few (`less` will not be invoked if either 
+stdout or stderr are being captured) . Make sure to report the stderr 
+output of nobs to the appropriate developer (if its all C++ errors) or 
+to jdbachan in the case of gasnet configure/build errors or uncaught 
+Python exceptions. For gasnet errors, gasnet might tell you to refer
+to some generated temporary file (likely in `/tmp/...`) which won't
+exist since `nobs` cleans up all of its temporaries before exiting.
+To prevent `/tmp` cleanup, run `nobs` with `NOBS_DEBUG=1` set.

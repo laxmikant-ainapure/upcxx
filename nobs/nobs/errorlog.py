@@ -3,6 +3,7 @@ nobs.errorlog: Logs errors during the course of process execution.
 """
 def _everything():
   import __builtin__
+  import hashlib
   import os
   import sys
   
@@ -14,11 +15,13 @@ def _everything():
     globals()[fn.__name__] = fn
     return fn
   
-  isatty = sys.stdout.isatty()
+  isatty = sys.stdout.isatty() and sys.stderr.isatty()
   
   RESET = '\x1b[0m'
   RED = '\x1b[31m'
   YELLOW = '\x1b[33m'
+  BLUE = '\x1b[34m'
+  WHITE = '\x1b[37m'
   
   def terminal_rows_cols():
     import struct
@@ -55,7 +58,7 @@ def _everything():
     return map(int, ans)
 
   t_rows, t_cols = terminal_rows_cols()
-  BAR = YELLOW + '~'*t_cols + RESET
+  BAR = '~'*t_cols
   
   _fatal = [None]
   _log = [] # [(title,message)]
@@ -80,20 +83,25 @@ def _everything():
     """
     def __init__(me, title, message):
       _fatal[0] = me
+      pair = (title, message)
       
-      if isatty:
-        pair = (title, message)
+      if pair not in _log:
         _log.append(pair)
-        if _log[0] is pair:
-          sys.stderr.write(RED + '*** Something FAILED! ***' + RESET + '\n')
-      else:
-        _log.append(None)
-        sys.stderr.write(''.join([
-          '~'*50, '\n',
-          title, '\n\n',
-          message,
-          (not message.endswith('\n'))*'\n'
-        ]))
+        
+        if isatty:
+          if _log[0] is pair:
+            sys.stderr.write(RED + '*** Something FAILED! ***' + RESET + '\n')
+        else:
+          sys.stderr.write(''.join([
+            '~'*50, '\n',
+            RED + title + RESET, '\n\n',
+            message,
+            (not message.endswith('\n'))*'\n'
+          ]))
+  
+  @export
+  def warning(message):
+    show("WARNING", message)
   
   @export
   def show(title, message):
@@ -101,14 +109,17 @@ def _everything():
     Print error message to stderr and display in the abort log if an
     aborting error occurs elsewhere.
     """
-    _log.append((title, message))
+    pair = (title, message)
     
-    sys.stderr.write(''.join([
-      BAR, '\n',
-      title, '\n\n',
-      message, '\n'*(not message.endswith('\n')),
-      BAR, '\n'
-    ]))
+    if pair not in _log:
+      _log.append((title, message))
+      
+      sys.stderr.write(''.join([
+        BAR, '\n',
+        RED + title + RESET, '\n\n',
+        message, '\n'*(not message.endswith('\n')),
+        BAR, '\n'
+      ]))
   
   @export
   def aborted(exception, tb=None):
@@ -123,7 +134,7 @@ def _everything():
       sys.exit(1)
     else:
       t_rows, t_cols = terminal_rows_cols()
-      BAR = YELLOW + '~'*t_cols + RESET
+      BAR = '~'*t_cols
       
       if exception is not None and not isinstance(exception, LoggedError):
         from traceback import format_exception

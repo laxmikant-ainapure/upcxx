@@ -3,13 +3,16 @@ def _everything():
   import shutil
   import tempfile
   
+  os_link = os.link
   os_listdir = os.listdir
+  os_makedirs = os.makedirs
   os_path_exists = os.path.exists
   os_path_join = os.path.join
   os_path_normcase = os.path.normcase
   os_path_split = os.path.split
   os_remove = os.remove
   os_rmdir = os.rmdir
+  os_symlink = os.symlink
   
   shutil_copyfile = shutil.copyfile
   shutil_copymode = shutil.copymode
@@ -68,6 +71,34 @@ def _everything():
         shutil_copymode(src, dst)
       else:
         raise e
+  
+  @export
+  def mktree(path, entries, symlinks=True):
+    def enter(path, entries):
+      try: os_makedirs(path)
+      except OSError: pass
+      
+      for e_name, e_val in entries.items():
+        path_and_name = os_path_join(path, e_name)
+        
+        if isinstance(e_val, dict):
+          enter(path_and_name, e_val)
+        else:
+          if symlinks:
+            os_symlink(e_val, path_and_name)
+          else:
+            if os_path_isfile(e_val):
+              link_or_copy(e_val, path_and_name)
+            elif os_path_isdir(e_val):
+              enter(
+                path_and_name,
+                dict((nm, os_path_join(e_val,nm)) for nm in listdir(e_val))
+              )
+            elif os_path_islink(e_val):
+              target = os_readlink(e_val)
+              os_symlink(target, path_and_name)
+    
+    enter(path, entries)
   
   # Case-sensitive system:
   if is_case_sensitive:

@@ -206,7 +206,10 @@ def _everything():
       #up('?')
   
   def unhashable(up, s_append, s_extend, x):
-    raise TypeError('Unhashable type: '+str(type(x)))
+    name = getattr(x, '__name__', '')
+    if name:
+      name = ', name='+name
+    raise TypeError('Unhashable type: '+str(type(x))+name)
   
   eat_action[types.GeneratorType] = unhashable
   eat_action[async.Future] = unhashable

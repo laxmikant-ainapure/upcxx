@@ -83,7 +83,7 @@ def _everything():
             def reader():
               while True:
                 try:
-                  buf = os.read(fd, 8192)
+                  buf = os.read(fd, 6*8192)
                 except OSError:
                   buf = ''
                 if len(buf) == 0: break

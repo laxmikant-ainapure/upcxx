@@ -681,12 +681,14 @@ def _everything():
   
   @export
   class Coroutine(Future):
-    __slots__ = Future.__slots__ + ('_fire',)
+    __slots__ = Future.__slots__ + ('_fire','__name__')
     
     def __init__(me, gen):
       super(Coroutine, me).__init__()
       me._status = 0
       me._sucs = []
+      
+      me.__name__ = gen.__name__
       
       me_task_add_successor = me._task.add_successor
       gen_send = gen.send

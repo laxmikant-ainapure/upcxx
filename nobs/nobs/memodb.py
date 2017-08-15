@@ -5,6 +5,10 @@ This API is mostly wrapped for the user by the `nobs.ruletree` module.
 See that module for documentation of memoization context objects.
 """
 def _everything():
+  # Useful in debugging to leave temporary files/dirs in tact after
+  # nobs exits so they may be autopsied.
+  DONT_REMOVE_TEMPS = False
+
   import __builtin__
   import binascii
   import cPickle
@@ -94,6 +98,9 @@ def _everything():
   
   valhash_eat = valhash.eat
   digest_of = valhash.digest_of
+  
+  if not DONT_REMOVE_TEMPS:
+    DONT_REMOVE_TEMPS = os.environ.get('NOBS_DEBUG', False)
   
   @export
   def traced(fn):
@@ -419,8 +426,9 @@ def _everything():
         _, _, name, full = trace_seq[-1]
         _, _, subtree_changed = cxt_tree_tip[name]
         
-        for tmp in cxt._temps:
-          os_extra_rmtree(tmp)
+        if not DONT_REMOVE_TEMPS:
+          for tmp in cxt._temps:
+            os_extra_rmtree(tmp)
         
         if isinstance(result, async_Result):
           cxt_tree_tip[name] = (2, full, result.values(), result.kws(), cxt_artifacts)
@@ -563,31 +571,8 @@ def _everything():
           return apath
           
         def mktree(me, entries, symlinks=True):
-          def enter(path, entries):
-            os_makedirs(path)
-            
-            for e_name, e_val in entries.items():
-              path_and_name = os_path_join(path, e_name)
-              
-              if isinstance(e_val, dict):
-                enter(path_and_name, e_val)
-              else:
-                if symlinks:
-                  os_symlink(e_val, path_and_name)
-                else:
-                  if os_path_isfile(e_val):
-                    os_extra_link_or_copy(e_val, path_and_name)
-                  elif os_path_isdir(e_val):
-                    enter(
-                      path_and_name,
-                      dict((nm, os_path_join(e_val,nm)) for nm in os_listdir(e_val))
-                    )
-                  elif os_path_islink(e_val):
-                    target = os_readlink(e_val)
-                    os_symlink(target, path_and_name)
-          
           path = me.mkpath(key=entries, isdir=True)
-          enter(path, entries)
+          os_extra.mktree(path, entries, symlinks=symlinks)
           return path
         
         def mktemp(me):

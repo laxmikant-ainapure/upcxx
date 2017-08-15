@@ -222,6 +222,19 @@ def _everything():
   
   digest_of = valhash.digest_of
   
+  def import_interposer(name, globals={}, locals={}, fromlist=[], level=-1):
+    here = globals.get('__nobs_here__')
+    if here is not None:
+      old_sys_path = sys.path
+      sys.path = [here] + old_sys_path
+      mod = __import__(name, globals, locals, fromlist, level)
+      sys.path = old_sys_path
+    else:
+      mod = __import__(name, globals, locals, fromlist, level)
+    return mod
+  
+  __builtin__.__dict__['__import__'] = import_interposer
+  
   @export
   def cached(fn):
     """
@@ -450,26 +463,17 @@ def _everything():
         mod.__package__ = None
         sys.modules[modname] = mod
         
-        def hacked_import(name, globals={}, locals={}, fromlist=[], level=-1):
-          old_sys_path = sys.path
-          sys.path = [path] + old_sys_path
-          mod = __import__(name, globals, locals, fromlist, level)
-          sys.path = old_sys_path
-          return mod
-        bltin = types_ModuleType('__builtin__')
-        bltin.__dict__.update(__builtin__.__dict__)
-        bltin.__dict__['__import__'] = hacked_import
-        
         defs = mod.__dict__
         defs.update({
-          '__builtin__': bltin,
-          '__builtins__':bltin.__dict__,
+          #'__builtin__': bltin,
+          #'__builtins__':bltin.__dict__,
+          '__nobs_here__': path,
           'async': async,
+          'cached': cached,
           'coroutine': async_coroutine,
           'digest_of': digest_of,
           'futurize': async.futurize,
           'here': lambda *xs: os_path_join(path, *xs),
-          'cached': cached,
           'rule': rule,
           'rule_memoized': rule_memoized,
           'traced': traced
