@@ -124,18 +124,27 @@ Enjoy.
 The compiler choice in `nobs` is dictated by the following list in order
 of decreasing precedence:
 
-1. Cross-compilation setting.
-2. User specified `CC` and `CXX` environment variables.
-3. `cc` and `CC` when running on NERSC's Cori or Edison.
-4. `gcc` and `g++` otherwise.
+  1. Cross-compilation setting.
+  2. User specified `CC` and `CXX` environment variables.
+  3. `cc` and `CC` when running on NERSC's Cori or Edison.
+  4. `gcc` and `g++` otherwise.
+
+## External GASNet ##
+
+Setting the `GASNET` environment variable to point to the absolute
+path of a configured and built, or installed, GASNetEx directory will
+cause `nobs` to skip building its own. It is your responsibility that
+the compilers found by the compiler selection mechanism above are
+compatible with those used by the given gasnet. It is an error to have
+both the `GASNET` and `CROSS` variables set simultaneously.
 
 ## GASNet Conduit ##
 
 The gasnet conduit will be pulled from this precedence list:
 
-1. `GASNET_CONDUIT` enviornment variable.
-2. Cross-compilation setting.
-3. `smp` otherwise.
+  1. `GASNET_CONDUIT` enviornment variable.
+  2. Cross-compilation setting (`cray-aries-*` maps to `aries`).
+  3. `smp` otherwise.
 
 ## Cross-Compilation at NERSC ##
 

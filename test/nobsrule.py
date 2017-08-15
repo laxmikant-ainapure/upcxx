@@ -34,5 +34,5 @@ def requires_upcxx_backend(cxt, src):
   return src in REQUIRES_UPCXX_BACKEND
 
 @rule()
-def requires_libgasnet(cxt, src):
+def requires_gasnet(cxt, src):
   return src in REQUIRES_GASNET

@@ -287,12 +287,12 @@ def compiler(cxt, src):
   yield lambda outfile: comp + ['-c', src, '-o', outfile]
 
 # Rule overriden in sub-nobsrule files.
-@rule(path_arg='src')
+@rule(cli='requires_gasnet', path_arg='src')
 def requires_gasnet(cxt, src):
   return False
 
 # Rule overriden in sub-nobsrule files.
-@rule(path_arg='src')
+@rule(cli='requires_upcxx_backend', path_arg='src')
 def requires_upcxx_backend(cxt, src):
   return False
 
@@ -589,6 +589,13 @@ class gasnet_config:
   @coroutine
   def get_cross_and_gasnet_src(me, cxt):
     cross = env('CROSS', None)
+    external = env('GASNET', None)
+    
+    if cross and external:
+      raise errorlog.LoggedError(
+        'Configuration Error',
+        'Only one of `CROSS` and `GASNET` may be set.'
+      )
     
     gasnet_src = None
     if cross:
@@ -736,22 +743,25 @@ class gasnet:
   """
   @traced
   def get_config(me, cxt):
+    external = env('GASNET', None)
     return futurize(
       cxt.gasnet_conduit(),
       cxt.gasnet_syncmode(),
-      cxt.gasnet_configured()
+      external,
+      external or cxt.gasnet_configured()
     )
   
   @coroutine
   def execute(me):
-    conduit, syncmode, build_dir = yield me.get_config()
+    conduit, syncmode, external, build_dir = yield me.get_config()
     
-    print>>sys.stderr, 'Building GASNet (conduit=%s, threading=%s)...'%(conduit, syncmode)
-    yield subexec.launch(
-      ['make', syncmode],
-      cwd = os.path.join(build_dir, '%s-conduit'%conduit)
-    )
-    
+    if not external:
+      print>>sys.stderr, 'Building GASNet (conduit=%s, threading=%s)...'%(conduit, syncmode)
+      yield subexec.launch(
+        ['make', syncmode],
+        cwd = os.path.join(build_dir, '%s-conduit'%conduit)
+      )
+      
     makefile = os.path.join(
       build_dir,
       '%s-conduit'%conduit,

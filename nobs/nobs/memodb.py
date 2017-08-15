@@ -115,7 +115,7 @@ def _everything():
   @export
   def memoized(cls):
     cls.__bases__ += (MemoizedBase,)
-    uid = digest_of(cls.__module__, cls.__name__, getattr(cls,'unique_id',None))
+    uid = digest_of(cls.__module__, cls.__name__, dir(cls), getattr(cls,'unique_id',None))
     cls._uid = uid
     
     def proxy(cxt, *args, **kws):
