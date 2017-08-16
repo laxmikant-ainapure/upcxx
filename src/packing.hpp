@@ -503,17 +503,17 @@ namespace upcxx {
     template<typename Fp>
     static std::uintptr_t funptr_to_uintptr(Fp fp) {
       using mem = typename std::aligned_storage<sizeof(Fp),alignof(Fp)>::type;
-      std::uintptr_t u;
-      *reinterpret_cast<mem*>(&u) = *reinterpret_cast<mem*>(&fp);
-      return u;
+      mem tmp;
+      new(&tmp) Fp{fp};
+      return *reinterpret_cast<std::uintptr_t*>(&tmp);
     }
     
     template<typename Fp>
     static Fp funptr_from_uintptr(std::uintptr_t u) {
       using mem = typename std::aligned_storage<sizeof(Fp),alignof(Fp)>::type;
-      Fp fp;
-      *reinterpret_cast<mem*>(&fp) = *reinterpret_cast<mem*>(&u);
-      return fp;
+      mem tmp;
+      new(&tmp) std::uintptr_t{u};
+      return *reinterpret_cast<Fp*>(&tmp);
     }
   }
   
