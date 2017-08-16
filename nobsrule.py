@@ -96,7 +96,7 @@ def cxx(cxt):
   ans_cross = cross_env.get('CXX','').split()
   
   ans_default = []
-  if env('NERSC_HOST', None) in ['cori','edison']:
+  if env('NERSC_HOST', None) in ('cori','edison'):
     ans_default = ['CC']
   if not ans_default:
     ans_default = ['g++']
@@ -112,7 +112,7 @@ def cxx(cxt):
     )
   
   # If the cross-config script set it, use it.
-  # Otherwise honor the CC env-variable.
+  # Otherwise honor the CXX env-variable.
   # Otherwise use intelligent defaults.
   yield ans_cross or ans_user or ans_default
 
@@ -126,7 +126,7 @@ def cc(cxt):
   ans_cross = cross_env.get('CC','').split()
   
   ans_default = []
-  if env('NERSC_HOST', None) in ['cori','edison']:
+  if env('NERSC_HOST', None) in ('cori','edison'):
     ans_default = ['cc']
   if not ans_default:
     ans_default = ['gcc']
@@ -614,7 +614,7 @@ class gasnet_config:
     cross, gasnet_src = yield me.get_cross_and_gasnet_src()
     
     if cross is None:
-      yield ([], os.environ)
+      yield ([], {})
       return
     
     # add "canned" env-var dependencies of scripts here
@@ -669,10 +669,15 @@ sys.stdout.write(repr((sys.argv, os.environ)))
     argv = argv[1:]
     
     # Only record the environment delta.
+    keep = ('CC','CXX','HOST_CC','HOST_CXX',
+            'MPI_CC','MPI_CFLAGS','MPI_LIBS','MPIRUN_CMD')
     env0 = os.environ
     for x in env0:
-      if x in env and env[x] == env0[x]:
-        del env[x]
+      if x in keep: continue
+      if x.startswith('CROSS_'): continue
+      if x not in env: continue
+      if env[x] != env0[x]: continue
+      del env[x]
     
     yield (argv, env)
 
