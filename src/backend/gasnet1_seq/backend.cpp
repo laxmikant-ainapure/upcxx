@@ -100,9 +100,13 @@ namespace {
 ////////////////////////////////////////////////////////////////////////
 // from: upcxx/backend.hpp
 
-#warning "TODO: Use counting semantics for init/finalize."
+namespace {
+  int init_count_ = 0;
+}
 
 void upcxx::init() {
+  if (init_count_++ != 0) return;
+  printf("initializing\n");
   int ok;
   
   ok = gasnet_init(nullptr, nullptr);
@@ -155,6 +159,9 @@ void upcxx::init() {
 }
 
 void upcxx::finalize() {
+  UPCXX_ASSERT_ALWAYS(init_count_ > 0);
+  if (--init_count_ != 0) return;
+  printf("finalizing\n");
   upcxx::barrier();
 }
 
