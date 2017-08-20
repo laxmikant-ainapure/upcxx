@@ -315,6 +315,18 @@ def libraries(cxt, src):
   
   yield cxt.libset_merge(maybe_gasnet, maybe_upcxx_backend)
 
+@rule()
+def gasnet_user_path(cxt):
+  return env('GASNET', None)
+
+@rule()
+def gasnet_user_built(cxt):
+  path = cxt.gasnet_user_path()
+  try:
+    return os.path.isdir(path)
+  except:
+    return False
+
 @rule(cli='gasnet_conduit')
 def gasnet_conduit(cxt):
   """
@@ -517,55 +529,42 @@ class executable:
     
     yield exe
 
-@rule_memoized(cli='download')
-class download:
-  """
-  Download a file from url. Returns path to local file.
-  """
-  @traced
-  def get_url(me, cxt, url):
-    return url
-  
-  @coroutine
-  def execute(me):
-    url = me.get_url()
-    dest = me.mkpath(key=url)
-    
-    @async.launched
-    def retrieve():
-      import urllib
-      urllib.urlretrieve(url, dest)
-    
-    print>>sys.stderr, 'Downloading %s' % url 
-    yield retrieve()
-    print>>sys.stderr, 'Finished    %s' % url
-    
-    yield dest
-
 @rule_memoized()
 class gasnet_source:
   """
   Download and extract gasnet source tree.
   """
-  gasnetex_tgz_url_b64 = 'aHR0cDovL2dhc25ldC5sYmwuZ292L0VYL0dBU05ldC0yMDE3LjYuMC50YXIuZ3o='
+  default_gasnetex_url_b64 = 'aHR0cDovL2dhc25ldC5sYmwuZ292L0VYL0dBU05ldC0yMDE3LjYuMC50YXIuZ3o='
   
-  unique_id = gasnetex_tgz_url_b64
+  unique_id = default_gasnetex_url_b64
+  
+  @traced
+  def get_gasnet(me, cxt):
+    import base64
+    default_url = base64.b64decode(me.default_gasnetex_url_b64)
+    return cxt.gasnet_user_path() or default_url
   
   @coroutine
   def execute(me):
-    import base64
-    gasnetex_tgz_url = base64.b64decode(me.gasnetex_tgz_url_b64)
+    url = me.get_gasnet()
     
-    tgz = me.mktemp()
+    from urlparse import urlparse
+    isurl = urlparse(url).netloc != ''
     
-    @async.launched
-    def download():
-      import urllib
-      urllib.urlretrieve(gasnetex_tgz_url, tgz)
-    
-    print>>sys.stderr, 'Downloading %s' % gasnetex_tgz_url 
-    yield download()
-    print>>sys.stderr, 'Finished    %s' % gasnetex_tgz_url
+    if not isurl:
+      tgz = url
+      me.depend_files(tgz) # in case the user changes the tarball but not its path
+    else:
+      tgz = me.mktemp()
+      
+      @async.launched
+      def download():
+        import urllib
+        urllib.urlretrieve(url, tgz)
+      
+      print>>sys.stderr, 'Downloading %s' % url
+      yield download()
+      print>>sys.stderr, 'Finished    %s' % url
     
     untar_dir = me.mkpath(key=None)
     os.makedirs(untar_dir)
@@ -589,12 +588,13 @@ class gasnet_config:
   @coroutine
   def get_cross_and_gasnet_src(me, cxt):
     cross = env('CROSS', None)
-    external = env('GASNET', None)
+    user_built = cxt.gasnet_user_built()
     
-    if cross and external:
+    if cross and user_built:
       raise errorlog.LoggedError(
         'Configuration Error',
-        'Only one of `CROSS` and `GASNET` may be set.'
+        'It is invalid to use both cross-compile (CROSS) and ' +
+        'externally-built gasnet (GASNET).'
       )
     
     gasnet_src = None
@@ -748,25 +748,26 @@ class gasnet:
   """
   @traced
   def get_config(me, cxt):
-    external = env('GASNET', None)
+    gasnet_path = cxt.gasnet_user_path()
+    gasnet_built = cxt.gasnet_user_built()
     return futurize(
       cxt.gasnet_conduit(),
       cxt.gasnet_syncmode(),
-      external,
-      external or cxt.gasnet_configured()
+      gasnet_built,
+      gasnet_path if gasnet_built else cxt.gasnet_configured()
     )
   
   @coroutine
   def execute(me):
-    conduit, syncmode, external, build_dir = yield me.get_config()
+    conduit, syncmode, built, build_dir = yield me.get_config()
     
-    if not external:
+    if not built:
       print>>sys.stderr, 'Building GASNet (conduit=%s, threading=%s)...'%(conduit, syncmode)
       yield subexec.launch(
         ['make', syncmode],
         cwd = os.path.join(build_dir, '%s-conduit'%conduit)
       )
-      
+    
     makefile = os.path.join(
       build_dir,
       '%s-conduit'%conduit,
