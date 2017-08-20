@@ -3,6 +3,7 @@
 #include <upcxx/rput.hpp>
 #include <upcxx/rget.hpp>
 #include <upcxx/rpc.hpp>
+#include <upcxx/wait.hpp>
 
 using namespace upcxx;
 
@@ -51,7 +52,9 @@ int main() {
       };
   };
   
-  while(!done_g.ready() || got_rpc != me)
+  upcxx::wait(done_g);
+  
+  while(got_rpc != me)
     upcxx::progress();
   
   //upcxx::barrier();

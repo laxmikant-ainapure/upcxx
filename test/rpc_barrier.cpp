@@ -1,4 +1,5 @@
 #include <upcxx/rpc.hpp>
+#include <upcxx/wait.hpp>
 
 #include <cstdint>
 
@@ -114,9 +115,7 @@ int main() {
       return 0xbeef;
     });
     
-    while(!fut.ready())
-      upcxx::progress();
-    
+    upcxx::wait(fut);
     UPCXX_ASSERT(fut.result() == 0xbeef);
   }
   
@@ -136,9 +135,7 @@ int main() {
       return rank_me;
     });
     
-    while(!fut.ready())
-      upcxx::progress();
-    
+    upcxx::wait(fut);
     UPCXX_ASSERT(fut.result() == rank_me);
   }
   

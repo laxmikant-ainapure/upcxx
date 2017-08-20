@@ -106,7 +106,8 @@ namespace {
 
 void upcxx::init() {
   if (init_count_++ != 0) return;
-  printf("initializing\n");
+  //printf("initializing\n");
+  
   int ok;
   
   ok = gasnet_init(nullptr, nullptr);
@@ -161,7 +162,7 @@ void upcxx::init() {
 void upcxx::finalize() {
   UPCXX_ASSERT_ALWAYS(init_count_ > 0);
   if (--init_count_ != 0) return;
-  printf("finalizing\n");
+  //printf("finalizing\n");
   upcxx::barrier();
 }
 

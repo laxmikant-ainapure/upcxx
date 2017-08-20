@@ -89,10 +89,9 @@ namespace upcxx {
     }
     
     template<int i=0>
-    typename std::tuple_element<i, results_type>::type result() const {
-      return typename std::tuple_element<i, results_type>::type{
-        std::get<i>(impl_.template result_lrefs_getter()())
-      };
+    typename upcxx::tuple_element_or_void<i, results_type>::type result() const {
+      return (typename upcxx::tuple_element_or_void<i, results_type>::type)
+        upcxx::get_or_void<i>(impl_.template result_lrefs_getter()());
     }
     
     results_type results() const {
@@ -101,8 +100,8 @@ namespace upcxx {
     
     template<int i=0>
     auto result_moved()
-      -> decltype(std::get<i>(impl_.template result_rvals())) {
-      return std::get<i>(impl_.template result_rvals());
+      -> decltype(upcxx::get_or_void<i>(impl_.template result_rvals())) {
+      return upcxx::get_or_void<i>(impl_.template result_rvals());
     }
     
     auto results_moved()

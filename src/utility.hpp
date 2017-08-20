@@ -182,6 +182,46 @@ namespace upcxx {
   };
   
   //////////////////////////////////////////////////////////////////////
+  // get_or_void & tuple_element_or_void: analogs of std::get &
+  // std::tuple_elemenet which return void for out-of-range indices
+  
+  namespace detail {
+    template<int i, typename TupRef,
+             bool in_range = (
+               0 <= i &&
+               i < std::tuple_size<typename std::decay<TupRef>::type>::value
+             )>
+    struct tuple_get_or_void {
+      auto operator()(TupRef t)
+        -> decltype(std::get<i>(t)) {
+        return std::get<i>(t);
+      }
+    };
+    
+    template<int i, typename TupRef>
+    struct tuple_get_or_void<i, TupRef, /*in_range=*/false>{
+      void operator()(TupRef t) {}
+    };
+  }
+  
+  template<int i, typename Tup>
+  auto get_or_void(Tup &&tup)
+    -> decltype(
+      detail::tuple_get_or_void<i,Tup>()(std::forward<Tup>(tup))
+    ) {
+    return detail::tuple_get_or_void<i,Tup>()(std::forward<Tup>(tup));
+  }
+  
+  template<int i, typename Tup,
+           bool in_range = 0 <= i && i < std::tuple_size<Tup>::value>
+  struct tuple_element_or_void: std::tuple_element<i,Tup> {};
+  
+  template<int i, typename Tup>
+  struct tuple_element_or_void<i,Tup,/*in_range=*/false> {
+    using type = void;
+  };
+  
+  //////////////////////////////////////////////////////////////////////
   // tuple_lrefs: Get individual lvalue-references to tuple componenets.
   // For components which are already `&` or `&&` types you'll get those
   // back unmodified. If the tuple itself isn't passed in with `&`
