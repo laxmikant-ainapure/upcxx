@@ -81,7 +81,7 @@ def _everything():
     never raised, logs the error message for later display and marks
     the whole execution as aborted.
     """
-    def __init__(me, title, message):
+    def __init__(me, title, message=''):
       _fatal[0] = me
       pair = (title, message)
       
@@ -94,14 +94,15 @@ def _everything():
         else:
           sys.stderr.write(''.join([
             '~'*50, '\n',
-            RED + title + RESET, '\n\n',
+            RED + title + RESET,
+            '\n\n'*(message != ''),
             message,
             (not message.endswith('\n'))*'\n'
           ]))
   
   @export
   def warning(message):
-    show("WARNING", message)
+    show("WARNING: " + message)
   
   @export
   def show(title, message):
@@ -116,9 +117,11 @@ def _everything():
       
       sys.stderr.write(''.join([
         BAR, '\n',
-        RED + title + RESET, '\n\n',
-        message, '\n'*(not message.endswith('\n')),
-        BAR, '\n'
+        RED + title + RESET,
+        '\n\n'*(message != ''),
+        message,
+        '\n'*(not message.endswith('\n')),
+        #BAR, '\n'
       ]))
   
   @export
@@ -129,9 +132,29 @@ def _everything():
     the error log and invoke sys.exit(1).
     """
     import re
+    from traceback import format_exception
     
-    if not isatty or isinstance(exception, KeyboardInterrupt):
+    if isinstance(exception, KeyboardInterrupt):
       sys.exit(1)
+    elif not isatty:
+      if exception is not None and not isinstance(exception, LoggedError):
+        if tb is None:
+          tb = sys.exc_info()[2]
+        
+        message = ''.join(format_exception(type(exception), exception, tb))
+        
+        BAR = 50*'~'
+        sys.stderr.write(''.join([
+          BAR, '\n',
+          RED + 'Uncaught exception' + RESET,
+          '\n\n'*(message != ''),
+          message,
+          '\n'*(not message.endswith('\n')),
+          #BAR, '\n'
+        ]))
+      
+      sys.exit(1)
+      
     else:
       t_rows, t_cols = terminal_rows_cols()
       BAR = '~'*t_cols
@@ -146,19 +169,28 @@ def _everything():
           'Uncaught exception',
           ''.join(format_exception(type(exception), exception, tb))
         ))
-
-      text = '\n'.join(''.join([BAR,'\n',RED,title,RESET,'\n\n',message,'\n']) for title,message in _log)
-#      text_plain = re.sub(r'(\x9b|\x1b\[)[0-?]*[ -\/]*[@-~]', '', text)
-#      text_rows = sum(map(lambda line: (len(line)+t_cols-1)/t_cols, text_plain.split('\n')))
       
-      # if text_rows >= t_rows-3:
-      #   import subprocess as sp
-      #   less = sp.Popen(['less','-R'], stdin=sp.PIPE)
-      #   less.communicate(text)
-      #   sys.exit(less.returncode)
-      # else:
-      sys.stderr.write(text)
-      sys.exit(1)
+      text = '\n'.join(
+        ''.join([
+          BAR, '\n',
+          RED, title, RESET,
+          '\n\n'*(message!=''),
+          message,
+          '\n'*(not message.endswith('\n'))
+        ])
+        for title,message in _log
+      )
+      text_plain = re.sub(r'(\x9b|\x1b\[)[0-?]*[ -\/]*[@-~]', '', text)
+      text_rows = sum(map(lambda line: (len(line)+t_cols-1)/t_cols, text_plain.split('\n')))
+      
+      if text_rows >= t_rows-3:
+        import subprocess as sp
+        less = sp.Popen(['less','-R'], stdin=sp.PIPE)
+        less.communicate(text)
+        sys.exit(less.returncode)
+      else:
+        sys.stderr.write(text)
+        sys.exit(1)
 
 _everything()
 del _everything

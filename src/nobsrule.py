@@ -8,4 +8,5 @@ def requires_upcxx_backend(cxt, src):
   return src in [
     here('backend/gasnet1_seq/backend.cpp'),
     here('dist_object.cpp'),
+    here('upcxx.cpp')
   ]

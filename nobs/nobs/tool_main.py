@@ -72,7 +72,9 @@ def main():
     
     @async.mbind(fn(*map(parse_arg, sys.argv[2:])))
     def printed(ans):
-      if isinstance(ans, basestring):
+      if ans is None:
+        pass
+      elif isinstance(ans, basestring):
         sys.stdout.write(ans)
       elif isinstance(ans, (int, long, float, bool)):
         sys.stdout.write(str(ans))

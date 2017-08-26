@@ -6,6 +6,7 @@ def _everything():
   os_link = os.link
   os_listdir = os.listdir
   os_makedirs = os.makedirs
+  os_path_dirname = os.path.dirname
   os_path_exists = os.path.exists
   os_path_join = os.path.join
   os_path_normcase = os.path.normcase
@@ -23,7 +24,8 @@ def _everything():
     def proxy(x):
       y = memo_get(x, memo_get)
       if y is memo_get:
-        memo[x] = y = fn(x)
+        y = fn(x)
+        memo[x] = y
       return y
     proxy.__doc__ = fn.__doc__
     proxy.__name__ = fn.__name__
@@ -62,15 +64,28 @@ def _everything():
           pass
   
   @export
-  def link_or_copy(src, dst):
+  def link_or_copy(src, dst, overwrite=False):
     try:
-      os_link(src, dst)
+      try:
+        os_link(src, dst)
+      except OSError as e:
+        if e.errno == 18: # cross-device link
+          shutil_copyfile(src, dst)
+          shutil_copymode(src, dst)
+        else:
+          raise
     except OSError as e:
-      if e.errno == 18: # cross-device link
-        shutil_copyfile(src, dst)
-        shutil_copymode(src, dst)
+      if e.errno == 17 and overwrite: # File exists
+        rmtree(dst)
+        link_or_copy(src, dst)
       else:
-        raise e
+        raise
+  
+  @export
+  def ensure_dirs(path):
+    d = os_path_dirname(path)
+    if not os_path_exists(d):
+      os_makedirs(d)
   
   @export
   def mktree(path, entries, symlinks=True):

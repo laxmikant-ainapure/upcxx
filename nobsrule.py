@@ -13,64 +13,31 @@ from nobs import subexec
 cxx_exts = ('.cpp','.cxx','.c++','.C','.C++')
 c_exts = ('.c',)
 
-def env(name, otherwise):
-  """
-  Read `name` from the environment returning it as an integer if it
-  looks like one otherwise a string. If `name` does not exist in the 
-  environment then `otherwise` is returned.
-  """
-  try:
-    got = os.environ[name]
-    try: return int(got)
-    except ValueError: pass
-    return got
-  except KeyError:
-    return otherwise
+crawlable_dirs = [
+  here('src'),
+  here('test')
+]
 
 """
+TODO: Update description reflecting: incdirs, incfiles, libfiles.
 Library sets are encoded as a dictionary of the type:
   {libname:str: {
       'ld':[str],
+      'incdirs':[str], 'incfiles':[str]
       'ppflags':[str],
       'cgflags':[str],
       'ldflags':[str],
+      'libfiles':[str],
       'libflags':[str],
       'deplibs':[str]
     }, ...
-  }.
+  }
 
-That is, each key is the short name of the library (like 'm') and the 
-value is a dictionary containing the linker command, various flags
-lists, and the list of libraries short-names it is dependent on. If
-'libflags' is absent it defaults to ['-l'+libname].
+That is, each key is the short name of the library (like 'm' for 
+'libm') and the value is a dictionary containing the linker command, 
+various flags lists, and the list of libraries short-names it is 
+dependent on.
 """
-
-def libset_merge_inplace(dst, src):
-  for k,v in src.items():
-    if dst.get(k,v) != v:
-      raise Exception("Multiple '%s' libraries with differing configurations." % k)
-    dst[k] = v
-
-def libset_merge(*libsets):
-  ans = {}
-  for x in libsets:
-    libset_merge_inplace(ans, x)
-  return ans
-
-def libset_ld(libset):
-  lds = set(tuple(x.get('ld',())) for x in libset.values())
-  lds.discard(())
-  if len(lds) == 0:
-    return None
-  if len(lds) != 1:
-    raise Exception("Multiple linkers demanded:" + ''.join(map(lambda x:'\n  '+' '.join(x), lds)))
-  return list(lds.pop())
-
-def libset_flags(libset, kind):
-  flags = []
-  for x in libset.values():
-    flags.extend(x.get(kind+'flags', []))
-  return flags
 
 @cached
 def output_of(cmd_args):
@@ -210,28 +177,30 @@ def comp_lang_pp(cxt, src):
     comp + 
     ['-D_GNU_SOURCE=1'] + # Required for full latest POSIX on some systems
     ['-I'+ipt] +
-    libset_flags(libs, 'pp')
+    libset_ppflags(libs)
   )
 
-# upcxx_backend is a pseudo library used to inject the
-# "-DUPCXX_BACKEND=X" preprocessor flag, and to rope in gasnet.
 @rule()
 @coroutine
 def upcxx_backend(cxt):
-  upcxx = {
-    'upcxx': {
+  """
+  A pseudo-library used to inject the "-DUPCXX_BACKEND=X" preprocessor
+  flag and to rope in gasnet.
+  """
+  upcxx_be = {
+    'upcxx-be': {
+      'primary': True,
       'ppflags': ['-D%s=%s'%(
           'UPCXX_BACKEND',
           env("UPCXX_BACKEND", otherwise="gasnet1_seq")
         )],
-      'libflags': [],
       'deplibs': ['gasnet']
     }
   }
   
   gasnet = yield cxt.gasnet()
   
-  yield libset_merge(gasnet, upcxx)
+  yield libset_merge(upcxx_be, libset_as_secondary(gasnet))
 
 @rule()
 def cg_optlev_default(cxt):
@@ -271,7 +240,7 @@ def comp_lang_pp_cg(cxt, src):
     ['-O%d'%optlev] +
     (['-g'] if dbgsym else []) +
     ['-Wall'] +
-    libset_flags(libset, 'cg')
+    libset_cgflags(libset)
   )
 
 @rule(path_arg='src')
@@ -390,7 +359,6 @@ class includes:
     deps = shlex.split(mk.replace("\\\n",""))[1:] # first is source file
     deps = map(os.path.abspath, deps)
     me.depend_files(*deps)
-    deps = map(os.path.realpath, deps)
     
     yield deps
 
@@ -421,22 +389,19 @@ class compile:
     yield subexec.launch(compiler(objfile))
     yield objfile
 
-@rule_memoized(cli='exe', path_arg=0)
-class executable:
+class Crawler:
   """
+  Base class for memoized rules.
+  
   Compile the given source file as well as all source files which can
   be found as sharing its name with a header included by any source
-  file reached in this process (transitively closed set). Take all those
-  compiled object files and link them along with their library
-  dependencies to proudce an executable. Path to executable returned.
+  file reached in this process (transitively closed set). Return pair
+  containing set of all object files and the accumulated library
+  dependency set.
   """
   @traced
-  def main_src(me, cxt, main_src):
+  def get_main_src(me, cxt, main_src):
     return main_src
-  
-  @traced
-  def cxx(me, cxt, main_src):
-    return cxt.cxx()
   
   @traced
   def do_includes(me, cxt, main_src, src):
@@ -456,8 +421,8 @@ class executable:
     return srcs
   
   @coroutine
-  def execute(me):
-    main_src = me.main_src()
+  def crawl(me):
+    main_src = me.get_main_src()
     
     # compile object files
     incs_seen = set()
@@ -470,18 +435,17 @@ class executable:
         me.do_compile_and_libraries(src) >> compile_done
       )
     
-    os_path_splitext = os.path.splitext
-    os_path_relpath = os.path.relpath
-    src_dir = here('src')
-    dot_dot_slash = '..' + os.path.sep
+    top_dir = here() # our "src/" directory
     
     def includes_done(incs):
       tasks = []
       for inc in incs:
-        inc, _ = os_path_splitext(inc)
+        inc = os.path.realpath(inc)
         if inc not in incs_seen:
           incs_seen.add(inc)
-          if not os_path_relpath(inc, src_dir).startswith(dot_dot_slash):
+          inc, _ = os.path.splitext(inc)
+          # `inc` must be in a crawlable directory
+          if any(path_within_dir(inc, x) for x in crawlable_dirs):
             for ext in me.find_src_exts(inc):
               tasks.append(fresh_src(inc + ext))
       
@@ -494,23 +458,26 @@ class executable:
     # wait for all compilations
     yield fresh_src(main_src)
     
-    # topsort library flags by library-library dependencies
-    sorted_libflags = []
-    sorted_libs = set()
-    def topsort(xs):
-      for x in xs:
-        rec = libset.get(x, {})
-        libflags = rec.get('libflags', ['-l'+x])
-        deplibs = rec.get('deplibs', [])
-        
-        topsort(deplibs)
-        
-        if x not in sorted_libs:
-          sorted_libs.add(x)
-          sorted_libflags.append(libflags)
-    
-    topsort(libset)
-    sorted_libflags = sum(reversed(sorted_libflags), [])
+    # return pair
+    yield (objs, libset)
+
+@rule_memoized(cli='exe', path_arg=0)
+class executable(Crawler):
+  """
+  Compile the given source file as well as all source files which can
+  be found as sharing its name with a header included by any source
+  file reached in this process (transitively closed set). Take all those
+  compiled object files and link them along with their library
+  dependencies to proudce an executable. Path to executable returned.
+  """
+  @traced
+  def cxx(me, cxt, main_src):
+    return cxt.cxx()
+  
+  @coroutine
+  def execute(me):
+    # invoke crawl of base class
+    objs, libset = yield me.crawl()
     
     # link
     exe = me.mkpath('exe', suffix='.x')
@@ -521,13 +488,71 @@ class executable:
       ld = cxx
     ld = [cxx[0]] + ld[1:] 
     
-    ldflags = libset_flags(libset, 'ld')
+    ldflags = libset_ldflags(libset)
+    libflags = libset_libflags(libset)
     
-    yield subexec.launch(
-      ld + ldflags + ['-o',exe] + objs + sorted_libflags
-    )
-    
+    yield subexec.launch(ld + ldflags + ['-o',exe] + objs + libflags)
     yield exe
+
+@rule_memoized(cli='lib', path_arg=0)
+class library(Crawler):
+  @traced
+  def get_include_paths_tree(me, cxt, main_src):
+    return cxt.include_paths_tree()
+  
+  @coroutine
+  def execute(me):
+    main_src = me.get_main_src()
+    top_dir = here()
+    
+    # Invoke crawl of base class.
+    objs, libset = yield me.crawl()
+    
+    # Headers pulled in from main file. Discard those not within this
+    # repo (top_dir) or the nobs artifact cache (path_art).
+    incs = yield me.do_includes(main_src)
+    incs = [i for i in incs if
+      path_within_dir(i, top_dir) or
+      path_within_dir(i, me.memodb.path_art)
+    ]
+    incs = list(set(incs))
+    
+    inc_dir = yield me.get_include_paths_tree()
+    
+    par_dir = me.mkpath(key=None)
+    os.makedirs(par_dir)
+    
+    libname, _ = os.path.splitext(main_src)
+    libname = os.path.basename(libname)
+    
+    libpath = os.path.join(par_dir, 'lib' + libname + '.a')
+    
+    # archive objects to `libpath`
+    yield subexec.launch(['ar', 'rcs', libpath] + objs)
+    
+    yield libset_merge(
+      libset_as_secondary(libset),
+      {libname: {
+        'primary': True,
+        'incdirs': [inc_dir],
+        'incfiles': incs,
+        'libfiles': [libpath],
+        'deplibs': list(libset.keys())
+      }}
+    )
+
+@rule(cli='install', path_arg='main_src')
+@coroutine
+def install(cxt, main_src, install_path):
+  libset = yield cxt.library(main_src)
+  
+  # select name of the one primary library
+  name = [k for k,v in libset.items() if v['primary']]
+  assert len(name) == 1
+  name = name[0]
+  
+  install_libset(install_path, name, libset)
+  yield None
 
 @rule_memoized()
 class gasnet_source:
@@ -654,7 +679,6 @@ import os
 import sys
 sys.stdout.write(repr((sys.argv, os.environ)))
 """)
-    import stat
     os.chmod(path(tmpd, 'configure'), 0777)
     
     # Run the cross-configure script.
@@ -754,12 +778,13 @@ class gasnet:
       cxt.gasnet_conduit(),
       cxt.gasnet_syncmode(),
       gasnet_built,
-      gasnet_path if gasnet_built else cxt.gasnet_configured()
+      gasnet_path if gasnet_built else cxt.gasnet_configured(),
+      None if gasnet_built else cxt.gasnet_source()
     )
   
   @coroutine
   def execute(me):
-    conduit, syncmode, built, build_dir = yield me.get_config()
+    conduit, syncmode, built, build_dir, source_dir = yield me.get_config()
     
     if not built:
       print>>sys.stderr, 'Building GASNet (conduit=%s, threading=%s)...'%(conduit, syncmode)
@@ -768,11 +793,15 @@ class gasnet:
         cwd = os.path.join(build_dir, '%s-conduit'%conduit)
       )
     
-    makefile = os.path.join(
-      build_dir,
-      '%s-conduit'%conduit,
-      '%s-%s.mak'%(conduit, syncmode)
-    )
+    # detect if this is a gasnet build or install directory
+    installed = (os.path.exists(os.path.join(build_dir, 'include')) and
+                 os.path.exists(os.path.join(build_dir, 'lib')))
+    
+    makefile = os.path.join(*(
+      [build_dir] +
+      (['include'] if installed else []) +
+      ['%s-conduit'%conduit, '%s-%s.mak'%(conduit, syncmode)]
+    ))
     
     GASNET_LD = makefile_extract(makefile, 'GASNET_LD').split()
     GASNET_LDFLAGS = makefile_extract(makefile, 'GASNET_LDFLAGS').split()
@@ -780,16 +809,95 @@ class gasnet:
     GASNET_CXXFLAGS = makefile_extract(makefile, 'GASNET_CXXFLAGS').split()
     GASNET_LIBS = makefile_extract(makefile, 'GASNET_LIBS').split()
     
+    # pull "-I..." arguments out of GASNET_CXXCPPFLAGS
+    incdirs = [x for x in GASNET_CXXCPPFLAGS if x.startswith('-I')]
+    GASNET_CXXCPPFLAGS = [x for x in GASNET_CXXCPPFLAGS if x not in incdirs]
+    incdirs = [x[2:] for x in incdirs] # drop "-I" prefix
+    
+    if not installed:
+      makefile = os.path.join(build_dir, 'Makefile')
+      incfiles = makefile_extract(makefile, 'include_HEADERS').split()
+      incfiles = [os.path.join(source_dir, i) for i in incfiles]
+    else:
+      # find all ".h" files found under "-I..." paths
+      incfiles = set()
+      for d in incdirs:
+        for f in os_extra.listdir(d):
+          if f.endswith('.h'):
+            incfiles.add(os.path.join(d, f))
+      incfiles = list(incfiles)
+    
+    # pull "-L..." arguments out of GASNET_LIBS, keep only the "..."
+    libdirs = [x[2:] for x in GASNET_LIBS if x.startswith('-L')]
+    # pull "-l..." arguments out of GASNET_LIBS, keep only the "..."
+    libnames = [x[2:] for x in GASNET_LIBS if x.startswith('-l')]
+    
+    # filter libdirs for those made by gasnet
+    libdirs = [x for x in libdirs if path_within_dir(x, build_dir)]
+    
+    # find libraries in libdirs
+    libfiles = []
+    libnames_matched = set()
+    for libname in libnames:
+      lib = 'lib' + libname + '.a'
+      for libdir in libdirs:
+        libfile = os.path.join(libdir, lib)
+        if os.path.exists(libfile):
+          # assert same library not found under multiple libdir paths
+          assert libname not in libnames_matched
+          libfiles.append(libfile)
+          libnames_matched.add(libname)
+    
+    # prune extracted libraries from GASNET_LIBS
+    GASNET_LIBS = [x for x in GASNET_LIBS
+      if not(
+        (x.startswith('-L') and x[2:] in libdirs) or
+        (x.startswith('-l') and x[2:] in libnames_matched)
+      )
+    ]
+    
     yield {
       'gasnet': {
+        'primary': True,
+        'incdirs': incdirs,
+        'incfiles': incfiles,
         'ld': GASNET_LD,
         'ldflags': GASNET_LDFLAGS,
         'ppflags': GASNET_CXXCPPFLAGS,
         'cgflags': GASNET_CXXFLAGS,
+        'libfiles': libfiles,
         'libflags': GASNET_LIBS,
         'deplibs': []
       }
     }
+
+@rule(cli='run', path_arg='main_src')
+@coroutine
+def run(cxt, main_src, *args):
+  """
+  Build the executable for `main_src` and run it with the given
+  argument list `args`.
+  """
+  exe = yield cxt.executable(main_src)
+  os.execvp(exe, [exe] + map(str, args))
+
+########################################################################
+## Utilties
+########################################################################
+
+def env(name, otherwise):
+  """
+  Read `name` from the environment returning it as an integer if it
+  looks like one otherwise a string. If `name` does not exist in the 
+  environment then `otherwise` is returned.
+  """
+  try:
+    got = os.environ[name]
+    try: return int(got)
+    except ValueError: pass
+    return got
+  except KeyError:
+    return otherwise
 
 def makefile_extract(makefile, varname):
   """
@@ -805,12 +913,196 @@ def makefile_extract(makefile, varname):
   val = val.strip(' \t\n')
   return val
 
-@rule(cli='run', path_arg='main_src')
-@coroutine
-def run(cxt, main_src, *args):
+def path_within_dir(path, dirpath):
+  rel = os.path.relpath(path, dirpath)
+  return path == dirpath or not rel.startswith('..' + os.path.sep)
+
+########################################################################
+
+def libset_merge_inplace(dst, src):
+  for k,v in src.items():
+    v1 = dict(dst.get(k,v))
+    v1_primary = v1['primary']
+    
+    v1['primary'] = v['primary']
+    if v != v1:
+      raise Exception("Multiple '%s' libraries with differing configurations." % k)
+    
+    v1['primary'] = v['primary'] or v1_primary
+    dst[k] = v1
+
+def libset_merge(*libsets):
+  ans = {}
+  for x in libsets:
+    libset_merge_inplace(ans, x)
+  return ans
+
+def libset_as_secondary(libset):
+  ans = {}
+  for k,v in libset.items():
+    if not v['primary']:
+      ans[k] = v
+    else:
+      ans[k] = dict(v)
+      ans[k]['primary'] = False
+  return ans
+
+def libset_ppflags(libset):
+  flags = []
+  for rec in libset.values():
+    flags.extend(rec.get('ppflags', []))
+  for rec in libset.values():
+    for d in rec.get('incdirs', []):
+      flag = '-I' + d
+      if flag not in flags:
+        flags.append(flag)
+  return flags
+
+def libset_cgflags(libset):
+  flags = []
+  for rec in libset.values():
+    flags.extend(rec.get('cgflags', []))
+  return flags
+
+def libset_ld(libset):
+  lds = set(tuple(x.get('ld',())) for x in libset.values())
+  lds.discard(())
+  if len(lds) == 0:
+    return None
+  if len(lds) != 1:
+    raise Exception("Multiple linkers demanded:" + ''.join(map(lambda x:'\n  '+' '.join(x), lds)))
+  return list(lds.pop())
+
+def libset_ldflags(libset):
+  flags = []
+  for rec in libset.values():
+    flags.extend(rec.get('ldflags', []))
+  return flags
+
+def libset_libflags(libset):
   """
-  Build the executable for `main_src` and run it with the given
-  argument list `args`.
+  Generate link-line library flags from a topsort over
+  library-library dependencies.
   """
-  exe = yield cxt.executable(main_src)
-  os.execvp(exe, [exe] + map(str, args))
+  sorted_lpaths = []
+  sorted_flags = []
+  visited = set()
+  
+  def topsort(xs):
+    for x in xs:
+      rec = libset.get(x, {x:{'libflags':['-l'+x]}})
+      
+      topsort(rec.get('deplibs', []))
+      
+      if x not in visited:
+        visited.add(x)
+
+        libfiles = rec.get('libfiles', [])
+        
+        sorted_lpaths.append(
+          ['-L' + os.path.dirname(f) for f in libfiles]
+        )
+        sorted_flags.append(
+          ['-l' + os.path.basename(f)[3:-2] for f in libfiles] +
+          rec.get('libflags', [])
+        )
+  
+  def uniquify(xs):
+    ys = []
+    for x in xs:
+      if x not in ys:
+        ys.append(x)
+    return ys
+  
+  topsort(libset)
+  
+  sorted_lpaths.reverse()
+  sorted_lpaths = sum(sorted_lpaths, [])
+  sorted_lpaths = uniquify(sorted_lpaths)
+  
+  sorted_flags.reverse()
+  sorted_flags = sum(sorted_flags, [])
+  
+  return sorted_lpaths + sorted_flags
+
+def install_libset(install_path, name, libset):
+  base_of = os.path.basename
+  join = os.path.join
+  up = '..' + os.path.sep
+  link_or_copy = os_extra.link_or_copy
+  
+  undo = []
+  
+  try:
+    libfiles_all = []
+    installed_libset = {}
+    
+    for xname,rec in libset.items():
+      incdirs = rec.get('incdirs', [])
+      incfiles = rec.get('incfiles', [])
+      libfiles = rec.get('libfiles')
+      
+      incfiles1 = []
+      libfiles_all.extend(libfiles or [])
+      
+      # copy includes
+      for f in incfiles:
+        # copy for each non-upwards relative path
+        for d in reversed(incdirs):
+          rp = os.path.relpath(f,d)
+          if not rp.startswith(up):
+            # copy include file to relative path under "install_path/include"
+            src = join(d, rp)
+            dest = join(install_path, 'include', rp)
+            
+            incfiles1.append(dest)
+            os_extra.ensure_dirs(dest)
+            undo.append(dest)
+            link_or_copy(src, dest, overwrite=False)
+      
+      # produce installed version of library record
+      rec1 = dict(rec)
+      rec1['incdirs'] = [join(install_path, 'include')]
+      rec1['incfiles'] = incfiles1
+      if libfiles is not None:
+        rec1['libfiles'] = [join(install_path, 'lib', base_of(f)) for f in libfiles]
+      
+      installed_libset[xname] = rec1
+    
+    # copy libraries
+    if len(libfiles_all) != len(set(map(base_of, libfiles_all))):
+      raise errorlog.LoggedError(
+        'ERROR: Duplicate library names in list:\n  ' + '\n  '.join(libfiles_all)
+      )
+    
+    for f in libfiles_all:
+      dest = join(install_path, 'lib', base_of(f))
+      undo.append(dest)
+      os_extra.ensure_dirs(dest)
+      link_or_copy(f, dest, overwrite=False)
+    
+    # produce metadata script
+    meta = join(install_path, 'bin', name+'-meta')
+    undo.append(meta)
+    os_extra.ensure_dirs(meta)
+    with open(meta, 'w') as fo:
+      fo.write(
+'''#!/bin/sh
+PPFLAGS="''' + ' '.join(libset_ppflags(installed_libset)) + '''"
+LDFLAGS="''' + ' '.join(libset_ldflags(installed_libset)) + '''"
+LIBFLAGS="''' + ' '.join(libset_libflags(installed_libset)) + '''"
+[ "$1" != "" ] && eval echo '$'"$1"
+''')
+    os.chmod(meta, 0777)
+        
+  except Exception as e:
+    for f in undo:
+      try: os_extra.rmtree(f)
+      except OSError: pass
+    
+    if isinstance(e, OSError) and e.errno == 17: # File exists
+      raise errorlog.LoggedError(
+        'Installation aborted because it would clobber files in "'+install_path+'"'
+      )
+    else:
+      raise

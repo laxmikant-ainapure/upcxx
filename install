@@ -1,0 +1,9 @@
+#!/bin/bash
+
+if [ "$#" -ne 1 ]; then
+  echo 'Usage: install <directory-path>' >&2
+  exit 1
+fi
+
+. sourceme
+nobs install src/upcxx.cpp $(absify "$1")

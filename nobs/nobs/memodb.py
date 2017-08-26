@@ -127,13 +127,13 @@ def _everything():
   
   @export
   class MemoDb(object):
-    def __init__(db, path_root):
-      path_root = os_path_normpath(path_root)
-      path_root = os_path_normcase(path_root)
-      path_root = os_path_join(path_root, '.nobs')
+    def __init__(db, path_site):
+      path_site = os_path_normpath(path_site)
+      path_db = os_path_join(path_site, '.nobs', 'db')
+      path_art = os_path_join(path_site, '.nobs', 'art')
       
-      path_db = os_path_join(path_root, 'db')
-      path_art = os_path_join(path_root, 'art')
+      db.path_site = path_site
+      db.path_art = path_art
       
       try: os_makedirs(path_art)
       except OSError: pass
@@ -459,6 +459,7 @@ def _everything():
       
       class Context(object):
         def __init__(me, cls, tracer, args, kws, apathset):
+          me.memodb = db
           me._apathset = apathset
           
           me__dict__ = me.__dict__
