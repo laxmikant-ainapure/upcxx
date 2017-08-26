@@ -9,5 +9,6 @@
 #include <upcxx/rget.hpp>
 #include <upcxx/rput.hpp>
 #include <upcxx/wait.hpp>
+#include <upcxx/atomic.hpp>
 
 #endif
