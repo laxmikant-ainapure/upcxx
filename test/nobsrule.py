@@ -12,6 +12,7 @@ REQUIRES_UPCXX_BACKEND = [
   'rpc_barrier.cpp',
   'rpc_ff_ring.cpp',
   'rput.cpp',
+  'atomics.cpp',
 ]
 
 # List of source files which make direct calls to gasnet, or include

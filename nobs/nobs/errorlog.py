@@ -146,19 +146,19 @@ def _everything():
           'Uncaught exception',
           ''.join(format_exception(type(exception), exception, tb))
         ))
-      
+
       text = '\n'.join(''.join([BAR,'\n',RED,title,RESET,'\n\n',message,'\n']) for title,message in _log)
-      text_plain = re.sub(r'(\x9b|\x1b\[)[0-?]*[ -\/]*[@-~]', '', text)
-      text_rows = sum(map(lambda line: (len(line)+t_cols-1)/t_cols, text_plain.split('\n')))
+#      text_plain = re.sub(r'(\x9b|\x1b\[)[0-?]*[ -\/]*[@-~]', '', text)
+#      text_rows = sum(map(lambda line: (len(line)+t_cols-1)/t_cols, text_plain.split('\n')))
       
-      if text_rows >= t_rows-3:
-        import subprocess as sp
-        less = sp.Popen(['less','-R'], stdin=sp.PIPE)
-        less.communicate(text)
-        sys.exit(less.returncode)
-      else:
-        sys.stderr.write(text)
-        sys.exit(1)
+      # if text_rows >= t_rows-3:
+      #   import subprocess as sp
+      #   less = sp.Popen(['less','-R'], stdin=sp.PIPE)
+      #   less.communicate(text)
+      #   sys.exit(less.returncode)
+      # else:
+      sys.stderr.write(text)
+      sys.exit(1)
 
 _everything()
 del _everything

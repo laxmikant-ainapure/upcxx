@@ -107,7 +107,7 @@ namespace {
 void upcxx::init() {
   if (init_count_++ != 0) return;
   //printf("initializing\n");
-  
+
   int ok;
   
   ok = gasnet_init(nullptr, nullptr);

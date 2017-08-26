@@ -44,7 +44,7 @@ Tests leveraging the upcxx runtime will need to
 `#include <upcxx/backend.hpp>`, and also register themselves in the
 "test/nobsrule.py" file before they can be built. The relative path
 to the test file (from the perspective of the "test/nobsrule.py" file)
-must be added to the `REQUIRES_UPCXX_BAKEND` list. After that, it will
+must be added to the `REQUIRES_UPCXX_BACKEND` list. After that, it will
 be buildable/runnable in the same manner as before.
 
 At this time there is no master `#include <upcxx/upcxx.hpp>` header file
