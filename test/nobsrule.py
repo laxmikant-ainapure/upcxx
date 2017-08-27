@@ -9,6 +9,8 @@ on the structure and interpretation of a rule-file.
 REQUIRES_UPCXX_BACKEND = [
   'dist_object.cpp',
   'hello_upcxx.cpp',
+  'multifile.cpp',
+  'multifile-buddy.cpp',
   'rpc_barrier.cpp',
   'rpc_ff_ring.cpp',
   'rput.cpp',
