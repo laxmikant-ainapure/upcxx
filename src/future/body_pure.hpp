@@ -9,7 +9,7 @@ namespace detail {
   // future_body_pure
   
   template<typename Kind, typename ...T>
-  struct future_body_pure<future1<Kind, T...>>: future_body {
+  struct future_body_pure<future1<Kind, T...>> final: future_body {
     future_dependency<future1<Kind, T...>> dep_;
     
   public:

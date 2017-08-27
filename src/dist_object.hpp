@@ -12,7 +12,7 @@
 
 namespace upcxx {
   template<typename T>
-  class dist_id;
+  struct dist_id;
   
   template<typename T>
   class dist_object;
