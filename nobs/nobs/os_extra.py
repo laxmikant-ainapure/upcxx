@@ -8,6 +8,8 @@ def _everything():
   os_makedirs = os.makedirs
   os_path_dirname = os.path.dirname
   os_path_exists = os.path.exists
+  os_path_isdir = os.path.isdir
+  os_path_isfile = os.path.isfile
   os_path_join = os.path.join
   os_path_normcase = os.path.normcase
   os_path_split = os.path.split
@@ -40,6 +42,16 @@ def _everything():
     is_case_sensitive = not os_path_exists(f.name.lower())
   
   globals()['is_case_sensitive'] = is_case_sensitive
+  
+  @export
+  @memoize
+  def isfile(path):
+    return os_path_isfile(path)
+  
+  @export
+  @memoize
+  def isdir(path):
+    return os_path_isdir(path)
   
   @export
   @memoize

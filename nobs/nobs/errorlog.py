@@ -185,7 +185,8 @@ def _everything():
       
       if text_rows >= t_rows-3:
         import subprocess as sp
-        less = sp.Popen(['less','-R'], stdin=sp.PIPE)
+        pager = os.environ.get('PAGER','less -R').split()
+        less = sp.Popen(pager, stdin=sp.PIPE)
         less.communicate(text)
         sys.exit(less.returncode)
       else:
