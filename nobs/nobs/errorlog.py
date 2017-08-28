@@ -169,7 +169,6 @@ def _everything():
           'Uncaught exception',
           ''.join(format_exception(type(exception), exception, tb))
         ))
-      
       text = '\n'.join(
         ''.join([
           BAR, '\n',
@@ -180,10 +179,15 @@ def _everything():
         ])
         for title,message in _log
       )
+
+      pipe_to_less = True
       text_plain = re.sub(r'(\x9b|\x1b\[)[0-?]*[ -\/]*[@-~]', '', text)
-      text_rows = sum(map(lambda line: (len(line)+t_cols-1)/t_cols, text_plain.split('\n')))
-      
-      if text_rows >= t_rows-3:
+      try:
+        text_rows = sum(map(lambda line: (len(line)+t_cols-1)/t_cols, text_plain.split('\n')))
+      except ZeroDivisionError as e:
+        pipe_to_less = False
+			
+      if pipe_to_less and text_rows >= t_rows-3:
         import subprocess as sp
         pager = os.environ.get('PAGER','less -R').split()
         less = sp.Popen(pager, stdin=sp.PIPE)
