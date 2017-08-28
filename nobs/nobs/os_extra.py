@@ -160,12 +160,10 @@ def _everything():
       if head == path:
         return os_path_exists(path)
       
-      if not exists(head):
+      if head != '' and not exists(head):
         return False
       
-      return tail in listdir(head)
-    
-      sibs = listdir(head)
+      return tail == '' or tail in listdir(head or '.')
     
     @export
     @memoize

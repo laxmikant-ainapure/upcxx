@@ -841,53 +841,50 @@ class gasnet:
     GASNET_CXXFLAGS = makefile_extract(makefile, 'GASNET_CXXFLAGS').split()
     GASNET_LIBS = makefile_extract(makefile, 'GASNET_LIBS').split()
     
-    # pull "-I..." arguments out of GASNET_CXXCPPFLAGS
-    incdirs = [x for x in GASNET_CXXCPPFLAGS if x.startswith('-I')]
-    GASNET_CXXCPPFLAGS = [x for x in GASNET_CXXCPPFLAGS if x not in incdirs]
-    incdirs = [x[2:] for x in incdirs] # drop "-I" prefix
-    
-    if kind != 'install':
+    if kind == 'install':
+      # use gasnet install in-place
+      incdirs = []
+      incfiles = []
+      libfiles = []
+    else:
+      # pull "-I..." arguments out of GASNET_CXXCPPFLAGS
+      incdirs = [x for x in GASNET_CXXCPPFLAGS if x.startswith('-I')]
+      GASNET_CXXCPPFLAGS = [x for x in GASNET_CXXCPPFLAGS if x not in incdirs]
+      incdirs = [x[2:] for x in incdirs] # drop "-I" prefix
+      
       makefile = os.path.join(build_dir, 'Makefile')
       source_dir = makefile_extract(makefile, 'TOP_SRCDIR')
       incfiles = makefile_extract(makefile, 'include_HEADERS').split()
       incfiles = [os.path.join(source_dir, i) for i in incfiles]
-    else:
-      # find all ".h" files found under "-I..." paths
-      incfiles = set()
-      for d in incdirs:
-        for f in os_extra.listdir(d):
-          if f.endswith('.h'):
-            incfiles.add(os.path.join(d, f))
-      incfiles = list(incfiles)
     
-    # pull "-L..." arguments out of GASNET_LIBS, keep only the "..."
-    libdirs = [x[2:] for x in GASNET_LIBS if x.startswith('-L')]
-    # pull "-l..." arguments out of GASNET_LIBS, keep only the "..."
-    libnames = [x[2:] for x in GASNET_LIBS if x.startswith('-l')]
-    
-    # filter libdirs for those made by gasnet
-    libdirs = [x for x in libdirs if path_within_dir(x, build_or_install_dir)]
-    
-    # find libraries in libdirs
-    libfiles = []
-    libnames_matched = set()
-    for libname in libnames:
-      lib = 'lib' + libname + '.a'
-      for libdir in libdirs:
-        libfile = os.path.join(libdir, lib)
-        if os.path.exists(libfile):
-          # assert same library not found under multiple libdir paths
-          assert libname not in libnames_matched
-          libfiles.append(libfile)
-          libnames_matched.add(libname)
-    
-    # prune extracted libraries from GASNET_LIBS
-    GASNET_LIBS = [x for x in GASNET_LIBS
-      if not(
-        (x.startswith('-L') and x[2:] in libdirs) or
-        (x.startswith('-l') and x[2:] in libnames_matched)
-      )
-    ]
+      # pull "-L..." arguments out of GASNET_LIBS, keep only the "..."
+      libdirs = [x[2:] for x in GASNET_LIBS if x.startswith('-L')]
+      # pull "-l..." arguments out of GASNET_LIBS, keep only the "..."
+      libnames = [x[2:] for x in GASNET_LIBS if x.startswith('-l')]
+      
+      # filter libdirs for those made by gasnet
+      libdirs = [x for x in libdirs if path_within_dir(x, build_or_install_dir)]
+      
+      # find libraries in libdirs
+      libfiles = []
+      libnames_matched = set()
+      for libname in libnames:
+        lib = 'lib' + libname + '.a'
+        for libdir in libdirs:
+          libfile = os.path.join(libdir, lib)
+          if os.path.exists(libfile):
+            # assert same library not found under multiple libdir paths
+            assert libname not in libnames_matched
+            libfiles.append(libfile)
+            libnames_matched.add(libname)
+      
+      # prune extracted libraries from GASNET_LIBS
+      GASNET_LIBS = [x for x in GASNET_LIBS
+        if not(
+          (x.startswith('-L') and x[2:] in libdirs) or
+          (x.startswith('-l') and x[2:] in libnames_matched)
+        )
+      ]
     
     yield {
       'gasnet': {
