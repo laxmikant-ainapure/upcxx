@@ -15,8 +15,6 @@ def _everything():
     globals()[fn.__name__] = fn
     return fn
   
-  isatty = sys.stdout.isatty() and sys.stderr.isatty()
-  
   RESET = '\x1b[0m'
   RED = '\x1b[31m'
   YELLOW = '\x1b[33m'
@@ -54,10 +52,22 @@ def _everything():
       except:
         pass
     
-    ans = ans or (25, 80)
-    return map(int, ans)
-
-  t_rows, t_cols = terminal_rows_cols()
+    if ans is None:
+      return None
+    ans = map(int, ans)
+    if ans[0] <= 0 or ans[1] <= 0:
+      return None
+    return ans
+  
+  isatty = sys.stdout.isatty() and sys.stderr.isatty()
+  t_rows_cols = terminal_rows_cols() if isatty else None
+  isatty = isatty and t_rows_cols is not None
+  
+  if not isatty:
+    t_rows, t_cols = 25, 50
+  else:
+    t_rows, t_cols = t_rows_cols
+  
   BAR = '~'*t_cols
   
   _fatal = [None]
@@ -161,14 +171,13 @@ def _everything():
       
       if exception is not None and not isinstance(exception, LoggedError):
         from traceback import format_exception
-        
         if tb is None:
           tb = sys.exc_info()[2]
-        
         _log.append((
           'Uncaught exception',
           ''.join(format_exception(type(exception), exception, tb))
         ))
+      
       text = '\n'.join(
         ''.join([
           BAR, '\n',
@@ -179,15 +188,11 @@ def _everything():
         ])
         for title,message in _log
       )
-
-      pipe_to_less = True
+      
       text_plain = re.sub(r'(\x9b|\x1b\[)[0-?]*[ -\/]*[@-~]', '', text)
-      try:
-        text_rows = sum(map(lambda line: (len(line)+t_cols-1)/t_cols, text_plain.split('\n')))
-      except ZeroDivisionError as e:
-        pipe_to_less = False
-			
-      if pipe_to_less and text_rows >= t_rows-3:
+      text_rows = sum(map(lambda line: (len(line)+t_cols-1)/t_cols, text_plain.split('\n')))
+      
+      if text_rows >= t_rows-3:
         import subprocess as sp
         pager = os.environ.get('PAGER','less -R').split()
         less = sp.Popen(pager, stdin=sp.PIPE)
