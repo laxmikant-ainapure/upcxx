@@ -11,8 +11,11 @@ if sys.version_info[0] != 2:
   os.execv('/usr/bin/env', ['/usr/bin/env','python2'] + sys.argv)
 
 from nobs.tool_main import main
+from nobs.async import shutdown
 
 try:
   main()
 except KeyboardInterrupt:
   exit(1)
+else:
+  shutdown()

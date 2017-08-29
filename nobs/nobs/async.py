@@ -205,6 +205,8 @@ def _everything():
       # register method
       me.resume_current_task = resume_current_task
   
+  threadpools = set()
+  
   @export
   class ThreadPool(Team):
     """
@@ -219,6 +221,8 @@ def _everything():
       """
       super(ThreadPool, me).__init__()
       
+      threadpools.add(me)
+      
       if size is None:
         from multiprocessing import cpu_count
         size = cpu_count()
@@ -227,8 +231,20 @@ def _everything():
       
       me._pending_n = 0
       me._dead_n = size
+      me._threads_live = set()
+      me._thread_dead = None
     
-    def _worker(me):
+    def join(me):
+      for t in me._threads_live:
+        t.join()
+      me._threads_live.clear()
+      
+      if me._thread_dead:
+        me._thread_dead.join()
+        me._thread_dead = None
+    
+    def _worker(me, thd_me_box):
+      thd_me = thd_me_box[0]
       me_dirty = me.dirty
       me_progress = me.progress
       guard = me._guard
@@ -242,7 +258,15 @@ def _everything():
       
       me._idle_n -= 1
       me._dead_n += 1
+      
+      dead = me._thread_dead
+      me._thread_dead = thd_me
+      me._threads_live.discard(thd_me)
+      
       guard.release()
+      
+      if dead is not None:
+        dead.join()
     
     def launch(me, lam, *args, **kws):
       """
@@ -255,8 +279,11 @@ def _everything():
       if me._idle_n == 0 and me._dead_n != 0:
         me._idle_n += 1
         me._dead_n -= 1
-        thd = threading.Thread(target=ThreadPool._worker, args=(me,))
+        thd_me_box = [None]
+        thd = threading.Thread(target=ThreadPool._worker, args=(me, thd_me_box))
+        thd_me_box[0] = thd
         thd.daemon = True
+        me._threads_live.add(thd)
         thd.start()
       
       ans = Promise()
@@ -288,6 +315,11 @@ def _everything():
       return ans
   
   ThreadPool.default = ThreadPool()
+  
+  @export
+  def shutdown():
+    for pool in threadpools:
+      pool.join()
   
   @export
   def launched(fn):
