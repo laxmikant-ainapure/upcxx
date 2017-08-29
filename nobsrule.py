@@ -183,7 +183,7 @@ def comp_lang_pp(cxt, src):
   File-specific compiler with source-language and preprocessor flags.
   """
   comp = yield cxt.comp_lang(src)
-  ipt = yield cxt.include_paths_tree()
+  ipt = yield cxt.include_paths_tree(src)
   libs = yield cxt.libraries(src)
   yield (
     comp + 
@@ -346,7 +346,7 @@ def gasnet_syncmode(cxt):
   # this should be computed based off the choice of upcxx backend
   return 'seq'
 
-@rule_memoized()
+@rule_memoized(path_arg=0)
 class include_paths_tree:
   """
   Setup a shim directory containing a single symlink named 'upcxx' which
@@ -528,7 +528,7 @@ class executable(Crawler):
 class library(Crawler):
   @traced
   def get_include_paths_tree(me, cxt, main_src):
-    return cxt.include_paths_tree()
+    return cxt.include_paths_tree(main_src)
   
   @coroutine
   def execute(me):

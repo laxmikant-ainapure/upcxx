@@ -20,6 +20,7 @@ a backtracking relative path from the example subdirectory up to
 would reference the upcxx directory as "../../../".
 
 ## Directory: "example/algo/" ##
+
 "example/algo/" exists to demonstrate parallel programming with 
 UPC\+\+. These should be free-floating collections of "foo.hpp" and 
 "foo.cpp" pairs (subdirs permitted) which provide subroutines for 
@@ -32,12 +33,17 @@ least one "test/*" so that we can confirm it is correct.
 
 ## Referencing members of "example/algo/" ##
 
+Members of "example/algo/" should reference other headers in 
+"example"algo/" using quoted relative-path includes:
+"example/algo/bicgstab.cpp" would reference "example/algo/dgemm.hpp"
+using `#include "dgemm.hpp"`.
+
 Members of "example/app/" should reference files in "example/algo/" 
 using relative paths ("example/app/foo" would reference 
 "../../algo/bicgstab.{hpp,cpp}").
 
-Tests in "test/" will reference the algo headers with
+Tests in "test/" should reference the algo headers with
 `#include <upcxx-example-algo/bicgstab.hpp>`. The usual nobs crawl of 
 headers will find the accompanying "bigcstab.cpp" automatically. Paths 
-based on "upcxx-example-algo" will *only* be valid for `#include's` 
-from within "test/". (TODO: implement this).
+based on "upcxx-example-algo" will *only* be valid for `#include`'s 
+from within "test/".
