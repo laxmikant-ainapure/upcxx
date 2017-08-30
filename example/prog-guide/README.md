@@ -9,12 +9,9 @@ This process will be more integrated when the programmers guide is merged into t
 Note that there are several cases where we have unimplemented features. These have been added with
 placeholders that abort the execution.
 
-To build all code, first run:
+To build all code, make sure to first set the `UPCXX_INSTALL` variable. e.g. 
 
-```
-source <installdir>/bin/upcxx_meta
-export PPFLAGS LDFLAGS LIBFLAGS
-```
+`export UPCXX_INSTALL=<installdir>`
 
 then
 
