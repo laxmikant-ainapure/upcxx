@@ -25,11 +25,11 @@ int main(int argc, char **argv)
 {
     upcxx::init();
     // each rank gets its own copy of local variables
-    int my_hits = 0, trials = 1000000;
+    int my_hits = 0;
+		// keep the number of trials per rank low to show the difference between single and multiple ranks
+    int my_trials = 2;
     // each rank gets its own local copies of input arguments
-    if (argc == 2) trials = atoi(argv[1]);
-    // divide the work up evenly among the ranks
-    int my_trials = (trials + upcxx::rank_n() - 1) / upcxx::rank_n();
+    if (argc == 2) my_trials = atoi(argv[1]);
     // initialize the random number generator differently for each rank
     srand(upcxx::rank_me());
     // do the computation
@@ -40,6 +40,9 @@ int main(int argc, char **argv)
     int hits = accumulate(my_hits);
     // only rank 0 prints the result
     if (upcxx::rank_me() == 0) {
+			  // the total number of trials over all ranks
+		    int trials = upcxx::rank_n() * my_trials;
+			  cout << "trials " << trials << " my_trials " << my_trials << endl;
         cout << "pi estimate: " << 4.0 * hits / trials << endl;
     }
     upcxx::finalize();
