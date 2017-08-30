@@ -12,16 +12,16 @@
 
 using namespace std;
 
-namespace upcxx {
-    // fill in missing functions
-    template<typename T>
-    //upcxx::future<T> broadcast(T &&value, upcxx::intrank_t sender, upcxx::team &team = world ()) {
-    upcxx::future<T> broadcast(T &&value, upcxx::intrank_t sender) {
-        if (upcxx::rank_me() == 0) cerr << "upcxx::broadcast not yet implemented" << endl;
-        upcxx::finalize();
-        exit(1);
-    }
-}
+//namespace upcxx {
+//    // fill in missing functions
+//    template<typename T>
+//    //upcxx::future<T> broadcast(T &&value, upcxx::intrank_t sender, upcxx::team &team = world ()) {
+//    upcxx::future<T> broadcast(T &&value, upcxx::intrank_t sender) {
+//        if (upcxx::rank_me() == 0) cerr << "upcxx::broadcast not yet implemented" << endl;
+//        upcxx::finalize();
+//        exit(1);
+//    }
+//}
 
 #include "fetch.hpp"
 
