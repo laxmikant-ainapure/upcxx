@@ -46,20 +46,28 @@ namespace upcxx {
         );
       }
     };
+    
+    // Computes return type for rpc. ValidType is unused, but by requiring
+    // it we can predicate this instantion on the validity of ValidType.
+    template<typename ValidType, typename Fn, typename ...Args>
+    struct rpc_return {
+      using type = typename detail::future_from_tuple_t<
+        detail::future_kind_shref<detail::future_header_ops_result>, // the default future kind
+        typename decltype(
+          upcxx::apply_tupled_as_future(
+            upcxx::bind(std::declval<Fn&&>(), std::declval<Args&&>()...),
+            std::tuple<>{}
+          )
+        )::results_type
+      >;
+    };
   }
   
   // rpc: future variant
   template<typename Fn, typename ...Args>
   auto rpc(intrank_t recipient, Fn &&fn, Args &&...args)
-    -> detail::future_from_tuple_t<
-      detail::future_kind_shref<detail::future_header_ops_result>, // the default future kind
-      typename decltype(
-        upcxx::apply_tupled_as_future(
-          upcxx::bind(std::forward<Fn>(fn), std::forward<Args>(args)...),
-          std::tuple<>{}
-        )
-      )::results_type
-    > {
+    // computes our return type, but SFINAE's out if fn(args...) is ill-formed
+    -> typename detail::rpc_return<decltype(fn(args...)), Fn, Args...>::type {
     
     auto fn_bound = upcxx::bind(std::forward<Fn>(fn), std::forward<Args>(args)...);
     

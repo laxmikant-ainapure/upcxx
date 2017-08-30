@@ -51,10 +51,10 @@ namespace upcxx {
         future_header *that_hdr = that.hdr_;
         
         int this_refs = this_hdr->ref_n_;
-        int this_unit = this_refs < 0 || this == &that ? 0 : 1;
+        int this_unit = this_refs < 0 || this_hdr == that_hdr ? 0 : 1;
         
         int that_refs = that_hdr->ref_n_;
-        int that_unit = that_refs < 0 || this == &that ? 0 : 1;
+        int that_unit = that_refs < 0 || this_hdr == that_hdr ? 0 : 1;
         
         that_refs += that_unit;
         this_refs -= this_unit;
@@ -80,10 +80,10 @@ namespace upcxx {
         future_header *that_hdr = that.hdr_;
         
         int this_refs = this_hdr->ref_n_;
-        int this_unit = this_refs < 0 || this == &that ? 0 : 1;
+        int this_unit = this_refs < 0 || this_hdr == that_hdr ? 0 : 1;
         
         int that_refs = that_hdr->ref_n_;
-        int that_unit = that_refs < 0 || this == &that ? 0 : 1;
+        int that_unit = that_refs < 0 || this_hdr == that_hdr ? 0 : 1;
         
         that_refs += that_unit;
         this_refs -= this_unit;
