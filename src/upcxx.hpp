@@ -10,6 +10,6 @@
 #include <upcxx/rput.hpp>
 #include <upcxx/wait.hpp>
 #include <upcxx/atomic.hpp>
-#include <upcxx/broadcast.hpp>
+#include <upcxx/collectives.hpp>
 
 #endif

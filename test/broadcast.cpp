@@ -1,5 +1,5 @@
 #include <upcxx/backend.hpp>
-#include <upcxx/broadcast.hpp>
+#include <upcxx/collectives.hpp>
 #include <upcxx/wait.hpp>
 #include <iostream>
 
