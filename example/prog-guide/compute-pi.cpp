@@ -40,9 +40,9 @@ int main(int argc, char **argv)
     int hits = accumulate(my_hits);
     // only rank 0 prints the result
     if (upcxx::rank_me() == 0) {
-			  // the total number of trials over all ranks
-		    int trials = upcxx::rank_n() * my_trials;
-			  cout << "trials " << trials << " my_trials " << my_trials << endl;
+        // the total number of trials over all ranks
+        int trials = upcxx::rank_n() * my_trials;
+        cout << "trials " << trials << " my_trials " << my_trials << endl;
         cout << "pi estimate: " << 4.0 * hits / trials << endl;
     }
     upcxx::finalize();

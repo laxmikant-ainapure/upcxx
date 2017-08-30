@@ -12,17 +12,6 @@
 
 using namespace std;
 
-//namespace upcxx {
-//    // fill in missing functions
-//    template<typename T>
-//    //upcxx::future<T> broadcast(T &&value, upcxx::intrank_t sender, upcxx::team &team = world ()) {
-//    upcxx::future<T> broadcast(T &&value, upcxx::intrank_t sender) {
-//        if (upcxx::rank_me() == 0) cerr << "upcxx::broadcast not yet implemented" << endl;
-//        upcxx::finalize();
-//        exit(1);
-//    }
-//}
-
 #include "fetch.hpp"
 
 namespace rpc {
@@ -59,11 +48,11 @@ int hit()
 
 
 #define ACCM(version)                                                   \
-    hits = version::accumulate(my_hits);                                       \
-    if (upcxx::rank_me() == 0) {                                        \
-        cout << #version << ": pi estimate: " << 4.0 * hits / trials   \
+    hits = version::accumulate(my_hits);                                \
+	if (upcxx::rank_me() == 0) {										\
+        cout << #version << ": pi estimate: " << 4.0 * hits / trials    \
              << ", rank 0 alone: " << 4.0 * my_hits / my_trials << endl; \
-    }
+	}
 
 
 
@@ -71,9 +60,9 @@ int main(int argc, char **argv)
 {
     upcxx::init();
     int my_hits = 0;
-		// keep the number of trials per rank low to show the difference between single and multiple ranks
+    // keep the number of trials per rank low to show the difference between single and multiple ranks
     int my_trials = 2;
-		int trials = upcxx::rank_n() * my_trials;
+    int trials = upcxx::rank_n() * my_trials;
     srand(upcxx::rank_me());
     for (int i = 0; i < my_trials; i++) {
         my_hits += hit();
