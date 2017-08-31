@@ -118,11 +118,10 @@ namespace upcxx {
       
       promise<dist_object<T>&> *pro = new promise<dist_object<T>&>;
       
-      digest id = id_;
-      pro->fulfill_result(*this); // future cascade, might delete this instance!
+      pro->fulfill_result(*this);
       
       void *pro_void = static_cast<void*>(pro);
-      std::swap(pro_void, detail::dist_master_promises[id]);
+      std::swap(pro_void, detail::dist_master_promises[id_]);
       
       delete static_cast<promise<dist_object<T>&>*>(pro_void);
     }

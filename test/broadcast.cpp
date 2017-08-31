@@ -1,5 +1,6 @@
 #include <upcxx/backend.hpp>
-#include <upcxx/collectives.hpp>
+#include <upcxx/allreduce.hpp>
+#include <upcxx/broadcast.hpp>
 #include <upcxx/wait.hpp>
 #include <iostream>
 
