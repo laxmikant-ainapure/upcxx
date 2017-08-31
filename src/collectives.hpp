@@ -6,6 +6,7 @@
 #include <upcxx/future.hpp>
 #include <upcxx/dist_object.hpp>
 #include <upcxx/rpc.hpp>
+#include <upcxx/wait.hpp>
 
 #include <list>
 #include <algorithm>

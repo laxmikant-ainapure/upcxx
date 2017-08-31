@@ -235,14 +235,26 @@ def _everything():
       me._thread_dead = None
     
     def join(me):
-      for t in me._threads_live:
-        t.join()
-      me._threads_live.clear()
-      
-      if me._thread_dead:
-        me._thread_dead.join()
+      while True:
+        me._guard.acquire()
+        
+        live = list(me._threads_live)
+        me._threads_live.clear()
+        
+        dead = me._thread_dead
         me._thread_dead = None
-    
+        
+        me._guard.release()
+        
+        if len(live) == 0 and dead is None:
+          break
+        
+        for t in live:
+          t.join()
+        
+        if dead:
+          dead.join()
+      
     def _worker(me, thd_me_box):
       thd_me = thd_me_box[0]
       me_dirty = me.dirty
@@ -318,7 +330,7 @@ def _everything():
   
   @export
   def shutdown():
-    for pool in threadpools:
+    for pool in list(threadpools):
       pool.join()
   
   @export
