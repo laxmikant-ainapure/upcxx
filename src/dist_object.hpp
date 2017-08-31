@@ -73,6 +73,11 @@ namespace upcxx {
     COMPARATOR(>=)
     #undef COMPARATOR
   };
+  
+  template<typename T>
+  std::ostream& operator<<(std::ostream &o, dist_id<T> x) {
+    return o << x.dig_;
+  }
 }
 
 namespace std {
@@ -97,13 +102,10 @@ namespace upcxx {
       value_{std::move(value)} {
       
       // TODO: use team's collective digest generator
-      id_ = {
-        0xdeadbeef*detail::dist_master_id_bump,
-        detail::dist_master_id_bump
-      };
+      id_ = {0, detail::dist_master_id_bump};
       detail::dist_master_id_bump += 1;
       
-      detail::dist_promise<T>(id_)->fulfill_result(*this);
+      detail::dist_promise<T>(id_)->fulfill_result(*this); // future cascade, might delete this instance!
     }
     
     dist_object(dist_object const&) = delete;
@@ -115,10 +117,12 @@ namespace upcxx {
       that.id_ = digest{~0ull, ~0ull}; // the tombstone id value
       
       promise<dist_object<T>&> *pro = new promise<dist_object<T>&>;
-      pro->fulfill_result(*this);
+      
+      digest id = id_;
+      pro->fulfill_result(*this); // future cascade, might delete this instance!
       
       void *pro_void = static_cast<void*>(pro);
-      std::swap(pro_void, detail::dist_master_promises[id_]);
+      std::swap(pro_void, detail::dist_master_promises[id]);
       
       delete static_cast<promise<dist_object<T>&>*>(pro_void);
     }

@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <iostream>
 
 namespace upcxx {
   struct digest {
@@ -26,6 +27,10 @@ namespace upcxx {
     friend bool operator> (digest a, digest b) { return (a.w0 >  b.w0) | ((a.w0 == b.w0) & (a.w1 >  b.w1)); }
     friend bool operator>=(digest a, digest b) { return (a.w0 >  b.w0) | ((a.w0 == b.w0) & (a.w1 >= b.w1)); }
   };
+  
+  inline std::ostream& operator<<(std::ostream &o, digest x) {
+    return o << '{'<<x.w0<<','<<x.w1<<'}';
+  }
 }
 
 namespace std {
