@@ -107,11 +107,16 @@ namespace upcxx {
         if(mid == rank_me)
           break;
         
+        // We know this dist_object exists everywhere since everyone
+        // has contributed. We send the dist_id and do an immediate
+        // `here()` so the lambda doesn't pointlessly wait on a ready
+        // future (as would happen if we sent dist_object&).
         rpc_ff(mid,
-          [=](dist_object<allreduce_state> &this_obj, T const &value) {
+          [=](dist_id<allreduce_state> this_id, T const &value) {
+            dist_object<allreduce_state> &this_obj = this_id.here();
             this_obj->broadcast(this_obj, value, rank_ub);
           },
-          this_obj, value
+          this_obj.id(), value
         );
         
         rank_ub = mid;
