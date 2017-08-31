@@ -12,6 +12,9 @@
 
 using namespace std;
 
+#define KNORM  "\x1B[0m"
+#define KLRED "\x1B[91m"
+
 #include "fetch.hpp"
 
 namespace rpc {
@@ -47,11 +50,16 @@ int hit()
 }
 
 
-#define ACCM(version)                                                   \
-    hits = version::accumulate(my_hits);                                \
-	if (upcxx::rank_me() == 0) {										\
-        cout << #version << ": pi estimate: " << 4.0 * hits / trials    \
+// the prev is passed into the macro to check that the results between the two
+// versions are identical
+#define ACCM(version, prev)                                             \
+    int hits_##version = version::accumulate(my_hits);                  \
+	if (!upcxx::rank_me()) {                                            \
+        cout << #version << ": pi estimate: " << 4.0 * hits_##version / trials \
              << ", rank 0 alone: " << 4.0 * my_hits / my_trials << endl; \
+        if (hits_##version != hits_##prev)                              \
+            cout << KLRED << "FAIL: hits from " << #version << " " << hits_##version << " != " \
+                 << hits_##prev << " from " << #prev << KNORM << endl;  \
 	}
 
 
@@ -68,15 +76,19 @@ int main(int argc, char **argv)
         my_hits += hit();
     }
 
-    int hits;
+    ACCM(rpc, rpc);
+    ACCM(global_ptrs, rpc);
+    ACCM(distobj, global_ptrs);
+    ACCM(async_distobj, distobj);
+    ACCM(atomics, async_distobj);
+    ACCM(quiesence, atomics);
+    // now check that the result is reasonable
+    if (!upcxx::rank_me()) {
+        double pi = 4.0 * hits_rpc / trials;
+        if (pi < 3 || pi > 3.5)
+            cout << KLRED << "FAIL: computed pi, " << pi << ", is out of range (3, 3.5)" << KNORM << endl;
+    }
     
-    ACCM(rpc);
-    ACCM(global_ptrs);
-    ACCM(distobj);
-    ACCM(async_distobj);
-    ACCM(atomics);
-    ACCM(quiesence);
-
     upcxx::finalize();
     return 0;
 }
