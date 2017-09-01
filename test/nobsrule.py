@@ -15,7 +15,7 @@ REQUIRES_UPCXX_BACKEND = [
   'rpc_ff_ring.cpp',
   'rput.cpp',
   'atomics.cpp',
-  'broadcast.cpp',
+  'collectives.cpp',
 ]
 
 # List of source files which make direct calls to gasnet, or include
