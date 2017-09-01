@@ -365,18 +365,21 @@ class includes:
   """
   @traced
   @coroutine
-  def get_comp_pp_and_src(me, cxt, src):
+  def get_comp_pp_and_src_and_ipt(me, cxt, src):
     me.depend_files(src)
     
     version = yield cxt.comp_version(src)
     me.depend_fact(key=None, value=version)
     
     comp_pp = yield cxt.comp_lang_pp(src)
-    yield comp_pp, src
+    
+    ipt = yield cxt.include_paths_tree(src)
+    
+    yield comp_pp, src, ipt
   
   @coroutine
   def execute(me):
-    comp_pp, src = yield me.get_comp_pp_and_src()
+    comp_pp, src, ipt = yield me.get_comp_pp_and_src_and_ipt()
     
     # See here for getting this to work with other compilers:
     #  https://projects.coin-or.org/ADOL-C/browser/trunk/autoconf/depcomp?rev=357
@@ -548,6 +551,22 @@ class library(Crawler):
     incs = list(set(incs))
     
     inc_dir = yield me.get_include_paths_tree()
+    
+    # Reconstruct symlinks from the inc_dir symlinks if squashed
+    # (as is the case on cygwin).
+    inc_syms = [os.path.join(inc_dir, x) for x in os_extra.listdir(inc_dir)]
+    inc_syms = [(x, os.path.realpath(x)) for x in inc_syms]
+    incs1 = []
+    updir = '..' + os.path.sep
+    for inc in incs:
+      candidates = []
+      for sym,real in inc_syms:
+        rel = os.path.relpath(inc, real)
+        if not rel.startswith(updir):
+          candidates.append(os.path.join(sym, rel))
+      candidates.sort(key=len)
+      incs1.append(candidates[0] if len(candidates) != 0 else inc)
+    incs = incs1
     
     par_dir = me.mkpath(key=None)
     os.makedirs(par_dir)
