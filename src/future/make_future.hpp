@@ -12,12 +12,17 @@ namespace upcxx {
     template<bool trivial, typename ...T>
     struct make_future_;
     
+    // Optimization for all trivial T: values aren't boxed into
+    // future_impl_shref's.
     template<typename ...T>
     struct make_future_</*trivial=*/true, T...> {
       future1<future_kind_result, T...> operator()(T ...values) {
         return future_impl_result<T...>{std::forward<T>(values)...};
       }
     };
+    
+    // Some non-trivial T: box things in a shref to avoid invoking T
+    // copies during future<T> copies.
     template<typename ...T>
     struct make_future_</*trivial=*/false, T...> {
       future1<future_kind_shref<future_header_ops_result_ready>,T...>
@@ -34,7 +39,17 @@ namespace upcxx {
     template<typename ...T>
     struct make_future:
       make_future_<
-        upcxx::trait_forall<std::is_trivially_copyable, T...>::value,
+        upcxx::trait_forall<
+          // is_trivially_copyable isn't true (on some/all systems?)
+          // for reference types (T& or T&&), but those are just
+          // pointers so should still get the optimizations we're
+          // trying to enable.
+          upcxx::trait_any<
+            std::is_trivially_copyable,
+            std::is_reference
+          >::type,
+          T...
+        >::value,
         T...
       > {
     };

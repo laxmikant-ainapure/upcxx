@@ -109,7 +109,8 @@ namespace upcxx {
   };
   
   //////////////////////////////////////////////////////////////////////
-
+  // trait_forall
+  
   template<template<typename...> class Test, typename ...T>
   struct trait_forall;
   template<template<typename...> class Test>
@@ -126,6 +127,48 @@ namespace upcxx {
   template<template<typename...> class Test, typename ...T>
   struct trait_forall_tupled<Test, std::tuple<T...>> {
     static constexpr bool value = trait_forall<Test, T...>::value;
+  };
+  
+  //////////////////////////////////////////////////////////////////////
+  // trait_any
+  
+  template<template<typename...> class ...Tr>
+  struct trait_any;
+  
+  template<>
+  struct trait_any<> {
+    template<typename T>
+    using type = std::false_type;
+  };
+  
+  template<template<typename...> class Tr0,
+           template<typename...> class ...Trs>
+  struct trait_any<Tr0,Trs...> {
+    template<typename T>
+    struct type {
+      static constexpr bool value = Tr0<T>::value || trait_any<Trs...>::template type<T>::value;
+    };
+  };
+  
+  //////////////////////////////////////////////////////////////////////
+  // trait_all
+  
+  template<template<typename...> class ...Tr>
+  struct trait_all;
+  
+  template<>
+  struct trait_all<> {
+    template<typename T>
+    using type = std::true_type;
+  };
+  
+  template<template<typename...> class Tr0,
+           template<typename...> class ...Trs>
+  struct trait_all<Tr0,Trs...> {
+    template<typename T>
+    struct type {
+      static constexpr bool value = Tr0<T>::value && trait_all<Trs...>::template type<T>::value;
+    };
   };
   
   //////////////////////////////////////////////////////////////////////
