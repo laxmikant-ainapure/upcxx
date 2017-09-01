@@ -17,6 +17,6 @@ global address space (PGAS) model.  UPC++ has three main objectives:
 This is a prerelease of v1.0. The release date is 9/1/2017. This prerelease supports most of the
 functionality covered in the UPC++ specification, except personas, promise-based completion, teams,
 serialization, and non-contiguous transfers. This prerelease is not performant, and may be unstable
-or buggy. Please notify us of issues by sending email to `upcxx-spec.googlegroups.com`.
+or buggy. Please notify us of issues by sending email to `upcxx-spec@googlegroups.com`.
 
 For a description of how to use UPC++, please refer to the programmer's guide, at `doc/guide/`. 
