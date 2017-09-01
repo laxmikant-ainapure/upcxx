@@ -69,7 +69,7 @@ future<int> fib(int i) {
         if(iter++ & 1) {
           auto *p = new promise<int>;
           p->require_anonymous(1);
-          UPCXX_ASSERT(x1 + x2 == fib_smart(i), "i="<<i<<" x1="<<x1<<" x2="<<x2);
+          UPCXX_ASSERT_ALWAYS(x1 + x2 == fib_smart(i), "i="<<i<<" x1="<<x1<<" x2="<<x2);
           p->fulfill_result(x1 + x2);
           the_q.push(p);
           return p->get_future();
@@ -117,7 +117,7 @@ int main() {
         std::cout << "fib("<<ans0+1<<")**2 = "<<ans1_sqr<<'\n';
         
         for(int i=0; i < 5; i++)
-          UPCXX_ASSERT(some_vec[i] == i*i);
+          UPCXX_ASSERT_ALWAYS(some_vec[i] == i*i);
       }
     );
   
@@ -130,7 +130,7 @@ int main() {
     delete p;
   }
   
-  UPCXX_ASSERT(ans2.ready());
+  UPCXX_ASSERT_ALWAYS(ans2.ready());
   std::cout << "fib("<<(2*ans1.result())<<") = "<<ans2.result()<<'\n';
   
   return 0;

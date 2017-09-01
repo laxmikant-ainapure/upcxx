@@ -278,10 +278,10 @@ namespace upcxx {
     
     #if 0
     static void pack(parcel_writer &w, const T &x) {
-      UPCXX_FAIL();
+      UPCXX_INVOKE_UB();
     }
     static T unpack(parcel_reader &r) {
-      UPCXX_FAIL();
+      UPCXX_INVOKE_UB();
     }
     #endif
   };

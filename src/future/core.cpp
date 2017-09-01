@@ -268,5 +268,5 @@ void future_body_proxy_::leave_active(future_header_dependent *hdr) {
 }
 
 void future_body::destruct_early() {
-  UPCXX_FAIL(); // never called
+  UPCXX_INVOKE_UB(); // never called
 }

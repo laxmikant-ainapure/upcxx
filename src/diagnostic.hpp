@@ -24,14 +24,15 @@ namespace upcxx {
   } while(0);
 
 #define UPCXX_ASSERT_DISPATCH(_1, _2, NAME, ...) NAME
+
+// Assert that will only happen in debug-mode. For now we just
+// always enable it.
 #define UPCXX_ASSERT(...) UPCXX_ASSERT_DISPATCH(__VA_ARGS__, UPCXX_ASSERT_2, UPCXX_ASSERT_1)(__VA_ARGS__)
 
-#define UPCXX_FAIL() ::upcxx::assert_failed(__FILE__, __LINE__)
+// Assert that happens regardless of debug-mode.
+#define UPCXX_ASSERT_ALWAYS(...) UPCXX_ASSERT_DISPATCH(__VA_ARGS__, UPCXX_ASSERT_2, UPCXX_ASSERT_1)(__VA_ARGS__)
 
-#define UPCXX_ASSERT_ALWAYS(ok) \
-  do { \
-    if(!(ok)) \
-      ::upcxx::assert_failed(__FILE__, __LINE__); \
-  } while(0);
+// In debug mode this will abort. In non-debug this is a nop.
+#define UPCXX_INVOKE_UB() ::upcxx::assert_failed(__FILE__, __LINE__)
 
 #endif

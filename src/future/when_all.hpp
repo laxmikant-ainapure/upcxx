@@ -22,7 +22,9 @@ namespace upcxx {
   
   template<typename ...Arg>
   detail::when_all_return_t<Arg...> when_all(Arg ...args) {
-    return typename detail::when_all_return_t<Arg...>::impl_type{std::move(args)...};
+    return typename detail::when_all_return_t<Arg...>::impl_type{
+      std::move(args)...
+    };
   }
 }
 #endif

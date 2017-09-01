@@ -24,7 +24,7 @@ namespace upcxx {
       
     public:
       future_impl_result(T ...values):
-        results_{std::move(values)...} {
+        results_{std::forward<T>(values)...} {
       }
       
       bool ready() const { return true; }

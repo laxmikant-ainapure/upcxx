@@ -15,7 +15,7 @@ namespace upcxx {
     template<typename ...T>
     struct make_future_</*trivial=*/true, T...> {
       future1<future_kind_result, T...> operator()(T ...values) {
-        return future_impl_result<T...>{std::move(values)...};
+        return future_impl_result<T...>{std::forward<T>(values)...};
       }
     };
     template<typename ...T>
@@ -25,7 +25,7 @@ namespace upcxx {
         return future_impl_shref<future_header_ops_result_ready, T...>{
           new future_header_result<T...>{
             /*not_ready*/false,
-            /*values*/std::tuple<T...>{std::move(values)...}
+            /*values*/std::tuple<T...>{std::forward<T>(values)...}
           }
         };
       }
@@ -42,8 +42,18 @@ namespace upcxx {
   
   template<typename ...T>
   auto make_future(T ...values)
-    -> decltype(detail::make_future<T...>()(std::move(values)...)) {
-    return detail::make_future<T...>()(std::move(values)...);
+    /* This would be the most correct way to compute the return type
+     * since it matches the function body, but mac os x clang
+     * (v 802.0.42) is choking complaining about template parameter
+     * pack length mismatch errors.
+     *
+     * -> decltype(detail::make_future<T...>()(std::forward<T>(values)...))
+     *
+     * So instead this seems to work:
+     */
+    -> decltype(detail::make_future<T...>()(std::declval<T>()...)) {
+    
+    return detail::make_future<T...>()(std::forward<T>(values)...);
   }
   
   
@@ -52,8 +62,8 @@ namespace upcxx {
   
   template<typename T>
   auto to_future(T x)
-    -> decltype(make_future(std::move(x))) {
-    return make_future(std::move(x));
+    -> decltype(make_future(std::forward<T>(x))) {
+    return make_future(std::forward<T>(x));
   }
   
   template<typename Kind, typename ...T>
