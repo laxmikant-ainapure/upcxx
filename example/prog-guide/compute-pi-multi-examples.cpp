@@ -4,16 +4,14 @@
  * for use with individual code snippets extracted directly from the programmer's guide.
 */
 
-
+#include <libgen.h>
 #include <iostream>
 #include <cstdlib>
 #include <random>
 #include <upcxx/upcxx.hpp>
+#include "../../test/util.hpp"
 
 using namespace std;
-
-#define KNORM  "\x1B[0m"
-#define KLRED "\x1B[91m"
 
 #include "fetch.hpp"
 
@@ -49,7 +47,6 @@ int hit()
     else return 0;
 }
 
-
 // the prev is passed into the macro to check that the results between the two
 // versions are identical
 #define ACCM(version, prev)                                             \
@@ -58,8 +55,8 @@ int hit()
         cout << #version << ": pi estimate: " << 4.0 * hits_##version / trials \
              << ", rank 0 alone: " << 4.0 * my_hits / my_trials << endl; \
         if (hits_##version != hits_##prev)                              \
-            cout << KLRED << "FAIL: hits from " << #version << " " << hits_##version << " != " \
-                 << hits_##prev << " from " << #prev << KNORM << endl;  \
+            FAIL("hits from " << #version << " " << hits_##version << " != " \
+                 << hits_##prev << " from " << #prev);                  \
 	}
 
 
@@ -67,6 +64,9 @@ int hit()
 int main(int argc, char **argv)
 {
     upcxx::init();
+    if (!upcxx::rank_me()) {
+        cout << "Testing " << basename((char*)__FILE__) << " with " << upcxx::rank_n() << " ranks" << endl;
+    }
     int my_hits = 0;
     // keep the number of trials per rank low to show the difference between single and multiple ranks
     int my_trials = 2;
@@ -85,10 +85,10 @@ int main(int argc, char **argv)
     // now check that the result is reasonable
     if (!upcxx::rank_me()) {
         double pi = 4.0 * hits_rpc / trials;
-        if (pi < 3 || pi > 3.5)
-            cout << KLRED << "FAIL: computed pi, " << pi << ", is out of range (3, 3.5)" << KNORM << endl;
+        if (pi < 3 || pi > 3.5) FAIL("computed pi, " << pi << ", is out of range (3, 3.5)");
+        cout << KLGREEN << "SUCCESS" << KNORM << endl;
     }
-    
+
     upcxx::finalize();
     return 0;
 }
