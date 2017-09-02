@@ -60,9 +60,11 @@ int main(int argc, char **argv)
 {
     upcxx::init();
     int my_hits = 0;
-    // keep the number of trials per rank low to show the difference between single and multiple ranks
-    int my_trials = 2;
+    int my_trials = 100000;
+    if (argc >= 2) my_trials = atoi(argv[1]);
     int trials = upcxx::rank_n() * my_trials;
+    if (!upcxx::rank_me()) 
+      cout << "Calculating pi with " << trials << " trials, distributed across " << upcxx::rank_n() << " ranks." << endl;
     srand(upcxx::rank_me());
     for (int i = 0; i < my_trials; i++) {
         my_hits += hit();
