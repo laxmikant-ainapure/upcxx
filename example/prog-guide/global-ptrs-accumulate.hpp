@@ -22,7 +22,7 @@ int accumulate(int my_hits)
         for (int i = 0; i < upcxx::rank_n(); i++) {
             hits += local_hits_ptrs[i];
         }
-//        upcxx::delete_array(all_hits_ptr);
+        upcxx::delete_array(all_hits_ptr);
     }
     return hits;
 }
