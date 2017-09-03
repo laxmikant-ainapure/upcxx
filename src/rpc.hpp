@@ -103,8 +103,8 @@ namespace upcxx {
   void rpc(intrank_t recipient, promise<T...> &prom, Fn &&fn, Args &&...args) {
     auto fn_bound = upcxx::bind(std::forward<Fn>(fn), std::forward<Args>(args)...);
     
-    using Fut = decltype(upcxx::apply_tupled_as_future(fn_bound, std::tuple<>{}));
-    using results_type = typename Fut::results_type;
+    //using Fut = decltype(upcxx::apply_tupled_as_future(fn_bound, std::tuple<>{}));
+    //using results_type = typename Fut::results_type;
     
     intrank_t initiator = backend::rank_me;
     promise<T...> *pro = &prom;
