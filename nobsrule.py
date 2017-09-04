@@ -806,13 +806,17 @@ class gasnet_configured:
         # disable non-EX conduits to prevent configure failures when that hardware is detected
         '--disable-psm','--disable-mxm','--disable-portals4','--disable-ofi',
       ]
+
+      # Allow user to append arbitrary GASNet configure options
+      import shlex
+      extra_conf_ops = shlex.split(env('GASNET_CONFIGURE_ARGS',''))
       
       print>>sys.stderr, 'Configuring GASNet...'
       yield subexec.launch(
         [os.path.join(source_dir, 'configure')] +
         config_args +
         (['--enable-debug'] if debug else []) +
-        misc_conf_opts,
+        misc_conf_opts + extra_conf_ops,
         
         cwd = build_dir,
         env = env1
