@@ -955,10 +955,10 @@ def env(name, otherwise):
 def makefile_extract(makefile, varname):
   """
   Extract a variable's value from a makefile.
-  -s (or --no-print-directory) is required to ensure correct behavior when nobs was invoked by make
+  --no-print-directory is required to ensure correct behavior when nobs was invoked by make
   """
   import subprocess as sp
-  p = sp.Popen(['make','-s','-f','-','gimme'], stdin=sp.PIPE, stdout=sp.PIPE, stderr=sp.PIPE)
+  p = sp.Popen(['make','--no-print-directory','-f','-','gimme'], stdin=sp.PIPE, stdout=sp.PIPE, stderr=sp.PIPE)
   tmp = ('include {0}\n' + 'gimme:\n' + '\t@echo $({1})\n').format(makefile, varname)
   val, _ = p.communicate(tmp)
   if p.returncode != 0:
