@@ -32,17 +32,17 @@ The buildsystem "nobs" is now availabe under the `nobs` bash function,
 but only for this bash instance. First useful thing to try:
 
 ```
-nobs exe test/gasnet_hello.cpp
+nobs exe test/hello_gasnet.cpp
 ```
 
 This should download gasnet, build it, then build and link 
-"test/gasnet_hello.cpp" and eventually write some cryptic hash 
+"test/hello_gasnet.cpp" and eventually write some cryptic hash 
 encrusted filename to stdout. That is the path to our just built 
 executable. At the moment gasnet defaults to building in the SMP 
 conduit, so to test out a parallel run do this:
 
 ```
-GASNET_PSHM_NODES=2 $(nobs exe test/gasnet_hello.cpp)
+GASNET_PSHM_NODES=2 $(nobs exe test/hello_gasnet.cpp)
 ```
 
 Or equivalently this convenience command which implicitly runs the
@@ -51,7 +51,7 @@ of error messages in the case of build failure, which nobs does really
 well):
 
 ```
-GASNET_PSHM_NODES=2 nobs run test/gasnet_hello.cpp
+GASNET_PSHM_NODES=2 nobs run test/hello_gasnet.cpp
 ```
 
 All object files and executables and all other artifacts of the build 
@@ -72,24 +72,24 @@ otherwise).
 ```
 export DBGSYM=1
 export OPTLEV=0
-echo $(nobs exe test/gasnet_hello.cpp)
+echo $(nobs exe test/hello_gasnet.cpp)
 # prints: <upcxx>/.nobs/art/6c2d0a503e095800dfac643fd169e5f95a1260de.x
 
 export DBGSYM=0
 export OPTLEV=2
-echo $(nobs exe test/gasnet_hello.cpp)
+echo $(nobs exe test/hello_gasnet.cpp)
 # prints: <upcxx>/.nobs/art/833cfeddce3c6fa1b266ff9429f1202933639346.x
 
 export DBGSYM=0
 export OPTLEV=3
-echo $(nobs exe test/gasnet_hello.cpp)
+echo $(nobs exe test/hello_gasnet.cpp)
 # prints: <upcxx>/.nobs/art/58af363d4b6bcfa05e4768bf4c1f1e64d4e1e2ba.x
 
 # Equivalently, thanks to succinct bash syntax:
 
-DBGSYM=1 OPTLEV=0 echo $(nobs test/gasnet_hello.cpp)
-DBGSYM=0 OPTLEV=2 echo $(nobs test/gasnet_hello.cpp)
-DBGSYM=0 OPTLEV=3 echo $(nobs test/gasnet_hello.cpp)
+DBGSYM=1 OPTLEV=0 echo $(nobs test/hello_gasnet.cpp)
+DBGSYM=0 OPTLEV=2 echo $(nobs test/hello_gasnet.cpp)
+DBGSYM=0 OPTLEV=3 echo $(nobs test/hello_gasnet.cpp)
 ```
 
 Each of these will rebuild GASNet and the source file the first time 
