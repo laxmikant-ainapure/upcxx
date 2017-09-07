@@ -104,21 +104,22 @@ int main(int argc, char **argv)
    OE = lo % 2;
 
 
-//   u = (double*)malloc(sizeof(double)*LocPnts);
    double *uexact = (double*)malloc(sizeof(double)*LocPnts);
    /* uexact is the exact solution, used to compute error */
 
 
 //   int LeftN =  (myrank != 0) ?  myrank-1 : -1;
 //   int RightN = (myrank != (nranks-1)) ?  myrank+1 : -1;
+//   u = (double*)malloc(sizeof(double)*LocPnts);
    global_ptr<double> U  = new_array<double>(LocPnts);
-   upcxx::dist_object<global_ptr<double>> UU(U);                // Equivalent to *UU=U;
+   upcxx::dist_object<global_ptr<double>> UU(U);        // Equivalent to *UU=U
 
 
    // Swap pointers to get Left and Right
    // Left and right pointers are NULL where there is a refernce beyond the
    // physical boundary
    global_ptr<double> uL(nullptr), uR(nullptr);
+
    // No barrier needed to get quiescence on (collective) dist_obj construction,
    // since the fetch does an RPC that handles the required synchronization
    if (myrank != 0){
