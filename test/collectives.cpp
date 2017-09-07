@@ -1,11 +1,9 @@
+#include <iostream>
 #include <upcxx/backend.hpp>
 #include <upcxx/allreduce.hpp>
 #include <upcxx/broadcast.hpp>
 #include <upcxx/wait.hpp>
-#include <iostream>
-
-#define KNORM  "\x1B[0m"
-#define KLRED "\x1B[91m"
+#include "util.hpp"
 
 using namespace std;
 
@@ -20,15 +18,23 @@ int main() {
   for (int i = 0; i < upcxx::rank_n(); i++) {
       auto fut = upcxx::broadcast(tosend, i);
       int recv = upcxx::wait(fut);
-      cout<<"Recv value is "<<recv<<" on "<<upcxx::rank_me()<<"\n";
+//      cout << "Recv value is " << recv << " on " << upcxx::rank_me() << endl;
+      if (recv != i) FAIL("Rank " << upcxx::rank_me() << " received " << recv << ", but expected " << i);
       upcxx::barrier();
   }
- 
-  tosend+=42; 
-  auto fut2 = upcxx::allreduce(forward<int>(tosend), plus<int>() );
-  //auto fut2 = upcxx::allreduce( tosend, std::plus<int>() );
+  if (!upcxx::rank_me()) cout << "broadcast test: SUCCESS" << endl;
+
+  auto fut2 = upcxx::allreduce(tosend, plus<int>());
   int recv2 = upcxx::wait(fut2);
-  cout<<"Reduced value is "<<recv2<<" on "<<upcxx::rank_me()<<"\n";
+  int expected_val = upcxx::rank_n() * (upcxx::rank_n() - 1) / 2;
+  if (recv2 != expected_val) {
+      FAIL("Rank " << upcxx::rank_me() << " received " << recv2 << ", but expected " << expected_val);
+  }
+  upcxx::barrier();
+  if (!upcxx::rank_me()) {
+      cout << "allreduce test: SUCCESS" << endl;
+      cout << KLGREEN << "SUCCESS" << KNORM << endl;
+  }
 
   upcxx::finalize();
   return 0;
