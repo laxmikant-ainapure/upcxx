@@ -1,7 +1,6 @@
 #include <assert.h>
 #include <getopt.h>
 #include <stdlib.h>
-#include "rb1d.h"
 #include <iostream>
 #include <upcxx/upcxx.hpp>
 using namespace upcxx;
