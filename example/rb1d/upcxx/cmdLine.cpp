@@ -108,7 +108,7 @@ void cmdLine(int argc, char *argv[], int& N, double& epsilon, int& chk_freq,
 	       upcxx::barrier();
 	       if (!myrank){
 		   std::cerr << "Error in command line argument: " << optarg << std::endl;
-		   std::cerr << fflush;
+//		   std::cerr << fflush;
 	       }
 	       upcxx::barrier();
                exit(-1);
@@ -144,7 +144,7 @@ void PrintUsage(char* program, char* option, intrank_t myrank)
        fprintf(stderr, "\t-f <integer> convergence check frequency\n");
        fprintf(stderr, "\t-p          print convergence information \n");
        fprintf(stderr, "\t-k          shut off communication\n");
-       fflush(NULL);
+//       fflush(NULL);
      }
 // ****  Need to exit
 //   MPI_Abort(MPI_COMM_WORLD,-1);
