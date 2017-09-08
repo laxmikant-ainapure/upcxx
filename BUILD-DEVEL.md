@@ -1,5 +1,7 @@
 # Building UPC\+\+ #
 
+These instructions are for UPC++ developers only.
+
 Requirements:
 
   - Bash
