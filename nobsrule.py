@@ -6,6 +6,9 @@ on the structure and interpretation of a rule-file.
 import os
 import sys
 
+import shlex
+shplit = shlex.split
+
 from nobs import errorlog
 from nobs import os_extra
 from nobs import subexec
@@ -72,7 +75,7 @@ def cxx(cxt):
   String list for the C++ compiler.
   """
   _, cross_env = yield cxt.gasnet_config()
-  ans_cross = cross_env.get('CXX','').split()
+  ans_cross = shplit(cross_env.get('CXX',''))
   
   ans_default = []
   if env('NERSC_HOST', None) in ('cori','edison'):
@@ -80,7 +83,7 @@ def cxx(cxt):
   if not ans_default:
     ans_default = ['g++']
   
-  ans_user = env('CXX','').split()
+  ans_user = shplit(env('CXX',''))
   
   if ans_cross and ans_user and ans_user != ans_cross:
     errorlog.warning(
@@ -102,7 +105,7 @@ def cc(cxt):
   String list for the C compiler.
   """
   _, cross_env = yield cxt.gasnet_config()
-  ans_cross = cross_env.get('CC','').split()
+  ans_cross = shplit(cross_env.get('CC',''))
   
   ans_default = []
   if env('NERSC_HOST', None) in ('cori','edison'):
@@ -110,7 +113,7 @@ def cc(cxt):
   if not ans_default:
     ans_default = ['gcc']
   
-  ans_user = env('CC','').split()
+  ans_user = shplit(env('CC',''))
   
   if ans_cross and ans_user and ans_user != ans_cross:
     errorlog.warning(
@@ -395,8 +398,7 @@ class includes:
     mk = yield subexec.launch(cmd, capture_stdout=True)
     mk = mk[mk.index(":")+1:]
     
-    import shlex
-    deps = shlex.split(mk.replace("\\\n",""))[1:] # first is source file
+    deps = shplit(mk.replace("\\\n",""))[1:] # first is source file
     deps = map(os.path.abspath, deps)
     me.depend_files(*deps)
     
@@ -691,10 +693,9 @@ class gasnet_config:
     yield (cross, gasnet_src)
   
   @traced
-  def touch_env(me, cxt, *names):
+  def get_env(me, cxt, name):
     """Place dependendcies on environment variables."""
-    for name in names:
-      me.depend_fact(key=name, value=env(name, None))
+    return env(name, None)
   
   @coroutine
   def execute(me):
@@ -706,9 +707,10 @@ class gasnet_config:
     
     # add "canned" env-var dependencies of scripts here
     if cross == 'cray-aries-slurm':
-      me.touch_env('SRUN')
+      me.get_env('SRUN')
     elif cross == 'bgq':
-      me.touch_env('USE_GCC','USE_CLANG')
+      me.get_env('USE_GCC')
+      me.get_env('USE_CLANG')
     
     path = os.path.join
     crosslong = 'cross-configure-' + cross
@@ -790,7 +792,9 @@ class gasnet_configured:
     config = yield cxt.gasnet_config()
     source_dir = yield cxt.gasnet_source()
     
-    yield (cc, cxx, cxt.cg_optlev_default(), cxt.cg_dbgsym(), config, source_dir)
+    user_args = shplit(env('GASNET_CONFIGURE_ARGS',''))
+    
+    yield (cc, cxx, cxt.cg_optlev_default(), cxt.cg_dbgsym(), config, source_dir, user_args)
   
   @coroutine
   def execute(me):
@@ -799,7 +803,7 @@ class gasnet_configured:
     if kind == 'build':
       build_dir = value
     else:
-      cc, cxx, optlev, debug, config, source_dir = yield me.get_config()
+      cc, cxx, optlev, debug, config, source_dir, user_args = yield me.get_config()
       config_args, config_env = config
       
       build_dir = me.mkpath(key=None)
@@ -819,17 +823,13 @@ class gasnet_configured:
         # avoid a known issue with -Wnested-externs, until it gets a proper fix in EX
         '--disable-dev-warnings',
       ]
-
-      # Allow user to append arbitrary GASNet configure options
-      import shlex
-      extra_conf_ops = shlex.split(env('GASNET_CONFIGURE_ARGS',''))
       
       print>>sys.stderr, 'Configuring GASNet...'
       yield subexec.launch(
         [os.path.join(source_dir, 'configure')] +
         config_args +
         (['--enable-debug'] if debug else []) +
-        misc_conf_opts + extra_conf_ops,
+        misc_conf_opts + user_args,
         
         cwd = build_dir,
         env = env1
@@ -873,11 +873,11 @@ class gasnet:
       ['%s-conduit'%conduit, '%s-%s.mak'%(conduit, syncmode)]
     ))
     
-    GASNET_LD = makefile_extract(makefile, 'GASNET_LD').split()
-    GASNET_LDFLAGS = makefile_extract(makefile, 'GASNET_LDFLAGS').split()
-    GASNET_CXXCPPFLAGS = makefile_extract(makefile, 'GASNET_CXXCPPFLAGS').split()
-    GASNET_CXXFLAGS = makefile_extract(makefile, 'GASNET_CXXFLAGS').split()
-    GASNET_LIBS = makefile_extract(makefile, 'GASNET_LIBS').split()
+    GASNET_LD = shplit(makefile_extract(makefile, 'GASNET_LD'))
+    GASNET_LDFLAGS = shplit(makefile_extract(makefile, 'GASNET_LDFLAGS'))
+    GASNET_CXXCPPFLAGS = shplit(makefile_extract(makefile, 'GASNET_CXXCPPFLAGS'))
+    GASNET_CXXFLAGS = shplit(makefile_extract(makefile, 'GASNET_CXXFLAGS'))
+    GASNET_LIBS = shplit(makefile_extract(makefile, 'GASNET_LIBS'))
     
     if kind == 'install':
       # use gasnet install in-place
@@ -892,7 +892,7 @@ class gasnet:
       
       makefile = os.path.join(build_dir, 'Makefile')
       source_dir = makefile_extract(makefile, 'TOP_SRCDIR')
-      incfiles = makefile_extract(makefile, 'include_HEADERS').split()
+      incfiles = shplit(makefile_extract(makefile, 'include_HEADERS'))
       incfiles = [os.path.join(source_dir, i) for i in incfiles]
       
       # pull "-L..." arguments out of GASNET_LIBS, keep only the "..."
