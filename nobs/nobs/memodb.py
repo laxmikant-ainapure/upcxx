@@ -54,22 +54,13 @@ def _everything():
   os_link = os.link
   os_listdir = os.listdir
   os_makedirs = os.makedirs
-  os_readlink = os.readlink
   os_remove = os.remove
   os_rmdir = os.rmdir
   os_symlink = os.symlink
   os_walk = os.walk
   
   os_path_abspath = os.path.abspath
-  os_path_dirname = os.path.dirname
-  #os_path_exists = os.path.exists
-  os_path_expanduser = os.path.expanduser
-  os_path_isabs = os.path.isabs
-  os_path_isdir = os.path.isdir
-  os_path_isfile = os.path.isfile
-  os_path_islink = os.path.islink
   os_path_join = os.path.join
-  os_path_normcase = os.path.normcase
   os_path_normpath = os.path.normpath
   os_path_sep = os.path.sep
   
@@ -251,25 +242,14 @@ def _everything():
       # register as method
       db.save = save
       
-      def get_mtime_smart(path):
-        mt = os.lstat(path).st_mtime
-        while os_path_islink(path):
-          path1 = os_readlink(path)
-          if not os_path_isabs(path1):
-            path1 = os_path_join(os_path_dirname(path), path1)
-          path = path1
-          mt = max(mt, os_path_getmtime(path))
-        return mt
-      
       def file_digest(apath):
-        if not os_extra_exists(apath):
-          return 'D.N.E.'
-        
         mtime = db_mtimes_get(apath)
         if mtime is None:
-          db_mtimes[apath] = mtime = get_mtime_smart(apath)
+          db_mtimes[apath] = mtime = os_extra.mtime(apath)
         
-        if db_files_get(apath, (-1,None))[0] != mtime:
+        NO_EXIST = (-1, 'NO_EXIST') # (mtime, digest) of non-existent file
+        
+        if db_files_get(apath, NO_EXIST)[0] != mtime: # implies file exists
           sha1 = hashlib_sha1()
           up = sha1.update
           up('%x:' % len(apath))
@@ -284,8 +264,8 @@ def _everything():
           with open(path_db, 'ab') as f:
             f.write(record)
         
-        return db_files[apath][1]
-        
+        return db_files_get(apath, NO_EXIST)[1]
+      
       def _execute(cls, args, kws):
         return memo_execute(cls, args, kws, set())
       # register as method

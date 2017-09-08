@@ -183,12 +183,12 @@ def comp_lang_pp(cxt, src):
   File-specific compiler with source-language and preprocessor flags.
   """
   comp = yield cxt.comp_lang(src)
-  ipt = yield cxt.include_paths_tree(src)
+  ivt = yield cxt.include_vdirs_tree(src)
   libs = yield cxt.libraries(src)
   yield (
     comp + 
     ['-D_GNU_SOURCE=1'] + # Required for full latest POSIX on some systems
-    ['-I'+ipt] +
+    ['-I'+ivt] +
     libset_ppflags(libs)
   )
 
@@ -346,26 +346,35 @@ def gasnet_syncmode(cxt):
   # this should be computed based off the choice of upcxx backend
   return 'seq'
 
+@rule(cli='include_vdirs', path_arg='src')
+def include_vdirs(cxt, src):
+  return {'upcxx': here('src')}
+
 @rule_memoized(path_arg=0)
-class include_paths_tree:
+class include_vdirs_tree:
   """
-  Setup a shim directory containing a single symlink named 'upcxx' which
-  points to 'upcxx/src'. With this directory added via '-I...' to
+  Setup a shim directory containing a symlink for each vdir in
+  include_vdirs. With this directory added via '-I...' to
   compiler flags, allows our headers to be accessed via:
     #include <upcxx/*.hpp>
   """
-  def execute(cxt):
-    return cxt.mktree({'upcxx': here('src')}, symlinks=True)
+  @traced
+  def get_include_vdirs(me, cxt, src):
+    return cxt.include_vdirs(src)
+  
+  def execute(me):
+    vdirs = me.get_include_vdirs()
+    return me.mktree(vdirs, symlinks=True)
 
 @rule_memoized(cli='incs', path_arg=0)
 class includes:
   """
   Ask compiler for all the non-system headers pulled in by preprocessing
-  the given source file. Returns the list of header paths.
+  the given source file. Returns the list of paths to included files.
   """
   @traced
   @coroutine
-  def get_comp_pp_and_src_and_ipt(me, cxt, src):
+  def get_stuff(me, cxt, src):
     me.depend_files(src)
     
     version = yield cxt.comp_version(src)
@@ -373,13 +382,11 @@ class includes:
     
     comp_pp = yield cxt.comp_lang_pp(src)
     
-    ipt = yield cxt.include_paths_tree(src)
-    
-    yield comp_pp, src, ipt
+    yield comp_pp, src
   
   @coroutine
   def execute(me):
-    comp_pp, src, ipt = yield me.get_comp_pp_and_src_and_ipt()
+    comp_pp, src = yield me.get_stuff()
     
     # See here for getting this to work with other compilers:
     #  https://projects.coin-or.org/ADOL-C/browser/trunk/autoconf/depcomp?rev=357
@@ -473,7 +480,7 @@ class Crawler:
     def includes_done(incs):
       tasks = []
       for inc in incs:
-        inc = os.path.realpath(inc)
+        inc = os_extra.realpath(inc)
         if inc not in incs_seen:
           incs_seen.add(inc)
           inc, _ = os.path.splitext(inc)
@@ -529,9 +536,14 @@ class executable(Crawler):
 
 @rule_memoized(cli='lib', path_arg=0)
 class library(Crawler):
+  unique_id = 3
+  
   @traced
-  def get_include_paths_tree(me, cxt, main_src):
-    return cxt.include_paths_tree(main_src)
+  def get_include_vdirs_and_tree(me, cxt, main_src):
+    return futurize(
+      cxt.include_vdirs(main_src),
+      cxt.include_vdirs_tree(main_src)
+    )
   
   @coroutine
   def execute(me):
@@ -544,26 +556,25 @@ class library(Crawler):
     # Headers pulled in from main file. Discard those not within this
     # repo (top_dir) or the nobs artifact cache (path_art).
     incs = yield me.do_includes(main_src)
+    incs = map(os_extra.realpath, incs)
     incs = [i for i in incs if
       path_within_dir(i, top_dir) or
       path_within_dir(i, me.memodb.path_art)
     ]
     incs = list(set(incs))
     
-    inc_dir = yield me.get_include_paths_tree()
+    inc_vdirs, inc_vdirs_tree = yield me.get_include_vdirs_and_tree()
     
-    # Reconstruct symlinks from the inc_dir symlinks if squashed
-    # (as is the case on cygwin).
-    inc_syms = [os.path.join(inc_dir, x) for x in os_extra.listdir(inc_dir)]
-    inc_syms = [(x, os.path.realpath(x)) for x in inc_syms]
+    # Reconstruct paths to includes as relative to vdirs in case the
+    # symlinks get squashed out.
     incs1 = []
     updir = '..' + os.path.sep
     for inc in incs:
       candidates = []
-      for sym,real in inc_syms:
-        rel = os.path.relpath(inc, real)
+      for vsym, vreal in inc_vdirs.items():
+        rel = os.path.relpath(inc, vreal)
         if not rel.startswith(updir):
-          candidates.append(os.path.join(sym, rel))
+          candidates.append(os.path.join(inc_vdirs_tree, vsym, rel))
       candidates.sort(key=len)
       incs1.append(candidates[0] if len(candidates) != 0 else inc)
     incs = incs1
@@ -583,7 +594,7 @@ class library(Crawler):
       libset_as_secondary(libset),
       {libname: {
         'primary': True,
-        'incdirs': [inc_dir],
+        'incdirs': [inc_vdirs_tree],
         'incfiles': incs,
         'libfiles': [libpath],
         'deplibs': list(libset.keys())
@@ -831,6 +842,8 @@ class gasnet:
   """
   Build gasnet. Return library dependencies dictionary.
   """
+  unique_id = 1
+  
   @traced
   def get_config(me, cxt):
     kind, value = cxt.gasnet_user()
@@ -881,7 +894,7 @@ class gasnet:
       source_dir = makefile_extract(makefile, 'TOP_SRCDIR')
       incfiles = makefile_extract(makefile, 'include_HEADERS').split()
       incfiles = [os.path.join(source_dir, i) for i in incfiles]
-    
+      
       # pull "-L..." arguments out of GASNET_LIBS, keep only the "..."
       libdirs = [x[2:] for x in GASNET_LIBS if x.startswith('-L')]
       # pull "-l..." arguments out of GASNET_LIBS, keep only the "..."
@@ -978,6 +991,7 @@ def libset_merge_inplace(dst, src):
   """
   Merge libraries of `src` into `dst`.
   """
+  
   for k,v in src.items():
     v1 = dict(dst.get(k,v))
     v1_primary = v1['primary']
@@ -1099,7 +1113,7 @@ def install_libset(install_path, name, libset):
   """
   base_of = os.path.basename
   join = os.path.join
-  up = '..' + os.path.sep
+  updir = '..' + os.path.sep
   link_or_copy = os_extra.link_or_copy
   
   undo = []
@@ -1111,20 +1125,20 @@ def install_libset(install_path, name, libset):
     for xname,rec in libset.items():
       incdirs = rec.get('incdirs', [])
       incfiles = rec.get('incfiles', [])
-      libfiles = rec.get('libfiles')
+      libfiles = rec.get('libfiles', None)
       
       incfiles1 = []
       libfiles_all.extend(libfiles or [])
       
       # copy includes
-      for f in incfiles:
+      for incf in incfiles:
         # copy for each non-upwards relative path
-        for d in reversed(incdirs):
-          rp = os.path.relpath(f,d)
-          if not rp.startswith(up):
+        for incd in reversed(incdirs):
+          rel = os.path.relpath(incf, incd)
+          if not rel.startswith(updir):
             # copy include file to relative path under "install_path/include"
-            src = join(d, rp)
-            dest = join(install_path, 'include', rp)
+            src = join(incd, rel)
+            dest = join(install_path, 'include', rel)
             
             incfiles1.append(dest)
             os_extra.ensure_dirs(dest)
