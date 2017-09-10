@@ -53,9 +53,15 @@ if test -z "$UPCXX_INSTALL_NOCHECK" ; then (
     KERNEL_GOOD=
   fi
   if test -z "$UPCXX_INSTALL_QUIET" ; then
-    /usr/bin/which $CXX 2> /dev/null
+    CXXBIN=`echo "$CXX" | cut -f1 -d' ' 2> /dev/null`
+    if test -n "$CXXBIN" && test -x /usr/bin/which ; then
+      /usr/bin/which $CXXBIN 2> /dev/null
+    fi
     $CXX --version
-    /usr/bin/which $CC 2> /dev/null
+    CCBIN=`echo "$CC" | cut -f1 -d' ' 2> /dev/null`
+    if test -n "$CCBIN" && test -x /usr/bin/which ; then
+      /usr/bin/which $CCBIN 2> /dev/null
+    fi
     $CC --version
     echo " "
   fi
