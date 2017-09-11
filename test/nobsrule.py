@@ -41,20 +41,8 @@ def requires_upcxx_backend(cxt, src):
 def requires_gasnet(cxt, src):
   return src in REQUIRES_GASNET
 
-@rule_memoized()
-class include_paths_tree:
-  """
-  Setup a shim directory containing two symlinks named 'upcxx' and
-  'upcxx-example-algo' which point to 'upcxx/src' and
-  'upcxx/example/algo' respectively. With this directory added via
-  '-I...' to compiler flags, allows those headers to be accessed via:
-    #include <upcxx/*.hpp>
-    #include <upcxx-example-algo/*.hpp>
-  """
-  def execute(cxt):
-    return cxt.mktree({
-        'upcxx': here('..','src'),
-        'upcxx-example-algo': here('..','example','algo')
-      },
-      symlinks=True
-    )
+@rule()
+def include_vdirs(cxt, src):
+  ans = dict(cxt.include_vdirs(src)) # inherit value from parent nobsrule
+  ans['upcxx-example-algo'] = here('..','example','algo')
+  return ans

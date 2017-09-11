@@ -15,4 +15,8 @@ namespace upcxx {
     return f.result();
   }
 }
+
+// issue 22: prevent an ambiguity on Linux with 'wait' defined in /usr/include/stdlib.h
+using upcxx::wait;
+
 #endif

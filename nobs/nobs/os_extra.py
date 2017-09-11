@@ -5,16 +5,22 @@ def _everything():
   
   os_link = os.link
   os_listdir = os.listdir
+  os_lstat = os.lstat
   os_makedirs = os.makedirs
+  os_path_abspath = os.path.abspath
   os_path_dirname = os.path.dirname
   os_path_exists = os.path.exists
   os_path_isdir = os.path.isdir
   os_path_isfile = os.path.isfile
+  os_path_islink = os.path.islink
   os_path_join = os.path.join
   os_path_normcase = os.path.normcase
+  os_path_normpath = os.path.normpath
   os_path_split = os.path.split
+  os_readlink = os.readlink
   os_remove = os.remove
   os_rmdir = os.rmdir
+  os_stat = os.stat
   os_symlink = os.symlink
   
   shutil_copyfile = shutil.copyfile
@@ -28,6 +34,32 @@ def _everything():
       if y is memo_get:
         y = fn(x)
         memo[x] = y
+      return y
+    proxy.__doc__ = fn.__doc__
+    proxy.__name__ = fn.__name__
+    proxy.__wrapped__ = getattr(fn, '__wrapped__', fn)
+    return proxy
+  
+  def memoize_true(fn):
+    memo = {}
+    memo_get = memo.get
+    memo_pop = memo.pop
+    lru = []
+    lru_append = lru.append
+    lru_index = lru.index
+    def proxy(x):
+      y = memo_get(x, memo_get)
+      if y is memo_get:
+        y = fn(x)
+        memo[x] = y
+        if not y:
+          if len(lru) > 50:
+            memo_pop(lru[0])
+            del lru[0]
+          lru_append(x)
+      elif not y:
+        del lru[lru_index(x)]
+        lru_append(x)
       return y
     proxy.__doc__ = fn.__doc__
     proxy.__name__ = fn.__name__
@@ -76,6 +108,103 @@ def _everything():
           pass
   
   @export
+  @memoize
+  def lstat(path):
+    """
+    Memoized version of os.lstat.
+    """
+    return os_lstat(path)
+  
+  @export
+  @memoize
+  def unsym_once(path):
+    """
+    Like os.realpath, but will remove only one level of symlink
+    from `path` and will not make relative paths absolute.
+    Also memoized.
+    """
+    try:
+      head, tail = os_path_split(path)
+      
+      if head == path:
+        return head
+      
+      head1 = unsym_once(head)
+      
+      if head1 == head:
+        if os_path_islink(path):
+          return os_path_normpath(os_path_join(head, os_readlink(path)))
+        else:
+          return path
+      else:
+        return os_path_join(head1, tail)
+    
+    except OSError as e:
+      if e.errno == 2: # No such file or directory
+        return path
+      else:
+        raise
+  
+  @export
+  @memoize
+  def realpath(path):
+    """
+    Memoized version of os.path.realpath.
+    """
+    path = os_path_abspath(path)
+    while True:
+      path1 = unsym_once(path)
+      if path == path1:
+        return path
+      path = path1
+  
+  @export
+  @memoize
+  def mtime(path):
+    """
+    Does a better job than os.path.getmtime because it takes the
+    maximum mtime value over all symlinks encountered in `path`.
+    Returns -1 for non-existent file. Also memoized.
+    """
+    try:
+      latest_mtime = lstat(path).st_mtime
+      while True:
+        path1 = unsym_once(path)
+        if path == path1: break
+        latest_mtime = max(latest_mtime, lstat(path1).st_mtime)
+        path = path1
+      return latest_mtime
+    except OSError:
+      return -1
+  
+  @export
+  def files_equal(a, b, false_negatives=False):
+    if a == b:
+      return True
+    try:
+      sa = os_stat(a)
+      sb = os_stat(b)
+      if sa.st_dev == sb.st_dev and sa.st_ino == sb.st_ino:
+        return True
+      if sa.st_size != sb.st_size or sa.st_mode != sb.st_mode:
+        return False
+      if false_negatives:
+        return False
+      with open(a, 'rb') as fa:
+        with open(b, 'rb') as fb:
+          size = sa.st_size
+          n = 8192
+          while size > 0:
+            size -= n
+            bufa = fa.read(n)
+            bufb = fb.read(n)
+            if bufa != bufb:
+              return False
+      return True
+    except OSError:
+      return False
+  
+  @export
   def link_or_copy(src, dst, overwrite=False):
     try:
       try:
@@ -87,9 +216,14 @@ def _everything():
         else:
           raise
     except OSError as e:
-      if e.errno == 17 and overwrite: # File exists
-        rmtree(dst)
-        link_or_copy(src, dst)
+      if e.errno == 17: # File exists
+        if files_equal(src, dst):
+          return
+        if overwrite:
+          rmtree(dst)
+          link_or_copy(src, dst)
+        else:
+          raise
       else:
         raise
   
@@ -130,31 +264,36 @@ def _everything():
   # Case-sensitive system:
   if is_case_sensitive:
     @export
-    @memoize
+    @memoize_true
     def exists(path):
-      """A memoized version of `os.path.exists`. More performant, but
+      """
+      A memoized version of `os.path.exists`. More performant, but
       only useful if you don't expect the existence of queried files
-      to change during this program's lifetime."""
-      return os_path_exists(path)
-    
+      to change during this program's lifetime.
+      """
+      return os_path_exists(path)  
+      
     @export
     def realcase(path):
-      """Returns the real upper/lower caseing of the given filename as
+      """
+      Returns the real upper/lower caseing of the given filename as
       stored in the filesystem. Your system is case-sensitive so this
-      is the identity function."""
+      is the identity function.
+      """
       return path
   
   # Case-insensitive system:
   else:
     @export
-    @memoize
+    @memoize_true
     def exists(path):
-      """A memoized version of `os.path.exists` that also respects
+      """
+      A memoized version of `os.path.exists` that also respects
       correct upper/lower caseing in the filename (a mismatch in case
       reports as non-existence). More performant than `os.path.exists`,
       but only useful if you don't expect the existence of queried files
-      to change during this program's lifetime."""
-      
+      to change during this program's lifetime.
+      """
       head, tail = os_path_split(path)
       
       if head == path:
@@ -163,13 +302,15 @@ def _everything():
       if head != '' and not exists(head):
         return False
       
-      return tail == '' or tail in listdir(head or '.')
+      return tail in ('','.','..') or tail in listdir(head or '.')
     
     @export
     @memoize
     def realcase():
-      """Returns the real upper/lower caseing of the given filename as
-      stored in the filesystem."""
+      """
+      Returns the real upper/lower caseing of the given filename as
+      stored in the filesystem.
+      """
       
       head, tail = os_path_split(path)
       if head == path:

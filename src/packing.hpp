@@ -34,6 +34,13 @@
  * serializable.
  */
 
+#if __GNUC__ >= 5
+  // issue 13: suppress scary GCC warnings from the type-punning below
+  #pragma GCC diagnostic push
+  #pragma GCC diagnostic ignored "-Wstrict-aliasing"
+  #define UPCXXI_DIAG_POP 1
+#endif
+
 namespace upcxx {
   //////////////////////////////////////////////////////////////////////
   // parcel_layout: Used for accumulating the size and alignment of
@@ -830,4 +837,8 @@ namespace upcxx {
     }
   };
 }
+#if UPCXXI_DIAG_POP
+  #pragma GCC diagnostic pop
+  #undef UPCXXI_DIAG_POP
+#endif
 #endif

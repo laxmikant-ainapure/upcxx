@@ -186,7 +186,7 @@ namespace upcxx {
       
       if (!std::is_trivially_destructible<T>::value) {
         std::size_t size = *reinterpret_cast<std::size_t*>(ptr);
-        for(T *p=tptr, p1=tptr+size; p != p1; p++)
+        for(T *p=tptr, *p1=tptr+size; p != p1; p++)
           p->~T();
       }
       

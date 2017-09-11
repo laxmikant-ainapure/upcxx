@@ -20,6 +20,13 @@ def _everything():
   YELLOW = '\x1b[33m'
   BLUE = '\x1b[34m'
   WHITE = '\x1b[37m'
+
+  if os.environ.get('TERM','') == 'dumb':
+    RESET = ''
+    RED = ''
+    YELLOW = ''
+    BLUE = ''
+    WHITE = ''
   
   def terminal_rows_cols():
     import struct
