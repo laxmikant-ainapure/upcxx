@@ -4,13 +4,16 @@
 # export UPCXX_INSTALL=<myinstalldir>; make hello-world
 CXX := g++
 
+OPTIMIZATION    =  -O3
 # WARNINGS = -Wpointer-bool-conversion
 PPFLAGS = --std=c++11
 PPFLAGS += $(shell $(UPCXX_INSTALL)/bin/upcxx-meta PPFLAGS)
 PPFLAGS += $(WARNINGS)
+PPFLAGS += $(OPTIMIZATION)
 # PPFLAGS += -I$(UPCXX_INSTALL)/include
 LDFLAGS=$(shell $(UPCXX_INSTALL)/bin/upcxx-meta LDFLAGS)
 LDFLAGS += --std=c++11
+PPFLAGS += $(OPTIMIZATION)
 LIBFLAGS=$(shell $(UPCXX_INSTALL)/bin/upcxx-meta LIBFLAGS)
 
 all: rb1d
