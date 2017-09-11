@@ -54,12 +54,8 @@ int hit()
 	if (!upcxx::rank_me()) {                                            \
         cout << #version << ": pi estimate: " << 4.0 * hits_##version / trials \
              << ", rank 0 alone: " << 4.0 * my_hits / my_trials << endl; \
-        if (hits_##version != hits_##prev)                              \
-            FAIL("hits from " << #version << " " << hits_##version << " != " \
-                 << hits_##prev << " from " << #prev);                  \
+        UPCXX_ASSERT_ALWAYS(hits_##version == hits_##prev, "hits mismatch between " #version " and " #prev); \
 	}
-
-
 
 int main(int argc, char **argv)
 {
@@ -85,7 +81,8 @@ int main(int argc, char **argv)
     // now check that the result is reasonable
     if (!upcxx::rank_me()) {
         double pi = 4.0 * hits_rpc / trials;
-        if (pi < 3 || pi > 3.5) FAIL("computed pi, " << pi << ", is out of range (3, 3.5)");
+        cout << "Computed pi to be " << pi << endl;
+        UPCXX_ASSERT_ALWAYS(pi >= 3 && pi <= 3.5, "pi is out of range (3, 3.5)");
         cout << KLGREEN << "SUCCESS" << KNORM << endl;
     }
 
