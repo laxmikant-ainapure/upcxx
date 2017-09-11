@@ -18,7 +18,7 @@ all: rb1d
 OBJ = rb1d.o cmdLine.o dumpAns.o fillGhost.o getTime.o
 
 rb1d: $(OBJ)
-	$(CXX) $(PPFLAGS) $(LDFLAGS) $(LIBFLAGS) -o $@  $(OBJ) 
+	$(CXX) $(PPFLAGS) $(LDFLAGS) -o $@  $(OBJ) $(LIBFLAGS)
 
 clean:
 	rm -rf rb1d *.o
