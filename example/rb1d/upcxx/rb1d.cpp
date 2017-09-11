@@ -147,7 +147,8 @@ int main(int argc, char **argv)
    double *u = U.local();        // not defined unless is_local() returns true
    assert(u);
 #endif
-   printf("global segment allocated on rank %d: %p\n",myrank,(void*)U.local());
+   printf("Global segment allocated on rank %d @ local address %p\n",myrank,(void*)U.local());
+//   printf("Global segment %p allocated on rank %d @ local address %p\n",U,myrank,(void*)U.local());
    
    // Initial guess is all 1's
    for (i = 1; i < LocPnts-1; i++) {
