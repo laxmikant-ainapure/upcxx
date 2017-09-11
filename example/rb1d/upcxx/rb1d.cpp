@@ -112,25 +112,31 @@ int main(int argc, char **argv)
 //   int RightN = (myrank != (nranks-1)) ?  myrank+1 : -1;
 //   u = (double*)malloc(sizeof(double)*LocPnts);
    global_ptr<double> U  = new_array<double>(LocPnts);
-   upcxx::dist_object<global_ptr<double>> UU(U);        // Equivalent to *UU=U
-
 
    // Swap pointers to get Left and Right
    // Left and right pointers are NULL where there is a refernce beyond the
    // physical boundary
+   // Not used for nrank == 1
+
    global_ptr<double> uL(nullptr), uR(nullptr);
 
-   // No barrier needed to get quiescence on (collective) dist_obj construction,
-   // since the fetch does an RPC that handles the required synchronization
-   if (myrank != 0){
-       upcxx::future<global_ptr<double>> fL = fetch(UU,myrank-1);
-       uL = upcxx::wait(fL);
-   }
-   if (myrank != (nranks-1)){
-       upcxx::future<global_ptr<double>> fR = fetch(UU,myrank+1);
-       uR = upcxx::wait(fR);
-   }
+   if ((nranks > 1) & (!noComm)){
+      upcxx::dist_object<global_ptr<double>> UU(U);      // Equivalent to *UU=U
+  
+  
+      // We don't need a barrier to get quiescence on (collective)
+      // dist_obj construction, since the fetch does an RPC, providing
+      // the required synchronization
+      if (myrank != 0){
+          upcxx::future<global_ptr<double>> fL = fetch(UU,myrank-1);
+          uL = upcxx::wait(fL);
+      }
+      if (myrank != (nranks-1)){
+          upcxx::future<global_ptr<double>> fR = fetch(UU,myrank+1);
+          uR = upcxx::wait(fR);
+      }
 
+   }
    upcxx::barrier();
 
    // Get the local pointer
