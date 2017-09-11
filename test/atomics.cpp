@@ -48,7 +48,8 @@ void test_fetch_add(bool use_atomics) {
 	
 	if (rank_me() == target_rank) {
         cout << "Final value is " << *counter.local() << endl;
-        if (use_atomics) UPCXX_ASSERT_ALWAYS(*counter.local() == expected_val);
+        if (use_atomics)
+            UPCXX_ASSERT_ALWAYS(*counter.local() == expected_val, "incorrect final value for the counter");
 	}
 	
 	barrier();

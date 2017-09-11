@@ -5,13 +5,22 @@
 
 #include "util.hpp"
 
+using upcxx::rank_me;
+using upcxx::rank_n;
+using std::cout;
+using std::endl;
+
+bool *from_nebrs;
 bool done = false;
 
 void arrive(upcxx::intrank_t origin) {
-  if (upcxx::rank_me() == origin)
+  if (rank_me() == origin)
     done = true;
   else {
-    upcxx::intrank_t nebr = (upcxx::rank_me() + 1)%upcxx::rank_n();
+    UPCXX_ASSERT_ALWAYS(!from_nebrs[origin], "already received an rpc from neighbor " << origin);
+    from_nebrs[origin] = true;
+      
+    upcxx::intrank_t nebr = (rank_me() + 1)%rank_n();
     
     upcxx::rpc_ff(nebr, [=]() {
       arrive(origin);
@@ -24,8 +33,12 @@ int main() {
 
   PRINT_TEST_HEADER;
   
-  upcxx::intrank_t me = upcxx::rank_me();
-  upcxx::intrank_t nebr = (me + 1) % upcxx::rank_n();
+  upcxx::intrank_t me = rank_me();
+  upcxx::intrank_t nebr = (me + 1) % rank_n();
+
+  from_nebrs = (bool*)calloc(rank_n(), sizeof(bool));
+
+  upcxx::barrier();
   
   upcxx::rpc_ff(nebr, [=]() {
     arrive(me);
@@ -33,8 +46,16 @@ int main() {
   
   while(!done)
     upcxx::progress();
+
+  cout << "Rank " << me << " done" << endl;
   
-  std::cout<<"Rank " << me << " done\n";
+  // need to wait untill all ranks have finished before checking the from_nebrs array
+  upcxx::barrier();
+  
+  for (int i = 0; i < rank_n(); i++) {
+    if (i == me) continue;
+    UPCXX_ASSERT_ALWAYS(from_nebrs[i], "From neighbor " << i << "is not set");
+  }
 
   PRINT_TEST_SUCCESS;
   

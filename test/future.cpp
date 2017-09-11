@@ -117,14 +117,14 @@ int main() {
     ).then(
       [=](int ans0, int ans1, int ans1_sqr, int arg, const vector<int> &some_vec) {
         cout << "fib("<<arg <<") = "<<ans0<<'\n';
-        UPCXX_ASSERT_ALWAYS(ans0 == 5);
+        UPCXX_ASSERT_ALWAYS(ans0 == 5, "expected 5, got " << ans0);
         cout << "fib("<<ans0+1<<") = "<<ans1<<'\n';
-        UPCXX_ASSERT_ALWAYS(ans1 == 8);
+        UPCXX_ASSERT_ALWAYS(ans1 == 8, "expected 8, got " << ans1);
         cout << "fib("<<ans0+1<<")**2 = "<<ans1_sqr<<'\n';
-        UPCXX_ASSERT_ALWAYS(ans1_sqr == 8*8);
+        UPCXX_ASSERT_ALWAYS(ans1_sqr == 8*8, "expected 64, got " << ans1_sqr);
         
         for(int i=0; i < 5; i++) {
-          UPCXX_ASSERT_ALWAYS(some_vec[i] == i*i);
+            UPCXX_ASSERT_ALWAYS(some_vec[i] == i*i, "expected " << i*i << ", got " << some_vec[i]);
         }
       }
     );
@@ -138,9 +138,9 @@ int main() {
     delete p;
   }
   
-  UPCXX_ASSERT_ALWAYS(ans2.ready());
+  UPCXX_ASSERT_ALWAYS(ans2.ready(), "Answer is not ready");
   cout << "fib("<<(2*ans1.result())<<") = "<<ans2.result()<<'\n';
-  UPCXX_ASSERT_ALWAYS(ans2.result() == 987);
+  UPCXX_ASSERT_ALWAYS(ans2.result() == 987, "expected 987, got " << ans2.result());
   
   PRINT_TEST_SUCCESS;
   
