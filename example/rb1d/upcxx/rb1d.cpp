@@ -110,6 +110,7 @@ int main(int argc, char **argv)
 //   int RightN = (myrank != (nranks-1)) ?  myrank+1 : -1;
 //   u = (double*)malloc(sizeof(double)*LocPnts);
    global_ptr<double> U  = new_array<double>(LocPnts);
+   printf("Allocated %p [%d]\n",U,myrank);
 
    // Swap pointers to get Left and Right
    // Left and right pointers are NULL where there is a refernce beyond the
@@ -150,6 +151,7 @@ int main(int argc, char **argv)
    
    // Initial guess is all 1's
    for (i = 1; i < LocPnts-1; i++) {
+       u[0] = u[LocPnts] = -77;
        u[i] = 1.0;
        double x = (lo+i)*h;
        uexact[i] = 4*x*(x-1.0);
