@@ -13,7 +13,7 @@ PPFLAGS += $(OPTIMIZATION)
 # PPFLAGS += -I$(UPCXX_INSTALL)/include
 LDFLAGS=$(shell $(UPCXX_INSTALL)/bin/upcxx-meta LDFLAGS)
 LDFLAGS += --std=c++11
-PPFLAGS += $(OPTIMIZATION)
+LDFLAGS += $(OPTIMIZATION)
 LIBFLAGS=$(shell $(UPCXX_INSTALL)/bin/upcxx-meta LIBFLAGS)
 
 all: rb1d
@@ -21,7 +21,7 @@ all: rb1d
 OBJ = rb1d.o cmdLine.o dumpAns.o fillGhost.o getTime.o
 
 rb1d: $(OBJ)
-	$(CXX) $(PPFLAGS) $(LDFLAGS) $(LIBFLAGS) -o $@  $(OBJ) 
+	$(CXX) $(LDFLAGS) $(LIBFLAGS) -o $@  $(OBJ) 
 
 clean:
 	rm -rf rb1d *.o
