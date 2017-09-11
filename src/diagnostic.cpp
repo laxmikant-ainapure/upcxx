@@ -1,5 +1,9 @@
 #include <upcxx/diagnostic.hpp>
 
+#ifdef UPCXX_BACKEND
+#include <upcxx/backend.hpp>
+#endif
+
 #include <iostream>
 #include <sstream>
 
@@ -41,8 +45,12 @@ void upcxx::dbgbrk() {
 
 void upcxx::assert_failed(const char *file, int line, const char *msg) {
   std::stringstream ss;
-  
-  ss << "UPC++ assertion failure ["<<file<<':'<<line<<']';
+
+  ss << "UPC++ assertion failure";
+#ifdef UPCXX_BACKEND
+	ss << " on rank " << upcxx::rank_me();
+#endif
+	ss << " ["<<file<<':'<<line<<']';
   if(msg != nullptr && '\0' != msg[0])
     ss << ": " << msg;
   ss << '\n';

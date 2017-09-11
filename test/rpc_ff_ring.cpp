@@ -3,10 +3,12 @@
 
 #include <iostream>
 
+#include "util.hpp"
+
 bool done = false;
 
 void arrive(upcxx::intrank_t origin) {
-  if(upcxx::rank_me() == origin)
+  if (upcxx::rank_me() == origin)
     done = true;
   else {
     upcxx::intrank_t nebr = (upcxx::rank_me() + 1)%upcxx::rank_n();
@@ -19,6 +21,8 @@ void arrive(upcxx::intrank_t origin) {
 
 int main() {
   upcxx::init();
+
+  PRINT_TEST_HEADER;
   
   upcxx::intrank_t me = upcxx::rank_me();
   upcxx::intrank_t nebr = (me + 1) % upcxx::rank_n();
@@ -30,7 +34,9 @@ int main() {
   while(!done)
     upcxx::progress();
   
-  std::cout<<"Done\n";
+  std::cout<<"Rank " << me << " done\n";
+
+  PRINT_TEST_SUCCESS;
   
   upcxx::finalize();
   return 0;
