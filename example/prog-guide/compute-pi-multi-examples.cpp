@@ -51,11 +51,11 @@ int hit()
 // versions are identical
 #define ACCM(version, prev)                                             \
     int hits_##version = version::accumulate(my_hits);                  \
-	if (!upcxx::rank_me()) {                                            \
+    if (!upcxx::rank_me()) {                                            \
         cout << #version << ": pi estimate: " << 4.0 * hits_##version / trials \
              << ", rank 0 alone: " << 4.0 * my_hits / my_trials << endl; \
         UPCXX_ASSERT_ALWAYS(hits_##version == hits_##prev, "hits mismatch between " #version " and " #prev); \
-	}
+    }
 
 int main(int argc, char **argv)
 {
