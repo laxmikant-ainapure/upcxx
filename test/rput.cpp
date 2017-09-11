@@ -5,13 +5,22 @@
 #include <upcxx/rpc.hpp>
 #include <upcxx/wait.hpp>
 
-using namespace upcxx;
+#include "util.hpp"
+
+using upcxx::global_ptr;
+using upcxx::intrank_t;
+using upcxx::future;
+using upcxx::operxn_cx_as_future;
+using upcxx::source_cx_as_future;
+using upcxx::remote_cx_as_rpc;
 
 global_ptr<int> my_thing;
 int got_rpc = -1;
 
 int main() {
   upcxx::init();
+
+  PRINT_TEST_HEADER;
   
   intrank_t me = upcxx::rank_me();
   intrank_t n = upcxx::rank_n();
@@ -30,7 +39,7 @@ int main() {
   }
   
   future<> done_g, done_s;
-  
+
   std::tie(done_g, done_s) = upcxx::rput(
     /*value*/100 + me,
     nebr_thing,
@@ -46,8 +55,8 @@ int main() {
         upcxx::rget(nebr_thing, &buf, 1)
       )
       >> [&](int got) {
-        UPCXX_ASSERT(got == 100 + me);
-        UPCXX_ASSERT(got == buf);
+        UPCXX_ASSERT(got == 100 + me, "got incorrect value, " << got << " != " << (100 + me));
+        UPCXX_ASSERT(got == buf, "got not equal to buf");
         std::cout << "get(put(X)) == X\n";
       };
   };
@@ -60,6 +69,9 @@ int main() {
   //upcxx::barrier();
   
   upcxx::deallocate(my_thing);
+
+  PRINT_TEST_SUCCESS;
+  
   upcxx::finalize();
   return 0;
 }
