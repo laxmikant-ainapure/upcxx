@@ -129,6 +129,10 @@ def cc(cxt):
   # Otherwise use intelligent defaults.
   yield ans_cross or ans_user or ans_default
 
+@rule(cli='ldflags')
+def ldflags(cxt):
+  return shplit(env('LDFLAGS',''))
+
 @rule()
 def lang_c11(cxt):
   """
@@ -515,9 +519,16 @@ class executable(Crawler):
   compiled object files and link them along with their library
   dependencies to proudce an executable. Path to executable returned.
   """
+  
+  unique_id = 1
+  
   @traced
   def cxx(me, cxt, main_src):
     return cxt.cxx()
+  
+  @traced
+  def ldflags(me, cxt, main_src):
+    return cxt.ldflags()
   
   @coroutine
   def execute(me):
@@ -528,12 +539,10 @@ class executable(Crawler):
     exe = me.mkpath('exe', suffix='.x')
     
     ld = libset_ld(libset)
-    cxx = yield me.cxx()
     if ld is None:
-      ld = cxx
-    ld = [cxx[0]] + ld[1:] 
+      ld = yield me.cxx()
     
-    ldflags = libset_ldflags(libset)
+    ldflags = me.ldflags() + libset_ldflags(libset)
     libflags = libset_libflags(libset)
     
     yield subexec.launch(ld + ldflags + ['-o',exe] + objs + libflags)
@@ -845,7 +854,7 @@ class gasnet:
   """
   Build gasnet. Return library dependencies dictionary.
   """
-  unique_id = 1
+  unique_id = 3
   
   @traced
   def get_config(me, cxt):
@@ -856,6 +865,10 @@ class gasnet:
       kind,
       value if kind == 'install' else cxt.gasnet_configured()
     )
+  
+  @traced
+  def cxx(me, cxt):
+    return cxt.cxx()
   
   @coroutine
   def execute(me):
@@ -881,6 +894,10 @@ class gasnet:
     GASNET_CXXCPPFLAGS = shplit(makefile_extract(makefile, 'GASNET_CXXCPPFLAGS'))
     GASNET_CXXFLAGS = shplit(makefile_extract(makefile, 'GASNET_CXXFLAGS'))
     GASNET_LIBS = shplit(makefile_extract(makefile, 'GASNET_LIBS'))
+    
+    # workaround for GASNet not giving us a C++ capable linker.
+    cxx = yield me.cxx()
+    GASNET_LD = cxx + GASNET_LD[1:]
     
     if kind == 'install':
       # use gasnet install in-place
