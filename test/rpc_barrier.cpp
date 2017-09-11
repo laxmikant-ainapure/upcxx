@@ -1,7 +1,8 @@
+#include <fstream>
+#include <cstdint>
 #include <upcxx/rpc.hpp>
 #include <upcxx/wait.hpp>
-
-#include <cstdint>
+#include "util.hpp"
 
 using namespace upcxx;
 using namespace std;
@@ -15,7 +16,7 @@ struct barrier_action {
   
   void operator()() {
     uint64_t bit = uint64_t(1)<<round;
-    UPCXX_ASSERT(0 == (state_bits[epoch & 1] & bit));
+    UPCXX_ASSERT_ALWAYS(0 == (state_bits[epoch & 1] & bit));
     state_bits[epoch & 1] |= bit;
   }
   
@@ -90,8 +91,12 @@ void rpc_barrier() {
   state_bits[epoch & 1] = 0;
 }
 
+bool got_right = false, got_left = false;
+
 int main() {
   upcxx::init();
+
+  PRINT_TEST_HEADER;
   
   intrank_t rank_me = upcxx::rank_me();
   intrank_t rank_n = upcxx::rank_n();
@@ -100,45 +105,61 @@ int main() {
     rpc_barrier();
     
     if(i % rank_n == rank_me) {
-      std::cout << "Barrier "<<i<<"\n";
-      std::cout.flush();
+      cout << "Barrier "<<i<<"\n";
+      cout.flush();
     }
   }
   
   intrank_t right = (rank_me + 1) % rank_n;
   intrank_t left = (rank_me + 1 + rank_n) % rank_n;
-  
+
   {
     future<int> fut = upcxx::rpc(right, []() {
-      std::cout << "From left\n";
-      std::cout.flush();
+      cout << upcxx::rank_me() << ": from left\n";
+      cout.flush();
+      got_left = true;
       return 0xbeef;
     });
     
     upcxx::wait(fut);
-    UPCXX_ASSERT(fut.result() == 0xbeef);
+    UPCXX_ASSERT_ALWAYS(fut.result() == 0xbeef, "rpc returned wrong value");
   }
   
   rpc_barrier();
+
+  UPCXX_ASSERT_ALWAYS(got_left, "no left found before barrier");
+  UPCXX_ASSERT_ALWAYS(!got_right, "right found before barrier");
   
   if(rank_me == 0) {
-    std::cout << "Eyeball me! No 'rights' before this message, no 'lefts' after.\n";
-    std::cout.flush();
+    cout << "Eyeball me! No 'rights' before this message, no 'lefts' after.\n";
+    cout.flush();
   }
+
+  got_left = false;
   
   rpc_barrier();
   
   {
     future<int> fut = upcxx::rpc(left, [=]() {
-      std::cout << "From right\n";
-      std::cout.flush();
+      cout << upcxx::rank_me() << ": from right\n";
+      cout.flush();
+      got_right = true;
       return rank_me;
     });
     
     upcxx::wait(fut);
-    UPCXX_ASSERT(fut.result() == rank_me);
+    UPCXX_ASSERT_ALWAYS(fut.result() == rank_me, "rpc returned wrong value");
   }
+
+  rpc_barrier();
+
+  UPCXX_ASSERT_ALWAYS(got_right, "no right found after barrier");
+  UPCXX_ASSERT_ALWAYS(!got_left, "left found after barrier");
+
+  upcxx::barrier();
   
+  PRINT_TEST_SUCCESS;
+
   upcxx::finalize();
   return 0;
 }

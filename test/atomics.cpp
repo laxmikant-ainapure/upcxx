@@ -40,8 +40,7 @@ void test_fetch_add(bool use_atomics) {
 			wait(rput(prev + 1, target_counter));
 		} else {
 			auto prev = wait(atomic_fetch_add<int64_t>(target_counter, 1, memory_order_relaxed));
-			if (prev < 0 || prev >= rank_n() * ITERS) 
-                FAIL("rank " << upcxx::rank_me() << " got unexpected previous value " << prev);
+            UPCXX_ASSERT_ALWAYS(prev >= 0 && prev < rank_n() * ITERS, "atomic_fetch_add result out of range");
 		}
 	}
 	
@@ -49,8 +48,7 @@ void test_fetch_add(bool use_atomics) {
 	
 	if (rank_me() == target_rank) {
         cout << "Final value is " << *counter.local() << endl;
-		if (*counter.local() != expected_val && use_atomics) 
-			FAIL("final value is " << *counter.local() << ", but expected " << (rank_n() * ITERS));
+        if (use_atomics) UPCXX_ASSERT_ALWAYS(*counter.local() == expected_val);
 	}
 	
 	barrier();
@@ -66,8 +64,7 @@ void test_put_get(void) {
 
 	for (int i = 0; i < ITERS * 10; i++) {
 		auto v = wait(atomic_get(target_counter, memory_order_relaxed));
-		if (v < 0 || v >= rank_n())	
-			FAIL("rank " << upcxx::rank_me() << " got unexpected value " << v);
+        UPCXX_ASSERT_ALWAYS(v >=0 && v < rank_n(), "atomic_get out of range");
 		wait(atomic_put(target_counter, (int64_t)rank_me(), memory_order_relaxed));
 	}
 
@@ -75,10 +72,8 @@ void test_put_get(void) {
 	
 	if (rank_me() == target_rank) {
         cout << "Final value is " << *counter.local() << endl;
-        if (*counter.local() < 0 || *counter.local() >= upcxx::rank_n()) {
-            FAIL("final value is out of range, " << *counter.local()
-                 << " not in [0, " << upcxx::rank_n() << ")");
-        }
+        UPCXX_ASSERT_ALWAYS(*counter.local() >= 0 && *counter.local() < upcxx::rank_n(),
+                     "atomic put and get test result out of range");
     }
 	
 	barrier();
@@ -87,10 +82,8 @@ void test_put_get(void) {
 int main(int argc, char **argv) {
 	init();
 
-    if (!rank_me()) {
-        cout << "Testing " << basename(const_cast<char*>(__FILE__)) << " with "
-             << rank_n() << " ranks" << endl;
-    }
+    PRINT_TEST_HEADER;
+    
 	if (rank_me() == target_rank) counter = allocate<int64_t>();
 	
 	barrier();
@@ -102,7 +95,7 @@ int main(int argc, char **argv) {
 	test_fetch_add(true);
 	test_put_get();
 
-    if (!rank_me()) cout << KLGREEN << "SUCCESS" << KNORM << endl;
+    PRINT_TEST_SUCCESS;
     
 	finalize();
 	return 0;

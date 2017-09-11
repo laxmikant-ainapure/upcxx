@@ -6,6 +6,8 @@
 
 #include <cstdlib>
 
+#include "util.hpp"
+
 using namespace upcxx;
 
 struct the_q_compare {
@@ -94,6 +96,8 @@ void operator delete(void *p) {
 #endif
 
 int main() {
+  PRINT_TEST_HEADER;
+    
   const int arg = 5;
   
   future<int> ans0 = fib(arg);
@@ -132,6 +136,8 @@ int main() {
   
   UPCXX_ASSERT_ALWAYS(ans2.ready());
   std::cout << "fib("<<(2*ans1.result())<<") = "<<ans2.result()<<'\n';
+
+  PRINT_TEST_RESULT;
   
   return 0;
 }

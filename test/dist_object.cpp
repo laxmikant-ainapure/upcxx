@@ -1,6 +1,7 @@
 #include <upcxx/dist_object.hpp>
 #include <upcxx/backend.hpp>
 #include <upcxx/rpc.hpp>
+#include "util.hpp"
 
 #include <iostream>
 
@@ -9,6 +10,8 @@ using namespace upcxx;
 
 int main() {
   upcxx::init();
+
+  PRINT_TEST_HEADER;
   
   intrank_t me = upcxx::rank_me();
   intrank_t n = upcxx::rank_n();
@@ -24,6 +27,8 @@ int main() {
         upcxx::bind(
           [=](dist_object<int> &his1, dist_object<int> &his2) {
             cout << me << "'s nebr values = "<< *his1 << ", " << *his2 << '\n';
+            UPCXX_ASSERT_ALWAYS(*his1 == 100 + upcxx::rank_me(), "incorrect value for neighbor 1");
+            UPCXX_ASSERT_ALWAYS(*his2 == 200 + upcxx::rank_me(), "incorrect value for neighbor 2");
           },
           obj1
         ),
@@ -37,6 +42,8 @@ int main() {
     
     upcxx::barrier(); // ensures dist_object lifetime
   }
+
+  PRINT_TEST_SUCCESS;
   
   upcxx::finalize();
   return 0;
