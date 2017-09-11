@@ -1,0 +1,45 @@
+#!/bin/bash
+
+export GASNET_BACKTRACE=1
+
+. sourceme
+rm -rf .nobs
+
+cd test
+
+echo "Setting up upcxx..."
+nobs run hello_upcxx.cpp &> .run-tests.err
+if [ $? -ne 0 ]; then
+		echo "Set up failed, here is the trace:"
+		cat .run-tests.err
+		exit 0
+fi
+rm .run-tests.err
+
+run_test() {
+		echo "Running test $1"
+		nobs run $1 > .run-tests.out 2> .run-tests.err
+		err=$?
+		grep "Test result: " .run-tests.out
+		if [ $err -ne 0 ]; then
+				echo -e "\e[91mTest failed, here is the trace:\e[0m"
+				cat .run-tests.err
+				rm .run-tests.err
+				exit $err
+		fi
+		rm .run-tests.err
+}
+
+echo "Running tests..."
+
+run_test "collectives.cpp"
+run_test "dist_object.cpp"
+run_test "future.cpp"
+run_test "rpc_barrier.cpp"
+run_test "atomics.cpp"
+run_test "rpc_ff_ring.cpp"
+run_test "rput.cpp"
+
+echo -e "\e[92mAll tests succeded\e[0m"
+
+cd ..
