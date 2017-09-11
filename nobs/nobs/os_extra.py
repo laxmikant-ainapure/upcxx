@@ -294,7 +294,6 @@ def _everything():
       but only useful if you don't expect the existence of queried files
       to change during this program's lifetime.
       """
-      
       head, tail = os_path_split(path)
       
       if head == path:
@@ -303,7 +302,7 @@ def _everything():
       if head != '' and not exists(head):
         return False
       
-      return tail == '' or tail in listdir(head or '.')
+      return tail in ('','.','..') or tail in listdir(head or '.')
     
     @export
     @memoize
