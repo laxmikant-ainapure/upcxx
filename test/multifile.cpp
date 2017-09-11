@@ -5,4 +5,9 @@
  * 
  * In our case "multifile-buddy.cpp" has everything.
  */
+ 
+// GOOD
 #include "multifile-buddy.hpp"
+
+// BAD (but works)
+//#include "multifile-buddy.cpp"

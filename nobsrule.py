@@ -15,6 +15,7 @@ from nobs import subexec
 
 cxx_exts = ('.cpp','.cxx','.c++','.C','.C++')
 c_exts = ('.c',)
+header_exts = ('.h','.hpp','.hxx','.h++')
 
 crawlable_dirs = [
   here('src'),
@@ -477,19 +478,21 @@ class Crawler:
         me.do_compile_and_libraries(src) >> compile_done
       )
     
-    top_dir = here() # our "src/" directory
-    
     def includes_done(incs):
       tasks = []
       for inc in incs:
         inc = os_extra.realpath(inc)
         if inc not in incs_seen:
           incs_seen.add(inc)
-          inc, _ = os.path.splitext(inc)
+          inc_base, _ = os.path.splitext(inc)
           # `inc` must be in a crawlable directory
-          if any(path_within_dir(inc, x) for x in crawlable_dirs):
-            for ext in me.find_src_exts(inc):
-              tasks.append(fresh_src(inc + ext))
+          if any(path_within_dir(inc_base, x) for x in crawlable_dirs):
+            for ext in me.find_src_exts(inc_base):
+              src = inc_base + ext
+              # Don't compile source files which have been included
+              # into other source files.
+              if src not in incs_seen:
+                tasks.append(fresh_src(src))
       
       return async.when_succeeded(*tasks)
     
