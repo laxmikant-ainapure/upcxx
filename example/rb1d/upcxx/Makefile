@@ -2,7 +2,7 @@
 # make UPCXX_INSTALL=<myinstalldir> hello-world
 # or
 # export UPCXX_INSTALL=<myinstalldir>; make hello-world
-CXX := g++
+# CXX := c++
 
 OPTIMIZATION    =  -O3
 # WARNINGS = -Wpointer-bool-conversion
