@@ -24,12 +24,6 @@ static_assert(
 );
 
 ////////////////////////////////////////////////////////////////////////
-// from: upcxx/backend.hpp
-
-intrank_t backend::rank_n;
-intrank_t backend::rank_me;
-
-////////////////////////////////////////////////////////////////////////
 // from: upcxx/backend/gasnet1_seq/backend.hpp
 
 size_t gasnet1_seq::am_size_rdzv_cutover;

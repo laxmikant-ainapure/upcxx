@@ -1,9 +1,5 @@
 #include <upcxx/diagnostic.hpp>
 
-#ifdef UPCXX_BACKEND
-#include <upcxx/backend.hpp>
-#endif
-
 #include <iostream>
 #include <sstream>
 
@@ -15,6 +11,22 @@ namespace upcxx {
   bool dbgbrk_spin_init = false;
   bool dbgbrk_spin = true;
 }
+
+////////////////////////////////////////////////////////////////////////
+// from: upcxx/backend.hpp
+
+// We don't pull in that header since we don't want the backend as
+// a dependency of non-parallel programs.
+
+namespace upcxx {
+  typedef int intrank_t; // Can't use backend.hpp so we'll do this hackishly, yuck.
+  namespace backend {
+    intrank_t rank_n = -1;
+    intrank_t rank_me; // leave undefined so valgrind can catch it.
+  }
+}
+
+////////////////////////////////////////////////////////////////////////
 
 void upcxx::dbgbrk() {
   if(!dbgbrk_spin_init) {
@@ -47,10 +59,11 @@ void upcxx::assert_failed(const char *file, int line, const char *msg) {
   std::stringstream ss;
 
   ss << "UPC++ assertion failure";
-#ifdef UPCXX_BACKEND
-	ss << " on rank " << upcxx::rank_me();
-#endif
-	ss << " ["<<file<<':'<<line<<']';
+  
+  if(upcxx::backend::rank_n != -1)
+    ss << " on rank " << upcxx::backend::rank_me;
+	
+  ss << " ["<<file<<':'<<line<<']';
   if(msg != nullptr && '\0' != msg[0])
     ss << ": " << msg;
   ss << '\n';

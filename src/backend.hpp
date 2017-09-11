@@ -5,6 +5,7 @@
  * upcxx backends. Some of it user-facing, some internal only.
  */
 
+#include <upcxx/diagnostic.hpp> // for upcxx::backend::rank_n/me
 #include <upcxx/future.hpp>
 #include <upcxx/packing.hpp>
 
@@ -43,6 +44,9 @@ namespace upcxx {
 
 namespace upcxx {
 namespace backend {
+  // These are actually defined in diagnostic.cpp so that asserts can
+  // print the current rank without pulling in the backend for non-parallel
+  // programs.
   extern intrank_t rank_n;
   extern intrank_t rank_me;
   
