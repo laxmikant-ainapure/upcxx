@@ -29,6 +29,8 @@ int main(int argc, char **argv)
    int N;                       // Size of the input
    bool printConvg;             // print convergence data
    bool noComm;                 // Shut off communication
+   bool noBarr;                 // Shut off barrier synchronization
+                                // within the timed iteration loop
    double epsilon; 		// Stopping value for error
    int freq = 1; 		// Convergence check frequency
 
@@ -38,20 +40,16 @@ int main(int argc, char **argv)
    double h;
 
    void fillGhost(double *u, int hi, int lo, global_ptr<double> &uL, global_ptr<double> &uR);
-   void cmdLine(int argc, char *argv[], int& N, double& epsilon, int& chk_freq,
-		int& MaxIter, bool& printConvg, bool& noComm);
+   void cmdLine(int argc, char *argv[],
+                int& N, double& epsilon, int& chk_freq,
+		int& MaxIter, bool& printConvg, bool& noComm, bool& noBarr);
 
    upcxx::init();
-   // Why was intrank_t causing compiler errors
    intrank_t myrank = upcxx::rank_me();
    intrank_t nranks = upcxx::rank_n();
 
-//   MPI_Comm_rank(MPI_COMM_WORLD,&myrank);
-//   MPI_Comm_size(MPI_COMM_WORLD,&nranks);
-
-
 // Get the command line arguments
-   cmdLine(argc, argv, N, epsilon, freq, MaxIter, printConvg, noComm);
+   cmdLine(argc, argv, N, epsilon, freq, MaxIter, printConvg, noComm, noBarr);
 
    h = 1.0 / (N-1.0);
 
@@ -120,31 +118,35 @@ int main(int argc, char **argv)
 
    global_ptr<double> uL(nullptr), uR(nullptr);
 
-   if ((nranks > 1) & (!noComm)){
-      upcxx::dist_object<global_ptr<double>> UU(U);      // Equivalent to *UU=U
+   upcxx::dist_object<global_ptr<double>> UU(U);      // Equivalent to *UU=U
   
-  
-      // We don't need a barrier to get quiescence on (collective)
-      // dist_obj construction, since the fetch does an RPC, providing
-      // the required synchronization
-      if (myrank != 0){
-          upcxx::future<global_ptr<double>> fL = fetch(UU,myrank-1);
-          uL = upcxx::wait(fL);
-      }
-      if (myrank != (nranks-1)){
-          upcxx::future<global_ptr<double>> fR = fetch(UU,myrank+1);
-          uR = upcxx::wait(fR);
-      }
+   // We don't need a barrier to get quiescence on (collective)
+   // dist_obj construction, since the fetch does an RPC, providing
+   // the required synchronization
 
+   if (myrank != 0){
+       upcxx::future<global_ptr<double>> fL = fetch(UU,myrank-1);
+       uL = upcxx::wait(fL);
    }
+   if (myrank != (nranks-1)){
+       upcxx::future<global_ptr<double>> fR = fetch(UU,myrank+1);
+       uR = upcxx::wait(fR);
+   }
+
    upcxx::barrier();
 
+// #define USE_MALLOC 1
    // Get the local pointer
    // We must do this because we cannot dereference a global pointer
+#if USE_MALLOC
+   double *u = (double*)malloc(sizeof(double)*LocPnts);
+   assert(u);
+#else
    assert(U.is_local());
-   double *u = U.local();                                       // not defined unless is_local() returns true
-
-   printf("local global segment on rank %d: %x\n",myrank,U.local());
+   double *u = U.local();        // not defined unless is_local() returns true
+   assert(u);
+#endif
+   printf("global segment allocated on rank %d: %x\n",myrank,U.local());
    
    // Initial guess is all 1's
    for (i = 1; i < LocPnts-1; i++) {
@@ -157,9 +159,10 @@ int main(int argc, char **argv)
    u[0] = u[LocPnts-1] = 0.0;
 
    barrier();
-   double t0 = -getTime();
-// ** Take time ** //
    double maxErr = 0.0, locErr = 0.0;
+   
+// ** Take time ** //
+   double t0 = -getTime();
    for (s = 0; s < MaxIter; s++) {
 
        // Compute values of u for next time step
@@ -174,10 +177,15 @@ int main(int argc, char **argv)
        for (i = OE+ 1; i < LocPnts-1; i+=2)
            u[i] = (u[i-1] + u[i+1] - 8.0*h*h)/2.0;
 
-       barrier();                                    // Can't start fillGhost until the values have been computed
+       if (!noBarr)
+          barrier();                     // Can't start fillGhost until the
+                                         // values have been computed
        // Do the Even Phase
        if ((nranks > 1) & (!noComm))
            fillGhost(u,lo,hi,uL, uR);
+
+       if (!noBarr)
+          barrier();                     // Can't start fillGhost until the
 
        for (i = 2-OE; i < LocPnts-1; i+=2) 
             u[i] = (u[i-1] + u[i+1] - 8.0*h*h)/2.0;
@@ -206,7 +214,8 @@ int main(int argc, char **argv)
 	        break;
         }
 
-        barrier();
+        if (!noBarr)
+            barrier();
 
    } // End of iteration loop. */
    barrier();

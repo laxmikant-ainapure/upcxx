@@ -27,6 +27,7 @@ using namespace upcxx;
 *
 *	-k			Shut off communication
 *
+*       -b                      Shut off barrier
 ********************************************************************************
 */
 
@@ -40,7 +41,7 @@ const int def_chk_freq = 100;
 const double def_epsilon = 1.0e-3;
 
 void cmdLine(int argc, char *argv[], int& N, double& epsilon, int& chk_freq,
-		int& maxIter, bool& printConvg, bool& noComm)
+		int& maxIter, bool& printConvg, bool& noComm, bool& noBarr)
 {
    int argcount = argc;
    int arg;
@@ -50,8 +51,9 @@ void cmdLine(int argc, char *argv[], int& N, double& epsilon, int& chk_freq,
         {"eps", required_argument, NULL, 'e'},
         {"freq", required_argument, NULL, 'f'},
         {"maxiter", required_argument, NULL, 'i'},
-        {"print", required_argument, NULL, 'p'},
-        {"nocomm", required_argument, NULL, 'k'},
+        {"print", no_argument, NULL, 'p'},
+        {"nocomm", no_argument, NULL, 'k'},
+        {"nobarr", no_argument, NULL, 'b'},
  };
 
 
@@ -70,7 +72,7 @@ void cmdLine(int argc, char *argv[], int& N, double& epsilon, int& chk_freq,
    int ac;
  for(ac=1;ac<argc;ac++) {
     int c;
-    while ((c=getopt_long(argc,argv,"n:e:f:i:p:k:?",long_options,NULL)) != -1){
+    while ((c=getopt_long(argc,argv,"n:e:f:i:pkb?",long_options,NULL)) != -1){
         switch (c) {
 
 	    // N
@@ -101,6 +103,11 @@ void cmdLine(int argc, char *argv[], int& N, double& epsilon, int& chk_freq,
             // No communication
             case 'k':
                 noComm = true;
+                break;
+
+            // No barrier synchronization
+            case 'b':
+                noBarr = false;
                 break;
 
 	    // Error
@@ -146,7 +153,5 @@ void PrintUsage(char* program, char* option, intrank_t myrank)
        fprintf(stderr, "\t-k          shut off communication\n");
 //       fflush(NULL);
      }
-// ****  Need to exit
-//   MPI_Abort(MPI_COMM_WORLD,-1);
   exit(-1);
   }
