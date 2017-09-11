@@ -96,7 +96,7 @@ void operator delete(void *p) {
 #endif
 
 int main() {
-  PRINT_TEST_HEADER;
+  print_test_header();
     
   const int arg = 5;
   
@@ -142,7 +142,7 @@ int main() {
   cout << "fib("<<(2*ans1.result())<<") = "<<ans2.result()<<'\n';
   UPCXX_ASSERT_ALWAYS(ans2.result() == 987, "expected 987, got " << ans2.result());
   
-  PRINT_TEST_SUCCESS;
+  print_test_success();
   
   return 0;
 }

@@ -83,7 +83,7 @@ void test_put_get(void) {
 int main(int argc, char **argv) {
 	init();
 
-    PRINT_TEST_HEADER;
+    print_test_header();
     
 	if (rank_me() == target_rank) counter = allocate<int64_t>();
 	
@@ -96,7 +96,7 @@ int main(int argc, char **argv) {
 	test_fetch_add(true);
 	test_put_get();
 
-    PRINT_TEST_SUCCESS;
+    print_test_success();
     
 	finalize();
 	return 0;

@@ -11,7 +11,7 @@ using namespace upcxx;
 int main() {
   upcxx::init();
 
-  PRINT_TEST_HEADER;
+  print_test_header();
   
   intrank_t me = upcxx::rank_me();
   intrank_t n = upcxx::rank_n();
@@ -43,7 +43,7 @@ int main() {
     upcxx::barrier(); // ensures dist_object lifetime
   }
 
-  PRINT_TEST_SUCCESS;
+  print_test_success();
   
   upcxx::finalize();
   return 0;

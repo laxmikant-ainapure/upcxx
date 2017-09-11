@@ -20,7 +20,7 @@ int got_rpc = -1;
 int main() {
   upcxx::init();
 
-  PRINT_TEST_HEADER;
+  print_test_header();
   
   intrank_t me = upcxx::rank_me();
   intrank_t n = upcxx::rank_n();
@@ -70,7 +70,7 @@ int main() {
   
   upcxx::deallocate(my_thing);
 
-  PRINT_TEST_SUCCESS;
+  print_test_success();
   
   upcxx::finalize();
   return 0;

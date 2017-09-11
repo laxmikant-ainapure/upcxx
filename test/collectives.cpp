@@ -10,7 +10,7 @@ using namespace std;
 int main() {
   upcxx::init();
 
-  PRINT_TEST_HEADER;
+  print_test_header();
   
   int tosend = upcxx::rank_me();
 
@@ -30,7 +30,7 @@ int main() {
   upcxx::barrier();
   if (!upcxx::rank_me()) cout << "allreduce test: SUCCESS" << endl;
 
-  PRINT_TEST_SUCCESS;
+  print_test_success();
   upcxx::finalize();
   return 0;
 }

@@ -31,7 +31,7 @@ void arrive(upcxx::intrank_t origin) {
 int main() {
   upcxx::init();
 
-  PRINT_TEST_HEADER;
+  print_test_header();
   
   upcxx::intrank_t me = rank_me();
   upcxx::intrank_t nebr = (me + 1) % rank_n();
@@ -57,7 +57,7 @@ int main() {
     UPCXX_ASSERT_ALWAYS(from_nebrs[i], "From neighbor " << i << "is not set");
   }
 
-  PRINT_TEST_SUCCESS;
+  print_test_success();
   
   upcxx::finalize();
   return 0;

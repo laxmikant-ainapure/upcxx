@@ -96,7 +96,7 @@ bool got_right = false, got_left = false;
 int main() {
   upcxx::init();
 
-  PRINT_TEST_HEADER;
+  print_test_header();
   
   intrank_t rank_me = upcxx::rank_me();
   intrank_t rank_n = upcxx::rank_n();
@@ -158,7 +158,7 @@ int main() {
 
   upcxx::barrier();
   
-  PRINT_TEST_SUCCESS;
+  print_test_success();
 
   upcxx::finalize();
   return 0;

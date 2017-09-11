@@ -6,24 +6,30 @@
 #define KLBLUE "\x1B[94m"
 
 #ifdef UPCXX_BACKEND
-#define PRINT_TEST_HEADER                                               \
-    if (!upcxx::rank_me()) {                                            \
-        std::cout << KLBLUE << "Test: " << basename(const_cast<char*>(__FILE__)) << KNORM << std::endl; \
-        std::cout << KLBLUE << "Ranks: " << upcxx::rank_n() << KNORM << std::endl; \
+inline void print_test_header(void)
+{
+    if (!upcxx::rank_me()) {
+        std::cout << KLBLUE << "Test: " << basename(const_cast<char*>(__FILE__)) << KNORM << std::endl;
+        std::cout << KLBLUE << "Ranks: " << upcxx::rank_n() << KNORM << std::endl;
     }
+}
 
 // include a barrier to ensure all other threads have finished working.
 // flush stdout to prevent any garbling of output
-#define PRINT_TEST_SUCCESS upcxx::barrier();\
-    if (!upcxx::rank_me()) std::cout << std::flush<< KLGREEN << "Test result: SUCCESS" << KNORM << std::endl
+inline void print_test_success(void) {
+    upcxx::barrier();
+    if (!upcxx::rank_me()) std::cout << std::flush<< KLGREEN << "Test result: SUCCESS" << KNORM << std::endl;
+}
 
 #else
 
-#define PRINT_TEST_HEADER                                               \
+inline void print_test_header(void) {
     std::cout << KLBLUE << "Test: " << basename(const_cast<char*>(__FILE__)) << KNORM << std::endl;
+}
 
-#define PRINT_TEST_SUCCESS \
-    std::cout << std::flush<< KLGREEN << "Test result: SUCCESS" << KNORM << std::endl
+inline void print_test_success(void) {
+    std::cout << std::flush<< KLGREEN << "Test result: SUCCESS" << KNORM << std::endl;
+}
 
 #endif
 
