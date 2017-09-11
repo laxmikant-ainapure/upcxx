@@ -52,8 +52,8 @@ void cmdLine(int argc, char *argv[], int& N, double& epsilon, int& chk_freq,
         {"eps", required_argument, NULL, 'e'},
         {"freq", required_argument, NULL, 'f'},
         {"maxiter", required_argument, NULL, 'i'},
-        {"print", required_argument, NULL, 'p'},
-        {"nocomm", required_argument, NULL, 'k'},
+        {"print", no_argument, NULL, 'p'},
+        {"nocomm", no_argument, NULL, 'k'},
  };
 
 
@@ -72,7 +72,7 @@ void cmdLine(int argc, char *argv[], int& N, double& epsilon, int& chk_freq,
    int ac;
  for(ac=1;ac<argc;ac++) {
     int c;
-    while ((c=getopt_long(argc,argv,"n:e:f:i:p:k:?",long_options,NULL)) != -1){
+    while ((c=getopt_long(argc,argv,"n:e:f:i:pk?",long_options,NULL)) != -1){
         switch (c) {
 
 	    // N
