@@ -215,7 +215,9 @@ int main(int argc, char **argv)
         else
             printf("Did not converge.  L2 Error after %d iterations: %g.\n", s, maxErr);
      printf("Wall clock time:  %g s.\n", t0);
-     printf("Grind time:  %g s.\n", t0/((N-2) * s));
+     double tgrind = t0 / (double) s;
+     tgrind /= (double) (N-2);
+     printf("Grind time:  %g\n", tgrind);
    }
 
    if ((N-2) <= 16) 
