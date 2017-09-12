@@ -1,9 +1,18 @@
 #include <libgen.h>
 
+#ifdef UPCXX_USE_COLOR
+// These test programs are not smart enough to properly honor termcap
+// Don't issue color codes by default unless specifically requested
 #define KNORM  "\x1B[0m"
 #define KLRED "\x1B[91m"
 #define KLGREEN "\x1B[92m"
 #define KLBLUE "\x1B[94m"
+#else
+#define KNORM  ""
+#define KLRED ""
+#define KLGREEN ""
+#define KLBLUE ""
+#endif
 
 #ifdef UPCXX_BACKEND
 inline void print_test_header(void)
