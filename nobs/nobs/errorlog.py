@@ -204,10 +204,9 @@ def _everything():
         pager = os.environ.get('PAGER','less -R').split()
         less = sp.Popen(pager, stdin=sp.PIPE)
         less.communicate(text)
-        sys.exit(less.returncode)
       else:
         sys.stderr.write(text)
-        sys.exit(1)
+      sys.exit(1)
 
 _everything()
 del _everything
