@@ -1,4 +1,5 @@
 #include <upcxx/diagnostic.hpp>
+#include <upcxx/backend_fwd.hpp>
 
 #include <iostream>
 #include <sstream>
@@ -13,13 +14,9 @@ namespace upcxx {
 }
 
 ////////////////////////////////////////////////////////////////////////
-// from: upcxx/backend.hpp
-
-// We don't pull in that header since we don't want the backend as
-// a dependency of non-parallel programs.
+// from: upcxx/backend_fwd.hpp
 
 namespace upcxx {
-  typedef int intrank_t; // Can't use backend.hpp so we'll do this hackishly, yuck.
   namespace backend {
     intrank_t rank_n = -1;
     intrank_t rank_me; // leave undefined so valgrind can catch it.

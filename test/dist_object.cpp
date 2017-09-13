@@ -1,6 +1,7 @@
 #include <upcxx/dist_object.hpp>
 #include <upcxx/backend.hpp>
 #include <upcxx/rpc.hpp>
+
 #include "util.hpp"
 
 #include <iostream>
@@ -37,8 +38,7 @@ int main() {
       obj3.fetch(nebr)
     );
     
-    while(!f.ready())
-      upcxx::progress();
+    f.wait();
     
     upcxx::barrier(); // ensures dist_object lifetime
   }

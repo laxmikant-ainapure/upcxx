@@ -8,7 +8,7 @@
 #include <upcxx/rget.hpp>
 #include <upcxx/rput.hpp>
 #include <upcxx/atomic.hpp>
-#include <upcxx/wait.hpp>
+
 #include "util.hpp"
 
 using namespace std;
@@ -17,7 +17,6 @@ using upcxx::rank_me;
 using upcxx::rank_n;
 using upcxx::barrier;
 using upcxx::global_ptr;
-using upcxx::wait;
 
 
 const int ITERS = 10;
@@ -36,16 +35,16 @@ void test_fetch_add(bool use_atomics) {
             cout << "Test fetch_add: atomics, expect value " << expected_val << endl;
         }
         // always use atomics to access or modify counter
-        wait(upcxx::atomic_put(target_counter, (int64_t)0, memory_order_relaxed));
+        upcxx::atomic_put(target_counter, (int64_t)0, memory_order_relaxed).wait();
     }
     barrier();
     for (int i = 0; i < ITERS; i++) {
         // increment the target
         if (!use_atomics) {
-            auto prev = wait(rget(target_counter));
-            wait(rput(prev + 1, target_counter));
+            auto prev = rget(target_counter).wait();
+            rput(prev + 1, target_counter).wait();
         } else {
-            auto prev = wait(upcxx::atomic_fetch_add<int64_t>(target_counter, 1, memory_order_relaxed));
+            auto prev = upcxx::atomic_fetch_add<int64_t>(target_counter, 1, memory_order_relaxed).wait();
             UPCXX_ASSERT_ALWAYS(prev >= 0 && prev < rank_n() * ITERS, "atomic_fetch_add result out of range");
         }
     }
@@ -65,14 +64,14 @@ void test_put_get(void) {
     if (rank_me() == 0) {
         cout << "Test puts and gets: expect a random rank number" << endl;
         // always use atomics to access or modify counter
-        wait(upcxx::atomic_put(target_counter, (int64_t)0, memory_order_relaxed));
+        upcxx::atomic_put(target_counter, (int64_t)0, memory_order_relaxed).wait();
     }
     barrier();
 
     for (int i = 0; i < ITERS * 10; i++) {
-        auto v = wait(atomic_get(target_counter, memory_order_relaxed));
+        auto v = atomic_get(target_counter, memory_order_relaxed).wait();
         UPCXX_ASSERT_ALWAYS(v >=0 && v < rank_n(), "atomic_get out of range");
-        wait(upcxx::atomic_put(target_counter, (int64_t)rank_me(), memory_order_relaxed));
+        upcxx::atomic_put(target_counter, (int64_t)rank_me(), memory_order_relaxed).wait();
     }
 
     barrier();
@@ -96,7 +95,7 @@ int main(int argc, char **argv) {
     barrier();
 
     // get the global pointer to the target counter
-    target_counter = wait(upcxx::rpc(target_rank, []() { return counter; }));
+    target_counter = upcxx::rpc(target_rank, []() { return counter; }).wait();
 
     test_fetch_add(false);
     test_fetch_add(true);

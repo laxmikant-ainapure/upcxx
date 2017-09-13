@@ -1,7 +1,7 @@
 #include <fstream>
 #include <cstdint>
 #include <upcxx/rpc.hpp>
-#include <upcxx/wait.hpp>
+
 #include "util.hpp"
 
 using namespace upcxx;
@@ -121,7 +121,7 @@ int main() {
       return 0xbeef;
     });
     
-    upcxx::wait(fut);
+    fut.wait();
     UPCXX_ASSERT_ALWAYS(fut.result() == 0xbeef, "rpc returned wrong value");
   }
   
@@ -147,7 +147,7 @@ int main() {
       return rank_me;
     });
     
-    upcxx::wait(fut);
+    fut.wait();
     UPCXX_ASSERT_ALWAYS(fut.result() == rank_me, "rpc returned wrong value");
   }
 

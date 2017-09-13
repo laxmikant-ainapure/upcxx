@@ -7,13 +7,13 @@ on the structure and interpretation of a rule-file.
 # exercise the upcxx backend (i.e. invoke upcxx::init), or include
 # headers which do.
 REQUIRES_UPCXX_BACKEND = [
+  'atomics.cpp',
+  'collectives.cpp',
   'dist_object.cpp',
   'hello_upcxx.cpp',
   'rpc_barrier.cpp',
   'rpc_ff_ring.cpp',
   'rput.cpp',
-  'atomics.cpp',
-  'collectives.cpp',
 ]
 
 # List of source files which make direct calls to gasnet, or include

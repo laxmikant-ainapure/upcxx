@@ -1,6 +1,10 @@
 #ifndef _677c2cf9_fcbb_4243_bd62_8138df3c50f7
 #define _677c2cf9_fcbb_4243_bd62_8138df3c50f7
 
+/* At the moment, this is not pulled in by upcxx.hpp. Instead, we're
+ * providing wait as a method on future.
+ */
+
 #include <upcxx/backend.hpp>
 #include <upcxx/future.hpp>
 
@@ -15,8 +19,5 @@ namespace upcxx {
     return f.result();
   }
 }
-
-// issue 22: prevent an ambiguity on Linux with 'wait' defined in /usr/include/stdlib.h
-using upcxx::wait;
 
 #endif

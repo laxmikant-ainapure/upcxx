@@ -2,6 +2,7 @@
 #define _1e7a65b7_b8d1_4def_98a3_76038c9431cf
 
 #include <upcxx/future/core.hpp>
+#include <upcxx/backend_fwd.hpp>
 
 namespace upcxx {
   //////////////////////////////////////////////////////////////////////
@@ -42,6 +43,16 @@ namespace upcxx {
    *   typedef detail::future_header_ops_? header_ops;
    * };
    */
+  
+  //////////////////////////////////////////////////////////////////////
+  
+  namespace detail {
+    struct future_wait_upcxx_progress_user {
+      void operator()() const {
+        upcxx::progress();
+      }
+    };
+  }
   
   //////////////////////////////////////////////////////////////////////
   // future1: The actual type users get (aliased as future<>).
@@ -135,6 +146,14 @@ namespace upcxx {
         *this,
         std::forward<Fn>(pure_fn)
       );
+    }
+    
+    template<typename Fn=detail::future_wait_upcxx_progress_user>
+    auto wait(Fn &&progress = detail::future_wait_upcxx_progress_user{})
+      -> decltype(this->result()) {
+      while(!impl_.ready())
+        progress();
+      return this->result();
     }
   };
 }

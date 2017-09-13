@@ -5,51 +5,18 @@
  * upcxx backends. Some of it user-facing, some internal only.
  */
 
-#include <upcxx/diagnostic.hpp> // for upcxx::backend::rank_n/me
+#include <upcxx/backend_fwd.hpp>
+
+// Pulls in diagnostic.cpp which defines backend::rank_n/me
+#include <upcxx/diagnostic.hpp>
+
 #include <upcxx/future.hpp>
-#include <upcxx/packing.hpp>
-
-#include <cstddef>
-#include <cstdint>
-
-//////////////////////////////////////////////////////////////////////
-// Public API:
-  
-namespace upcxx {
-  typedef int intrank_t;
-  typedef unsigned int uintrank_t;
-  
-  enum class progress_level {
-    internal,
-    user
-  };
-  
-  void init();
-  void finalize();
-  
-  intrank_t rank_n();
-  intrank_t rank_me();
-  
-  void* allocate(std::size_t size,
-                 std::size_t alignment = alignof(std::max_align_t));
-  void deallocate(void *p);
-  
-  void progress(progress_level lev = progress_level::user);
-  
-  void barrier();
-}
 
 ////////////////////////////////////////////////////////////////////////
 // Backend API:
 
 namespace upcxx {
 namespace backend {
-  // These are actually defined in diagnostic.cpp so that asserts can
-  // print the current rank without pulling in the backend for non-parallel
-  // programs.
-  extern intrank_t rank_n;
-  extern intrank_t rank_me;
-  
   template<typename Fn>
   void during_user(Fn &&fn);
   void during_user(promise<> &&pro);
@@ -93,14 +60,6 @@ namespace backend {
     rma_get_cb *cb
   );
 }}
-  
-////////////////////////////////////////////////////////////////////////
-// Public API implementations:
-
-namespace upcxx {
-  inline intrank_t rank_n() { return backend::rank_n; }
-  inline intrank_t rank_me() { return backend::rank_me; }
-}
 
 #endif // #ifdef guard
 
