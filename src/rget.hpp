@@ -64,7 +64,7 @@ namespace upcxx {
     struct rget_state_operxn<rget_byref, promise_cx<>> {
       promise<> *pro;
       
-      rget_state_operxn(promise_cx<> &cx):
+      rget_state_operxn(promise_cx<> &&cx):
         pro{&cx.pro_} {
       }
       
@@ -76,7 +76,7 @@ namespace upcxx {
     struct rget_state_operxn<rget_byval<T>, promise_cx<T>> {
       promise<T> *pro;
       
-      rget_state_operxn(promise_cx<> &cx):
+      rget_state_operxn(promise_cx<T> &&cx):
         pro{&cx.pro_} {
       }
       
@@ -100,7 +100,7 @@ namespace upcxx {
     struct rget_state_remote<rpc_cx<Fn>> {
       Fn fn;
       
-      rget_state_remote(rpc_cx<Fn> &cx):
+      rget_state_remote(rpc_cx<Fn> &&cx):
         fn{std::move(cx.fn_)} {
       }
       

@@ -14,7 +14,7 @@ using upcxx::source_cx_as_future;
 using upcxx::remote_cx_as_rpc;
 
 global_ptr<int> my_thing;
-int got_rpc = -1;
+int got_rpc = 0;
 
 int main() {
   upcxx::init();
@@ -41,14 +41,17 @@ int main() {
     nebr_thing,
     operxn_cx_as_future |
     source_cx_as_future |
-    remote_cx_as_rpc([=]() { got_rpc = nebr; })
+    remote_cx_as_rpc([=]() { got_rpc++; })
   );
   
   int buf;
   done_g = done_g.then([&]() {
     return upcxx::when_all(
         upcxx::rget(nebr_thing),
-        upcxx::rget(nebr_thing, &buf, 1)
+        upcxx::rget(nebr_thing, &buf, 1,
+                    operxn_cx_as_future |
+                    remote_cx_as_rpc([=](){ got_rpc++; })
+        )
       ).then([&](int got) {
         UPCXX_ASSERT(got == 100 + me, "got incorrect value, " << got << " != " << (100 + me));
         UPCXX_ASSERT(got == buf, "got not equal to buf");
@@ -58,7 +61,7 @@ int main() {
   
   done_g.wait();
   
-  while(got_rpc != me)
+  while(got_rpc != 2)
     upcxx::progress();
   
   //upcxx::barrier();
