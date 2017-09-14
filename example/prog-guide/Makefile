@@ -15,17 +15,14 @@ CXX := $(CXX) -std=c++11
 
 all: hello-world compute-pi compute-pi-multi-examples
 
-hello-world: hello-world.cpp
-	$(CXX) $< $(PPFLAGS) $(LDFLAGS) $(LIBFLAGS) -o $@ 
-
-compute-pi: compute-pi.cpp
-	$(CXX) $< $(PPFLAGS) $(LDFLAGS) $(LIBFLAGS) -o $@ 
-
 CP_HDRS=async-distobj-accumulate.hpp distobj-accumulate.hpp global-ptrs-accumulate.hpp \
 	rpc-accumulate.hpp atomics-accumulate.hpp fetch.hpp quiesence-accumulate.hpp
 
 compute-pi-multi-examples: compute-pi-multi-examples.cpp $(CP_HDRS)
 	$(CXX) $< $(PPFLAGS) $(LDFLAGS) $(LIBFLAGS) -o $@ 
+
+.cpp: *.h *.hpp
+	$(CXX) $< $(PPFLAGS) $(LDFLAGS) $(LIBFLAGS) -o $@
 
 clean:
 	rm -rf hello-world compute-pi compute-pi-multi-examples
