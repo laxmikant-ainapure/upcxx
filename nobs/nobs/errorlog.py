@@ -122,7 +122,7 @@ def _everything():
     show("WARNING: " + message)
   
   @export
-  def show(title, message):
+  def show(title, message=''):
     """
     Print error message to stderr and display in the abort log if an
     aborting error occurs elsewhere.
