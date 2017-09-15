@@ -52,6 +52,15 @@ if test -z "$UPCXX_INSTALL_NOCHECK" ; then (
   else
     KERNEL_GOOD=
   fi
+  ARCH=`uname -m 2> /dev/null`
+  ARCH_GOOD=
+  ARCH_BAD=
+  if test x86_64 = "$ARCH" ; then
+    ARCH_GOOD=1
+  elif expr "$ARCH" : 'i.86' ; then
+    ARCH_BAD=1
+  fi
+
   if test -z "$UPCXX_INSTALL_QUIET" ; then
     type -p ${CXX%% *}
     $CXX --version
@@ -81,13 +90,18 @@ if test -z "$UPCXX_INSTALL_NOCHECK" ; then (
     COMPILER_GOOD=1
   fi
 
-  RECOMMEND='We recommend Linux or OS X with one of the following C++ compilers: g++ 5.1.0 or newer, LLVM/clang 3.7.0 or newer, Xcode/clang 8.0.0 or newer'
+  RECOMMEND='We recommend Linux or OS X on x86_64 with one of the following C++ compilers: 
+         g++ 5.1.0 or newer, LLVM/clang 3.7.0 or newer, Xcode/clang 8.0.0 or newer'
 
-  if test -n "$COMPILER_BAD" ; then
-    echo 'ERROR: Your C++ compiler is known to lack the support needed to build UPCXX. Please set $CC and $CXX to point to a newer C/C++ compiler suite.'
+  if test -n "$ARCH_BAD" ; then
+    echo "ERROR: This version of UPC++ does not support the '$ARCH' architecture."
     echo "ERROR: $RECOMMEND"
     exit 1
-  elif test -z "$COMPILER_GOOD" || test -z "$KERNEL_GOOD" ; then
+  elif test -n "$COMPILER_BAD" ; then
+    echo 'ERROR: Your C++ compiler is known to lack the support needed to build UPC++. Please set $CC and $CXX to point to a newer C/C++ compiler suite.'
+    echo "ERROR: $RECOMMEND"
+    exit 1
+  elif test -z "$COMPILER_GOOD" || test -z "$KERNEL_GOOD" || test -z "$ARCH_GOOD" ; then
     echo 'WARNING: Your C++ compiler or platform has not been validated to run UPC++'
     echo "WARNING: $RECOMMEND"
   fi
@@ -96,4 +110,4 @@ if test -z "$UPCXX_INSTALL_NOCHECK" ; then (
 ) || exit 1 ; fi
 
 nobs install src/upcxx.cpp $INSTALL_DIR || \
-  ( echo "UPCXX Installation failed. Please report the entire log above to: upcxx@googlegroups.com" ; exit 1; )
+  ( echo "UPC++ Installation failed. Please report the entire log above to: upcxx@googlegroups.com" ; exit 1; )
