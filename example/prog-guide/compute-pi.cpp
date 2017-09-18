@@ -18,7 +18,7 @@ int hit()
 int accumulate(int my_hits)
 {
     // wait for a collective reduction that sums all local values
-    return upcxx::wait(upcxx::allreduce(my_hits, plus<int>() ));
+    return upcxx::allreduce(my_hits, plus<int>()).wait();
 }
 
 int main(int argc, char **argv)

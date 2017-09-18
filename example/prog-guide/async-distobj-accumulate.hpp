@@ -14,7 +14,7 @@ int accumulate(int my_hits) {
             f = combined_f.then([](int a, int b) { return a + b; });
         }
         // wait for the chain to complete
-        hits = upcxx::wait(f);
+        hits = f.wait();
     }
     upcxx::barrier(); 
     return hits;

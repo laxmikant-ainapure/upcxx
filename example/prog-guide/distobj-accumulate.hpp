@@ -10,7 +10,7 @@ int accumulate(int my_hits)
         // rank 0 accumulates the values
         for (int i = 0; i < upcxx::rank_n(); i++) {
             // fetch the distributed object from remote rank i
-            hits += upcxx::wait(fetch(all_hits, i));
+            hits += fetch(all_hits, i).wait();
         }
     }
     // ensure that no distributed objects are destructed before rank 0 is done

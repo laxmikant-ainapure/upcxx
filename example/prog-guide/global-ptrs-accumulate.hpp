@@ -7,12 +7,12 @@ int accumulate(int my_hits)
         all_hits_ptr = upcxx::new_array<int>(upcxx::rank_n()); 
     }
     // Rank 0 broadcasts the array global pointer to all ranks
-    all_hits_ptr = upcxx::wait(upcxx::broadcast(all_hits_ptr, 0));
+    all_hits_ptr = upcxx::broadcast(all_hits_ptr, 0).wait();
     // All ranks offset the start pointer of the array by their rank to point 
     // to their own chunk of the array
     upcxx::global_ptr<int> my_hits_ptr = all_hits_ptr + upcxx::rank_me();
     // every rank now puts its own hits value into the correct part of the array
-    upcxx::wait(upcxx::rput(my_hits, my_hits_ptr));
+    upcxx::rput(my_hits, my_hits_ptr).wait();
     upcxx::barrier();
     // Now rank 0 accumulates all the values stored in the array
     int hits = 0;
