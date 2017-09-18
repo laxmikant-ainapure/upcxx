@@ -5,8 +5,8 @@ global address space (PGAS) model.  UPC++ has three main objectives:
 
 * Provide an object-oriented PGAS programming model in the context of the popular C++ language
 
-* Add useful parallel programming idioms unavailable in Unified Parallel C (UPC), such as
-  asynchronous remote function invocation and multidimensional arrays, to support complex scientific
+* Expose useful asynchronous parallel programming idioms unavailable in traditional SPMD models, such as
+  remote function invocation and continuation-based operation completion, to support complex scientific
   applications
  
 * Offer an easy on-ramp to PGAS programming through interoperability with other existing parallel
