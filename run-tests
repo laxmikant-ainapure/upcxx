@@ -32,13 +32,16 @@ run_test() {
 
 echo "Running tests..."
 
+run_test "atomics.cpp"
 run_test "collectives.cpp"
 run_test "dist_object.cpp"
 run_test "future.cpp"
 run_test "rpc_barrier.cpp"
-run_test "atomics.cpp"
 run_test "rpc_ff_ring.cpp"
 run_test "rput.cpp"
+run_test "uts/uts_ranks.cpp"
+run_test "uts/uts_threads.cpp"
+UPCXX_BACKEND=gasnetex_par run_test "uts/uts_hybrid.cpp"
 
 echo -e "\e[92mAll tests succeded\e[0m"
 

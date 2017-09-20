@@ -4,63 +4,72 @@
 #include <upcxx/backend.hpp>
 #include <upcxx/command.hpp>
 
+#include <upcxx/backend/gasnet/handle_cb.hpp>
+
 #include <cstdint>
 #include <cstdlib>
 
 ////////////////////////////////////////////////////////////////////////
-// declarations for: upcxx/backend/gasnet1_seq/backend.cpp
+
+#define gasnet1_seq 100
+#define gasnetex_par 101
+#if UPCXX_BACKEND == gasnet1_seq
+  #undef gasnet1_seq
+  #undef gasnetex_par
+  #define UPCXX_GASNET1_SEQ 1
+#elif UPCXX_BACKEND == gasnetex_par
+  #undef gasnet1_seq
+  #undef gasnetex_par
+  #define UPCXX_GASNETEX_PAR 1
+#else
+  #error "Invalid UPCXX_BACKEND."
+#endif
+
+#ifndef UPCXX_GASNET1_SEQ
+  #define UPCXX_GASNET1_SEQ 0
+#endif
+
+#ifndef UPCXX_GASNETEX_PAR
+  #define UPCXX_GASNETEX_PAR 0
+#endif
+
+////////////////////////////////////////////////////////////////////////
+// declarations for: upcxx/backend/gasnet/runtime.cpp
 
 namespace upcxx {
 namespace backend {
-  namespace gasnet1_seq {
-    extern std::size_t am_size_rdzv_cutover;
-    
-    struct action {
-      action *next_;
-      virtual void fire_and_delete() = 0;
-    };
-    
-    extern bool in_user_progress_;
-    extern action *user_actions_head_;
-    extern action **user_actions_tailp_;
-    
-    // Send AM (packed command), receiver executes in handler.
-    void send_am_eager_restricted(
-      intrank_t recipient,
-      void *command_buf,
-      std::size_t buf_size,
-      std::size_t buf_align
-    );
-    
-    // Send fully bound callable, receiver executes in handler.
-    template<typename Fn>
-    void send_am_restricted(intrank_t recipient, Fn &&fn);
-    
-    // Send AM (packed command), receiver executes in `level` progress.
-    void send_am_eager_queued(
-      progress_level level,
-      intrank_t recipient,
-      void *command_buf,
-      std::size_t buf_size,
-      std::size_t buf_align
-    );
-    
-    // Send AM (packed command) via rendezvous, receiver executes druing `level`.
-    void send_am_rdzv(
-      progress_level level,
-      intrank_t recipient,
-      void *command_buf,
-      std::size_t buf_size, std::size_t buf_align
-    );
-    
-    struct rma_cb {
-      rma_cb *next;
-      std::uintptr_t handle;
-      
-      virtual void fire_and_delete() = 0;
-    };
-  }
-}}
+namespace gasnet {
+  extern std::size_t am_size_rdzv_cutover;
+  
+  // Send AM (packed command), receiver executes in handler.
+  void send_am_eager_restricted(
+    intrank_t recipient,
+    void *command_buf,
+    std::size_t buf_size,
+    std::size_t buf_align
+  );
+  
+  // Send fully bound callable, receiver executes in handler.
+  template<typename Fn>
+  void send_am_restricted(intrank_t recipient, Fn &&fn);
+  
+  // Send AM (packed command), receiver executes in `level` progress.
+  void send_am_eager_queued(
+    progress_level level,
+    intrank_t recipient,
+    void *command_buf,
+    std::size_t buf_size,
+    std::size_t buf_align
+  );
+  
+  // Send AM (packed command) via rendezvous, receiver executes druing `level`.
+  template<progress_level level>
+  void send_am_rdzv(
+    intrank_t recipient,
+    void *command_buf,
+    std::size_t buf_size, std::size_t buf_align
+  );
+}}}
 
 //////////////////////////////////////////////////////////////////////
 // implementation of: upcxx/backend.hpp
@@ -68,61 +77,25 @@ namespace backend {
 namespace upcxx {
 namespace backend {
   //////////////////////////////////////////////////////////////////////
-  // during_user_progress
+  // during_level
   
-  namespace gasnet1_seq {
-    template<typename Fn>
-    struct action_impl final: action {
-      Fn fn;
-      action_impl(Fn fn): fn{std::move(fn)} {}
-      
-      void fire_and_delete() {
-        fn();
-        delete this;
-      }
-    };
+  template<typename Fn>
+  void during_level(std::integral_constant<progress_level, progress_level::internal>, Fn &&fn) {
+    UPCXX_ASSERT(!UPCXX_GASNET1_SEQ || backend::master.active_with_caller());
+    fn();
   }
-  
-  template<typename Fn1>
-  inline void during_user(Fn1 &&fn) {
-    using Fn = typename std::decay<Fn1>::type;
+  template<typename Fn>
+  void during_level(std::integral_constant<progress_level, progress_level::user>, Fn &&fn) {
+    UPCXX_ASSERT(!UPCXX_GASNET1_SEQ || backend::master.active_with_caller());
     
-    if(gasnet1_seq::in_user_progress_)
-      fn();
-    else {
-      auto *a = new gasnet1_seq::action_impl<Fn>{std::forward<Fn1>(fn)};
-      // enqueue a on `user_actions`
-      a->next_ = nullptr;
-      *(gasnet1_seq::user_actions_tailp_) = a;
-      gasnet1_seq::user_actions_tailp_ = &a->next_;
-    }
-  }
-  
-  inline void during_user(promise<> &&pro) {
-    struct deferred {
-      promise<> pro;
-      void operator()() { pro.fulfill_result(); }
-    };
-    during_user(deferred{std::move(pro)});
-  }
-  
-  inline void during_user(promise<> *pro) {
-    during_user([=]() { pro->fulfill_result(); });
-  }
-  
-  template<typename Fn1>
-  inline void during_level(progress_level level, Fn1 &&fn) {
-    using Fn = typename std::decay<Fn1>::type;
+    persona &p = UPCXX_GASNET1_SEQ ? backend::master : *detail::tl_top_persona;
     
-    if(level == progress_level::internal || gasnet1_seq::in_user_progress_)
-      fn();
-    else {
-      auto *a = new gasnet1_seq::action_impl<Fn>{std::forward<Fn1>(fn)};
-      // enqueue a on `user_actions`
-      a->next_ = nullptr;
-      *(gasnet1_seq::user_actions_tailp_) = a;
-      gasnet1_seq::user_actions_tailp_ = &a->next_;
-    }
+    detail::persona_during</*known_active=*/true>(p, progress_level::user, std::forward<Fn>(fn));
+  }
+
+  template<progress_level level, typename Fn>
+  void during_level(Fn &&fn) {
+    during_level(std::integral_constant<progress_level,level>{}, std::forward<Fn>(fn));
   }
   
   //////////////////////////////////////////////////////////////////////
@@ -130,10 +103,12 @@ namespace backend {
   
   template<upcxx::progress_level level, typename Fn>
   void send_am(intrank_t recipient, Fn &&fn) {
+    UPCXX_ASSERT(!UPCXX_GASNET1_SEQ || backend::master.active_with_caller());
+    
     parcel_layout ub;
     command_size_ubound(ub, fn);
     
-    bool eager = ub.size() <= gasnet1_seq::am_size_rdzv_cutover;
+    bool eager = ub.size() <= gasnet::am_size_rdzv_cutover;
     void *buf;
     
     if(eager) {
@@ -147,18 +122,18 @@ namespace backend {
     command_pack(w, ub.size(), fn);
     
     if(eager) {
-      gasnet1_seq::send_am_eager_queued(level, recipient, buf, w.size(), w.alignment());
+      gasnet::send_am_eager_queued(level, recipient, buf, w.size(), w.alignment());
       std::free(buf);
     }
     else
-      gasnet1_seq::send_am_rdzv(level, recipient, buf, w.size(), w.alignment());
+      gasnet::send_am_rdzv<level>(recipient, buf, w.size(), w.alignment());
   }
   
   //////////////////////////////////////////////////////////////////////
   // rma_[put/get]_cb:
   
-  struct rma_put_cb: gasnet1_seq::rma_cb {};
-  struct rma_get_cb: gasnet1_seq::rma_cb {};
+  struct rma_put_cb: gasnet::handle_cb {};
+  struct rma_get_cb: gasnet::handle_cb {};
   
   template<typename State>
   struct rma_put_cb_wstate: rma_put_cb {
@@ -174,7 +149,7 @@ namespace backend {
   //////////////////////////////////////////////////////////////////////
   // make_rma_[put/get]_cb
   
-  namespace gasnet1_seq {
+  namespace gasnet {
     template<typename State, typename SrcCx, typename OpCx>
     struct rma_put_cb_impl final: rma_put_cb_wstate<State> {
       SrcCx src_cx;
@@ -186,7 +161,7 @@ namespace backend {
         op_cx{std::move(op_cx)} {
       }
       
-      void fire_and_delete() override {
+      void execute_and_delete() override {
         src_cx(this->state);
         op_cx(this->state);
         delete this;
@@ -202,7 +177,7 @@ namespace backend {
         op_cx{std::move(op_cx)} {
       }
       
-      void fire_and_delete() override {
+      void execute_and_delete() override {
         op_cx(this->state);
         delete this;
       }
@@ -215,7 +190,7 @@ namespace backend {
       SrcCx src_cx,
       OpCx op_cx
     ) {
-    return new gasnet1_seq::rma_put_cb_impl<State,SrcCx,OpCx>{
+    return new gasnet::rma_put_cb_impl<State,SrcCx,OpCx>{
       std::move(state),
       std::move(src_cx),
       std::move(op_cx)
@@ -227,7 +202,7 @@ namespace backend {
       State state,
       OpCx op_cx
     ) {
-    return new gasnet1_seq::rma_get_cb_impl<State,OpCx>{
+    return new gasnet::rma_get_cb_impl<State,OpCx>{
       std::move(state),
       std::move(op_cx)
     };
@@ -239,16 +214,18 @@ namespace backend {
 
 namespace upcxx {
 namespace backend {
-namespace gasnet1_seq {
+namespace gasnet {
   //////////////////////////////////////////////////////////////////////
   // send_am_restricted
   
   template<typename Fn>
   void send_am_restricted(intrank_t recipient, Fn &&fn) {
+    UPCXX_ASSERT(!UPCXX_GASNET1_SEQ || backend::master.active_with_caller());
+    
     parcel_layout ub;
     command_size_ubound(ub, fn);
     
-    bool eager = ub.size() <= gasnet1_seq::am_size_rdzv_cutover;
+    bool eager = ub.size() <= gasnet::am_size_rdzv_cutover;
     void *buf;
     
     if(eager) {
@@ -262,15 +239,15 @@ namespace gasnet1_seq {
     command_pack(w, ub.size(), fn);
     
     if(eager) {
-      gasnet1_seq::send_am_eager_restricted(recipient, buf, w.size(), w.alignment());
+      gasnet::send_am_eager_restricted(recipient, buf, w.size(), w.alignment());
       std::free(buf);
     }
     else {
-      gasnet1_seq::send_am_rdzv(
-        progress_level::internal,
+      gasnet::send_am_rdzv<progress_level::internal>(
         recipient, buf, w.size(), w.alignment()
       );
     }
   }
 }}}
+
 #endif

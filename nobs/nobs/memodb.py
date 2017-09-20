@@ -186,15 +186,12 @@ def _everything():
               db._size_tail = f.tell()
               break
       
-      db._mtimes = {} # {digest(path): mtime}
       db._lock_acquire = async.CriticalSection(threadsafe=False).acquire
       db._failed_name_seqs = []
       
       db_tree = db._tree
       db_files = db._files
       db_files_get = db_files.get
-      db_mtimes = db._mtimes
-      db_mtimes_get = db_mtimes.get
       db_lock_acquire = db._lock_acquire
       db_failed_name_seqs = db._failed_name_seqs
       
@@ -243,22 +240,24 @@ def _everything():
       db.save = save
       
       def file_digest(apath):
-        mtime = db_mtimes_get(apath)
-        if mtime is None:
-          db_mtimes[apath] = mtime = os_extra.mtime(apath)
-        
         NO_EXIST = (-1, 'NO_EXIST') # (mtime, digest) of non-existent file
         
-        if db_files_get(apath, NO_EXIST)[0] != mtime: # implies file exists
-          sha1 = hashlib_sha1()
-          up = sha1.update
-          up('%x:' % len(apath))
-          up(apath)
-          with open(apath, 'rb') as f:
-            for chk in iter(lambda: f.read(8192), b''):
-              up(chk)
-          digest = sha1.digest()
-          db_files[apath] = (mtime, digest)
+        mtime = os_extra.mtime(apath)
+        
+        if db_files_get(apath, NO_EXIST)[0] != mtime:
+          if mtime != -1:
+            sha1 = hashlib_sha1()
+            up = sha1.update
+            up('%x:' % len(apath))
+            up(apath)
+            with open(apath, 'rb') as f:
+              for chk in iter(lambda: f.read(8192), b''):
+                up(chk)
+            digest = sha1.digest()
+            db_files[apath] = (mtime, digest)
+          else:
+            digest = NO_EXIST[1]
+            db_files[apath] = NO_EXIST
           
           record = cPickle_dumps(('file',apath,mtime,digest), protocol=2)
           with open(path_db, 'ab') as f:

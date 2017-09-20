@@ -26,7 +26,7 @@ struct barrier_action {
     // random number in [-128, 128)
     int perturb = -128 + (knuth*uint32_t(100*epoch + round) >> (32-8));
     // about half the time we'll do a rendezvous
-    return backend::gasnet1_seq::am_size_rdzv_cutover + perturb - sizeof(barrier_action);
+    return backend::gasnet::am_size_rdzv_cutover + perturb - sizeof(barrier_action);
   }
 };
 

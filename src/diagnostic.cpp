@@ -69,3 +69,13 @@ void upcxx::assert_failed(const char *file, int line, const char *msg) {
   dbgbrk();
   std::abort();
 }
+
+upcxx::say::say() {
+  if(upcxx::backend::rank_n != -1)
+    ss << '[' << upcxx::backend::rank_me << "] ";
+}
+
+upcxx::say::~say() {
+  ss << std::endl;
+  std::cerr << ss.str();
+}

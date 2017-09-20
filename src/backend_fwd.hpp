@@ -43,11 +43,43 @@ namespace upcxx {
 namespace upcxx {
 namespace backend {
   // These are actually defined in diagnostic.cpp so that asserts can
-  // print the current rank without pulling in the backend for non-parallel
-  // programs.
+  // print the current rank without pulling in the backend for
+  // non-parallel programs.
   extern intrank_t rank_n;
   extern intrank_t rank_me;
 }}
+  
+// We dispatch on backend type using preprocessor symbol which is
+// defined to be another symbol that otherwise doesn't exist. So we
+// define and immediately undefine them.
+#define gasnet1_seq 100
+#define gasnetex_par 101
+#if UPCXX_BACKEND == gasnet1_seq
+  #undef gasnet1_seq
+  #undef gasnetex_par
+  
+  namespace upcxx {
+  namespace backend {
+    struct persona_state {};
+  }}
+#elif UPCXX_BACKEND == gasnetex_par
+  #undef gasnet1_seq
+  #undef gasnetex_par
+  
+  #include <upcxx/backend/gasnet/handle_cb.hpp>
+  
+  namespace upcxx {
+  namespace backend {
+    struct persona_state {
+      gasnet::handle_cb_queue hcbs;
+    };
+  }}
+#else
+  namespace upcxx {
+  namespace backend {
+    struct persona_state {};
+  }}
+#endif
 
 ////////////////////////////////////////////////////////////////////////
 // Public API implementations:

@@ -200,6 +200,9 @@ def comp_lang_pp(cxt, src):
     libset_ppflags(libs)
   )
 
+def upcxx_backend_id():
+  return env("UPCXX_BACKEND", otherwise="gasnet1_seq")
+
 @rule()
 @coroutine
 def upcxx_backend(cxt):
@@ -210,11 +213,9 @@ def upcxx_backend(cxt):
   upcxx_be = {
     'upcxx-backend': {
       'primary': True,
-      'ppflags': ['-D%s=%s'%(
-          'UPCXX_BACKEND',
-          env("UPCXX_BACKEND", otherwise="gasnet1_seq")
-        )],
-      'deplibs': ['gasnet']
+      'ppflags': ['-D%s=%s'%('UPCXX_BACKEND', upcxx_backend_id())],
+      'libflags': [],
+      'deplibs': ['gasnet','pthread']
     }
   }
   
@@ -285,6 +286,11 @@ def requires_gasnet(cxt, src):
 def requires_upcxx_backend(cxt, src):
   return False
 
+# Rule overriden in sub-nobsrule files.
+@rule(cli='requires_pthread', path_arg='src')
+def requires_pthread(cxt, src):
+  return False
+
 @rule(path_arg='src')
 @coroutine
 def libraries(cxt, src):
@@ -302,7 +308,12 @@ def libraries(cxt, src):
   else:
     maybe_upcxx_backend = {}
   
-  yield cxt.libset_merge(maybe_gasnet, maybe_upcxx_backend)
+  if cxt.requires_pthread(src):
+    maybe_pthread = {'pthread':{}}
+  else:
+    maybe_pthread = {}
+  
+  yield cxt.libset_merge(maybe_gasnet, maybe_upcxx_backend, maybe_pthread)
 
 @rule()
 def gasnet_user(cxt):
@@ -351,8 +362,10 @@ def gasnet_syncmode(cxt):
   """
   GASNet sync-mode to use.
   """
-  # this should be computed based off the choice of upcxx backend
-  return 'seq'
+  return {
+      'gasnet1_seq': 'seq',
+      'gasnetex_par': 'par'
+    }[upcxx_backend_id()]
 
 @rule(cli='include_vdirs', path_arg='src')
 def include_vdirs(cxt, src):
@@ -1012,16 +1025,20 @@ def libset_merge_inplace(dst, src):
   Merge libraries of `src` into `dst`.
   """
   
-  for k,v in src.items():
-    v1 = dict(dst.get(k,v))
-    v1_primary = v1['primary']
+  for k,sv in src.items():
+    sv1 = dict(sv)
+    try: del sv1['primary']
+    except KeyError: pass
     
-    v1['primary'] = v['primary']
-    if v != v1:
+    dv1 = dict(dst.get(k,sv))
+    try: del dv1['primary']
+    except KeyError: pass
+    
+    if sv1 != dv1:
       raise Exception("Multiple '%s' libraries with differing configurations." % k)
     
-    v1['primary'] = v['primary'] or v1_primary
-    dst[k] = v1
+    dv1['primary'] = dv1.get('primary', True) or sv1.get('primary', True)
+    dst[k] = dv1
 
 def libset_merge(*libsets):
   """
@@ -1088,7 +1105,7 @@ def libset_libflags(libset):
   
   def topsort(xs):
     for x in xs:
-      rec = libset.get(x, {x:{'libflags':['-l'+x]}})
+      rec = libset.get(x, {})
       
       topsort(rec.get('deplibs', []))
       
@@ -1102,7 +1119,7 @@ def libset_libflags(libset):
         )
         sorted_flags.append(
           ['-l' + os.path.basename(f)[3:-2] for f in libfiles] +
-          rec.get('libflags', [])
+          rec.get('libflags', ['-l'+x])
         )
   
   def uniquify(xs):

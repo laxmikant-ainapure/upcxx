@@ -36,21 +36,21 @@ inline std::string test_name(const char *file) {
       }
   }
 
-  inline void print_test_success() {
+  inline void print_test_success(bool success=true) {
       // include a barrier to ensure all other threads have finished working.
       // flush stdout to prevent any garbling of output
       upcxx::barrier();
       
       if(0 == upcxx::rank_me())
-          std::cout << std::flush<< KLGREEN << "Test result: SUCCESS" << KNORM << std::endl;
+          std::cout << std::flush<< KLGREEN << "Test result: "<<(success?"SUCCESS":"FAILURE") << KNORM << std::endl;
   }
 #else
   inline void print_test_header_(const char *file) {
       std::cout << KLBLUE << "Test: " << test_name(file) << KNORM << std::endl;
   }
 
-  inline void print_test_success() {
-      std::cout << std::flush<< KLGREEN << "Test result: SUCCESS" << KNORM << std::endl;
+  inline void print_test_success(bool success=true) {
+      std::cout << std::flush<< KLGREEN << "Test result: "<<(success?"SUCCESS":"FAILURE") << KNORM << std::endl;
   }
 #endif
 
