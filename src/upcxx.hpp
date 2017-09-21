@@ -1,8 +1,9 @@
 #ifndef _a6becf70_cd32_4da7_82e9_379ce395b781
 #define _a6becf70_cd32_4da7_82e9_379ce395b781
 
-#define UPCXX_VERSION 1
-#define UPCXX_VERSION_DATE 20170930
+// UPCXX_VERSION release identifier format:
+// YYYYMMPP = [YEAR][MONTH][PATCH]
+#define UPCXX_VERSION 20170900
 
 #include <upcxx/allocate.hpp>
 #include <upcxx/backend.hpp>
