@@ -212,7 +212,6 @@ def upcxx_backend(cxt):
   """
   upcxx_be = {
     'upcxx-backend': {
-      'primary': True,
       'ppflags': ['-D%s=%s'%('UPCXX_BACKEND', upcxx_backend_id())],
       'libflags': [],
       'deplibs': ['gasnet','pthread']
@@ -563,7 +562,7 @@ class executable(Crawler):
 
 @rule_memoized(cli='lib', path_arg=0)
 class library(Crawler):
-  unique_id = 3
+  unique_id = 6
   
   @traced
   def get_include_vdirs_and_tree(me, cxt, main_src):
@@ -620,7 +619,6 @@ class library(Crawler):
     yield libset_merge(
       libset_as_secondary(libset),
       {libname: {
-        'primary': True,
         'incdirs': [inc_vdirs_tree],
         'incfiles': incs,
         'libfiles': [libpath],
@@ -959,7 +957,6 @@ class gasnet:
     
     yield {
       'gasnet': {
-        'primary': True,
         'incdirs': incdirs,
         'incfiles': incfiles,
         'ld': GASNET_LD,
@@ -1030,14 +1027,15 @@ def libset_merge_inplace(dst, src):
     try: del sv1['primary']
     except KeyError: pass
     
-    dv1 = dict(dst.get(k,sv))
+    dv = dst.get(k,sv)
+    dv1 = dict(dv)
     try: del dv1['primary']
     except KeyError: pass
     
     if sv1 != dv1:
       raise Exception("Multiple '%s' libraries with differing configurations." % k)
     
-    dv1['primary'] = dv1.get('primary', True) or sv1.get('primary', True)
+    dv1['primary'] = dv.get('primary',True) or sv.get('primary',True)
     dst[k] = dv1
 
 def libset_merge(*libsets):
@@ -1055,7 +1053,7 @@ def libset_as_secondary(libset):
   """
   ans = {}
   for k,v in libset.items():
-    if not v['primary']:
+    if not v.get('primary',True):
       ans[k] = v
     else:
       ans[k] = dict(v)
