@@ -30,7 +30,10 @@ run_test() {
 		rm .run-tests.err
 }
 
-echo "Running tests..."
+# Run on all available cores by default - this works on Mac and Linux
+export GASNET_PSHM_NODES=${RANKS:=`getconf _NPROCESSORS_ONLN`}
+
+echo "Running tests on $RANKS ranks..."
 
 run_test "atomics.cpp"
 run_test "collectives.cpp"
