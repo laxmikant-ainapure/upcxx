@@ -1,8 +1,8 @@
-int accumulate(int my_hits) {
+int reduce_to_rank0(int my_hits) {
     // initialize this rank's part of the distributed object with the local value
     upcxx::dist_object<int> all_hits(my_hits);
     int hits = 0;
-    // rank 0 accumulates all the values asynchronously
+    // rank 0 gets all the values asynchronously
     if (upcxx::rank_me() == 0) {
         upcxx::future<int> f = upcxx::make_future(my_hits);
         for (int i = 1; i < upcxx::rank_n(); i++) {

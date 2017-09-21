@@ -16,27 +16,27 @@ using namespace std;
 #include "fetch.hpp"
 
 namespace rpc {
-    #include "rpc-accumulate.hpp"
+    #include "rpc-reduce_to_rank0.hpp"
 }
 
 namespace global_ptrs {
-    #include "global-ptrs-accumulate.hpp"
+    #include "global-ptrs-reduce_to_rank0.hpp"
 }
 
 namespace distobj {
-    #include "distobj-accumulate.hpp"
+    #include "distobj-reduce_to_rank0.hpp"
 }
 
 namespace async_distobj {
-    #include "async-distobj-accumulate.hpp"
+    #include "async-distobj-reduce_to_rank0.hpp"
 }
 
 namespace atomics {
-    #include "atomics-accumulate.hpp"
+    #include "atomics-reduce_to_rank0.hpp"
 }
 
 namespace quiesence {
-    #include "quiesence-accumulate.hpp"
+    #include "quiesence-reduce_to_rank0.hpp"
 }
 
 int hit()
@@ -50,7 +50,7 @@ int hit()
 // the prev is passed into the macro to check that the results between the two
 // versions are identical
 #define ACCM(version, prev)                                             \
-    int hits_##version = version::accumulate(my_hits);                  \
+    int hits_##version = version::reduce_to_rank0(my_hits);             \
     if (!upcxx::rank_me()) {                                            \
         cout << #version << ": pi estimate: " << 4.0 * hits_##version / trials \
              << ", rank 0 alone: " << 4.0 * my_hits / my_trials << endl; \

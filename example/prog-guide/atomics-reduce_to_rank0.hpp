@@ -1,4 +1,4 @@
-int accumulate(int my_hits)
+int reduce_to_rank0(int my_hits)
 {
     // a global pointer to the atomic counter in rank 0's shared segment
     upcxx::global_ptr<int32_t> hits_ptr = 

@@ -1,4 +1,4 @@
-int accumulate(int my_hits)
+int reduce_to_rank0(int my_hits)
 {
     // Rank 0 creates an array the size of the number of ranks to store all 
     // the global pointers
@@ -14,7 +14,7 @@ int accumulate(int my_hits)
     // every rank now puts its own hits value into the correct part of the array
     upcxx::rput(my_hits, my_hits_ptr).wait();
     upcxx::barrier();
-    // Now rank 0 accumulates all the values stored in the array
+    // Now rank 0 gets all the values stored in the array
     int hits = 0;
     if (upcxx::rank_me() == 0) {
         // get a local pointer to the shared object on rank 0

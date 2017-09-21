@@ -1,6 +1,6 @@
 // need to declare a global variable to use with RPC
 int hits = 0; 
-int accumulate(int my_hits)
+int reduce_to_rank0(int my_hits)
 {
     // wait for an rpc that updates rank 0's count
     upcxx::rpc(0, [](int my_hits) { hits += my_hits; }, my_hits).wait();

@@ -15,8 +15,8 @@ CXX := $(CXX) -std=c++11
 
 all: hello-world compute-pi compute-pi-multi-examples
 
-CP_HDRS=async-distobj-accumulate.hpp distobj-accumulate.hpp global-ptrs-accumulate.hpp \
-	rpc-accumulate.hpp atomics-accumulate.hpp fetch.hpp quiesence-accumulate.hpp
+CP_HDRS=async-distobj-reduce_to_rank0.hpp distobj-reduce_to_rank0.hpp global-ptrs-reduce_to_rank0.hpp \
+	rpc-reduce_to_rank0.hpp atomics-reduce_to_rank0.hpp fetch.hpp quiesence-reduce_to_rank0.hpp
 
 compute-pi-multi-examples: compute-pi-multi-examples.cpp $(CP_HDRS)
 	$(CXX) $< $(PPFLAGS) $(LDFLAGS) $(LIBFLAGS) -o $@ 
