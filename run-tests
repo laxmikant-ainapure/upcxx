@@ -5,6 +5,12 @@ export GASNET_BACKTRACE=1
 . sourceme
 rm -rf .nobs
 
+. utils/system-checks.sh
+sys_info
+
+echo "Checking platform..."
+platform_sanity_checks
+
 cd test
 
 echo "Setting up upcxx..."
