@@ -230,7 +230,7 @@ def cg_optlev_default(cxt):
   """
   return env('OPTLEV', 2)
 
-@rule(path_arg='src')
+@rule(cli='cg_optlev', path_arg='src')
 def cg_optlev(cxt, src):
   """
   File-specific code-gen optimization level, defaults to `cg_optlev_default`.
@@ -244,7 +244,7 @@ def cg_dbgsym(cxt):
   """
   return env('DBGSYM', 0)
 
-@rule(path_arg='src')
+@rule(cli='comp_lang_pp_cg', path_arg='src')
 @coroutine
 def comp_lang_pp_cg(cxt, src):
   """
@@ -1320,7 +1320,7 @@ LIBFLAGS="''' + ' '.join(libset_libflags(installed_libset)) + '''"
 ) + '''
 [ "$1" != "" ] && eval echo '$'"$1"
 ''')
-    os.chmod(metafile, 0777)
+    os.chmod(metafile, 0755)
     
   except Exception as e:
     for f in undo:

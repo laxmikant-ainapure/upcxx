@@ -1,18 +1,118 @@
 #!/bin/bash
 
-if [ "$#" -ne 1 ]; then
-  echo 'Usage: install <directory-path>' >&2
+function usage_and_die {
+  echo 'Usage: install [--single] <directory-path>' >&2
   exit 1
+}
+
+function failure_and_die {
+  echo "UPC++ Installation failed. Please report the entire log above to: upcxx@googlegroups.com"
+  exit 1
+}
+
+if [ "$#" -eq 1 ]; then
+  single=0
+  install_to="$1"
+elif [ "$#" -eq 2 ]; then
+  if [ "$1" -ne "--single" ]; then
+    usage_and_die
+  fi
+  single=1
+  install_to="$2"
+else
+  usage_and_die
 fi
 
 . sourceme
-INSTALL_DIR=$(absify "$1")
+install_to=$(absify "$install_to")
 
 . utils/system-checks.sh
 sys_info
 platform_sanity_checks
 
-nobs install src/upcxx.cpp $INSTALL_DIR || \
-  ( echo "UPC++ Installation failed. Please report the entire log above to: upcxx@googlegroups.com" ; exit 1; )
+if [ "$single" -eq 1 ]; then
+  nobs install src/upcxx.cpp "$install_to" \
+    || failure_and_die
+else
+  rm -rf .nobs
+  
+  function foreach_codemode {
+    export DBGSYM=1 OPTLEV=0
+    export upcxx_codemode='debug'
+    export gasnet_codemode='debug'
+    foreach_backend
+    
+    if false; then
+      # Attempting O2 is pointless since gasnet forces everyone to O3
+      # through the CXXFLAGS it exports in makefile fragments.
+      export DBGSYM=0 OPTLEV=2
+      export upcxx_codemode='O2'
+      export gasnet_codemode='opt'
+      foreach_backend
+    fi
+    
+    export DBGSYM=0 OPTLEV=3
+    export upcxx_codemode='O3'
+    export gasnet_codemode='opt'
+    foreach_backend
+  }
+  
+  function foreach_backend {
+    export UPCXX_BACKEND=gasnet1_seq
+    nobs_install
+    
+    export UPCXX_BACKEND=gasnetex_par
+    nobs_install
+  }
+  
+  function nobs_install {
+    export GASNET_INSTALL_TO="${install_to}/gasnet.${gasnet_codemode}"
+    nobs install src/upcxx.cpp "${install_to}/upcxx.${upcxx_codemode}.${UPCXX_BACKEND}" \
+      || failure_and_die
+  }
+  
+  foreach_codemode
+  
+  mkdir -p "${install_to}/bin"
+  cat <<EOF >"${install_to}/bin/upcxx-meta"
+#!/bin/bash
+
+case \${UPCXX_CODEMODE} in
+"")
+  UPCXX_CODEMODE=O3
+  ;;
+debug|O3)
+  ;;
+*)
+  echo "UPCXX_CODEMODE must be set to one of: O3 (default), debug";
+  exit 1
+  ;;
+esac
+
+case \${UPCXX_THREADMODE} in
+"")
+  UPCXX_THREADMODE=seq
+  ;;
+seq|par)
+  ;;
+*)
+  echo "UPCXX_THREADMODE must be set to one of: seq (default), par"
+  exit 1
+  ;;
+esac
+
+case \${UPCXX_THREADMODE} in
+seq)
+  UPCXX_BACKEND=gasnet1_seq
+  ;;
+par)
+  UPCXX_BACKEND=gasnetex_par
+  ;;
+esac
+
+${install_to}/upcxx.\${UPCXX_CODEMODE}.\${UPCXX_BACKEND}/bin/upcxx-meta \$*
+EOF
+  chmod 755 "${install_to}/bin/upcxx-meta"
+fi
 
 echo "UPC++ successfully installed"
