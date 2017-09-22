@@ -7,11 +7,10 @@ ifeq ($(wildcard $(UPCXX_INSTALL)/bin/upcxx-meta),)
 $(error Please set UPCXX_INSTALL=/path/to/upcxx/install)
 endif
 
+CXX=$(shell $(UPCXX_INSTALL)/bin/upcxx-meta CXX) -std=c++11
 PPFLAGS=$(shell $(UPCXX_INSTALL)/bin/upcxx-meta PPFLAGS)
 LDFLAGS=$(shell $(UPCXX_INSTALL)/bin/upcxx-meta LDFLAGS)
 LIBFLAGS=$(shell $(UPCXX_INSTALL)/bin/upcxx-meta LIBFLAGS)
-
-CXX := $(CXX) -std=c++11
 
 all: hello-world compute-pi compute-pi-multi-examples
 
