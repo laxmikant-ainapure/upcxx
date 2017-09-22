@@ -26,7 +26,7 @@ crawlable_dirs = [
 Library sets are encoded as a dictionary of strings to dictionaries
 conforming to:
   {libname:str: {
-      'primary':bool
+      'primary':bool # defaults to True if absent
       'ld':[str],
       'incdirs':[str], # "-I" directories
       'incfiles':[str] # paths to files residing in "-I" directories.
@@ -366,6 +366,28 @@ def gasnet_syncmode(cxt):
       'gasnetex_par': 'par'
     }[upcxx_backend_id()]
 
+@rule(cli='gasnet_syncmode')
+def gasnet_debug(cxt):
+  """
+  Whether to build GASNet in debug mode.
+  """
+  return cxt.cg_dbgsym()
+
+@rule(cli='gasnet_install_to')
+def gasnet_install_to(cxt):
+  """
+  User-requested install location for gasnet.
+  """
+  path_fmt = env('GASNET_INSTALL_TO', None)
+  
+  if path_fmt is None:
+    return None
+  else:
+    path = path_fmt.format(debug=(1 if cxt.gasnet_debug() else 0))
+    path = os.path.expanduser(path)
+    path = os.path.abspath(path)
+    return path
+
 @rule(cli='include_vdirs', path_arg='src')
 def include_vdirs(cxt, src):
   return {'upcxx': here('src')}
@@ -378,6 +400,8 @@ class include_vdirs_tree:
   compiler flags, allows our headers to be accessed via:
     #include <upcxx/*.hpp>
   """
+  version_bump = 0
+  
   @traced
   def get_include_vdirs(me, cxt, src):
     return cxt.include_vdirs(src)
@@ -392,6 +416,8 @@ class includes:
   Ask compiler for all the non-system headers pulled in by preprocessing
   the given source file. Returns the list of paths to included files.
   """
+  version_bump = 0
+  
   @traced
   @coroutine
   def get_stuff(me, cxt, src):
@@ -426,6 +452,8 @@ class compile:
   """
   Compile the given source file. Returns path to object file.
   """
+  version_bump = 0
+  
   @traced
   @coroutine
   def get_src_compiler(me, cxt, src):
@@ -531,8 +559,7 @@ class executable(Crawler):
   compiled object files and link them along with their library
   dependencies to proudce an executable. Path to executable returned.
   """
-  
-  unique_id = 1
+  version_bump = 1
   
   @traced
   def cxx(me, cxt, main_src):
@@ -562,7 +589,7 @@ class executable(Crawler):
 
 @rule_memoized(cli='lib', path_arg=0)
 class library(Crawler):
-  unique_id = 6
+  version_bump = 6
   
   @traced
   def get_include_vdirs_and_tree(me, cxt, main_src):
@@ -636,7 +663,14 @@ def install(cxt, main_src, install_path):
   assert len(name) == 1
   name = name[0]
   
-  install_libset(install_path, name, libset)
+  cc = yield cxt.cc()
+  cxx = yield cxt.cxx()
+  
+  install_libset(install_path, name, libset, meta_extra={
+    'CC': ' '.join(cc),
+    'CXX': ' '.join(cxx)
+  })
+  
   yield None
 
 @rule_memoized()
@@ -644,6 +678,8 @@ class gasnet_source:
   """
   Download and extract gasnet source tree.
   """
+  version_bump = 0
+  
   @traced
   def get_gasnet_user(me, cxt):
     return cxt.gasnet_user()
@@ -695,6 +731,7 @@ class gasnet_config:
   in which gasnet's other/contrib/cross-configure-{xxx} script runs
   configure.
   """
+  version_bump = 0
   
   @traced
   @coroutine
@@ -797,6 +834,8 @@ class gasnet_configured:
   """
   Returns a configured gasnet build directory.
   """
+  version_bump = 2
+  
   @traced
   def get_gasnet_user(me, cxt):
     return cxt.gasnet_user()
@@ -815,9 +854,10 @@ class gasnet_configured:
     config = yield cxt.gasnet_config()
     source_dir = yield cxt.gasnet_source()
     
+    debug = cxt.gasnet_debug()
     user_args = shplit(env('GASNET_CONFIGURE_ARGS',''))
     
-    yield (cc, cxx, cxt.cg_optlev_default(), cxt.cg_dbgsym(), config, source_dir, user_args)
+    yield (cc, cxx, debug, config, source_dir, user_args)
   
   @coroutine
   def execute(me):
@@ -826,7 +866,7 @@ class gasnet_configured:
     if kind == 'build':
       build_dir = value
     else:
-      cc, cxx, optlev, debug, config, source_dir, user_args = yield me.get_config()
+      cc, cxx, debug, config, source_dir, user_args = yield me.get_config()
       config_args, config_env = config
       
       build_dir = me.mkpath(key=None)
@@ -836,9 +876,9 @@ class gasnet_configured:
       env1.update(config_env)
       
       if 'CC' not in env1:
-        env1['CC'] = ' '.join(cc + ['-O%d'%optlev])
+        env1['CC'] = ' '.join(cc)
       if 'CXX' not in env1:
-        env1['CXX'] = ' '.join(cxx + ['-O%d'%optlev])
+        env1['CXX'] = ' '.join(cxx)
       
       misc_conf_opts = [
         # disable non-EX conduits to prevent configure failures when that hardware is detected
@@ -860,21 +900,25 @@ class gasnet_configured:
     
     yield build_dir
 
-@rule_memoized(cli='gasnet')
-class gasnet:
+@rule_memoized(cli='gasnet_built')
+class gasnet_built:
   """
-  Build gasnet. Return library dependencies dictionary.
+  Build gasnet (if necessary). Return tuple (installed, built_dir) where
+  `installed` is a boolean indicating whether `built_dir` points to a
+  gasnet install tree or build tree.
   """
-  unique_id = 3
+  version_bump = 0
   
   @traced
   def get_config(me, cxt):
     kind, value = cxt.gasnet_user()
+    install_to = cxt.gasnet_install_to()
     return futurize(
-      cxt.gasnet_conduit(),
-      cxt.gasnet_syncmode(),
       kind,
-      value if kind == 'install' else cxt.gasnet_configured()
+      value if kind == 'install' else cxt.gasnet_configured(),
+      install_to,
+      None if install_to else cxt.gasnet_conduit(),
+      None if install_to else cxt.gasnet_syncmode()
     )
   
   @traced
@@ -883,20 +927,68 @@ class gasnet:
   
   @coroutine
   def execute(me):
-    conduit, syncmode, kind, build_or_install_dir \
+    kind, build_or_install_dir, install_to, conduit, syncmode \
       = yield me.get_config()
     
-    if kind != 'install':
+    if kind == 'install':
+      installed = True
+      built_dir = build_or_install_dir
+    else:
+      # We weren't given an installed gasnet, so we're looking at a
+      # configured build dir.
       build_dir = build_or_install_dir
-      print>>sys.stderr, 'Building GASNet (conduit=%s, threading=%s)...'%(conduit, syncmode)
-      yield subexec.launch(
-        ['make', syncmode],
-        cwd = os.path.join(build_dir, '%s-conduit'%conduit)
-      )
+      
+      if install_to is None:
+        # We haven't been told to install gasnet to a specific location,
+        # so we can build just what we need (conduit,threading)
+        print>>sys.stderr, 'Building GASNet (conduit=%s, threading=%s)...'%(conduit, syncmode)
+        yield subexec.launch(
+          ['make', syncmode],
+          cwd = os.path.join(build_dir, '%s-conduit'%conduit)
+        )
+        installed = False
+        built_dir = build_or_install_dir
+      else:
+        # User wants us to install gasnet
+        print>>sys.stderr, 'Building GASNet...'
+        yield subexec.launch(['make'], cwd=build_dir)
+        
+        print>>sys.stderr, 'Installing GASNet...'
+        yield subexec.launch(
+          ['make', 'install', 'prefix='+install_to],
+          cwd=build_dir
+        )
+        installed = True
+        built_dir = install_to
+    
+    yield (installed, built_dir)
+
+@rule_memoized(cli='gasnet')
+class gasnet:
+  """
+  Builds/installs gasnet as necessary. Returns library dependencies dictionary.
+  """
+  version_bump = 10
+  
+  @traced
+  @coroutine
+  def get_config(me, cxt):
+    installed, built_dir = yield cxt.gasnet_built()
+    cxx = yield cxt.cxx()
+    yield (
+      installed, built_dir,
+      cxt.gasnet_conduit(),
+      cxt.gasnet_syncmode(),
+      cxx
+    )
+  
+  @coroutine
+  def execute(me):
+    installed, built_dir, conduit, syncmode, cxx = yield me.get_config()
     
     makefile = os.path.join(*(
-      [build_or_install_dir] +
-      (['include'] if kind == 'install' else []) +
+      [built_dir] +
+      (['include'] if installed else []) +
       ['%s-conduit'%conduit, '%s-%s.mak'%(conduit, syncmode)]
     ))
     
@@ -907,10 +999,9 @@ class gasnet:
     GASNET_LIBS = shplit(makefile_extract(makefile, 'GASNET_LIBS'))
     
     # workaround for GASNet not giving us a C++ capable linker.
-    cxx = yield me.cxx()
     GASNET_LD = cxx + GASNET_LD[1:]
     
-    if kind == 'install':
+    if installed:
       # use gasnet install in-place
       incdirs = []
       incfiles = []
@@ -921,7 +1012,7 @@ class gasnet:
       GASNET_CXXCPPFLAGS = [x for x in GASNET_CXXCPPFLAGS if x not in incdirs]
       incdirs = [x[2:] for x in incdirs] # drop "-I" prefix
       
-      makefile = os.path.join(build_dir, 'Makefile')
+      makefile = os.path.join(built_dir, 'Makefile')
       source_dir = makefile_extract(makefile, 'TOP_SRCDIR')
       incfiles = shplit(makefile_extract(makefile, 'include_HEADERS'))
       incfiles = [os.path.join(source_dir, i) for i in incfiles]
@@ -932,7 +1023,7 @@ class gasnet:
       libnames = [x[2:] for x in GASNET_LIBS if x.startswith('-l')]
       
       # filter libdirs for those made by gasnet
-      libdirs = [x for x in libdirs if path_within_dir(x, build_or_install_dir)]
+      libdirs = [x for x in libdirs if path_within_dir(x, built_dir)]
       
       # find libraries in libdirs
       libfiles = []
@@ -957,6 +1048,10 @@ class gasnet:
     
     yield {
       'gasnet': {
+        'meta': {
+          'GASNET_CONDUIT': conduit,
+          'GASNET_INSTALL' if installed else 'GASNET_BUILD': built_dir
+        },
         'incdirs': incdirs,
         'incfiles': incfiles,
         'ld': GASNET_LD,
@@ -1109,15 +1204,17 @@ def libset_libflags(libset):
       
       if x not in visited:
         visited.add(x)
-
-        libfiles = rec.get('libfiles', [])
+        
+        libfiles = rec.get('libfiles', None)
+        libflags = rec.get('libflags', ['-l'+x] if libfiles is None else [])
+        libfiles = libfiles or []
         
         sorted_lpaths.append(
           ['-L' + os.path.dirname(f) for f in libfiles]
         )
         sorted_flags.append(
           ['-l' + os.path.basename(f)[3:-2] for f in libfiles] +
-          rec.get('libflags', ['-l'+x])
+          libflags
         )
   
   def uniquify(xs):
@@ -1138,7 +1235,7 @@ def libset_libflags(libset):
   
   return sorted_lpaths + sorted_flags
 
-def install_libset(install_path, name, libset):
+def install_libset(install_path, name, libset, meta_extra={}):
   """
   Install a library set to the given path. Produces headers and binaries
   in the typical "install_path/{bin,include,lib}" structure. Also
@@ -1201,19 +1298,29 @@ def install_libset(install_path, name, libset):
       os_extra.ensure_dirs(dest)
       link_or_copy(f, dest, overwrite=False)
     
+    # build dict of library provided meta-assignments
+    metas = dict(meta_extra)
+    for rec in installed_libset.values():
+      for x,y in rec.get('meta',{}).items():
+        assert y == metas.get(x,y) # libraries provided conflicting values for same meta-varaible
+        metas[x] = y
+    
     # produce metadata script
-    meta = join(install_path, 'bin', name+'-meta')
-    undo.append(meta)
-    os_extra.ensure_dirs(meta)
-    with open(meta, 'w') as fo:
+    metafile = join(install_path, 'bin', name+'-meta')
+    undo.append(metafile)
+    os_extra.ensure_dirs(metafile)
+    with open(metafile, 'w') as fo:
       fo.write(
 '''#!/bin/sh
 PPFLAGS="''' + ' '.join(libset_ppflags(installed_libset)) + '''"
 LDFLAGS="''' + ' '.join(libset_ldflags(installed_libset)) + '''"
 LIBFLAGS="''' + ' '.join(libset_libflags(installed_libset)) + '''"
+''' + '\n'.join(
+  ["%s='%s'"%(k,v) for k,v in sorted(metas.items()) if v is not None]
+) + '''
 [ "$1" != "" ] && eval echo '$'"$1"
 ''')
-    os.chmod(meta, 0777)
+    os.chmod(metafile, 0777)
     
   except Exception as e:
     for f in undo:
