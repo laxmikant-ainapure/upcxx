@@ -35,6 +35,10 @@ The current release is known to work on the following configurations:
 * Cray XC with PrgEnv-gnu and gcc/5.2.0 (or later) environment modules loaded
  [smp and aries conduits]
 
+## Installation
+
+For instructions on installing UPC++ and compiling programs, look at [INSTALL.md](INSTALL.md).
+
 ## ChangeLog
 
 ### 2017.09.01: Release v1.0-pre
