@@ -1,3 +1,4 @@
+
 To install, from the main directory run:
 
 ```bash
@@ -13,13 +14,15 @@ export CROSS=cray-aries-slurm
 export GASNET_CONDUIT=aries
 module switch PrgEnv-intel PrgEnv-gnu
 ```
-On a Mac, make sure you install the full xcode tools with the following command line:
+On a Mac, make sure you install the Xcode Command Line Tools with the following command line:
 
 ```bash
 xcode-select --install
 ```
 
-If there are any issues with the installation, it can be cleaned by running `rm -r .nobs`.
+If you have set up any other non-clang compilers in your path, be sure
+to adjust your path so that g++ and gcc resolve to /usr/bin.
+If there are any issues with the installation, you can clean it by running `rm -r .nobs`.
 
 To compile, use the `${UPCXX_INSTALL}/bin/upcxx-meta` helper script, where `UPCXX_INSTALL` is the
 installation directory. For example, to build the hello world code given previously, execute:
@@ -51,3 +54,4 @@ For an example of a Makefile for building UPC++ applications, look at
 `example/prog-guide/Makefile`. This directory also has code for running all the examples given in
 the guide. To use that `Makefile`, first set the `UPCXX_INSTALL` shell variable to the install
 path.
+
