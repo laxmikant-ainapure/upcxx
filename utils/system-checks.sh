@@ -15,7 +15,10 @@ sys_info() {
         echo Current directory: `pwd 2>&1`
         echo Install directory: $INSTALL_DIR
         SETTINGS=
-        for var in CC CXX GASNET GASNET_CONFIGURE_ARGS CROSS OPTLEV DBGSYM ; do
+        for var in CC CXX GASNET GASNET_CONFIGURE_ARGS CROSS OPTLEV DBGSYM \
+	           UPCXX_BACKEND GASNET_INSTALL_TO \
+		   UPCXX_CODEMODE UPCXX_THREADMODE \
+		   ; do
             if test "${!var:+set}" = set; then
                 SETTINGS="$SETTINGS $var='${!var}'"
             fi
