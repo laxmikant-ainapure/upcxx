@@ -6,7 +6,7 @@ function usage_and_die {
 }
 
 function failure_and_die {
-  echo "UPC++ Installation failed. Please report the entire log above to: upcxx@googlegroups.com"
+  echo "UPC++ Installation failed. Please report the entire log above to: upcxx@googlegroups.com" >&2
   exit 1
 }
 
@@ -14,7 +14,7 @@ if [ "$#" -eq 1 ]; then
   single=0
   install_to="$1"
 elif [ "$#" -eq 2 ]; then
-  if [ "$1" -ne "--single" ]; then
+  if [ "$1" != "--single" ]; then
     usage_and_die
   fi
   single=1
@@ -59,19 +59,28 @@ else
   
   function foreach_backend {
     export UPCXX_BACKEND=gasnet1_seq
-    nobs_install
+    foreach_conduit
     
     export UPCXX_BACKEND=gasnetex_par
-    nobs_install
+    foreach_conduit
   }
   
-  function nobs_install {
-    export GASNET_INSTALL_TO="${install_to}/gasnet.${gasnet_codemode}"
-    nobs install src/upcxx.cpp "${install_to}/upcxx.${upcxx_codemode}.${UPCXX_BACKEND}" \
-      || failure_and_die
+  function foreach_conduit {
+    for conduit in $(nobs gasnet_configured_conduits); do
+      export GASNET_INSTALL_TO="${install_to}/gasnet.${gasnet_codemode}"
+      export GASNET_CONDUIT=${conduit}
+      nobs install src/upcxx.cpp "${install_to}/upcxx.${upcxx_codemode}.${UPCXX_BACKEND}.${conduit}" \
+        || failure_and_die
+    done
   }
   
   foreach_codemode
+  
+  conduits=$(nobs gasnet_configured_conduits)
+  conduits_pipes="${conduits//$'\n'/|}"
+  conduits_commas="${conduits//$'\n'/, }"
+  
+  conduit_default=$(GASNET_CONDUIT='' nobs gasnet_conduit)
   
   mkdir -p "${install_to}/bin"
   cat <<EOF >"${install_to}/bin/upcxx-meta"
@@ -84,7 +93,7 @@ case \${UPCXX_CODEMODE} in
 debug|O3)
   ;;
 *)
-  echo "UPCXX_CODEMODE must be set to one of: O3 (default), debug";
+  echo "UPCXX_CODEMODE must be set to one of: O3 (default), debug" >&2
   exit 1
   ;;
 esac
@@ -96,7 +105,19 @@ case \${UPCXX_THREADMODE} in
 seq|par)
   ;;
 *)
-  echo "UPCXX_THREADMODE must be set to one of: seq (default), par"
+  echo "UPCXX_THREADMODE must be set to one of: seq (default), par" >&2
+  exit 1
+  ;;
+esac
+
+case "\${UPCXX_GASNET_CONDUIT}" in
+'')
+  UPCXX_GASNET_CONDUIT="${conduit_default}"
+  ;;
+${conduits_pipes})
+  ;;
+*)
+  echo "UPCXX_GASNET_CONDUIT must be one of: ${conduits_commas}" >&2
   exit 1
   ;;
 esac
@@ -110,7 +131,7 @@ par)
   ;;
 esac
 
-${install_to}/upcxx.\${UPCXX_CODEMODE}.\${UPCXX_BACKEND}/bin/upcxx-meta \$*
+${install_to}/upcxx.\${UPCXX_CODEMODE}.\${UPCXX_BACKEND}.\${UPCXX_GASNET_CONDUIT}/bin/upcxx-meta \$*
 EOF
   chmod 755 "${install_to}/bin/upcxx-meta"
 fi

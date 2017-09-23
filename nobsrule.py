@@ -354,7 +354,7 @@ def gasnet_conduit(cxt):
   else:
     default = 'smp'
   
-  return env('GASNET_CONDUIT', default)
+  return env('GASNET_CONDUIT', None) or default
 
 @rule(cli='gasnet_syncmode')
 def gasnet_syncmode(cxt):
@@ -900,6 +900,45 @@ class gasnet_configured:
     
     yield build_dir
 
+@rule_memoized(cli='gasnet_configured_conduits')
+class gasnet_configured_conduits:
+  """
+  Get the list of detected conduits from a configured gasnet.
+  """
+  version_bump = 4
+  
+  @traced
+  def get_config(me, cxt):
+    kind, value = cxt.gasnet_user()
+    return futurize(
+      kind,
+      value if kind == 'install' else cxt.gasnet_configured()
+    )
+  
+  @coroutine
+  def execute(me):
+    kind, dir_path = yield me.get_config()
+    
+    header = os.path.join(*(
+      [dir_path] +
+      (['include'] if kind == 'install' else []) +
+      ['gasnet_config.h']
+    ))
+    
+    import re
+    conduits = None
+    with open(header,'r') as f:
+      for line in f:
+        m = re.match('[ \t]*#define +GASNETI_CONDUITS +"([^"]*)"', line)
+        if m is not None:
+          conduits = m.group(1).split()
+          break
+        elif 'GASNETI_CONDUITS' in line:
+          print>>sys.stderr, repr(line)
+    
+    assert conduits is not None
+    yield conduits
+    
 @rule_memoized(cli='gasnet_built')
 class gasnet_built:
   """
