@@ -8,8 +8,8 @@ $(error Please set UPCXX_INSTALL=/path/to/upcxx/install)
 endif
 
 CXX=$(shell $(UPCXX_INSTALL)/bin/upcxx-meta CXX) -std=c++11
-PPFLAGS=$(shell $(UPCXX_INSTALL)/bin/upcxx-meta PPFLAGS)
-LDFLAGS=$(shell $(UPCXX_INSTALL)/bin/upcxx-meta LDFLAGS)
+PPFLAGS=$(shell $(UPCXX_INSTALL)/bin/upcxx-meta PPFLAGS) -Wno-inline
+LDFLAGS=$(shell $(UPCXX_INSTALL)/bin/upcxx-meta LDFLAGS) -Wno-inline
 LIBFLAGS=$(shell $(UPCXX_INSTALL)/bin/upcxx-meta LIBFLAGS)
 
 all: hello-world compute-pi compute-pi-multi-examples
