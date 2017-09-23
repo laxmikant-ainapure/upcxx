@@ -5,6 +5,8 @@
 #include <upcxx/future.hpp>
 #include <upcxx/lpc_inbox.hpp>
 
+#include <type_traits>
+
 namespace upcxx {
   class persona;
   class persona_scope;
@@ -19,10 +21,15 @@ namespace upcxx {
       return (void*)&tl_default_persona;
     }
     
-    // Enqueue a lambda onto persona's progress level queue. Note this
+    // Enqueue a lambda onto persona's progress level queue. Note: this
     // lambda may execute in the calling context if permitted.
-    template<bool known_active, typename Fn>
-    void persona_during(persona&, progress_level level, Fn &&fn);
+    template<typename Fn, bool known_active>
+    void persona_during(persona&, progress_level level, Fn &&fn, std::integral_constant<bool,known_active> known_active1 = {});
+    
+    // Enqueue a lambda onto persona's progress level queue. Unlike
+    // `persona_during`, lambda will not execute in calling context.
+    template<typename Fn, bool known_active=false>
+    void persona_defer(persona&, progress_level level, Fn &&fn, std::integral_constant<bool,known_active> known_active1 = {});
     
     // Call `fn` on each `persona&` active with calling thread.
     template<typename Fn>
@@ -43,8 +50,11 @@ namespace upcxx {
   class persona {
     friend class persona_scope;
     
-    template<bool known_active, typename Fn>
-    friend void detail::persona_during(persona&, progress_level, Fn &&fn);
+    template<typename Fn, bool known_active>
+    friend void detail::persona_during(persona&, progress_level, Fn &&fn, std::integral_constant<bool,known_active>);
+    
+    template<typename Fn, bool known_active>
+    friend void detail::persona_defer(persona&, progress_level, Fn &&fn, std::integral_constant<bool,known_active>);
     
     template<typename Fn>
     friend void detail::persona_foreach_active(Fn&&);
@@ -247,8 +257,13 @@ namespace upcxx {
     return *detail::tl_top_persona->scope_;
   }
   
-  template<bool known_active, typename Fn>
-  void detail::persona_during(persona &p, progress_level level, Fn &&fn) {
+  template<typename Fn, bool known_active>
+  void detail::persona_during(
+      persona &p,
+      progress_level level,
+      Fn &&fn,
+      std::integral_constant<bool, known_active>
+    ) {
     if(known_active || p.active_with_caller()) {
       if(level == progress_level::internal || (
           (int)level <= tl_progressing && p.burstable_[(int)level]
@@ -265,6 +280,19 @@ namespace upcxx {
       else
         p.self_inbox_.send((int)level, std::forward<Fn>(fn));
     }
+    else
+      p.peer_inbox_.send((int)level, std::forward<Fn>(fn));
+  }
+
+  template<typename Fn, bool known_active>
+  void detail::persona_defer(
+      persona &p,
+      progress_level level,
+      Fn &&fn,
+      std::integral_constant<bool, known_active>
+    ) {
+    if(known_active || p.active_with_caller())
+      p.self_inbox_.send((int)level, std::forward<Fn>(fn));
     else
       p.peer_inbox_.send((int)level, std::forward<Fn>(fn));
   }

@@ -50,7 +50,7 @@ namespace backend {
   void rma_put(
     intrank_t rank_d,
     void *buf_d,
-    void *buf_s,
+    void const *buf_s,
     std::size_t buf_size,
     rma_put_cb *cb
   );
@@ -66,7 +66,7 @@ namespace backend {
   void rma_get(
     void *buf_d,
     intrank_t rank_s,
-    void *buf_s,
+    void const *buf_s,
     std::size_t buf_size,
     rma_get_cb *cb
   );

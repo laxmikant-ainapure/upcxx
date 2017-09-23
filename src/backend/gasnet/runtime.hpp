@@ -90,7 +90,10 @@ namespace backend {
     
     persona &p = UPCXX_GASNET1_SEQ ? backend::master : *detail::tl_top_persona;
     
-    detail::persona_during</*known_active=*/true>(p, progress_level::user, std::forward<Fn>(fn));
+    detail::persona_during(
+      p, progress_level::user, std::forward<Fn>(fn),
+      /*known_active=*/std::true_type{}
+    );
   }
 
   template<progress_level level, typename Fn>

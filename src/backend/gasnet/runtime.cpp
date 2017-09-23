@@ -215,14 +215,16 @@ void upcxx::deallocate(void *p) {
 void backend::rma_get(
     void *buf_d,
     intrank_t rank_s,
-    void *buf_s,
+    void const *buf_s,
     size_t buf_size,
     backend::rma_get_cb *cb
   ) {
   
   UPCXX_ASSERT(!UPCXX_GASNET1_SEQ || backend::master.active_with_caller());
   
-  gasnet_handle_t handle = gasnet_get_nb_bulk(buf_d, rank_s, buf_s, buf_size);
+  gasnet_handle_t handle = gasnet_get_nb_bulk(
+    buf_d, rank_s, const_cast<void*>(buf_s), buf_size
+  );
   cb->handle = reinterpret_cast<uintptr_t>(handle);
   
   #if UPCXX_GASNET1_SEQ
@@ -237,14 +239,16 @@ void backend::rma_get(
 void backend::rma_put(
     intrank_t rank_d,
     void *buf_d,
-    void *buf_s,
+    void const *buf_s,
     size_t buf_size,
     backend::rma_put_cb *cb
   ) {
   
   UPCXX_ASSERT(!UPCXX_GASNET1_SEQ || backend::master.active_with_caller());
   
-  gasnet_handle_t handle = gasnet_put_nb_bulk(rank_d, buf_d, buf_s, buf_size);
+  gasnet_handle_t handle = gasnet_put_nb_bulk(
+    rank_d, buf_d, const_cast<void*>(buf_s), buf_size
+  );
   cb->handle = reinterpret_cast<uintptr_t>(handle);
   
   #if UPCXX_GASNET1_SEQ
@@ -479,9 +483,7 @@ namespace {
     rpc_message *m = rpc_message::build_copy(buf, buf_size, buf_align);
     
     if(UPCXX_GASNETEX_PAR && !backend::master.active_with_caller()) {
-      // Won't execute immediately (which could possibly violate gasent restrictions)
-      // since master isn't active in thread.
-      detail::persona_during</*known_active=*/false>(
+      detail::persona_defer(
         backend::master,
         level_user ? progress_level::user : progress_level::internal,
         [=]() {

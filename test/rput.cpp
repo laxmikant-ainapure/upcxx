@@ -35,10 +35,10 @@ int main() {
   }
   
   future<> done_g, done_s;
-
+  
+  int value = 100+me;
   std::tie(done_g, done_s) = upcxx::rput(
-    /*value*/100 + me,
-    nebr_thing,
+    &value, nebr_thing, 1,
     operxn_cx_as_future |
     source_cx_as_future |
     remote_cx_as_rpc([=]() { got_rpc++; })

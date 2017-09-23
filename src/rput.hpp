@@ -195,8 +195,7 @@ namespace upcxx {
            typename O = future_cx<0>>
   typename detail::rput_futures_of<S,R,O>::return_type
   rput(
-      T const *buf_s, std::size_t n,
-      global_ptr<T> gp_d,
+      T const *buf_s, global_ptr<T> gp_d, std::size_t n,
       completions<S,R,O> cxs = completions<S,R,O>{}
     ) {
     
