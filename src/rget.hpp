@@ -159,7 +159,7 @@ namespace upcxx {
   }
   
   //////////////////////////////////////////////////////////////////////
-  // rget: WRONG API, these should be operxn_ptr, not virtual address (T*)
+  // rget
   
   template<typename T,
            typename R = nil_cx,

@@ -154,7 +154,7 @@ namespace upcxx {
   }
   
   //////////////////////////////////////////////////////////////////////
-  // rput: WRONG API, these should be global_ptr, not virtual address (T*)
+  // rput
   
   template<typename T,
            typename S = nil_cx,
