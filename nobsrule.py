@@ -1298,28 +1298,33 @@ def install_libset(install_path, name, libset, meta_extra={}):
       incfiles = rec.get('incfiles', [])
       libfiles = rec.get('libfiles', None)
       
-      incfiles1 = []
       libfiles_all.extend(libfiles or [])
-      
-      # copy includes
-      for incf in incfiles:
-        # copy for each non-upwards relative path
-        for incd in reversed(incdirs):
-          rel = os.path.relpath(incf, incd)
-          if not rel.startswith(updir):
-            # copy include file to relative path under "install_path/include"
-            src = join(incd, rel)
-            dest = join(install_path, 'include', rel)
-            
-            incfiles1.append(dest)
-            os_extra.ensure_dirs(dest)
-            undo.append(dest)
-            link_or_copy(src, dest, overwrite=False)
       
       # produce installed version of library record
       rec1 = dict(rec)
-      rec1['incdirs'] = [join(install_path, 'include')]
-      rec1['incfiles'] = incfiles1
+      
+      # HACK: copy headers for primary libraries, not otherwise.
+      # TODO: We should be tracking header-header dependencies, and
+      # then only copying  the set of headers as reachable from the
+      # set of primary libraries.
+      if rec.get('primary',True):
+        incfiles1 = []
+        for incf in incfiles:
+          # copy for each non-upwards relative path
+          for incd in reversed(incdirs):
+            rel = os.path.relpath(incf, incd)
+            if not rel.startswith(updir):
+              # copy include file to relative path under "install_path/include"
+              src = join(incd, rel)
+              dest = join(install_path, 'include', rel)
+              
+              incfiles1.append(dest)
+              os_extra.ensure_dirs(dest)
+              undo.append(dest)
+              link_or_copy(src, dest, overwrite=False)
+        rec1['incdirs'] = [join(install_path, 'include')]
+        rec1['incfiles'] = incfiles1
+        
       if libfiles is not None:
         rec1['libfiles'] = [join(install_path, 'lib', base_of(f)) for f in libfiles]
       
