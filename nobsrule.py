@@ -885,6 +885,8 @@ class gasnet_configured:
         '--disable-psm','--disable-mxm','--disable-portals4','--disable-ofi',
         # avoid a known issue with -Wnested-externs, until it gets a proper fix in EX
         '--disable-dev-warnings',
+        # disable the parsync mode which is not used by UPCXX
+        '--disable-parsync',
       ]
       
       print>>sys.stderr, 'Configuring GASNet...'
