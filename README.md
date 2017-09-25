@@ -22,18 +22,19 @@ requires a modern C++11/14 compiler and corresponding STL implementation.
 The current release is known to work on the following configurations:
 
 
-* Mac OS X 10.11, 10.12 and 10.13beta (El Capitan, Sierra and High Sierra,
+* Mac OS X 10.11, 10.12 and 10.13 (El Capitan, Sierra and High Sierra,
  respectively) with the most recent Xcode releases for each, though it is
- suspected that any Xcode release 8.0 or newer will work. 
- [smp and udp conduits]
+ suspected that any Xcode release 8.0 or newer will work.  
+ (smp and udp conduits)
 
-* Linux/x86-64 with gcc-5.1.0 or newer, or with clang-3.7.0 when using
- libstdc++ from gcc-5.1.0 (but see the note [to be provided] about use of
- non-system compilers). 
- [smp, udp and ibv conduits]
+* Linux/x86-64 with gcc-5.1.0 or newer, or with clang-3.7.0 or newer when
+ using libstdc++ from gcc-5.1.0.  If your system compilers do not meet these
+ requirements, please see the note in [docs/local-gcc.md](docs/local-gcc.md)
+ regarding use of non-system compilers.  
+ (smp, udp and ibv conduits)
 
-* Cray XC with PrgEnv-gnu and gcc/5.2.0 (or later) environment modules loaded
- [smp and aries conduits]
+* Cray XC with PrgEnv-gnu and gcc/5.2.0 (or later) environment modules loaded.  
+ (smp and aries conduits)
 
 ## Installation
 
