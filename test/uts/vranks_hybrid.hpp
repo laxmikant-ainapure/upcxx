@@ -42,7 +42,7 @@ namespace vranks {
   void spawn(Fn fn) {
     upcxx::init();
     
-    thread_per_rank = upcxx::os_env<int>("THREADS", 1);
+    thread_per_rank = upcxx::os_env<int>("THREADS", 4);
     thread_agents.resize(thread_per_rank);
     
     std::vector<std::thread*> threads{(unsigned)thread_per_rank};

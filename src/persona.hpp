@@ -147,7 +147,7 @@ namespace upcxx {
     template<typename Fn>
     auto lpc(Fn fn)
       -> typename detail::future_from_tuple_t<
-        detail::future_kind_shref<detail::future_header_ops_result>, // the default future kind
+        detail::future_kind_shref<detail::future_header_ops_general>, // the default future kind
         typename decltype(
           upcxx::apply_tupled_as_future(fn, std::tuple<>{})
         )::results_type
@@ -156,13 +156,14 @@ namespace upcxx {
       using results_type = typename decltype(
           upcxx::apply_tupled_as_future(fn, std::tuple<>{})
         )::results_type;
+      using results_promise = upcxx::tuple_types_into_t<results_type, promise>;
       
-      promise<results_type> *pro = new promise<results_type>;
+      results_promise *pro = new results_promise;
       auto ans = pro->get_future();
       
       this->lpc_ff(
-        lpc_recipient_execute<Fn, promise<results_type>>{
-          /*initiator*/&detail::tl_top_persona->peer_inbox_,
+        lpc_recipient_execute<Fn, results_promise>{
+          /*initiator*/detail::tl_top_persona,
           /*promise*/pro,
           /*fn*/std::move(fn)
         }
@@ -251,6 +252,10 @@ namespace upcxx {
   
   inline persona& current_persona() {
     return *detail::tl_top_persona;
+  }
+  
+  inline persona_scope& default_persona_scope() {
+    return detail::tl_default_persona_scope;
   }
   
   inline persona_scope& top_persona_scope() {

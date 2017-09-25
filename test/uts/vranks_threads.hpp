@@ -22,7 +22,7 @@ namespace vranks {
   }
   
   inline void progress() {
-    bool worked;
+    bool worked = false;
     upcxx::detail::persona_foreach_active([&](upcxx::persona &p) {
       worked |= 0 != upcxx::detail::persona_burst(p, upcxx::progress_level::user);
     });
@@ -39,7 +39,7 @@ namespace vranks {
   
   template<typename Fn>
   void spawn(Fn fn) {
-    int vrank_n = upcxx::os_env<int>("THREADS", 1);
+    int vrank_n = upcxx::os_env<int>("THREADS", 10);
     vranks.resize(vrank_n);
     
     std::vector<std::thread*> threads{(unsigned)vrank_n};
