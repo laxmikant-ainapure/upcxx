@@ -82,7 +82,7 @@ else
     conduits=$(GASNET_CONDUIT='' nobs gasnet_configured_conduits)
     if [ $? -ne 0 ]; then failure_and_die; fi
     
-    for conduit in $(conduits); do
+    for conduit in ${conduits}; do
       export GASNET_INSTALL_TO="${install_to}/gasnet.${gasnet_codemode}"
       export GASNET_CONDUIT=${conduit}
       nobs install src/upcxx.cpp "${install_to}/upcxx.${upcxx_codemode}.${UPCXX_BACKEND}.${conduit}" \

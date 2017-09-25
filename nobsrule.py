@@ -841,7 +841,7 @@ class gasnet_configured:
   """
   Returns a configured gasnet build directory.
   """
-  version_bump = 2
+  version_bump = 3
   
   @traced
   def get_gasnet_user(me, cxt):
@@ -1291,12 +1291,65 @@ def install_libset(install_path, name, libset, meta_extra={}):
   content to a pkgconfig script) for querying the various compiler and
   linker flags.
   """
+  import os
+  import shutil
+  
   base_of = os.path.basename
   join = os.path.join
   updir = '..' + os.path.sep
-  link_or_copy = os_extra.link_or_copy
   
-  undo = []
+  class InstallError(Exception):
+    pass
+  
+  rollback = []
+  commit = []
+  suffix = '.771b861d-97e2-49db-b3a2-6d99437726bf'
+  
+  def ensure_dirs_upto(path):
+    head, tail = os.path.split(path)
+    if head=='' or os.path.isdir(head):
+      return
+    if os.path.exists(head):
+      raise InstallError('Path "%s" is not a directory.'%head)
+    
+    ensure_dirs_upto(head)
+    
+    try:
+      os.mkdir(head)
+    except OSError as e:
+      raise InstallError('Failed to create directory "%s": %s'%(head,e.message))
+    
+    rollback.append(lambda: os.rmdir(head))
+  
+  def install_file(src, dst, src_is_path_not_contents=True):
+    isfile = os.path.isfile(dst)
+    if isfile:
+      try:
+        os.rename(dst, dst+suffix)
+      except OSError as e:
+        raise InstallError('Failed to rename "%s": %s".'%(dst,e.message))
+      rollback.append((lambda dst: lambda: os.rename(dst+suffix, dst))(dst))
+      commit.append((lambda dst: lambda: os.remove(dst+suffix))(dst))
+    elif os.path.exists(dst):
+      raise InstallError('Path "%s" is not a file.'%path)
+    else:
+      ensure_dirs_upto(dst)
+    
+    if not isfile:
+      rollback.append((lambda dst: lambda: os.remove(dst))(dst))
+    
+    try:
+      if src_is_path_not_contents:
+        shutil.copyfile(src, dst)
+      else:
+        with open(dst, 'w') as f:
+          f.write(src)
+      os.chmod(dst, 0755)
+    except Exception as e:
+      raise InstallError('Could not write file "%s": %s'%(dst, e.message))
+  
+  def install_contents(contents, dst):
+    install_file(contents, dst, src_is_path_not_contents=False)
   
   try:
     libfiles_all = []
@@ -1325,15 +1378,16 @@ def install_libset(install_path, name, libset, meta_extra={}):
             if not rel.startswith(updir):
               # copy include file to relative path under "install_path/include"
               src = join(incd, rel)
-              dest = join(install_path, 'include', rel)
-              
-              incfiles1.append(dest)
-              os_extra.ensure_dirs(dest)
-              undo.append(dest)
-              link_or_copy(src, dest, overwrite=False)
+              dst = join(install_path, 'include', rel)
+              incfiles1.append(dst)
+              install_file(src, dst)
+        
         rec1['incdirs'] = [join(install_path, 'include')]
         rec1['incfiles'] = incfiles1
-        
+      else:
+        rec1['incdirs'] = []
+        rec1['incfiles'] = []
+      
       if libfiles is not None:
         rec1['libfiles'] = [join(install_path, 'lib', base_of(f)) for f in libfiles]
       
@@ -1341,15 +1395,13 @@ def install_libset(install_path, name, libset, meta_extra={}):
     
     # copy libraries
     if len(libfiles_all) != len(set(map(base_of, libfiles_all))):
-      raise errorlog.LoggedError(
-        'ERROR: Duplicate library names in list:\n  ' + '\n  '.join(libfiles_all)
+      raise InstallError(
+        'Duplicate library names in list:\n  ' + '\n  '.join(libfiles_all)
       )
     
-    for f in libfiles_all:
-      dest = join(install_path, 'lib', base_of(f))
-      undo.append(dest)
-      os_extra.ensure_dirs(dest)
-      link_or_copy(f, dest, overwrite=False)
+    for src in libfiles_all:
+      dst = join(install_path, 'lib', base_of(src))
+      install_file(src, dst)
     
     # build dict of library provided meta-assignments
     metas = dict(meta_extra)
@@ -1359,11 +1411,8 @@ def install_libset(install_path, name, libset, meta_extra={}):
         metas[x] = y
     
     # produce metadata script
-    metafile = join(install_path, 'bin', name+'-meta')
-    undo.append(metafile)
-    os_extra.ensure_dirs(metafile)
-    with open(metafile, 'w') as fo:
-      fo.write(
+    meta_path = join(install_path, 'bin', name+'-meta')
+    meta_contents = \
 '''#!/bin/sh
 PPFLAGS="''' + ' '.join(libset_ppflags(installed_libset)) + '''"
 LDFLAGS="''' + ' '.join(libset_ldflags(installed_libset)) + '''"
@@ -1372,17 +1421,19 @@ LIBFLAGS="''' + ' '.join(libset_libflags(installed_libset)) + '''"
   ["%s='%s'"%(k,v) for k,v in sorted(metas.items()) if v is not None]
 ) + '''
 [ "$1" != "" ] && eval echo '$'"$1"
-''')
-    os.chmod(metafile, 0755)
+'''
+    install_contents(meta_contents, meta_path)
     
   except Exception as e:
-    for f in undo:
-      try: os_extra.rmtree(f)
+    for fn in reversed(rollback):
+      try: fn()
       except OSError: pass
     
-    if isinstance(e, OSError) and e.errno == 17: # File exists
-      raise errorlog.LoggedError(
-        'Installation aborted because it would clobber files in "'+install_path+'"'
-      )
+    if isinstance(e, InstallError):
+      raise errorlog.LoggedError('Installation to "%s" aborted: %s'%(install_path, e.message))
     else:
       raise
+  
+  else:
+    for fn in commit:
+      fn()
