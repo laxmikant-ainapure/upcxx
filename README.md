@@ -12,7 +12,7 @@ global address space (PGAS) model.  UPC++ has three main objectives:
 * Offer an easy on-ramp to PGAS programming through interoperability with other existing parallel
   programming systems (e.g., MPI, OpenMP, CUDA)
 
-For a description of how to use UPC++, please refer to the [programmer's guide](docs/guide/guide.pdf). 
+For a description of how to use UPC++, please refer to the [programmer's guide](docs/guide.pdf). 
 
 ## System Requirements
 
@@ -49,8 +49,7 @@ For guidance on using UPC++ and MPI in the same applciation, see [docs/hybrid.md
 ### 2017.09.30: Release 2017.9.0 
 
 The initial public release of UPC++ v1.0. This release supports most of the
-functionality specified in the UPC++ 1.0 draft 4 specification (located in the
-docs directory). 
+functionality specified in the [UPC++ 1.0 draft specification](docs/spec.pdf).
 
 The following features from that specification are not yet implemented:
 
