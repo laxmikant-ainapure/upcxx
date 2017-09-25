@@ -70,21 +70,21 @@ def main():
       print 'Unknown cli-hook "%s".' % cmd
       return 1
     
-    @async.mbind(fn(*map(parse_arg, sys.argv[2:])))
-    def printed(ans):
-      if ans is None:
-        pass
-      elif isinstance(ans, basestring):
-        sys.stdout.write(ans)
-      elif isinstance(ans, (int, long, float, bool)):
-        sys.stdout.write(str(ans))
-      elif isinstance(ans, (tuple, list, set, frozenset)):
-        sys.stdout.write(u'\n'.join(map(unicode, ans)) + u'\n')
-      else:
-        sys.stdout.write(repr(ans))
-    
     try:
+      @async.mbind(fn(*map(parse_arg, sys.argv[2:])))
+      def printed(ans):
+        if ans is None:
+          pass
+        elif isinstance(ans, basestring):
+          sys.stdout.write(ans)
+        elif isinstance(ans, (int, long, float, bool)):
+          sys.stdout.write(str(ans))
+        elif isinstance(ans, (tuple, list, set, frozenset)):
+          sys.stdout.write(u'\n'.join(map(unicode, ans)) + u'\n')
+        else:
+          sys.stdout.write(repr(ans))
       printed.wait()
+      
     except BaseException as e:
       errorlog.aborted(e)
   

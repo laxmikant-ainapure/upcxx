@@ -341,8 +341,15 @@ def gasnet_user(cxt):
   elif os_extra.exists(join(value, 'include')) and \
        os_extra.exists(join(value, 'lib')):
     return 'install', value
-  else:
+  elif os_extra.exists(join(value, 'configure')):
     return 'source', value
+  else:
+    raise errorlog.LoggedError("Invalid value for GASNET (GASNET=%s)"%value)
+
+@rule(cli='gasnet_user_kind')
+def gasnet_user_kind(cxt):
+  kind, _ = cxt.gasnet_user()
+  return kind
 
 @rule(cli='gasnet_conduit')
 def gasnet_conduit(cxt):

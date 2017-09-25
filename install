@@ -10,6 +10,11 @@ function failure_and_die {
   exit 1
 }
 
+function echo_and_die {
+  echo $* >&2
+  exit 1
+}
+
 if [ "$#" -eq 1 ]; then
   single=0
   install_to="$1"
@@ -35,6 +40,14 @@ if [ "$single" -eq 1 ]; then
     || failure_and_die
 else
   rm -rf .nobs
+  
+  case $(nobs gasnet_user_kind) in
+  tarball|tarball-url|source)
+    ;;
+  *)
+    echo_and_die "GASNET must point to local tarball file, tarball url, or gasnet source tree."
+    ;;
+  esac
   
   function foreach_codemode {
     export DBGSYM=1 OPTLEV=0
@@ -66,7 +79,10 @@ else
   }
   
   function foreach_conduit {
-    for conduit in $(nobs gasnet_configured_conduits); do
+    conduits=$(GASNET_CONDUIT='' nobs gasnet_configured_conduits)
+    if [ $? -ne 0 ]; then failure_and_die; fi
+    
+    for conduit in $(conduits); do
       export GASNET_INSTALL_TO="${install_to}/gasnet.${gasnet_codemode}"
       export GASNET_CONDUIT=${conduit}
       nobs install src/upcxx.cpp "${install_to}/upcxx.${upcxx_codemode}.${UPCXX_BACKEND}.${conduit}" \
@@ -86,6 +102,11 @@ else
   cat <<EOF >"${install_to}/bin/upcxx-meta"
 #!/bin/bash
 
+function echo_and_die {
+  echo \$* >&2
+  exit 1
+}
+
 case \${UPCXX_CODEMODE} in
 "")
   UPCXX_CODEMODE=O3
@@ -93,8 +114,7 @@ case \${UPCXX_CODEMODE} in
 debug|O3)
   ;;
 *)
-  echo "UPCXX_CODEMODE must be set to one of: O3 (default), debug" >&2
-  exit 1
+  echo_and_die "UPCXX_CODEMODE must be set to one of: O3 (default), debug"
   ;;
 esac
 
@@ -105,8 +125,7 @@ case \${UPCXX_THREADMODE} in
 seq|par)
   ;;
 *)
-  echo "UPCXX_THREADMODE must be set to one of: seq (default), par" >&2
-  exit 1
+  echo_and_die "UPCXX_THREADMODE must be set to one of: seq (default), par"
   ;;
 esac
 
@@ -117,8 +136,7 @@ case "\${UPCXX_GASNET_CONDUIT}" in
 ${conduits_pipes})
   ;;
 *)
-  echo "UPCXX_GASNET_CONDUIT must be one of: ${conduits_commas}" >&2
-  exit 1
+  echo_and_die "UPCXX_GASNET_CONDUIT must be one of: ${conduits_commas}"
   ;;
 esac
 
