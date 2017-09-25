@@ -46,6 +46,23 @@ For guidance on using UPC++ and MPI in the same applciation, see [docs/hybrid.md
 
 ## ChangeLog
 
+### 2017.09.30: Release 2017.9.0 
+
+The initial public release of UPC++ v1.0. This release supports most of the
+functionality specified in the UPC++ 1.0 draft 4 specification (located in the
+docs directory). 
+
+The following features from that specification are not yet implemented:
+
+ * Continuation-based and Promise-based completion (use future completion for now)
+ * Teams
+ * Serialization
+ * Non-contiguous transfers
+
+This release is not performant, and may be unstable or buggy.
+
+Please report any problems in the [issue tracker](https://bitbucket.org/berkeleylab/upcxx/issues).
+
 ### 2017.09.01: Release v1.0-pre
 
 This is a prerelease of v1.0. This prerelease supports most of the
