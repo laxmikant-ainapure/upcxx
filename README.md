@@ -40,6 +40,10 @@ The current release is known to work on the following configurations:
 
 For instructions on installing UPC++ and compiling programs, look at [INSTALL.md](INSTALL.md).
 
+## Using UPC++ with MPI
+
+For guidance on using UPC++ and MPI in the same applciation, see [docs/hybrid.md](docs/hybrid.md).
+
 ## ChangeLog
 
 ### 2017.09.01: Release v1.0-pre
