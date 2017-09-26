@@ -2,7 +2,7 @@
 
 if [ "$1" == "-h" ]; then
     echo "Usage: RANKS=<ranks> CONDUIT=<smp|udp> ./run-tests"
-    echo "  Defaults to the number of available hardware threads for RANKS, and the udp CONDUIT"
+    echo "  Defaults to a reasonable number of RANKS for the current system, and the udp CONDUIT"
     exit 0
 fi
     
@@ -25,10 +25,13 @@ elif [ "$CONDUIT" != "udp" ] && [ "$CONDUIT" != "smp" ]; then
 fi
 echo "Using $CONDUIT conduit (set environment variable CONDUIT=<smp|udp> to change)"
 
-# Run on all available cores by default - this works on Mac and Linux
+# Choose a good default RANK count
 if [ -z "$RANKS" ]; then
-    export RANKS=`getconf _NPROCESSORS_ONLN`
-    echo "Detected $RANKS hardware threads (set environment variable RANKS=<ranks> to change)"
+    export CORES=`getconf _NPROCESSORS_ONLN`
+    export RANKS=$(($CORES/2))     # default to using half the cores
+    RANKS=$(($RANKS<2?2:$RANKS))   # but use at least two
+    RANKS=$(($RANKS>16?16:$RANKS)) # but not more than 16
+    echo "Detected $CORES hardware threads, running with RANKS=$RANKS (set environment variable RANKS=<ranks> to change)"
 fi
 echo "Running tests on $RANKS ranks"
 
