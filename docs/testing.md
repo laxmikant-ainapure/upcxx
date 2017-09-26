@@ -34,7 +34,7 @@ It is also possible to set the optimization level (`-O<level>`) and debugging (`
 variables. For example, the following will disable optimization and enable debugging builds:
 
 ```bash
-DBGSYM=1 OPTLEV = 0 ./run-tests
+DBGSYM=1 OPTLEV=0 ./run-tests
 ```
 
 `DBGSYM` can be either 0 or 1, and `OPTLEV` can be 0, 1, 2 or 3, corresponding to optimization levels.
