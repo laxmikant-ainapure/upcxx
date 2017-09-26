@@ -1,7 +1,9 @@
 #!/bin/bash
 
+CONDUIT_WHITELIST='udp|smp|ibv|aries'
+
 if [ "$1" == "-h" ]; then
-    echo "Usage: RANKS=<ranks> CONDUIT=<smp|udp> ./run-tests"
+    echo "Usage: RANKS=<ranks> CONDUIT=<$CONDUIT_WHITELIST> ./run-tests"
     echo "  Defaults to a reasonable number of RANKS for the current system, and the udp CONDUIT"
     exit 0
 fi
@@ -16,14 +18,12 @@ echo "Checking platform..."
 platform_sanity_checks
 
 # Check for supported conduits
-if [ -z "$CONDUIT" ]; then
-    export CONDUIT=udp
-elif [ "$CONDUIT" != "udp" ] && [ "$CONDUIT" != "smp" ]; then
-    echo "At this point, only the udp and smp conduits are supported"
-    echo "Set CONDUIT=smp or CONDUIT=udp"
-    exit 0
-fi
-echo "Using $CONDUIT conduit (set environment variable CONDUIT=<smp|udp> to change)"
+case "$CONDUIT" in
+  $CONDUIT_WHITELIST) ;;
+                  '') export CONDUIT=udp ;;
+                   *) echo "WARNING: CONDUIT=$CONDUIT has not been validated with UPC++" ;;
+esac
+echo "Using $CONDUIT conduit (set environment variable CONDUIT=<$CONDUIT_WHITELIST> to change)"
 
 # Choose a good default RANK count
 if [ -z "$RANKS" ]; then
