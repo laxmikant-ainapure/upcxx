@@ -2,6 +2,12 @@
 
 export GASNET_BACKTRACE=1
 
+if [ "$1" == "-h" ]; then
+    echo "Usage: RANKS=<ranks> CONDUIT=<smp|udp> ./run-tests"
+    echo "  Defaults to the number of available hardware threads for RANKS, and the udp CONDUIT"
+    exit 0
+fi
+    
 . sourceme
 rm -rf .nobs
 
@@ -11,20 +17,52 @@ sys_info
 echo "Checking platform..."
 platform_sanity_checks
 
-cd test
+# Check for supported conduits
+if [ -z "$CONDUIT" ]; then
+    export CONDUIT=udp
+elif [ "$CONDUIT" != "udp" ] && [ "$CONDUIT" != "smp" ]; then
+    echo "At this point, only the udp and smp conduits are supported"
+    echo "Set CONDUIT=smp or CONDUIT=udp"
+    exit 0
+fi
+echo "Using $CONDUIT conduit (set environment variable CONDUIT=<smp|udp> to change)"
 
-echo "Setting up upcxx..."
-nobs run hello_upcxx.cpp &> .run-tests.err
+echo "Setting up upcxx... (this may take a while)"
+
+export GASNET_CONDUIT=$CONDUIT
+export GASNET_INSTALL_TO=.nobs/gasnet_conduit
+
+# always install the debug version for the test
+nobs install src/upcxx.cpp ${GASNET_INSTALL_TO}/upcxx.debug.gasnet1_seq.${GASNET_CONDUIT} &> .run-tests.err
+
 if [ $? -ne 0 ]; then
 		echo "Set up failed, here is the trace:"
 		cat .run-tests.err
+    rm .run-tests.err
+    rm -rf .nobs
 		exit 0
 fi
 rm .run-tests.err
 
+cd test
+
+# Run on all available cores by default - this works on Mac and Linux
+if [ -z "$RANKS" ]; then
+    RANKS=`getconf _NPROCESSORS_ONLN`
+    echo "Detected $RANKS hardware threads (set environment variable RANKS=<ranks> to change)"
+fi
+export GASNET_PSHM_NODES=${RANKS}
+
 run_test() {
 		echo "Running test $1"
-		nobs run $1 > .run-tests.out 2> .run-tests.err
+    if [ "$GASNET_CONDUIT" == "udp" ]; then
+        NOBS_EXE=$(nobs exe $1 2> .run-tests.err)
+        ${GASNET_INSTALL_TO}/bin/amudprun -np $RANKS -spawn L $NOBS_EXE > .run-tests.out 2>> .run-tests.err
+    else
+        # assumes smp conduit
+		    nobs run $1 > .run-tests.out 2> .run-tests.err
+    fi
+    
 		err=$?
 		grep "Test result: " .run-tests.out
 		if [ $err -ne 0 ]; then
@@ -35,17 +73,6 @@ run_test() {
 		fi
 		rm .run-tests.err
 }
-
-# Check for udp conduit
-if [ -z "$GASNET_CONDUIT" ]; then
-    export GASNET_CONDUIT=smp
-elif [ "$GASNET_CONDUIT" == "udp" ]; then
-    # need to do something to launch with amudprun here, but it doesn't exist in nobs only installs
-fi
-echo Using $GASNET_CONDUIT conduit
-
-# Run on all available cores by default - this works on Mac and Linux
-export GASNET_PSHM_NODES=${RANKS:=`getconf _NPROCESSORS_ONLN`}
 
 echo "Running tests on $RANKS ranks..."
 
@@ -64,3 +91,5 @@ UPCXX_BACKEND=gasnetex_par run_test "uts/uts_hybrid.cpp"
 echo -e "\e[92mAll tests succeded\e[0m"
 
 cd ..
+
+rm -rf .nobs
