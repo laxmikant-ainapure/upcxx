@@ -1,7 +1,9 @@
 #ifndef _f0b217aa_607e_4aa4_8147_82a0d66d6303
 #define _f0b217aa_607e_4aa4_8147_82a0d66d6303
 
+#ifdef UPCXX_BACKEND
 #include <upcxx/backend_fwd.hpp>
+#endif
 
 #include <string>
 

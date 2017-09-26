@@ -55,9 +55,16 @@ export GASNET_PSHM_NODES=${RANKS}
 
 run_test() {
 		echo "Running test $1"
-    if [ "$GASNET_CONDUIT" == "udp" ]; then
+    if [ "$2" == "nopar" ]; then
+        export GASNET_PSHM_NODES=1
+        export GASNET_CONDUIT=smp
+    else
+        export GASNET_PSHM_NODES=$RANKS
+        export GASNET_CONDUIT=$CONDUIT
+    fi
+    if [ "$GASNET_CONDUIT" == "udp" ] && [ "GASNET_PSHM_NODES" != "1" ]; then
         NOBS_EXE=$(nobs exe $1 2> .run-tests.err)
-        ${GASNET_INSTALL_TO}/bin/amudprun -np $RANKS -spawn L $NOBS_EXE > .run-tests.out 2>> .run-tests.err
+        ${GASNET_INSTALL_TO}/bin/amudprun -np ${GASNET_PSHM_NODES} -spawn L $NOBS_EXE > .run-tests.out 2>> .run-tests.err
     else
         # assumes smp conduit
 		    nobs run $1 > .run-tests.out 2> .run-tests.err
@@ -76,17 +83,18 @@ run_test() {
 
 echo "Running tests on $RANKS ranks..."
 
-run_test "atomics.cpp"
-run_test "collectives.cpp"
-run_test "dist_object.cpp"
-run_test "future.cpp"
-run_test "lpc_barrier.cpp"
-run_test "rpc_barrier.cpp"
-run_test "rpc_ff_ring.cpp"
-run_test "rput.cpp"
-run_test "uts/uts_ranks.cpp"
-run_test "uts/uts_threads.cpp"
-UPCXX_BACKEND=gasnetex_par run_test "uts/uts_hybrid.cpp"
+run_test "atomics.cpp" "par"
+run_test "collectives.cpp" "par"
+run_test "dist_object.cpp" "par"
+run_test "future.cpp" "nopar"
+run_test "lpc_barrier.cpp" "nopar"
+run_test "rpc_barrier.cpp" "par"
+run_test "rpc_ff_ring.cpp" "par"
+run_test "rput.cpp" "par"
+run_test "uts/uts_ranks.cpp" "par"
+run_test "uts/uts_threads.cpp" "nopar"
+
+UPCXX_BACKEND=gasnetex_par run_test "uts/uts_hybrid.cpp" "par"
 
 echo -e "\e[92mAll tests succeded\e[0m"
 
