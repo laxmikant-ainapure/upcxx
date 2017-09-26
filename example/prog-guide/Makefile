@@ -12,7 +12,7 @@ PPFLAGS=$(shell $(UPCXX_INSTALL)/bin/upcxx-meta PPFLAGS) -Wno-inline
 LDFLAGS=$(shell $(UPCXX_INSTALL)/bin/upcxx-meta LDFLAGS) -Wno-inline
 LIBFLAGS=$(shell $(UPCXX_INSTALL)/bin/upcxx-meta LIBFLAGS)
 
-all: hello-world compute-pi compute-pi-multi-examples
+all: hello-world compute-pi compute-pi-multi-examples persona-example
 
 CP_HDRS=async-distobj-reduce_to_rank0.hpp distobj-reduce_to_rank0.hpp global-ptrs-reduce_to_rank0.hpp \
 	rpc-reduce_to_rank0.hpp atomics-reduce_to_rank0.hpp fetch.hpp quiescence-reduce_to_rank0.hpp \
@@ -25,5 +25,5 @@ compute-pi-multi-examples: compute-pi-multi-examples.cpp $(CP_HDRS)
 	$(CXX) $< $(PPFLAGS) $(LDFLAGS) $(LIBFLAGS) -o $@
 
 clean:
-	rm -rf hello-world compute-pi compute-pi-multi-examples
+	rm -rf hello-world compute-pi compute-pi-multi-examples persona-example
 
