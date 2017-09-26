@@ -36,6 +36,14 @@ run_test() {
 		rm .run-tests.err
 }
 
+# Check for udp conduit
+if [ -z "$GASNET_CONDUIT" ]; then
+    export GASNET_CONDUIT=smp
+elif [ "$GASNET_CONDUIT" == "udp" ]; then
+    # need to do something to launch with amudprun here, but it doesn't exist in nobs only installs
+fi
+echo Using $GASNET_CONDUIT conduit
+
 # Run on all available cores by default - this works on Mac and Linux
 export GASNET_PSHM_NODES=${RANKS:=`getconf _NPROCESSORS_ONLN`}
 

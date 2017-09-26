@@ -44,6 +44,10 @@ For instructions on installing UPC++ and compiling programs, look at [INSTALL.md
 
 For guidance on using UPC++ and MPI in the same applciation, see [docs/hybrid.md](docs/hybrid.md).
 
+## Testing
+
+To run a test script, see [docs/testing.md](docs/testing.md)
+
 ## ChangeLog
 
 ### 2017.09.30: Release 2017.9.0 
@@ -67,5 +71,5 @@ Please report any problems in the [issue tracker](https://bitbucket.org/berkeley
 This is a prerelease of v1.0. This prerelease supports most of the
 functionality covered in the UPC++ specification, except personas, promise-based completion, teams,
 serialization, and non-contiguous transfers. This prerelease is not performant, and may be unstable
-or buggy. Please notify us of issues by sending email to `upcxx-spec@googlegroups.com`.
+or buggy. Please notify us of issues by sending email to `upcxx@googlegroups.com`.
 
