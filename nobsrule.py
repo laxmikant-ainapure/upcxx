@@ -689,7 +689,7 @@ def run(cxt, main_src, *args):
     env1 = dict(os.environ)
     env1['GASNET_PREFIX'] = meta.get('GASNET_INSTALL') or meta.get('GASNET_BUILD')
     if meta['GASNET_CONDUIT'] == 'udp':
-      env1['GASNET_SPAWNFN'] = 'L'
+      env1['GASNET_SPAWNFN'] = env('GASNET_SPAWNFN','L')
     
     upcxx_run = here('utils','upcxx-run')
     ranks = str(env('RANKS', 1))
