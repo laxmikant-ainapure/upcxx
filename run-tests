@@ -25,44 +25,45 @@ elif [ "$CONDUIT" != "udp" ] && [ "$CONDUIT" != "smp" ]; then
 fi
 echo "Using $CONDUIT conduit (set environment variable CONDUIT=<smp|udp> to change)"
 
-export GASNET_CONDUIT=$CONDUIT
-export GASNET_BACKTRACE=1 
-
-echo "Setting up upcxx... (this may take a while)"
-nobs exe test/atomics.cpp > /dev/null 2> .run-tests.err
-
-if [ $? -ne 0 ]; then
-    echo "Set up failed, here is the trace:"
-    cat .run-tests.err
-    rm .run-tests.err
-    rm -rf .nobs
-    exit 0
-fi
-rm .run-tests.err
-
-cd test
-
 # Run on all available cores by default - this works on Mac and Linux
 if [ -z "$RANKS" ]; then
     export RANKS=`getconf _NPROCESSORS_ONLN`
     echo "Detected $RANKS hardware threads (set environment variable RANKS=<ranks> to change)"
 fi
+echo "Running tests on $RANKS ranks"
+
+check_result() {
+    if [ $1 -ne 0 ]; then
+        echo -e "\e[91m$2 failed, the trace can be found in test/run-tests.err\e[0m"
+        # force a flush
+        cat .run-tests.err > run-tests.err
+        rm .run-tests.err .run-tests.out
+        rm -rf .nobs
+        exit 1
+    fi
+}
+
+export GASNET_CONDUIT=$CONDUIT
+export GASNET_BACKTRACE=1
+# default to debugging mode
+export DBGSYM=${DBGSYM:=1}
+export OPTLEV=${OPTLEV:=0}
+
+cd test
+
+echo "Setting up upcxx... (this may take a while)"
+nobs exe hello_upcxx.cpp &> .run-tests.err
+check_result $? "Setup"
+rm .run-tests.err
 
 run_test() {
     echo "Running test $1"
-    nobs run "$1" > .run-tests.out 2> .run-tests.err
-    err=$?
-    grep "Test result: " .run-tests.out
-    if [ $err -ne 0 ]; then
-        echo -e "\e[91mTest failed, here is the trace:\e[0m"
-        cat .run-tests.err
-        rm .run-tests.err
-        exit $err
-    fi
+    nobs run "$1" &> .run-tests.err
+    check_result $? "Test"
+    grep "Test result: " .run-tests.err
     rm .run-tests.err
 }
 
-echo "Running tests on $RANKS ranks..."
 
 run_test "atomics.cpp"
 run_test "collectives.cpp"
