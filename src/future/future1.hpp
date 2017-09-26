@@ -117,6 +117,9 @@ namespace upcxx {
     results_type results() const {
       return results_type{impl_.template result_rvals()};
     }
+    results_type result_tuple() const {
+      return results_type{impl_.template result_rvals()};
+    }
     
     template<int i=0>
     auto result_moved()
@@ -125,6 +128,10 @@ namespace upcxx {
     }
     
     auto results_moved()
+      -> decltype(impl_.template result_rvals()) {
+      return impl_.template results_rvals();
+    }
+    auto results_tuple_moved()
       -> decltype(impl_.template result_rvals()) {
       return impl_.template results_rvals();
     }
