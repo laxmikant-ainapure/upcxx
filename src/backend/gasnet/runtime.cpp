@@ -191,7 +191,7 @@ void* upcxx::allocate(size_t size, size_t alignment) {
     #endif
     
     void *p = mspace_memalign(segment_mspace_, alignment, size);
-    UPCXX_ASSERT(p != nullptr);
+    //UPCXX_ASSERT(p != nullptr);
     return p;
   #else
     return operator new(size);
