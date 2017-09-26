@@ -81,4 +81,6 @@ echo -e "\e[92mAll tests succeded\e[0m"
 
 cd ..
 
-rm -rf .nobs
+rm -rf .nobs 2>&1 >/dev/null # ignore failures due to races
+
+exit 0
