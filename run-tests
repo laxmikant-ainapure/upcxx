@@ -33,6 +33,9 @@ fi
 echo "Running tests on $RANKS ranks"
 
 check_result() {
+    if test -n "$UPCXX_VERBOSE" ; then
+      cat .run-tests.err
+    fi
     if [ $1 -ne 0 ]; then
         echo -e "\e[91m$2 failed, the trace can be found in test/run-tests.err\e[0m"
         # force a flush

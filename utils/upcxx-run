@@ -2,7 +2,7 @@
 require 5.004;
 use strict;
 
-my $debug = 1;
+my $debug = $ENV{'UPCXX_VERBOSE'} or 0;
 
 if (@ARGV < 2) {
   my $myname = $0; $myname =~ s@^(.*/)@@;
