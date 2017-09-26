@@ -79,7 +79,7 @@ def cxx(cxt):
   ans_cross = shplit(cross_env.get('CXX',''))
   
   ans_default = []
-  if env('NERSC_HOST', None) in ('cori','edison'):
+  if env('CRAYPE_DIR', None):
     ans_default = ['CC']
   if not ans_default:
     ans_default = ['g++']
@@ -109,7 +109,7 @@ def cc(cxt):
   ans_cross = shplit(cross_env.get('CC',''))
   
   ans_default = []
-  if env('NERSC_HOST', None) in ('cori','edison'):
+  if env('CRAYPE_DIR', None):
     ans_default = ['cc']
   if not ans_default:
     ans_default = ['gcc']
