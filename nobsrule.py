@@ -483,10 +483,9 @@ class compile:
     yield subexec.launch(compiler(objfile))
     yield objfile
 
-class Crawler:
+@rule_memoized(path_arg=0)
+class objects_and_libset:
   """
-  Base class for memoized rules.
-  
   Compile the given source file as well as all source files which can
   be found as sharing its name with a header included by any source
   file reached in this process (transitively closed set). Return pair
@@ -515,7 +514,7 @@ class Crawler:
     return srcs
   
   @coroutine
-  def crawl(me):
+  def execute(me):
     main_src = me.get_main_src()
     
     # compile object files
@@ -558,7 +557,7 @@ class Crawler:
     yield (objs, libset)
 
 @rule_memoized(cli='exe', path_arg=0)
-class executable(Crawler):
+class executable:
   """
   Compile the given source file as well as all source files which can
   be found as sharing its name with a header included by any source
@@ -566,7 +565,7 @@ class executable(Crawler):
   compiled object files and link them along with their library
   dependencies to proudce an executable. Path to executable returned.
   """
-  version_bump = 1
+  version_bump = 2
   
   @traced
   def cxx(me, cxt, main_src):
@@ -576,10 +575,13 @@ class executable(Crawler):
   def ldflags(me, cxt, main_src):
     return cxt.ldflags()
   
+  @traced
+  def objects_and_libset(me, cxt, main_src):
+    return cxt.objects_and_libset(main_src)
+  
   @coroutine
   def execute(me):
-    # invoke crawl of base class
-    objs, libset = yield me.crawl()
+    objs, libset = yield me.objects_and_libset()
     
     # link
     exe = me.mkpath('exe', suffix='.x')
@@ -595,8 +597,20 @@ class executable(Crawler):
     yield exe
 
 @rule_memoized(cli='lib', path_arg=0)
-class library(Crawler):
-  version_bump = 6
+class library:
+  version_bump = 7
+  
+  @traced
+  def get_main_src(me, cxt, main_src):
+    return main_src
+  
+  @traced
+  def includes(me, cxt, main_src, src):
+    return cxt.includes(src)
+  
+  @traced
+  def objects_and_libset(me, cxt, main_src):
+    return cxt.objects_and_libset(main_src)
   
   @traced
   def get_include_vdirs_and_tree(me, cxt, main_src):
@@ -610,12 +624,11 @@ class library(Crawler):
     main_src = me.get_main_src()
     top_dir = here()
     
-    # Invoke crawl of base class.
-    objs, libset = yield me.crawl()
+    objs, libset = yield me.objects_and_libset()
     
     # Headers pulled in from main file. Discard those not within this
     # repo (top_dir) or the nobs artifact cache (path_art).
-    incs = yield me.do_includes(main_src)
+    incs = yield me.includes(main_src)
     incs = map(os_extra.realpath, incs)
     incs = [i for i in incs if
       path_within_dir(i, top_dir) or
@@ -660,6 +673,31 @@ class library(Crawler):
       }}
     )
 
+@rule(cli='run', path_arg='main_src')
+@coroutine
+def run(cxt, main_src, *args):
+  """
+  Build the executable for `main_src` and run it with the given
+  argument list `args`.
+  """
+  _, libset = yield cxt.objects_and_libset(main_src)
+  exe = yield cxt.executable(main_src)
+  
+  if 'gasnet' in libset:
+    meta = libset['gasnet']['meta']
+    
+    env1 = dict(os.environ)
+    env1['GASNET_PREFIX'] = meta.get('GASNET_INSTALL') or meta.get('GASNET_BUILD')
+    if meta['GASNET_CONDUIT'] == 'udp':
+      env1['GASNET_SPAWNFN'] = 'L'
+    
+    upcxx_run = here('utils','upcxx-run')
+    ranks = str(env('RANKS', 1))
+    
+    os.execvpe(upcxx_run, [upcxx_run, ranks, exe] + map(str, args), env1)
+  else:
+    os.execvp(exe, [exe] + map(str, args))
+
 @rule(cli='install', path_arg='main_src')
 @coroutine
 def install(cxt, main_src, install_path):
@@ -679,6 +717,10 @@ def install(cxt, main_src, install_path):
   })
   
   yield None
+
+########################################################################
+## GASNet build recipes                                               ##
+########################################################################
 
 @rule_memoized()
 class gasnet_source:
@@ -994,6 +1036,13 @@ class gasnet_built:
           ['make', syncmode],
           cwd = os.path.join(build_dir, '%s-conduit'%conduit)
         )
+        
+        if conduit == 'udp':
+          yield subexec.launch(
+            ['make', 'amudprun'],
+            cwd = os.path.join(build_dir, 'other', 'amudp')
+          )
+        
         installed = False
         built_dir = build_or_install_dir
       else:
@@ -1112,18 +1161,8 @@ class gasnet:
       }
     }
 
-@rule(cli='run', path_arg='main_src')
-@coroutine
-def run(cxt, main_src, *args):
-  """
-  Build the executable for `main_src` and run it with the given
-  argument list `args`.
-  """
-  exe = yield cxt.executable(main_src)
-  os.execvp(exe, [exe] + map(str, args))
-
 ########################################################################
-## Utilties
+## Utilties                                                           ##
 ########################################################################
 
 def env(name, otherwise):
