@@ -15,7 +15,8 @@ LIBFLAGS=$(shell $(UPCXX_INSTALL)/bin/upcxx-meta LIBFLAGS)
 all: hello-world compute-pi compute-pi-multi-examples
 
 CP_HDRS=async-distobj-reduce_to_rank0.hpp distobj-reduce_to_rank0.hpp global-ptrs-reduce_to_rank0.hpp \
-	rpc-reduce_to_rank0.hpp atomics-reduce_to_rank0.hpp fetch.hpp quiesence-reduce_to_rank0.hpp
+	rpc-reduce_to_rank0.hpp atomics-reduce_to_rank0.hpp fetch.hpp quiescence-reduce_to_rank0.hpp \
+	rpc-reduce_to_rank0-no-barrier.hpp
 
 compute-pi-multi-examples: compute-pi-multi-examples.cpp $(CP_HDRS)
 	$(CXX) $< $(PPFLAGS) $(LDFLAGS) $(LIBFLAGS) -o $@ 

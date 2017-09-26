@@ -19,6 +19,10 @@ namespace rpc {
     #include "rpc-reduce_to_rank0.hpp"
 }
 
+namespace rpc_no_barrier {
+    #include "rpc-reduce_to_rank0-no-barrier.hpp"
+}
+
 namespace global_ptrs {
     #include "global-ptrs-reduce_to_rank0.hpp"
 }
@@ -35,8 +39,8 @@ namespace atomics {
     #include "atomics-reduce_to_rank0.hpp"
 }
 
-namespace quiesence {
-    #include "quiesence-reduce_to_rank0.hpp"
+namespace quiescence {
+    #include "quiescence-reduce_to_rank0.hpp"
 }
 
 int hit()
@@ -75,11 +79,12 @@ int main(int argc, char **argv)
     }
 
     ACCM(rpc, rpc);
-    ACCM(global_ptrs, rpc);
+    ACCM(rpc_no_barrier, rpc);
+    ACCM(global_ptrs, rpc_no_barrier);
     ACCM(distobj, global_ptrs);
     ACCM(async_distobj, distobj);
     ACCM(atomics, async_distobj);
-    ACCM(quiesence, atomics);
+    ACCM(quiescence, atomics);
     // now check that the result is reasonable
     if (!upcxx::rank_me()) {
         double pi = 4.0 * hits_rpc / trials;
