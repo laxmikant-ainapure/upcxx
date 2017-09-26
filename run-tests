@@ -37,7 +37,7 @@ check_result() {
         echo -e "\e[91m$2 failed, the trace can be found in test/run-tests.err\e[0m"
         # force a flush
         cat .run-tests.err > run-tests.err
-        rm .run-tests.err .run-tests.out
+        rm .run-tests.err
         rm -rf .nobs
         exit 1
     fi
