@@ -7,7 +7,7 @@ if [ "$1" == "-h" ]; then
 fi
     
 . sourceme
-#rm -rf .nobs
+rm -rf .nobs
 
 . utils/system-checks.sh
 sys_info
@@ -27,6 +27,7 @@ echo "Using $CONDUIT conduit (set environment variable CONDUIT=<smp|udp> to chan
 
 export GASNET_CONDUIT=$CONDUIT
 export GASNET_BACKTRACE=1 
+
 echo "Setting up upcxx... (this may take a while)"
 nobs exe test/atomics.cpp > /dev/null 2> .run-tests.err
 
@@ -48,17 +49,17 @@ if [ -z "$RANKS" ]; then
 fi
 
 run_test() {
-		echo "Running test $1"
+    echo "Running test $1"
     nobs run "$1" > .run-tests.out 2> .run-tests.err
     err=$?
-		grep "Test result: " .run-tests.out
-		if [ $err -ne 0 ]; then
-				echo -e "\e[91mTest failed, here is the trace:\e[0m"
-				cat .run-tests.err
-				rm .run-tests.err
-				exit $err
-		fi
-		rm .run-tests.err
+    grep "Test result: " .run-tests.out
+    if [ $err -ne 0 ]; then
+        echo -e "\e[91mTest failed, here is the trace:\e[0m"
+        cat .run-tests.err
+        rm .run-tests.err
+        exit $err
+    fi
+    rm .run-tests.err
 }
 
 echo "Running tests on $RANKS ranks..."
