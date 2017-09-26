@@ -54,7 +54,7 @@ platform_sanity_checks() {
         ARCH_BAD=
         if test x86_64 = "$ARCH" ; then
             ARCH_GOOD=1
-        elif expr "$ARCH" : 'i.86' ; then
+        elif expr "$ARCH" : 'i.86' >/dev/null 2>&1 ; then
             ARCH_BAD=1
         fi
 
