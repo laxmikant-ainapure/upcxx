@@ -62,7 +62,7 @@ namespace upcxx {
       }
       
       void completed(intrank_t target) {
-        backend::send_am<progress_level::user>(target, std::move(fn));
+        backend::send_am_master<progress_level::user>(target, std::move(fn));
       }
     };
     

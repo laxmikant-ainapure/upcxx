@@ -74,11 +74,14 @@ namespace {
   
   enum {
     id_am_eager_restricted = 128,
-    id_am_eager_queued
+    id_am_eager_master,
+    id_am_eager_persona
   };
     
   void am_eager_restricted(gasnet_token_t, void *buf, size_t buf_size, gasnet_handlerarg_t buf_align);
-  void am_eager_queued(gasnet_token_t, void *buf, size_t buf_size, gasnet_handlerarg_t buf_align_and_level);
+  void am_eager_master(gasnet_token_t, void *buf, size_t buf_size, gasnet_handlerarg_t buf_align_and_level);
+  void am_eager_persona(gasnet_token_t, void *buf, size_t buf_size, gasnet_handlerarg_t buf_align_and_level,
+                        gasnet_handlerarg_t persona_ptr_lo, gasnet_handlerarg_t persona_ptr_hi);
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -106,10 +109,11 @@ void upcxx::init() {
   
   gasnet_handlerentry_t am_table[] = {
     {id_am_eager_restricted, (void(*)())am_eager_restricted},
-    {id_am_eager_queued,     (void(*)())am_eager_queued}
+    {id_am_eager_master,     (void(*)())am_eager_master},
+    {id_am_eager_persona,    (void(*)())am_eager_persona}
   };
   
-  size_t segment_size = os_env<size_t>("UPCXX_SEGMENT_MB", 128<<20);
+  size_t segment_size = size_t(os_env<double>("UPCXX_SEGMENT_MB", 128)*(1<<20));
   // Do this instead? segment_size = gasnet_getMaxLocalSegmentSize();
   
   backend::rank_n = gasnet_nodes();
@@ -275,7 +279,7 @@ void gasnet::send_am_eager_restricted(
   after_gasnet();
 }
 
-void gasnet::send_am_eager_queued(
+void gasnet::send_am_eager_master(
     progress_level level,
     intrank_t recipient,
     void *buf,
@@ -285,9 +289,36 @@ void gasnet::send_am_eager_queued(
   
   gasnet_AMRequestMedium1(
     recipient,
-    id_am_eager_queued,
+    id_am_eager_master,
     buf, buf_size,
     buf_align<<1 | (level == progress_level::user ? 1 : 0)
+  );
+  
+  after_gasnet();
+}
+
+void gasnet::send_am_eager_persona(
+    progress_level level,
+    intrank_t recipient_rank,
+    persona *recipient_persona,
+    void *buf,
+    std::size_t buf_size,
+    std::size_t buf_align
+  ) {
+  
+  uintptr_t per_lo_u = reinterpret_cast<uintptr_t>(recipient_persona) & 0xffffffffu;
+  uintptr_t per_hi_u = reinterpret_cast<uintptr_t>(recipient_persona) >> 31 >> 1;
+  
+  gasnet_handlerarg_t per_lo_h=0, per_hi_h=0;
+  std::memcpy(&per_lo_h, &per_lo_u, sizeof(gasnet_handlerarg_t));
+  std::memcpy(&per_hi_h, &per_hi_u, sizeof(gasnet_handlerarg_t));
+  
+  gasnet_AMRequestMedium3(
+    recipient_rank,
+    id_am_eager_persona,
+    buf, buf_size,
+    buf_align<<1 | (level == progress_level::user ? 1 : 0),
+    per_lo_h, per_hi_h
   );
   
   after_gasnet();
@@ -296,6 +327,7 @@ void gasnet::send_am_eager_queued(
 template<progress_level level>
 void gasnet::send_am_rdzv(
     intrank_t rank_d,
+    persona *persona_d,
     void *buf_s,
     size_t buf_size,
     size_t buf_align
@@ -303,8 +335,9 @@ void gasnet::send_am_rdzv(
   
   intrank_t rank_s = backend::rank_me;
   
-  backend::send_am<progress_level::internal>(
+  backend::send_am_persona<progress_level::internal>(
     rank_d,
+    persona_d,
     [=]() {
       // TODO: Elide rma_get (copy) for node-local sends with pointer
       // translation and execution directly from source buffer.
@@ -337,8 +370,8 @@ void gasnet::send_am_rdzv(
   );
 }
 
-template void gasnet::send_am_rdzv<progress_level::internal>(intrank_t, void*, size_t, size_t);
-template void gasnet::send_am_rdzv<progress_level::user>(intrank_t, void*, size_t, size_t);
+template void gasnet::send_am_rdzv<progress_level::internal>(intrank_t, persona*, void*, size_t, size_t);
+template void gasnet::send_am_rdzv<progress_level::user>(intrank_t, persona*, void*, size_t, size_t);
 
 ////////////////////////////////////////////////////////////////////////
 // from: upcxx/backend.hpp
@@ -470,7 +503,7 @@ namespace {
     UPCXX_ASSERT(buf_done.ready());
   }
   
-  void am_eager_queued(
+  void am_eager_master(
       gasnet_token_t,
       void *buf, size_t buf_size,
       gasnet_handlerarg_t buf_align_and_level
@@ -485,6 +518,42 @@ namespace {
     if(UPCXX_GASNETEX_PAR && !backend::master.active_with_caller()) {
       detail::persona_defer(
         backend::master,
+        level_user ? progress_level::user : progress_level::internal,
+        [=]() {
+          m->execute_and_delete();
+        }
+      );
+    }
+    else {
+      rpc_inbox &inbox = level_user ? rpcs_user_ : rpcs_internal_;
+      inbox.enqueue(m);
+    }
+  }
+  
+  void am_eager_persona(
+      gasnet_token_t,
+      void *buf, size_t buf_size,
+      gasnet_handlerarg_t buf_align_and_level,
+      gasnet_handlerarg_t per_lo_h,
+      gasnet_handlerarg_t per_hi_h
+    ) {
+    
+    UPCXX_ASSERT(backend::rank_n!=-1);
+    size_t buf_align = buf_align_and_level>>1;
+    bool level_user = buf_align_and_level & 1;
+    
+    uintptr_t per_lo_u=0, per_hi_u=0;
+    std::memcpy(&per_lo_u, &per_lo_h, sizeof(gasnet_handlerarg_t));
+    std::memcpy(&per_hi_u, &per_hi_h, sizeof(gasnet_handlerarg_t));
+    
+    persona *per = reinterpret_cast<persona*>(per_hi_u<<31<<1 | per_lo_u);
+    per = per == nullptr ? &backend::master : per;
+    
+    rpc_message *m = rpc_message::build_copy(buf, buf_size, buf_align);
+    
+    if(UPCXX_GASNETEX_PAR && (per != &backend::master || !per->active_with_caller())) {
+      detail::persona_defer(
+        *per,
         level_user ? progress_level::user : progress_level::internal,
         [=]() {
           m->execute_and_delete();

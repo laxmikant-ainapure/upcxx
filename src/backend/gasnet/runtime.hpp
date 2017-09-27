@@ -54,9 +54,17 @@ namespace gasnet {
   void send_am_restricted(intrank_t recipient, Fn &&fn);
   
   // Send AM (packed command), receiver executes in `level` progress.
-  void send_am_eager_queued(
+  void send_am_eager_master(
     progress_level level,
     intrank_t recipient,
+    void *command_buf,
+    std::size_t buf_size,
+    std::size_t buf_align
+  );
+  void send_am_eager_persona(
+    progress_level level,
+    intrank_t recipient_rank,
+    persona *recipient_persona,
     void *command_buf,
     std::size_t buf_size,
     std::size_t buf_align
@@ -65,7 +73,8 @@ namespace gasnet {
   // Send AM (packed command) via rendezvous, receiver executes druing `level`.
   template<progress_level level>
   void send_am_rdzv(
-    intrank_t recipient,
+    intrank_t recipient_rank,
+    persona *recipient_persona, // nullptr == master
     void *command_buf,
     std::size_t buf_size, std::size_t buf_align
   );
@@ -105,7 +114,7 @@ namespace backend {
   // send_am
   
   template<upcxx::progress_level level, typename Fn>
-  void send_am(intrank_t recipient, Fn &&fn) {
+  void send_am_master(intrank_t recipient, Fn &&fn) {
     UPCXX_ASSERT(!UPCXX_GASNET1_SEQ || backend::master.active_with_caller());
     
     parcel_layout ub;
@@ -125,11 +134,43 @@ namespace backend {
     command_pack(w, ub.size(), fn);
     
     if(eager) {
-      gasnet::send_am_eager_queued(level, recipient, buf, w.size(), w.alignment());
+      gasnet::send_am_eager_master(level, recipient, buf, w.size(), w.alignment());
       std::free(buf);
     }
     else
-      gasnet::send_am_rdzv<level>(recipient, buf, w.size(), w.alignment());
+      gasnet::send_am_rdzv<level>(recipient, /*master*/nullptr, buf, w.size(), w.alignment());
+  }
+  
+  template<upcxx::progress_level level, typename Fn>
+  void send_am_persona(
+      intrank_t recipient_rank,
+      persona *recipient_persona,
+      Fn &&fn
+    ) {
+    UPCXX_ASSERT(!UPCXX_GASNET1_SEQ || backend::master.active_with_caller());
+    
+    parcel_layout ub;
+    command_size_ubound(ub, fn);
+    
+    bool eager = ub.size() <= gasnet::am_size_rdzv_cutover;
+    void *buf;
+    
+    if(eager) {
+      int ok = posix_memalign(&buf, ub.alignment(), ub.size());
+      UPCXX_ASSERT_ALWAYS(ok == 0);
+    }
+    else
+      buf = upcxx::allocate(ub.size(), ub.alignment());
+    
+    parcel_writer w{buf};
+    command_pack(w, ub.size(), fn);
+    
+    if(eager) {
+      gasnet::send_am_eager_persona(level, recipient_rank, recipient_persona, buf, w.size(), w.alignment());
+      std::free(buf);
+    }
+    else
+      gasnet::send_am_rdzv<level>(recipient_rank, recipient_persona, buf, w.size(), w.alignment());
   }
   
   //////////////////////////////////////////////////////////////////////
@@ -247,7 +288,7 @@ namespace gasnet {
     }
     else {
       gasnet::send_am_rdzv<progress_level::internal>(
-        recipient, buf, w.size(), w.alignment()
+        recipient, /*master*/nullptr, buf, w.size(), w.alignment()
       );
     }
   }

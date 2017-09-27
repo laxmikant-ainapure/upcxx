@@ -11,7 +11,7 @@ namespace upcxx {
   
   template<typename Fn, typename ...Args>
   void rpc_ff(intrank_t recipient, Fn &&fn, Args &&...args) {
-    backend::template send_am<progress_level::user>(
+    backend::template send_am_master<progress_level::user>(
       recipient,
       upcxx::bind(std::forward<Fn>(fn), std::forward<Args>(args)...)
     );
@@ -24,6 +24,7 @@ namespace upcxx {
     template<typename Pro>
     struct rpc_recipient_after {
       intrank_t initiator_;
+      persona *initiator_persona_;
       Pro *pro_;
       
       template<typename ...Args>
@@ -34,8 +35,9 @@ namespace upcxx {
           std::forward<Args>(args)...
         };
         
-        backend::template send_am<progress_level::user>(
+        backend::template send_am_persona<progress_level::user>(
           initiator_,
+          initiator_persona_,
           upcxx::bind(
             [=](decltype(results) const &results1) {
               pro->fulfill_result(std::move(results1));
@@ -76,9 +78,10 @@ namespace upcxx {
     using Pro = upcxx::tuple_types_into_t<results_type, promise>;
     
     intrank_t initiator = backend::rank_me;
+    persona *initiator_persona = &upcxx::current_persona();
     Pro *pro = new Pro;
     
-    backend::template send_am<progress_level::user>(
+    backend::template send_am_master<progress_level::user>(
       recipient,
       upcxx::bind(
         [=](decltype(fn_bound) &fn_bound1) {
@@ -88,7 +91,7 @@ namespace upcxx {
               // to take variadic Args... we have to call to an outlined
               // class. I'm not sure if even C++14's allowance of `auto`
               // lambda args would be enough.
-              detail::rpc_recipient_after<Pro>{initiator, pro}
+              detail::rpc_recipient_after<Pro>{initiator, initiator_persona, pro}
             );
         },
         std::move(fn_bound)
@@ -107,9 +110,10 @@ namespace upcxx {
     //using results_type = typename Fut::results_type;
     
     intrank_t initiator = backend::rank_me;
+    persona *initiator_persona = &upcxx::current_persona();
     promise<T...> *pro = &prom;
     
-    backend::template send_am<progress_level::user>(
+    backend::template send_am_master<progress_level::user>(
       recipient,
       upcxx::bind(
         [=](decltype(fn_bound) &fn_bound1) {
@@ -119,7 +123,7 @@ namespace upcxx {
               // to take variadic Args... we have to call to an outlined
               // class. I'm not sure if even C++14's allowance of `auto`
               // would be enough.
-              detail::rpc_recipient_after<promise<T...>>{initiator, pro}
+              detail::rpc_recipient_after<promise<T...>>{initiator, initiator_persona, pro}
             );
         },
         std::move(fn_bound)

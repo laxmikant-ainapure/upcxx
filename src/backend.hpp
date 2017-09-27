@@ -40,7 +40,10 @@ namespace backend {
   void during_level(Fn &&fn);
 
   template<progress_level level, typename Fn>
-  void send_am(intrank_t recipient, Fn &&fn);
+  void send_am_master(intrank_t recipient, Fn &&fn);
+  
+  template<progress_level level, typename Fn>
+  void send_am_persona(intrank_t recipient_rank, persona *recipient_persona, Fn &&fn);
   
   // Type definitions provided by backend.
   struct rma_put_cb;
