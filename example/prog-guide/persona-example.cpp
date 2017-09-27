@@ -27,6 +27,7 @@ int main(int argc, char **argv)
         // the number of trials to run on each rank
         int trials_per_rank = 100000;
         if (argc == 2) trials_per_rank = atoi(argv[1]);
+
         int hits = 0;
         int my_hits = 0;
 
