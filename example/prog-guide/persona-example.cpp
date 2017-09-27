@@ -24,10 +24,9 @@ int main(int argc, char **argv)
     srand(upcxx::rank_me());
 
     if (upcxx::rank_me() == 0) {
-        // rank 0 is the master and initiates the computation
-        int trials = 1000000;
-        // divide the work up evenly among the ranks
-        int trials_per_rank = (trials + upcxx::rank_n() - 1) / upcxx::rank_n();
+        // the number of trials to run on each rank
+        int trials_per_rank = 100000;
+        if (argc == 2) trials_per_rank = atoi(argv[1]);
         int hits = 0;
         int my_hits = 0;
 
@@ -89,6 +88,8 @@ int main(int argc, char **argv)
             } // end omp section
         } // end omp parallel sections
         hits += my_hits;
+        // the total number of trials over all ranks
+        int trials = upcxx::rank_n() * trials_per_rank;
         cout << "pi estimated as " << 4.0 * hits / trials << endl;
     } else {
         // other ranks progress until quiescence is reached (i.e. done == 1)
