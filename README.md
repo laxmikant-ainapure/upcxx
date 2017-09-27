@@ -64,6 +64,7 @@ The following features from that specification are not yet implemented:
 
  * Continuation-based and Promise-based completion (use future completion for
    now)
+ * `rput_then_rpc`
  * Teams
  * Serialization
  * Non-contiguous transfers
