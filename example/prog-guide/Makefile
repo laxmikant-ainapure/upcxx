@@ -7,10 +7,12 @@ ifeq ($(wildcard $(UPCXX_INSTALL)/bin/upcxx-meta),)
 $(error Please set UPCXX_INSTALL=/path/to/upcxx/install)
 endif
 
-CXX=$(shell $(UPCXX_INSTALL)/bin/upcxx-meta CXX) -std=c++11
-PPFLAGS=$(shell $(UPCXX_INSTALL)/bin/upcxx-meta PPFLAGS) -Wno-inline
-LDFLAGS=$(shell $(UPCXX_INSTALL)/bin/upcxx-meta LDFLAGS) -Wno-inline
+EXTRA_FLAGS=-std=c++11 -Wno-inline
+CXX=$(shell $(UPCXX_INSTALL)/bin/upcxx-meta CXX)
+PPFLAGS=$(shell $(UPCXX_INSTALL)/bin/upcxx-meta PPFLAGS) $(EXTRA_FLAGS)
+LDFLAGS=$(shell $(UPCXX_INSTALL)/bin/upcxx-meta LDFLAGS) $(EXTRA_FLAGS)
 LIBFLAGS=$(shell $(UPCXX_INSTALL)/bin/upcxx-meta LIBFLAGS)
+OPENMP_FLAGS=-fopenmp
 
 all: hello-world compute-pi compute-pi-multi-examples persona-example
 
@@ -21,9 +23,21 @@ CP_HDRS=async-distobj-reduce_to_rank0.hpp distobj-reduce_to_rank0.hpp global-ptr
 compute-pi-multi-examples: compute-pi-multi-examples.cpp $(CP_HDRS)
 	$(CXX) $< $(PPFLAGS) $(LDFLAGS) $(LIBFLAGS) -o $@ 
 
+OPENMP_EXAMPLES = persona-example
+$(OPENMP_EXAMPLES): % : %.cpp
+	@if test -z "$$UPCXX_BUILDING_PAR" ; then \
+	  export UPCXX_BUILDING_PAR=1 ; \
+	  export UPCXX_THREADMODE="par" ; \
+	  $(MAKE) $@ EXTRA_FLAGS="$(EXTRA_FLAGS) $(OPENMP_FLAGS)" ; \
+	else set -x ; \
+	  $(CXX) $< $(PPFLAGS) $(LDFLAGS) $(LIBFLAGS) -o $@ ; \
+	fi
+
 .cpp: *.h *.hpp
 	$(CXX) $< $(PPFLAGS) $(LDFLAGS) $(LIBFLAGS) -o $@
 
 clean:
 	rm -rf hello-world compute-pi compute-pi-multi-examples persona-example
+
+.PHONY: force
 
