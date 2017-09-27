@@ -8,12 +8,11 @@ done by executing:
 ./run-tests
 ```
 
-This will run a set of basic tests to ensure UPC++ is working correctly. By
-default, the tests are run on a single node using the UDP conduit. The default
-number of ranks is set to a reasonable value, more than 2 and no more than 16 or
-the number of hardware threads on the system. To specify an alternative number
-of ranks, set the environment variable `RANKS`, e.g. to run with 16 ranks, the
-script can be run as:
+By default, the tests are run on a single node using the UDP conduit. 
+The default number of ranks is set to a reasonable value, more than 2 
+and no more than 16 or the number of hardware threads on the system. To 
+specify an alternative number of ranks, set the environment variable 
+`RANKS`, e.g. to run with 16 ranks, the script can be run as:
 
 ```bash
 RANKS=16 ./run-tests
@@ -30,6 +29,12 @@ To see available conduits, run
 
 ```bash
 ./run-tests -h
+```
+
+When running on the Cray XC, `CROSS=cray-aries-slurm` must be set.
+
+```bash
+CROSS=cray-aries-slurm ./run-tests
 ```
 
 The compiler used for the test is chosen according to the following list, in

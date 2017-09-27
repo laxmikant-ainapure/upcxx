@@ -2,9 +2,13 @@
 
 CONDUIT_WHITELIST='udp|smp|ibv|aries'
 
-if [ "$1" == "-h" ]; then
-    echo "Usage: RANKS=<ranks> CONDUIT=<$CONDUIT_WHITELIST> ./run-tests"
-    echo "  Defaults to a reasonable number of RANKS for the current system, and the udp CONDUIT"
+if [[ "$1" = "-h" || "$1" = "--help" ]]; then
+    cat<<EOF
+Usage: RANKS=<ranks> CONDUIT=<${CONDUIT_WHITELIST}> ./run-tests
+  Defaults to a reasonable number of RANKS for the current system, and
+  the udp CONDUIT. Setting CROSS is required for cross-compilation
+  based platforms (Cray XC). See docs/testing.md for more information.
+EOF
     exit 0
 fi
     
