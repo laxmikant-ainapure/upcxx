@@ -31,10 +31,19 @@ To see available conduits, run
 ./run-tests -h
 ```
 
-When running on the Cray XC, `CROSS=cray-aries-slurm` must be set.
+When running on the Cray XC, you must set CROSS to indicate the appropriate
+network and batch system for your site, and also select the appropriate
+Cray conduit, e.g.:
 
 ```bash
-CROSS=cray-aries-slurm ./run-tests
+CROSS=cray-aries-slurm CONDUIT=aries ./run-tests
+```
+
+When running on an InfiniBand cluster, you'll want to select the InfiniBand
+conduit, and will likely also need `CXX=mpicxx` to use MPI for job spawning:
+
+```bash
+CONDUIT=ibv CXX=mpicxx ./run-tests
 ```
 
 The compiler used for the test is chosen according to the following list, in
