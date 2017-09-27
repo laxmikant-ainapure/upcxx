@@ -39,7 +39,7 @@ platform_sanity_checks() {
         elif test -n "$CRAY_PRGENVGNU" ; then
             CC=${CC:-cc}
             CXX=${CXX:-CC}
-	    if test -z "$CROSS" ; then
+	    if test -z "$CROSS" && test -z "$GASNET" ; then
 	      echo 'WARNING: To build for Cray XC compute nodes, you should set the CROSS variable (e.g. CROSS=cray-aries-slurm)'
 	    fi
         else
