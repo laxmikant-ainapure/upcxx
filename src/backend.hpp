@@ -18,6 +18,9 @@
 namespace upcxx {
   persona& master_persona();
   void liberate_master_persona();
+  
+  bool progress_required(persona_scope &ps = top_persona_scope());
+  void discharge(persona_scope &ps = top_persona_scope());
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -77,6 +80,15 @@ namespace backend {
 namespace upcxx {
   inline persona& master_persona() {
     return upcxx::backend::master;
+  }
+  
+  inline bool progress_required(persona_scope&) {
+    return false;
+  }
+  
+  inline void discharge(persona_scope &ps) {
+    while(upcxx::progress_required(ps))
+      upcxx::progress(progress_level::internal);
   }
 }
 
