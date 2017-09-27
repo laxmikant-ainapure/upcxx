@@ -13,42 +13,36 @@ This will build the UPC\+\+ library and install it to the
 non-existent or empty directories as the installation path so that 
 uninstallation is as trivial as `rm -rf <upcxx-install-path>`.  Note 
 that the install process downloads the GASNet communication library, so 
-an Internet connection is needed. Depending on your platform, 
+an Internet connection is needed. Depending on the platform, 
 additional configuration may be necessary before invoking `install`. 
 See below.
 
-### Installation: Linux ###
+**Installation: Linux**
 
 The installation command above will work as is. The default compilers 
 used will be gcc/g++. The `CC` and `CXX` environment variables can be 
 set to alternatives to override this behavior. Additional environment 
 variables allowing finer control over how UPC\+\+ is configured can be 
-found further in this document.
+found in the [Advanced Installer Configuration](#advanced-installer-configuration) section below.
 
-### Installation: Mac ###
+**Installation: Mac**
 
-Be sure to install the Xcode Command Line Tools before invoking
-`install`.
+The Xcode Command Line Tools need to be installed *before* invoking 
+`install`, i.e.:
 
 ```bash
 xcode-select --install
-
-# and then the usual installation command
-cd <upcxx-source-path>
-./install <upcxx-install-path>
 ```
 
-### Installation: Cray XC ###
+**Installation: Cray XC**
 
-To inform the installer of your intent of running on the compute nodes 
-of a Cray XC, you must have `CROSS=cray-aries-slurm` in your 
-environment when the installation is invoked. Additionally, because 
+To run on the compute nodes of a Cray XC, the `CROSS` environment variable needs to be set before
+the install command is invoked, i.e. `CROSS=cray-aries-slurm`. Additionally, because 
 UPC\+\+ does not currently support the Intel compilers (usually the 
-default for these systems) you must load in either GCC or Clang.
+default for these systems), either GCC or Clang must be loaded, e.g.:
 
 ```bash
 module switch PrgEnv-intel PrgEnv-gnu
-
 cd <upcxx-source-path>
 CROSS=cray-aries-slurm ./install <upcxx-install-path>
 ```
@@ -59,9 +53,8 @@ programming environment loaded.
 ## Advanced Installer Configuration ##
 
 The installer script tries to pick a sensible default behavior for the
-platform it's running on, but a user wishing for more control over that
-behavior may be interested in the following set of environment
-variables.
+platform it is running on, but the install can be customized using the 
+following environment variables: 
 
 * `CC`, `CXX`: The C and C\+\+ compilers to use.
 * `CROSS`: The cross-configure settings script to pull from the GASNet 
@@ -74,9 +67,9 @@ variables.
 * `GASNET_CONFIGURE_ARGS`: List of additional command line arguments
   passed to GASNet's configure phase.
 
-## Compiling Against UPC\+\+ ##
+# Compiling Against UPC\+\+ #
 
-With UPC\+\+ installed, your application's build process can query for
+With UPC\+\+ installed, the application's build process can query for
 the appropriate compiler flags to enable building against upcxx by
 invoking the `<upcxx-install-path>/bin/upcxx-meta <what>` script, where
 `<what>` indicates which form of flags are desired. Valid values are:
@@ -90,19 +83,8 @@ invoking the `<upcxx-install-path>/bin/upcxx-meta <what>` script, where
   line. These will make libupcxx and its dependencies available to
   the linker.
 
-For example, to build a single-file application `my-app.cpp` with
-UPC\+\+:
-
-```bash
-<c++ compiler> -std=c++11 \
-  $(<upcxx-install-path>/bin/upcxx-meta PPFLAGS) \
-  my-app.cpp \
-  $(<upcxx-install-path>/bin/upcxx-meta LDFLAGS) \
-  $(<upcxx-install-path>/bin/upcxx-meta LIBFLAGS)
-```
-
-Building a multi-file application consisting of `my-app1.cpp` and
-`my-app2.cpp` could look like:
+For example, to build an application consisting of `my-app1.cpp` and
+`my-app2.cpp`:
 
 ```bash
 upcxx="<upcxx-install-path>/bin/upcxx-meta"
@@ -111,31 +93,31 @@ upcxx="<upcxx-install-path>/bin/upcxx-meta"
 <c++ compiler> $($upcxx LDFLAGS) my-app1.o my-app2.o $($upcxx LIBFLAGS)
 ```
 
-Be sure that the `<c++ compiler>` used to build your application is the
-same one UPC\+\+'s installation used.
+The `<c++ compiler>` used to build the application must be the
+same as the one used for the UPC\+\+ installation.
 
 For an example of a Makefile which builds UPC++ applications, look at
 `example/prog-guide/Makefile`. This directory also has code for running
-all the examples given in the guide. To use that `Makefile`, first set
+all the examples given in the programmer's guide. To use that `Makefile`, first set
 the `UPCXX_INSTALL` shell variable to the `<upcxx-install-path>`.
 
-# UPC\+\+ Backends #
+## UPC\+\+ Backends ##
 
-UPC\+\+ provides multiple "backends" offering the user flexibility to 
-choose the means by which the parallel communication facilities are 
-implemented. At the moment, these backends are characterized by three 
-dimensions: conduit, thread-mode, and code-mode. The conduit and 
-thread-mode parameters map directly to the GASNet concepts of the same 
-name. Code-mode selects between highly optimized code and highly 
-debuggable code. The `upcxx-meta` script will assume sensible defaults 
-for these paramters based on the installation configuration. The 
-following environment variables can be set to influence which backend 
-`upcxx-meta` selects.
+UPC\+\+ provides multiple "backends" offering the user flexibility to
+choose the means by which the parallel communication facilities are
+implemented. Those backends are characterized by three dimensions:
+conduit, thread-mode, and code-mode. The conduit and thread-mode
+parameters map directly to the GASNet concepts of the same name (for
+more explanation, see below). Code-mode selects between highly
+optimized code and highly debuggable code. The `upcxx-meta` script
+will assume sensible defaults for these parameters based on the
+installation configuration. The following environment variables can be
+set to influence which backend `upcxx-meta` selects:
 
 * `UPCXX_GASNET_CONDUIT=[smp|udp|aries]`: The GASNet conduit to use. 
   `smp` is the typical high-performance choice for single-node 
-  multi-core runs. `udp` is a useful low-performance alternative for 
-  testing and debugging. And `aries` is the high-performance Cray XC 
+  multi-core runs, `udp` is a useful low-performance alternative for 
+  testing and debugging, and `aries` is the high-performance Cray XC 
   network. The default value is platform dependent.
 * `UPCXX_THREADMODE=[seq|par]`: The value `seq` limits the 
   application to only calling "communicating" upcxx routines from the 
@@ -152,7 +134,7 @@ following environment variables can be set to influence which backend
   checking assertions, and is annotated with the symbol tables needed 
   by debuggers. The default value is always `O3`.
 
-## Running UPC\+\+ Programs ##
+# Running UPC\+\+ Programs #
 
 To run a parallel UPC\+\+ application, use the `upcxx-run` launcher
 provided in the installation directory:
