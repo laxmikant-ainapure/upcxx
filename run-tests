@@ -22,11 +22,11 @@ echo "Checking platform..."
 platform_sanity_checks
 
 # Check for supported conduits
-case "$CONDUIT" in
+eval "case '$CONDUIT' in
   $CONDUIT_WHITELIST) ;;
                   '') export CONDUIT=udp ;;
-                   *) echo "WARNING: CONDUIT=$CONDUIT has not been validated with UPC++" ;;
-esac
+                   *) echo 'WARNING: CONDUIT=$CONDUIT has not been validated with UPC++' ;;
+esac"
 echo "Using $CONDUIT conduit (set environment variable CONDUIT=<$CONDUIT_WHITELIST> to change)"
 
 # Choose a good default RANK count
