@@ -4,6 +4,8 @@ use strict;
 
 my $debug = $ENV{'UPCXX_VERBOSE'} or 0;
 
+shift if $ARGV[0] and ($ARGV[0] =~ m@^-np?$@i);
+
 if (@ARGV < 2) {
   my $myname = $0; $myname =~ s@^(.*/)@@;
   print STDERR "usage: $myname <num_ranks> <executable> [arguments...]\n";
