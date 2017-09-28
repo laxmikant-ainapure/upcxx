@@ -16,6 +16,8 @@ my $exe = shift;
 die "Value '$np' is not a valid rank count\n" unless ($np =~ /^[1-9][0-9]*$/);
 open (FILE, $exe) || die "Could not open executable '$exe'";
 
+$exe = "./$exe" if not $exe =~ m@/@;
+
 my $conduit;
 {   local $/ = '$'; # use $ as the line break symbol
     while (<FILE>) {
