@@ -5,37 +5,22 @@
  * upcxx backends. Some of it user-facing, some internal only.
  */
 
+#include <upcxx/backend_fwd.hpp>
+
+// Pulls in diagnostic.cpp which defines backend::rank_n/me
+#include <upcxx/diagnostic.hpp>
+
 #include <upcxx/future.hpp>
-#include <upcxx/packing.hpp>
+#include <upcxx/persona.hpp>
 
-#include <cstddef>
-#include <cstdint>
+////////////////////////////////////////////////////////////////////////
 
-//////////////////////////////////////////////////////////////////////
-// Public API:
-  
 namespace upcxx {
-  typedef int intrank_t;
-  typedef unsigned int uintrank_t;
+  persona& master_persona();
+  void liberate_master_persona();
   
-  enum class progress_level {
-    internal,
-    user
-  };
-  
-  void init();
-  void finalize();
-  
-  intrank_t rank_n();
-  intrank_t rank_me();
-  
-  void* allocate(std::size_t size,
-                 std::size_t alignment = alignof(std::max_align_t));
-  void deallocate(void *p);
-  
-  void progress(progress_level lev = progress_level::user);
-  
-  void barrier();
+  bool progress_required(persona_scope &ps = top_persona_scope());
+  void discharge(persona_scope &ps = top_persona_scope());
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -43,19 +28,22 @@ namespace upcxx {
 
 namespace upcxx {
 namespace backend {
-  extern intrank_t rank_n;
-  extern intrank_t rank_me;
+  extern persona master;
+  extern persona_scope *initial_master_scope;
   
   template<typename Fn>
   void during_user(Fn &&fn);
   void during_user(promise<> &&pro);
   void during_user(promise<> *pro);
   
-  template<typename Fn>
-  void during_level(progress_level level, Fn &&fn);
+  template<progress_level level, typename Fn>
+  void during_level(Fn &&fn);
 
   template<progress_level level, typename Fn>
-  void send_am(intrank_t recipient, Fn &&fn);
+  void send_am_master(intrank_t recipient, Fn &&fn);
+  
+  template<progress_level level, typename Fn>
+  void send_am_persona(intrank_t recipient_rank, persona *recipient_persona, Fn &&fn);
   
   // Type definitions provided by backend.
   struct rma_put_cb;
@@ -68,7 +56,7 @@ namespace backend {
   void rma_put(
     intrank_t rank_d,
     void *buf_d,
-    void *buf_s,
+    void const *buf_s,
     std::size_t buf_size,
     rma_put_cb *cb
   );
@@ -84,20 +72,51 @@ namespace backend {
   void rma_get(
     void *buf_d,
     intrank_t rank_s,
-    void *buf_s,
+    void const *buf_s,
     std::size_t buf_size,
     rma_get_cb *cb
   );
 }}
-  
+
 ////////////////////////////////////////////////////////////////////////
-// Public API implementations:
 
 namespace upcxx {
-  inline intrank_t rank_n() { return backend::rank_n; }
-  inline intrank_t rank_me() { return backend::rank_me; }
+  inline persona& master_persona() {
+    return upcxx::backend::master;
+  }
+  
+  inline bool progress_required(persona_scope&) {
+    return false;
+  }
+  
+  inline void discharge(persona_scope &ps) {
+    while(upcxx::progress_required(ps))
+      upcxx::progress(progress_level::internal);
+  }
 }
 
+////////////////////////////////////////////////////////////////////////
+
+namespace upcxx {
+namespace backend {
+  template<typename Fn>
+  void during_user(Fn &&fn) {
+    during_level<progress_level::user>(std::forward<Fn>(fn));
+  }
+  
+  inline void during_user(promise<> &&pro) {
+    struct deferred {
+      promise<> pro;
+      void operator()() { pro.fulfill_result(); }
+    };
+    during_user(deferred{std::move(pro)});
+  }
+  
+  inline void during_user(promise<> *pro) {
+    during_user([=]() { pro->fulfill_result(); });
+  }
+}}
+  
 #endif // #ifdef guard
 
 ////////////////////////////////////////////////////////////////////////
@@ -108,14 +127,11 @@ namespace upcxx {
 // defined to be another symbol that otherwise doesn't exist. So we
 // define and immediately undefine them.
 #define gasnet1_seq 100
-// #define gasnet1_par 101
-// ...
-
-#if UPCXX_BACKEND == gasnet1_seq
+#define gasnetex_par 101
+#if UPCXX_BACKEND == gasnet1_seq || UPCXX_BACKEND == gasnetex_par
   #undef gasnet1_seq
-  // #undef gasnet1_par 101
-  // ...
-  #include <upcxx/backend/gasnet1_seq/backend.hpp>
+  #undef gasnetex_par
+  #include <upcxx/backend/gasnet/runtime.hpp>
 #else
   #error "Invalid UPCXX_BACKEND."
 #endif

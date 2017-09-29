@@ -1,0 +1,78 @@
+#!/usr/bin/env perl
+require 5.004;
+use strict;
+
+my $debug = $ENV{'UPCXX_VERBOSE'} or 0;
+
+if (@ARGV < 2) {
+  my $myname = $0; $myname =~ s@^(.*/)@@;
+  print STDERR "usage: $myname <num_ranks> <executable> [arguments...]\n";
+  exit 1;
+}
+
+my $np = shift;
+my $exe = shift;
+
+die "Value '$np' is not a valid rank count\n" unless ($np =~ /^[1-9][0-9]*$/);
+open (FILE, $exe) || die "Could not open executable '$exe'";
+
+$exe = "./$exe" if not $exe =~ m@/@;
+
+my $conduit;
+{   local $/ = '$'; # use $ as the line break symbol
+    while (<FILE>) {
+        next unless(/^GASNet/);
+        if (/GASNetConduitName: ([A-Z]*) \$/o) {
+           $conduit = lc($1);
+           last;
+        }
+    }
+    close(FILE);
+}
+
+my @cmd;
+my $spawner;
+if (!$conduit) {
+  die "'$exe' does not appear to be a UPC++/GASNet executable\n";
+} elsif ($conduit eq 'smp') {
+    $ENV{'GASNET_PSHM_NODES'} = $np;
+    print "GASNET_PSHM_NODES=$np\n" if $debug;
+    @cmd = ( $exe );
+} elsif ($conduit eq 'udp') {
+    $spawner = 'amudprun';
+    @cmd = ( '-np', $np, $exe );
+} elsif (grep { /$conduit/ } qw/mpi ibv aries gemini pami/) {
+    $spawner = "gasnetrun_$conduit";
+    @cmd = ( '-n', $np, $exe );
+} else {
+    die "Unknown gasnet conduit '$conduit'\n";
+}
+
+if ($spawner) { 
+  # look for spawner in some known directories, otherwise rely on path
+  my $mypath = $0; $mypath =~ s@/[^/]*$@@;
+  my @spawner_path = (
+    ($ENV{'GASNET_PREFIX'} and "$ENV{'GASNET_PREFIX'}/bin"),
+    ($ENV{'GASNET_PREFIX'} and "$ENV{'GASNET_PREFIX'}/$conduit-conduit/contrib"),
+    ($ENV{'GASNET_PREFIX'} and "$ENV{'GASNET_PREFIX'}/other/amudp"),
+    ($mypath and "$mypath/../gasnet.debug/bin"),
+    ($mypath and "$mypath/../gasnet.opt/bin"),
+    ($ENV{'UPCXX_INSTALL'} and "$ENV{'UPCXX_INSTALL'}/gasnet.debug/bin"),
+    ($ENV{'UPCXX_INSTALL'} and "$ENV{'UPCXX_INSTALL'}/gasnet.opt/bin"),
+  );
+  print "spawner_path=".join(":", @spawner_path)."\n" if $debug;
+  foreach my $path (@spawner_path) {
+    if ($path and -x "$path/$spawner") {
+      $spawner = "$path/$spawner";
+      print "found spawner: $spawner\n" if $debug;
+      last;
+    }
+  }
+  unshift @cmd, $spawner;
+}
+
+push @cmd, @ARGV;
+print join(" ",@cmd)."\n" if $debug;
+
+exec (@cmd) || die $!;
+

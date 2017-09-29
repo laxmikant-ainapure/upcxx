@@ -4,38 +4,43 @@
  * for use with individual code snippets extracted directly from the programmer's guide.
 */
 
-
+#include <libgen.h>
 #include <iostream>
 #include <cstdlib>
 #include <random>
 #include <upcxx/upcxx.hpp>
+#include "../../test/util.hpp"
 
 using namespace std;
 
 #include "fetch.hpp"
 
 namespace rpc {
-    #include "rpc-accumulate.hpp"
+    #include "rpc-reduce_to_rank0.hpp"
+}
+
+namespace rpc_no_barrier {
+    #include "rpc-reduce_to_rank0-no-barrier.hpp"
 }
 
 namespace global_ptrs {
-    #include "global-ptrs-accumulate.hpp"
+    #include "global-ptrs-reduce_to_rank0.hpp"
 }
 
 namespace distobj {
-    #include "distobj-accumulate.hpp"
+    #include "distobj-reduce_to_rank0.hpp"
 }
 
 namespace async_distobj {
-    #include "async-distobj-accumulate.hpp"
+    #include "async-distobj-reduce_to_rank0.hpp"
 }
 
 namespace atomics {
-    #include "atomics-accumulate.hpp"
+    #include "atomics-reduce_to_rank0.hpp"
 }
 
-namespace quiesence {
-    #include "quiesence-accumulate.hpp"
+namespace quiescence {
+    #include "quiescence-reduce_to_rank0.hpp"
 }
 
 int hit()
@@ -46,36 +51,47 @@ int hit()
     else return 0;
 }
 
-
-#define ACCM(version)                                                   \
-    hits = version::accumulate(my_hits);                                \
-	if (upcxx::rank_me() == 0) {										\
-        cout << #version << ": pi estimate: " << 4.0 * hits / trials    \
+// the prev is passed into the macro to check that the results between the two
+// versions are identical
+#define ACCM(version, prev)                                             \
+    int hits_##version = version::reduce_to_rank0(my_hits);             \
+    if (!upcxx::rank_me()) {                                            \
+        cout << #version << ": pi estimate: " << 4.0 * hits_##version / trials \
              << ", rank 0 alone: " << 4.0 * my_hits / my_trials << endl; \
-	}
-
-
+        UPCXX_ASSERT_ALWAYS(hits_##version == hits_##prev, "hits mismatch between " #version " and " #prev); \
+    }
 
 int main(int argc, char **argv)
 {
     upcxx::init();
+    if (!upcxx::rank_me()) {
+        cout << "Testing " << basename((char*)__FILE__) << " with " << upcxx::rank_n() << " ranks" << endl;
+    }
     int my_hits = 0;
-    // keep the number of trials per rank low to show the difference between single and multiple ranks
-    int my_trials = 2;
+    int my_trials = 100000;
+    if (argc >= 2) my_trials = atoi(argv[1]);
     int trials = upcxx::rank_n() * my_trials;
+    if (!upcxx::rank_me()) 
+      cout << "Calculating pi with " << trials << " trials, distributed across " << upcxx::rank_n() << " ranks." << endl;
     srand(upcxx::rank_me());
     for (int i = 0; i < my_trials; i++) {
         my_hits += hit();
     }
 
-    int hits;
-    
-    ACCM(rpc);
-    ACCM(global_ptrs);
-    ACCM(distobj);
-    ACCM(async_distobj);
-    ACCM(atomics);
-    ACCM(quiesence);
+    ACCM(rpc, rpc);
+    ACCM(rpc_no_barrier, rpc);
+    ACCM(global_ptrs, rpc_no_barrier);
+    ACCM(distobj, global_ptrs);
+    ACCM(async_distobj, distobj);
+    ACCM(atomics, async_distobj);
+    ACCM(quiescence, atomics);
+    // now check that the result is reasonable
+    if (!upcxx::rank_me()) {
+        double pi = 4.0 * hits_rpc / trials;
+        cout << "Computed pi to be " << pi << endl;
+        UPCXX_ASSERT_ALWAYS(pi >= 3 && pi <= 3.5, "pi is out of range (3, 3.5)");
+        cout << KLGREEN << "SUCCESS" << KNORM << endl;
+    }
 
     upcxx::finalize();
     return 0;

@@ -2,6 +2,7 @@
 #define _1e7a65b7_b8d1_4def_98a3_76038c9431cf
 
 #include <upcxx/future/core.hpp>
+#include <upcxx/backend_fwd.hpp>
 
 namespace upcxx {
   //////////////////////////////////////////////////////////////////////
@@ -44,6 +45,21 @@ namespace upcxx {
    */
   
   //////////////////////////////////////////////////////////////////////
+  
+  namespace detail {
+    struct future_wait_upcxx_progress_user {
+      void operator()() const {
+        upcxx::progress();
+      }
+    };
+    
+    template<typename T>
+    struct is_future1: std::false_type {};
+    template<typename Kind, typename ...T>
+    struct is_future1<future1<Kind,T...>>: std::true_type {};
+  }
+  
+  //////////////////////////////////////////////////////////////////////
   // future1: The actual type users get (aliased as future<>).
   
   template<typename Kind, typename ...T>
@@ -59,7 +75,11 @@ namespace upcxx {
     ~future1() = default;
     
     future1(impl_type impl): impl_{std::move(impl)} {}
-    template<typename impl_type1>
+    
+    template<typename impl_type1,
+             // Prune from overload resolution if `impl_type1` is a
+             // future1 (and therefor not an actual impl type).
+             typename = typename std::enable_if<!detail::is_future1<impl_type1>::value>::type>
     future1(impl_type1 impl): impl_{std::move(impl)} {}
     
     future1(future1 const&) = default;
@@ -95,7 +115,10 @@ namespace upcxx {
     }
     
     results_type results() const {
-      return results_type{impl_.template result_rvals()};
+      return results_type{const_cast<impl_type&>(impl_).template result_rvals()};
+    }
+    results_type result_tuple() const {
+      return results_type{const_cast<impl_type&>(impl_).template result_rvals()};
     }
     
     template<int i=0>
@@ -106,7 +129,11 @@ namespace upcxx {
     
     auto results_moved()
       -> decltype(impl_.template result_rvals()) {
-      return impl_.template results_rvals();
+      return impl_.template result_rvals();
+    }
+    auto results_tuple_moved()
+      -> decltype(impl_.template result_rvals()) {
+      return impl_.template result_rvals();
     }
     
     template<typename Fn>
@@ -135,6 +162,14 @@ namespace upcxx {
         *this,
         std::forward<Fn>(pure_fn)
       );
+    }
+    
+    template<typename Fn=detail::future_wait_upcxx_progress_user>
+    auto wait(Fn &&progress = detail::future_wait_upcxx_progress_user{})
+      -> decltype(this->result()) {
+      while(!impl_.ready())
+        progress();
+      return this->result();
     }
   };
 }

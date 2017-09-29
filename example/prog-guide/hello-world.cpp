@@ -6,7 +6,6 @@ using namespace std;
 
 int main(int argc, char *argv[])
 {
-    // this is the change!!!
     // setup UPC++ runtime
     upcxx::init();
     // upcxx::rank_me() - get number for this rank

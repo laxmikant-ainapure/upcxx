@@ -54,22 +54,13 @@ def _everything():
   os_link = os.link
   os_listdir = os.listdir
   os_makedirs = os.makedirs
-  os_readlink = os.readlink
   os_remove = os.remove
   os_rmdir = os.rmdir
   os_symlink = os.symlink
   os_walk = os.walk
   
   os_path_abspath = os.path.abspath
-  os_path_dirname = os.path.dirname
-  #os_path_exists = os.path.exists
-  os_path_expanduser = os.path.expanduser
-  os_path_isabs = os.path.isabs
-  os_path_isdir = os.path.isdir
-  os_path_isfile = os.path.isfile
-  os_path_islink = os.path.islink
   os_path_join = os.path.join
-  os_path_normcase = os.path.normcase
   os_path_normpath = os.path.normpath
   os_path_sep = os.path.sep
   
@@ -115,7 +106,7 @@ def _everything():
   @export
   def memoized(cls):
     cls.__bases__ += (MemoizedBase,)
-    uid = digest_of(cls.__module__, cls.__name__, dir(cls), getattr(cls,'unique_id',None))
+    uid = digest_of(cls.__module__, cls.__name__, dir(cls), getattr(cls,'version_bump',None))
     cls._uid = uid
     
     def proxy(cxt, *args, **kws):
@@ -195,15 +186,12 @@ def _everything():
               db._size_tail = f.tell()
               break
       
-      db._mtimes = {} # {digest(path): mtime}
       db._lock_acquire = async.CriticalSection(threadsafe=False).acquire
       db._failed_name_seqs = []
       
       db_tree = db._tree
       db_files = db._files
       db_files_get = db_files.get
-      db_mtimes = db._mtimes
-      db_mtimes_get = db_mtimes.get
       db_lock_acquire = db._lock_acquire
       db_failed_name_seqs = db._failed_name_seqs
       
@@ -251,41 +239,32 @@ def _everything():
       # register as method
       db.save = save
       
-      def get_mtime_smart(path):
-        mt = os.lstat(path).st_mtime
-        while os_path_islink(path):
-          path1 = os_readlink(path)
-          if not os_path_isabs(path1):
-            path1 = os_path_join(os_path_dirname(path), path1)
-          path = path1
-          mt = max(mt, os_path_getmtime(path))
-        return mt
-      
       def file_digest(apath):
-        if not os_extra_exists(apath):
-          return 'D.N.E.'
+        NO_EXIST = (-1, 'NO_EXIST') # (mtime, digest) of non-existent file
         
-        mtime = db_mtimes_get(apath)
-        if mtime is None:
-          db_mtimes[apath] = mtime = get_mtime_smart(apath)
+        mtime = os_extra.mtime(apath)
         
-        if db_files_get(apath, (-1,None))[0] != mtime:
-          sha1 = hashlib_sha1()
-          up = sha1.update
-          up('%x:' % len(apath))
-          up(apath)
-          with open(apath, 'rb') as f:
-            for chk in iter(lambda: f.read(8192), b''):
-              up(chk)
-          digest = sha1.digest()
-          db_files[apath] = (mtime, digest)
+        if db_files_get(apath, NO_EXIST)[0] != mtime:
+          if mtime != -1:
+            sha1 = hashlib_sha1()
+            up = sha1.update
+            up('%x:' % len(apath))
+            up(apath)
+            with open(apath, 'rb') as f:
+              for chk in iter(lambda: f.read(8192), b''):
+                up(chk)
+            digest = sha1.digest()
+            db_files[apath] = (mtime, digest)
+          else:
+            digest = NO_EXIST[1]
+            db_files[apath] = NO_EXIST
           
           record = cPickle_dumps(('file',apath,mtime,digest), protocol=2)
           with open(path_db, 'ab') as f:
             f.write(record)
         
-        return db_files[apath][1]
-        
+        return db_files_get(apath, NO_EXIST)[1]
+      
       def _execute(cls, args, kws):
         return memo_execute(cls, args, kws, set())
       # register as method

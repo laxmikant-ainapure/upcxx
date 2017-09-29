@@ -34,7 +34,35 @@
  * serializable.
  */
 
+#if 0
+  /* Disabling strict-aliasing warning suppression since we're now using
+   * memcpy, which is the only safe way to transfer bytes between types.
+   * Just hoping the compiler is smart enough to use word-moves instead
+   * of byte-moves.
+   */
+  #if __GNUC__ >= 5
+    // issue 13: suppress scary GCC warnings from the type-punning below  
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wstrict-aliasing"
+    #define UPCXXI_DIAG_POP 1
+  #endif
+#endif
+
 namespace upcxx {
+  template<typename T>
+  union raw_storage {
+    typename std::aligned_storage<sizeof(T), alignof(T)>::type raw;
+    T value;
+    
+    raw_storage() {}
+    raw_storage(raw_storage const &that): raw{that.raw} {}
+    raw_storage& operator=(raw_storage const &that) {
+      this->raw = that.raw;
+      return *this;
+    }
+    ~raw_storage() {}
+  };
+  
   //////////////////////////////////////////////////////////////////////
   // parcel_layout: Used for accumulating the size and alignment of
   // packed data as well as determining the position of packed items.
@@ -135,46 +163,27 @@ namespace upcxx {
     
     template<typename T>
     T* put_trivial_aligned(const T &x) {
-      using mem = typename std::aligned_storage<sizeof(T),alignof(T)>::type;
       std::size_t p = lay_.add_bytes(sizeof(T), alignof(T));
-      *(mem*)(buf_ + p) = *reinterpret_cast<mem const*>(&x);
+      std::memcpy((T*)(buf_ + p), &x, sizeof(T));
       return (T*)(buf_ + p);
     }
-    
     template<typename T>
     T* put_trivial_aligned(const T *x, std::size_t n) {
-      using mem = typename std::aligned_storage<sizeof(T),alignof(T)>::type;
       std::size_t p = lay_.add_bytes(n*sizeof(T), alignof(T));
-      
-      mem *__restrict w = (mem*)(buf_ + p);
-      mem const *__restrict r = reinterpret_cast<mem const*>(x);
-      for(std::size_t m=n; m!=0; m--)
-        *w++ = *r++;
-      
+      std::memcpy((T*)(buf_ + p), x, n*sizeof(T));
       return (T*)(buf_ + p);
     }
     
     template<typename T>
     void* put_trivial_unaligned(const T &x) {
       std::size_t p = lay_.add_bytes(sizeof(T));
-      for(std::size_t i=0; i != sizeof(T); i++)
-        buf_[p+i] = ((char const*)&x)[i];
+      std::memcpy(buf_ + p, &x, sizeof(T));
       return buf_ + p;
     }
     template<typename T>
     void* put_trivial_unaligned(const T *x, std::size_t n) {
       std::size_t p = lay_.add_bytes(n*sizeof(T));
-      
-      char *__restrict w = buf_ + p;
-      char const *__restrict r = (char const*)x;
-      
-      for(std::size_t m=n; m!=0; m--) {
-        for(std::size_t i=0; i != sizeof(T); i++)
-          w[i] = r[i];
-        w += sizeof(T);
-        r += sizeof(T);
-      }
-      
+      std::memcpy((T*)(buf_ + p), x, n*sizeof(T));
       return buf_ + p;
     }
   };
@@ -234,15 +243,10 @@ namespace upcxx {
     
     template<typename T>
     T pop_trivial_unaligned() {
-      using mem = typename std::aligned_storage<sizeof(T),alignof(T)>::type;
       std::size_t p = lay_.add_bytes(sizeof(T));
-      
-      mem tmp;
-      char const *__restrict r = buf_ + p;
-      for(std::size_t i=0; i != sizeof(T); i++)
-        ((char*)&tmp)[i] = r[i];
-      
-      return *reinterpret_cast<T*>(&tmp);
+      raw_storage<T> tmp;
+      std::memcpy(&tmp.value, buf_ + p, sizeof(T));
+      return tmp.value;
     }
     template<typename T>
     char const* pop_trivial_unaligned(std::size_t n) {
@@ -321,8 +325,10 @@ namespace upcxx {
     static void size_ubound(parcel_layout &ub, const T &x) {}
     static void pack(parcel_writer &w, const T &x) {}
     static T unpack(parcel_reader &r) {
-      typename std::aligned_storage<sizeof(T),alignof(T)>::type ooze = {};
-      return *reinterpret_cast<T*>(&ooze);
+      raw_storage<T> ooze;
+      return ooze.value;
+      //typename std::aligned_storage<sizeof(T),alignof(T)>::type ooze = {};
+      //return *reinterpret_cast<T*>(&ooze);
     }
   };
   
@@ -480,15 +486,17 @@ namespace upcxx {
        */
       
       // Uninitialized memory to hold unpacked value.
-      typename std::aligned_storage<sizeof(T),alignof(T)>::type ooze = {};
+      raw_storage<T> ooze;
+      //typename std::aligned_storage<sizeof(T),alignof(T)>::type ooze = {};
       
       // The unpack reflecter will placement-construct each member.
       packing_unpack_reflector</*member_assignment_not_construction=*/false> re{r};
-      reflect_upon(re, *reinterpret_cast<T*>(&ooze));
+      //reflect_upon(re, *reinterpret_cast<T*>(&ooze));
+      reflect_upon(re, ooze.value);
       
       // Return to user, make sure to destruct moved-out object.
-      T ans = reinterpret_cast<T&&>(ooze);
-      reinterpret_cast<T&>(ooze).~T();
+      T ans = reinterpret_cast<T&&>(ooze.value);
+      ooze.value.~T();
       return ans;
     }
   };
@@ -502,18 +510,16 @@ namespace upcxx {
 
     template<typename Fp>
     static std::uintptr_t funptr_to_uintptr(Fp fp) {
-      using mem = typename std::aligned_storage<sizeof(Fp),alignof(Fp)>::type;
-      mem tmp;
-      new(&tmp) Fp{fp};
-      return *reinterpret_cast<std::uintptr_t*>(&tmp);
+      std::uintptr_t ans;
+      std::memcpy(&ans, &fp, sizeof(Fp));
+      return ans;
     }
     
     template<typename Fp>
     static Fp funptr_from_uintptr(std::uintptr_t u) {
-      using mem = typename std::aligned_storage<sizeof(Fp),alignof(Fp)>::type;
-      mem tmp;
-      new(&tmp) std::uintptr_t{u};
-      return *reinterpret_cast<Fp*>(&tmp);
+      Fp ans;
+      std::memcpy(&ans, &u, sizeof(Fp));
+      return ans;
     }
   }
   
@@ -830,4 +836,8 @@ namespace upcxx {
     }
   };
 }
+#if UPCXXI_DIAG_POP
+  #pragma GCC diagnostic pop
+  #undef UPCXXI_DIAG_POP
+#endif
 #endif

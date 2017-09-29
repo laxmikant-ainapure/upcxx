@@ -58,7 +58,7 @@ namespace upcxx {
         raw_ptr_ = ptr;
         rank_ = 0; // null pointer represented with rank 0
       } else {
-        raw_ptr_ = pshm_local_addr2remote(ptr, rank_);
+        raw_ptr_ = static_cast<T*>(pshm_local_addr2remote(ptr, rank_));
         UPCXX_ASSERT(raw_ptr_ && "address must be in shared segment");
       }
     }

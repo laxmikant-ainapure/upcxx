@@ -14,11 +14,11 @@ int hit()
     else return 0;
 }
 
-// accumulate the hits 
-int accumulate(int my_hits)
+// sum the hits to rank 0
+int reduce_to_rank0(int my_hits)
 {
     // wait for a collective reduction that sums all local values
-    return upcxx::wait(upcxx::allreduce(my_hits, plus<int>() ));
+    return upcxx::allreduce(my_hits, plus<int>()).wait();
 }
 
 int main(int argc, char **argv)
@@ -26,9 +26,8 @@ int main(int argc, char **argv)
     upcxx::init();
     // each rank gets its own copy of local variables
     int my_hits = 0;
-    // keep the number of trials per rank low to show the difference between 
-    // single and multiple ranks
-    int my_trials = 2;
+    // the number of trials to run on each rank
+    int my_trials = 100000;
     // each rank gets its own local copies of input arguments
     if (argc == 2) my_trials = atoi(argv[1]);
     // initialize the random number generator differently for each rank
@@ -37,8 +36,8 @@ int main(int argc, char **argv)
     for (int i = 0; i < my_trials; i++) {
         my_hits += hit();
     }
-    // accumulate and print out the final result
-    int hits = accumulate(my_hits);
+    // sum the hits and print out the final result
+    int hits = reduce_to_rank0(my_hits);
     // only rank 0 prints the result
     if (upcxx::rank_me() == 0) {
         // the total number of trials over all ranks

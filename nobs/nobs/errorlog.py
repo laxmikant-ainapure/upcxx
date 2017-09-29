@@ -20,6 +20,13 @@ def _everything():
   YELLOW = '\x1b[33m'
   BLUE = '\x1b[34m'
   WHITE = '\x1b[37m'
+
+  if os.environ.get('TERM','') == 'dumb':
+    RESET = ''
+    RED = ''
+    YELLOW = ''
+    BLUE = ''
+    WHITE = ''
   
   def terminal_rows_cols():
     import struct
@@ -115,7 +122,7 @@ def _everything():
     show("WARNING: " + message)
   
   @export
-  def show(title, message):
+  def show(title, message=''):
     """
     Print error message to stderr and display in the abort log if an
     aborting error occurs elsewhere.
@@ -197,10 +204,9 @@ def _everything():
         pager = os.environ.get('PAGER','less -R').split()
         less = sp.Popen(pager, stdin=sp.PIPE)
         less.communicate(text)
-        sys.exit(less.returncode)
       else:
         sys.stderr.write(text)
-        sys.exit(1)
+      sys.exit(1)
 
 _everything()
 del _everything

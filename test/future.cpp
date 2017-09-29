@@ -1,19 +1,21 @@
 #include <cstdint>
 #include <queue>
+#include <cstdlib>
 
 #include <upcxx/diagnostic.hpp>
 #include <upcxx/future.hpp>
 
-#include <cstdlib>
+#include "util.hpp"
 
 using namespace upcxx;
+using namespace std;
 
 struct the_q_compare {
   // shuffle bits of a pointer
   template<typename T>
-  static std::uintptr_t mix(T *p) {
-    std::uintptr_t u = reinterpret_cast<std::uintptr_t>(p);
-    std::uintptr_t knuth = 0x9e3779b97f4a7c15u;
+  static uintptr_t mix(T *p) {
+    uintptr_t u = reinterpret_cast<uintptr_t>(p);
+    uintptr_t knuth = 0x9e3779b97f4a7c15u;
     u ^= u >> 35;
     u *= knuth;
     u ^= u >> 21;
@@ -30,9 +32,9 @@ struct the_q_compare {
 // A global list of promises in a randomized order. Progress is made by
 // satisfying these promises. Randomization is to immitate the wacky
 // nature of asynchronous execution.
-std::priority_queue<
+priority_queue<
     promise<int>*,
-    std::vector<promise<int>*>,
+    vector<promise<int>*>,
     the_q_compare
   > the_q;
 
@@ -81,19 +83,21 @@ future<int> fib(int i) {
 }
 
 #if 0
-void* operator new(std::size_t size) {
-  return std::malloc(size);
+void* operator new(size_t size) {
+  return malloc(size);
 }
 
 // hopefully we see lots of "free!"'s scattered through run and not all
 // clumped up at the end.
 void operator delete(void *p) {
-  std::cout << "free!\n";
-  std::free(p);
+  cout << "free!\n";
+  free(p);
 }
 #endif
 
 int main() {
+  print_test_header();
+    
   const int arg = 5;
   
   future<int> ans0 = fib(arg);
@@ -109,15 +113,19 @@ int main() {
         ans1.then_pure([](int x) { return x*x; }),
         make_future<const int&>(arg)
       ),
-      make_future<std::vector<int>>({0*0, 1*1, 2*2, 3*3, 4*4})
+      make_future<vector<int>>({0*0, 1*1, 2*2, 3*3, 4*4})
     ).then(
-      [=](int ans0, int ans1, int ans1_sqr, int arg, const std::vector<int> &some_vec) {
-        std::cout << "fib("<<arg <<") = "<<ans0<<'\n';
-        std::cout << "fib("<<ans0+1<<") = "<<ans1<<'\n';
-        std::cout << "fib("<<ans0+1<<")**2 = "<<ans1_sqr<<'\n';
+      [=](int ans0, int ans1, int ans1_sqr, int arg, const vector<int> &some_vec) {
+        cout << "fib("<<arg <<") = "<<ans0<<'\n';
+        UPCXX_ASSERT_ALWAYS(ans0 == 5, "expected 5, got " << ans0);
+        cout << "fib("<<ans0+1<<") = "<<ans1<<'\n';
+        UPCXX_ASSERT_ALWAYS(ans1 == 8, "expected 8, got " << ans1);
+        cout << "fib("<<ans0+1<<")**2 = "<<ans1_sqr<<'\n';
+        UPCXX_ASSERT_ALWAYS(ans1_sqr == 8*8, "expected 64, got " << ans1_sqr);
         
-        for(int i=0; i < 5; i++)
-          UPCXX_ASSERT_ALWAYS(some_vec[i] == i*i);
+        for(int i=0; i < 5; i++) {
+            UPCXX_ASSERT_ALWAYS(some_vec[i] == i*i, "expected " << i*i << ", got " << some_vec[i]);
+        }
       }
     );
   
@@ -130,8 +138,11 @@ int main() {
     delete p;
   }
   
-  UPCXX_ASSERT_ALWAYS(ans2.ready());
-  std::cout << "fib("<<(2*ans1.result())<<") = "<<ans2.result()<<'\n';
+  UPCXX_ASSERT_ALWAYS(ans2.ready(), "Answer is not ready");
+  cout << "fib("<<(2*ans1.result())<<") = "<<ans2.result()<<'\n';
+  UPCXX_ASSERT_ALWAYS(ans2.result() == 987, "expected 987, got " << ans2.result());
+  
+  print_test_success();
   
   return 0;
 }

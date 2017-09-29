@@ -13,6 +13,7 @@
 #include <cmath> // ceil
 #include <cstdint>
 #include <cstddef> // max_align_t
+#include <limits> // numeric_limits
 #include <new> // bad_alloc
 #include <type_traits> // aligned_storage, is_default_constructible,
                        // is_destructible, is_trivially_destructible
@@ -99,6 +100,14 @@ namespace upcxx {
       
       std::size_t size = sizeof(std::size_t);
       size = (size + alignof(T)-1) & -alignof(T);
+
+      if(n > (std::numeric_limits<std::size_t>::max() - size) / sizeof(T)) {
+        // more bytes required than can be represented by size_t
+        if(throws)
+          throw std::bad_alloc();
+        return nullptr;
+      }
+
       std::size_t offset = size;
       size += n * sizeof(T);
       
@@ -186,7 +195,7 @@ namespace upcxx {
       
       if (!std::is_trivially_destructible<T>::value) {
         std::size_t size = *reinterpret_cast<std::size_t*>(ptr);
-        for(T *p=tptr, p1=tptr+size; p != p1; p++)
+        for(T *p=tptr, *p1=tptr+size; p != p1; p++)
           p->~T();
       }
       

@@ -1,4 +1,5 @@
 #include <upcxx/diagnostic.hpp>
+#include <upcxx/backend_fwd.hpp>
 
 #include <iostream>
 #include <sstream>
@@ -11,6 +12,18 @@ namespace upcxx {
   bool dbgbrk_spin_init = false;
   bool dbgbrk_spin = true;
 }
+
+////////////////////////////////////////////////////////////////////////
+// from: upcxx/backend_fwd.hpp
+
+namespace upcxx {
+  namespace backend {
+    intrank_t rank_n = -1;
+    intrank_t rank_me; // leave undefined so valgrind can catch it.
+  }
+}
+
+////////////////////////////////////////////////////////////////////////
 
 void upcxx::dbgbrk() {
   if(!dbgbrk_spin_init) {
@@ -41,8 +54,13 @@ void upcxx::dbgbrk() {
 
 void upcxx::assert_failed(const char *file, int line, const char *msg) {
   std::stringstream ss;
+
+  ss << "UPC++ assertion failure";
   
-  ss << "UPC++ assertion failure ["<<file<<':'<<line<<']';
+  if(upcxx::backend::rank_n != -1)
+    ss << " on rank " << upcxx::backend::rank_me;
+	
+  ss << " ["<<file<<':'<<line<<']';
   if(msg != nullptr && '\0' != msg[0])
     ss << ": " << msg;
   ss << '\n';
@@ -50,4 +68,14 @@ void upcxx::assert_failed(const char *file, int line, const char *msg) {
   std::cerr << ss.str();
   dbgbrk();
   std::abort();
+}
+
+upcxx::say::say() {
+  if(upcxx::backend::rank_n != -1)
+    ss << '[' << upcxx::backend::rank_me << "] ";
+}
+
+upcxx::say::~say() {
+  ss << std::endl;
+  std::cerr << ss.str();
 }

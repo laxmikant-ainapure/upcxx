@@ -1,0 +1,97 @@
+#!/bin/bash
+
+CONDUIT_WHITELIST='udp|smp|ibv|aries'
+
+if [[ "$1" = "-h" || "$1" = "--help" ]]; then
+    cat<<EOF
+Usage: RANKS=<ranks> CONDUIT=<${CONDUIT_WHITELIST}> ./run-tests
+  Defaults to a reasonable number of RANKS for the current system, and
+  the udp CONDUIT. Setting CROSS is required for cross-compilation
+  based platforms (Cray XC). See docs/testing.md for more information.
+EOF
+    exit 0
+fi
+    
+. sourceme
+rm -rf .nobs
+
+. utils/system-checks.sh
+sys_info
+
+echo "Checking platform..."
+platform_sanity_checks
+
+# Check for supported conduits
+eval "case '$CONDUIT' in
+  $CONDUIT_WHITELIST) ;;
+                  '') export CONDUIT=udp ;;
+                   *) echo 'WARNING: CONDUIT=$CONDUIT has not been validated with UPC++' ;;
+esac"
+echo "Using $CONDUIT conduit (set environment variable CONDUIT=<$CONDUIT_WHITELIST> to change)"
+
+# Choose a good default RANK count
+if [ -z "$RANKS" ]; then
+    export CORES=`getconf _NPROCESSORS_ONLN`
+    export RANKS=$(($CORES/2))     # default to using half the cores
+    RANKS=$(($RANKS<2?2:$RANKS))   # but use at least two
+    RANKS=$(($RANKS>16?16:$RANKS)) # but not more than 16
+    echo "Detected $CORES hardware threads, running with RANKS=$RANKS (set environment variable RANKS=<ranks> to change)"
+fi
+echo "Running tests on $RANKS ranks"
+
+check_result() {
+    if test -n "$UPCXX_VERBOSE" ; then
+      cat .run-tests.err
+    fi
+    if [ $1 -ne 0 ]; then
+        echo -e "\e[91m$2 failed, the trace can be found in test/run-tests.err\e[0m"
+        # force a flush
+        cat .run-tests.err > run-tests.err
+        rm .run-tests.err
+        rm -rf .nobs
+        exit 1
+    fi
+}
+
+export GASNET_CONDUIT=$CONDUIT
+export GASNET_BACKTRACE=1
+# default to debugging mode
+export DBGSYM=${DBGSYM:=1}
+export OPTLEV=${OPTLEV:=0}
+
+cd test
+
+echo "Setting up upcxx... (this may take a while)"
+nobs exe hello_upcxx.cpp &> .run-tests.err
+check_result $? "Setup"
+rm .run-tests.err
+
+run_test() {
+    echo "Running test $1"
+    nobs run "$1" &> .run-tests.err
+    check_result $? "Test"
+    grep "Test result: " .run-tests.err
+    rm .run-tests.err
+}
+
+
+run_test "atomics.cpp"
+run_test "collectives.cpp"
+run_test "dist_object.cpp"
+run_test "future.cpp"
+run_test "lpc_barrier.cpp"
+run_test "rpc_barrier.cpp"
+run_test "rpc_ff_ring.cpp"
+run_test "rput.cpp" "par"
+run_test "uts/uts_ranks.cpp"
+THREADS="$RANKS" run_test "uts/uts_threads.cpp"
+
+UPCXX_BACKEND=gasnetex_par run_test "uts/uts_hybrid.cpp"
+
+echo -e "\e[92mAll tests succeded\e[0m"
+
+cd ..
+
+rm -rf .nobs 2>&1 >/dev/null # ignore failures due to races
+
+exit 0

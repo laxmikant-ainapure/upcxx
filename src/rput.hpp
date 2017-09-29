@@ -62,7 +62,7 @@ namespace upcxx {
       }
       
       void completed(intrank_t target) {
-        backend::send_am<progress_level::user>(target, std::move(fn));
+        backend::send_am_master<progress_level::user>(target, std::move(fn));
       }
     };
     
@@ -154,7 +154,7 @@ namespace upcxx {
   }
   
   //////////////////////////////////////////////////////////////////////
-  // rput: WRONG API, these should be global_ptr, not virtual address (T*)
+  // rput
   
   template<typename T,
            typename S = nil_cx,
@@ -195,8 +195,7 @@ namespace upcxx {
            typename O = future_cx<0>>
   typename detail::rput_futures_of<S,R,O>::return_type
   rput(
-      T const *buf_s, std::size_t n,
-      global_ptr<T> gp_d,
+      T const *buf_s, global_ptr<T> gp_d, std::size_t n,
       completions<S,R,O> cxs = completions<S,R,O>{}
     ) {
     

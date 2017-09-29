@@ -6,12 +6,16 @@ on the structure and interpretation of a rule-file.
 import os
 import sys
 
+import shlex
+shplit = shlex.split
+
 from nobs import errorlog
 from nobs import os_extra
 from nobs import subexec
 
 cxx_exts = ('.cpp','.cxx','.c++','.C','.C++')
 c_exts = ('.c',)
+header_exts = ('.h','.hpp','.hxx','.h++')
 
 crawlable_dirs = [
   here('src'),
@@ -22,7 +26,7 @@ crawlable_dirs = [
 Library sets are encoded as a dictionary of strings to dictionaries
 conforming to:
   {libname:str: {
-      'primary':bool
+      'primary':bool # defaults to True if absent
       'ld':[str],
       'incdirs':[str], # "-I" directories
       'incfiles':[str] # paths to files residing in "-I" directories.
@@ -72,15 +76,15 @@ def cxx(cxt):
   String list for the C++ compiler.
   """
   _, cross_env = yield cxt.gasnet_config()
-  ans_cross = cross_env.get('CXX','').split()
+  ans_cross = shplit(cross_env.get('CXX',''))
   
   ans_default = []
-  if env('NERSC_HOST', None) in ('cori','edison'):
+  if env('CRAYPE_DIR', None):
     ans_default = ['CC']
   if not ans_default:
     ans_default = ['g++']
   
-  ans_user = env('CXX','').split()
+  ans_user = shplit(env('CXX',''))
   
   if ans_cross and ans_user and ans_user != ans_cross:
     errorlog.warning(
@@ -102,15 +106,15 @@ def cc(cxt):
   String list for the C compiler.
   """
   _, cross_env = yield cxt.gasnet_config()
-  ans_cross = cross_env.get('CC','').split()
+  ans_cross = shplit(cross_env.get('CC',''))
   
   ans_default = []
-  if env('NERSC_HOST', None) in ('cori','edison'):
+  if env('CRAYPE_DIR', None):
     ans_default = ['cc']
   if not ans_default:
     ans_default = ['gcc']
   
-  ans_user = env('CC','').split()
+  ans_user = shplit(env('CC',''))
   
   if ans_cross and ans_user and ans_user != ans_cross:
     errorlog.warning(
@@ -124,6 +128,10 @@ def cc(cxt):
   # Otherwise honor the CC env-variable.
   # Otherwise use intelligent defaults.
   yield ans_cross or ans_user or ans_default
+
+@rule(cli='ldflags')
+def ldflags(cxt):
+  return shplit(env('LDFLAGS',''))
 
 @rule()
 def lang_c11(cxt):
@@ -183,14 +191,17 @@ def comp_lang_pp(cxt, src):
   File-specific compiler with source-language and preprocessor flags.
   """
   comp = yield cxt.comp_lang(src)
-  ipt = yield cxt.include_paths_tree(src)
+  ivt = yield cxt.include_vdirs_tree(src)
   libs = yield cxt.libraries(src)
   yield (
     comp + 
     ['-D_GNU_SOURCE=1'] + # Required for full latest POSIX on some systems
-    ['-I'+ipt] +
+    ['-I'+ivt] +
     libset_ppflags(libs)
   )
+
+def upcxx_backend_id():
+  return env("UPCXX_BACKEND", otherwise="gasnet1_seq")
 
 @rule()
 @coroutine
@@ -201,12 +212,9 @@ def upcxx_backend(cxt):
   """
   upcxx_be = {
     'upcxx-backend': {
-      'primary': True,
-      'ppflags': ['-D%s=%s'%(
-          'UPCXX_BACKEND',
-          env("UPCXX_BACKEND", otherwise="gasnet1_seq")
-        )],
-      'deplibs': ['gasnet']
+      'ppflags': ['-D%s=%s'%('UPCXX_BACKEND', upcxx_backend_id())],
+      'libflags': [],
+      'deplibs': ['gasnet','pthread']
     }
   }
   
@@ -222,7 +230,7 @@ def cg_optlev_default(cxt):
   """
   return env('OPTLEV', 2)
 
-@rule(path_arg='src')
+@rule(cli='cg_optlev', path_arg='src')
 def cg_optlev(cxt, src):
   """
   File-specific code-gen optimization level, defaults to `cg_optlev_default`.
@@ -236,7 +244,7 @@ def cg_dbgsym(cxt):
   """
   return env('DBGSYM', 0)
 
-@rule(path_arg='src')
+@rule(cli='comp_lang_pp_cg', path_arg='src')
 @coroutine
 def comp_lang_pp_cg(cxt, src):
   """
@@ -277,6 +285,11 @@ def requires_gasnet(cxt, src):
 def requires_upcxx_backend(cxt, src):
   return False
 
+# Rule overriden in sub-nobsrule files.
+@rule(cli='requires_pthread', path_arg='src')
+def requires_pthread(cxt, src):
+  return False
+
 @rule(path_arg='src')
 @coroutine
 def libraries(cxt, src):
@@ -294,14 +307,19 @@ def libraries(cxt, src):
   else:
     maybe_upcxx_backend = {}
   
-  yield cxt.libset_merge(maybe_gasnet, maybe_upcxx_backend)
+  if cxt.requires_pthread(src):
+    maybe_pthread = {'pthread':{}}
+  else:
+    maybe_pthread = {}
+  
+  yield cxt.libset_merge(maybe_gasnet, maybe_upcxx_backend, maybe_pthread)
 
 @rule()
 def gasnet_user(cxt):
   value = env('GASNET', None)
   
   if not value:
-    default_gasnetex_url_b64 = 'aHR0cDovL2dhc25ldC5sYmwuZ292L0VYL0dBU05ldC0yMDE3LjYuMC50YXIuZ3o='
+    default_gasnetex_url_b64 = 'aHR0cDovL2dhc25ldC5sYmwuZ292L0VYL0dBU05ldC0yMDE3LjkuMC50YXIuZ3o='
     import base64
     value = base64.b64decode(default_gasnetex_url_b64)
   
@@ -323,8 +341,15 @@ def gasnet_user(cxt):
   elif os_extra.exists(join(value, 'include')) and \
        os_extra.exists(join(value, 'lib')):
     return 'install', value
-  else:
+  elif os_extra.exists(join(value, 'configure')):
     return 'source', value
+  else:
+    raise errorlog.LoggedError("Invalid value for GASNET (GASNET=%s)"%value)
+
+@rule(cli='gasnet_user_kind')
+def gasnet_user_kind(cxt):
+  kind, _ = cxt.gasnet_user()
+  return kind
 
 @rule(cli='gasnet_conduit')
 def gasnet_conduit(cxt):
@@ -336,36 +361,73 @@ def gasnet_conduit(cxt):
   else:
     default = 'smp'
   
-  return env('GASNET_CONDUIT', default)
+  return env('GASNET_CONDUIT', None) or default
 
 @rule(cli='gasnet_syncmode')
 def gasnet_syncmode(cxt):
   """
   GASNet sync-mode to use.
   """
-  # this should be computed based off the choice of upcxx backend
-  return 'seq'
+  return {
+      'gasnet1_seq': 'seq',
+      'gasnetex_par': 'par'
+    }[upcxx_backend_id()]
+
+@rule(cli='gasnet_syncmode')
+def gasnet_debug(cxt):
+  """
+  Whether to build GASNet in debug mode.
+  """
+  return cxt.cg_dbgsym()
+
+@rule(cli='gasnet_install_to')
+def gasnet_install_to(cxt):
+  """
+  User-requested install location for gasnet.
+  """
+  path_fmt = env('GASNET_INSTALL_TO', None)
+  
+  if path_fmt is None:
+    return None
+  else:
+    path = path_fmt.format(debug=(1 if cxt.gasnet_debug() else 0))
+    path = os.path.expanduser(path)
+    path = os.path.abspath(path)
+    return path
+
+@rule(cli='include_vdirs', path_arg='src')
+def include_vdirs(cxt, src):
+  return {'upcxx': here('src')}
 
 @rule_memoized(path_arg=0)
-class include_paths_tree:
+class include_vdirs_tree:
   """
-  Setup a shim directory containing a single symlink named 'upcxx' which
-  points to 'upcxx/src'. With this directory added via '-I...' to
+  Setup a shim directory containing a symlink for each vdir in
+  include_vdirs. With this directory added via '-I...' to
   compiler flags, allows our headers to be accessed via:
     #include <upcxx/*.hpp>
   """
-  def execute(cxt):
-    return cxt.mktree({'upcxx': here('src')}, symlinks=True)
+  version_bump = 0
+  
+  @traced
+  def get_include_vdirs(me, cxt, src):
+    return cxt.include_vdirs(src)
+  
+  def execute(me):
+    vdirs = me.get_include_vdirs()
+    return me.mktree(vdirs, symlinks=True)
 
 @rule_memoized(cli='incs', path_arg=0)
 class includes:
   """
   Ask compiler for all the non-system headers pulled in by preprocessing
-  the given source file. Returns the list of header paths.
+  the given source file. Returns the list of paths to included files.
   """
+  version_bump = 0
+  
   @traced
   @coroutine
-  def get_comp_pp_and_src_and_ipt(me, cxt, src):
+  def get_stuff(me, cxt, src):
     me.depend_files(src)
     
     version = yield cxt.comp_version(src)
@@ -373,13 +435,11 @@ class includes:
     
     comp_pp = yield cxt.comp_lang_pp(src)
     
-    ipt = yield cxt.include_paths_tree(src)
-    
-    yield comp_pp, src, ipt
+    yield comp_pp, src
   
   @coroutine
   def execute(me):
-    comp_pp, src, ipt = yield me.get_comp_pp_and_src_and_ipt()
+    comp_pp, src = yield me.get_stuff()
     
     # See here for getting this to work with other compilers:
     #  https://projects.coin-or.org/ADOL-C/browser/trunk/autoconf/depcomp?rev=357
@@ -388,8 +448,7 @@ class includes:
     mk = yield subexec.launch(cmd, capture_stdout=True)
     mk = mk[mk.index(":")+1:]
     
-    import shlex
-    deps = shlex.split(mk.replace("\\\n",""))[1:] # first is source file
+    deps = shplit(mk.replace("\\\n",""))[1:] # first is source file
     deps = map(os.path.abspath, deps)
     me.depend_files(*deps)
     
@@ -400,6 +459,8 @@ class compile:
   """
   Compile the given source file. Returns path to object file.
   """
+  version_bump = 0
+  
   @traced
   @coroutine
   def get_src_compiler(me, cxt, src):
@@ -422,10 +483,9 @@ class compile:
     yield subexec.launch(compiler(objfile))
     yield objfile
 
-class Crawler:
+@rule_memoized(path_arg=0)
+class objects_and_libset:
   """
-  Base class for memoized rules.
-  
   Compile the given source file as well as all source files which can
   be found as sharing its name with a header included by any source
   file reached in this process (transitively closed set). Return pair
@@ -454,7 +514,7 @@ class Crawler:
     return srcs
   
   @coroutine
-  def crawl(me):
+  def execute(me):
     main_src = me.get_main_src()
     
     # compile object files
@@ -468,19 +528,21 @@ class Crawler:
         me.do_compile_and_libraries(src) >> compile_done
       )
     
-    top_dir = here() # our "src/" directory
-    
     def includes_done(incs):
       tasks = []
       for inc in incs:
-        inc = os.path.realpath(inc)
+        inc = os_extra.realpath(inc)
         if inc not in incs_seen:
           incs_seen.add(inc)
-          inc, _ = os.path.splitext(inc)
+          inc_base, _ = os.path.splitext(inc)
           # `inc` must be in a crawlable directory
-          if any(path_within_dir(inc, x) for x in crawlable_dirs):
-            for ext in me.find_src_exts(inc):
-              tasks.append(fresh_src(inc + ext))
+          if any(path_within_dir(inc_base, x) for x in crawlable_dirs):
+            for ext in me.find_src_exts(inc_base):
+              src = inc_base + ext
+              # Don't compile source files which have been included
+              # into other source files.
+              if src not in incs_seen:
+                tasks.append(fresh_src(src))
       
       return async.when_succeeded(*tasks)
     
@@ -495,7 +557,7 @@ class Crawler:
     yield (objs, libset)
 
 @rule_memoized(cli='exe', path_arg=0)
-class executable(Crawler):
+class executable:
   """
   Compile the given source file as well as all source files which can
   be found as sharing its name with a header included by any source
@@ -503,67 +565,89 @@ class executable(Crawler):
   compiled object files and link them along with their library
   dependencies to proudce an executable. Path to executable returned.
   """
+  version_bump = 2
+  
   @traced
   def cxx(me, cxt, main_src):
     return cxt.cxx()
   
+  @traced
+  def ldflags(me, cxt, main_src):
+    return cxt.ldflags()
+  
+  @traced
+  def objects_and_libset(me, cxt, main_src):
+    return cxt.objects_and_libset(main_src)
+  
   @coroutine
   def execute(me):
-    # invoke crawl of base class
-    objs, libset = yield me.crawl()
+    objs, libset = yield me.objects_and_libset()
     
     # link
     exe = me.mkpath('exe', suffix='.x')
     
     ld = libset_ld(libset)
-    cxx = yield me.cxx()
     if ld is None:
-      ld = cxx
-    ld = [cxx[0]] + ld[1:] 
+      ld = yield me.cxx()
     
-    ldflags = libset_ldflags(libset)
+    ldflags = me.ldflags() + libset_ldflags(libset)
     libflags = libset_libflags(libset)
     
     yield subexec.launch(ld + ldflags + ['-o',exe] + objs + libflags)
     yield exe
 
 @rule_memoized(cli='lib', path_arg=0)
-class library(Crawler):
+class library:
+  version_bump = 7
+  
   @traced
-  def get_include_paths_tree(me, cxt, main_src):
-    return cxt.include_paths_tree(main_src)
+  def get_main_src(me, cxt, main_src):
+    return main_src
+  
+  @traced
+  def includes(me, cxt, main_src, src):
+    return cxt.includes(src)
+  
+  @traced
+  def objects_and_libset(me, cxt, main_src):
+    return cxt.objects_and_libset(main_src)
+  
+  @traced
+  def get_include_vdirs_and_tree(me, cxt, main_src):
+    return futurize(
+      cxt.include_vdirs(main_src),
+      cxt.include_vdirs_tree(main_src)
+    )
   
   @coroutine
   def execute(me):
     main_src = me.get_main_src()
     top_dir = here()
     
-    # Invoke crawl of base class.
-    objs, libset = yield me.crawl()
+    objs, libset = yield me.objects_and_libset()
     
     # Headers pulled in from main file. Discard those not within this
     # repo (top_dir) or the nobs artifact cache (path_art).
-    incs = yield me.do_includes(main_src)
+    incs = yield me.includes(main_src)
+    incs = map(os_extra.realpath, incs)
     incs = [i for i in incs if
       path_within_dir(i, top_dir) or
       path_within_dir(i, me.memodb.path_art)
     ]
     incs = list(set(incs))
     
-    inc_dir = yield me.get_include_paths_tree()
+    inc_vdirs, inc_vdirs_tree = yield me.get_include_vdirs_and_tree()
     
-    # Reconstruct symlinks from the inc_dir symlinks if squashed
-    # (as is the case on cygwin).
-    inc_syms = [os.path.join(inc_dir, x) for x in os_extra.listdir(inc_dir)]
-    inc_syms = [(x, os.path.realpath(x)) for x in inc_syms]
+    # Reconstruct paths to includes as relative to vdirs in case the
+    # symlinks get squashed out.
     incs1 = []
     updir = '..' + os.path.sep
     for inc in incs:
       candidates = []
-      for sym,real in inc_syms:
-        rel = os.path.relpath(inc, real)
+      for vsym, vreal in inc_vdirs.items():
+        rel = os.path.relpath(inc, vreal)
         if not rel.startswith(updir):
-          candidates.append(os.path.join(sym, rel))
+          candidates.append(os.path.join(inc_vdirs_tree, vsym, rel))
       candidates.sort(key=len)
       incs1.append(candidates[0] if len(candidates) != 0 else inc)
     incs = incs1
@@ -582,13 +666,37 @@ class library(Crawler):
     yield libset_merge(
       libset_as_secondary(libset),
       {libname: {
-        'primary': True,
-        'incdirs': [inc_dir],
+        'incdirs': [inc_vdirs_tree],
         'incfiles': incs,
         'libfiles': [libpath],
         'deplibs': list(libset.keys())
       }}
     )
+
+@rule(cli='run', path_arg='main_src')
+@coroutine
+def run(cxt, main_src, *args):
+  """
+  Build the executable for `main_src` and run it with the given
+  argument list `args`.
+  """
+  _, libset = yield cxt.objects_and_libset(main_src)
+  exe = yield cxt.executable(main_src)
+  
+  if 'gasnet' in libset:
+    meta = libset['gasnet']['meta']
+    
+    env1 = dict(os.environ)
+    env1['GASNET_PREFIX'] = meta.get('GASNET_INSTALL') or meta.get('GASNET_BUILD')
+    if meta['GASNET_CONDUIT'] == 'udp':
+      env1['GASNET_SPAWNFN'] = env('GASNET_SPAWNFN','L')
+    
+    upcxx_run = here('utils','upcxx-run')
+    ranks = str(env('RANKS', 1))
+    
+    os.execvpe(upcxx_run, [upcxx_run, ranks, exe] + map(str, args), env1)
+  else:
+    os.execvp(exe, [exe] + map(str, args))
 
 @rule(cli='install', path_arg='main_src')
 @coroutine
@@ -600,14 +708,27 @@ def install(cxt, main_src, install_path):
   assert len(name) == 1
   name = name[0]
   
-  install_libset(install_path, name, libset)
+  cc = yield cxt.cc()
+  cxx = yield cxt.cxx()
+  
+  install_libset(install_path, name, libset, meta_extra={
+    'CC': ' '.join(cc),
+    'CXX': ' '.join(cxx)
+  })
+  
   yield None
+
+########################################################################
+## GASNet build recipes                                               ##
+########################################################################
 
 @rule_memoized()
 class gasnet_source:
   """
   Download and extract gasnet source tree.
   """
+  version_bump = 0
+  
   @traced
   def get_gasnet_user(me, cxt):
     return cxt.gasnet_user()
@@ -659,6 +780,7 @@ class gasnet_config:
   in which gasnet's other/contrib/cross-configure-{xxx} script runs
   configure.
   """
+  version_bump = 0
   
   @traced
   @coroutine
@@ -680,10 +802,9 @@ class gasnet_config:
     yield (cross, gasnet_src)
   
   @traced
-  def touch_env(me, cxt, *names):
+  def get_env(me, cxt, name):
     """Place dependendcies on environment variables."""
-    for name in names:
-      me.depend_fact(key=name, value=env(name, None))
+    return env(name, None)
   
   @coroutine
   def execute(me):
@@ -695,9 +816,10 @@ class gasnet_config:
     
     # add "canned" env-var dependencies of scripts here
     if cross == 'cray-aries-slurm':
-      me.touch_env('SRUN')
+      me.get_env('SRUN')
     elif cross == 'bgq':
-      me.touch_env('USE_GCC','USE_CLANG')
+      me.get_env('USE_GCC')
+      me.get_env('USE_CLANG')
     
     path = os.path.join
     crosslong = 'cross-configure-' + cross
@@ -761,6 +883,8 @@ class gasnet_configured:
   """
   Returns a configured gasnet build directory.
   """
+  version_bump = 3
+  
   @traced
   def get_gasnet_user(me, cxt):
     return cxt.gasnet_user()
@@ -779,7 +903,10 @@ class gasnet_configured:
     config = yield cxt.gasnet_config()
     source_dir = yield cxt.gasnet_source()
     
-    yield (cc, cxx, cxt.cg_optlev_default(), cxt.cg_dbgsym(), config, source_dir)
+    debug = cxt.gasnet_debug()
+    user_args = shplit(env('GASNET_CONFIGURE_ARGS',''))
+    
+    yield (cc, cxx, debug, config, source_dir, user_args)
   
   @coroutine
   def execute(me):
@@ -788,7 +915,7 @@ class gasnet_configured:
     if kind == 'build':
       build_dir = value
     else:
-      cc, cxx, optlev, debug, config, source_dir = yield me.get_config()
+      cc, cxx, debug, config, source_dir, user_args = yield me.get_config()
       config_args, config_env = config
       
       build_dir = me.mkpath(key=None)
@@ -798,13 +925,17 @@ class gasnet_configured:
       env1.update(config_env)
       
       if 'CC' not in env1:
-        env1['CC'] = ' '.join(cc + ['-O%d'%optlev])
+        env1['CC'] = ' '.join(cc)
       if 'CXX' not in env1:
-        env1['CXX'] = ' '.join(cxx + ['-O%d'%optlev])
+        env1['CXX'] = ' '.join(cxx)
       
       misc_conf_opts = [
         # disable non-EX conduits to prevent configure failures when that hardware is detected
         '--disable-psm','--disable-mxm','--disable-portals4','--disable-ofi',
+        # avoid a known issue with -Wnested-externs, until it gets a proper fix in EX
+        '--disable-dev-warnings',
+        # disable the parsync mode which is not used by UPCXX
+        '--disable-parsync',
       ]
       
       print>>sys.stderr, 'Configuring GASNet...'
@@ -812,7 +943,7 @@ class gasnet_configured:
         [os.path.join(source_dir, 'configure')] +
         config_args +
         (['--enable-debug'] if debug else []) +
-        misc_conf_opts,
+        misc_conf_opts + user_args,
         
         cwd = build_dir,
         env = env1
@@ -820,47 +951,154 @@ class gasnet_configured:
     
     yield build_dir
 
-@rule_memoized(cli='gasnet')
-class gasnet:
+@rule_memoized(cli='gasnet_configured_conduits')
+class gasnet_configured_conduits:
   """
-  Build gasnet. Return library dependencies dictionary.
+  Get the list of detected conduits from a configured gasnet.
   """
+  version_bump = 4
+  
   @traced
   def get_config(me, cxt):
     kind, value = cxt.gasnet_user()
     return futurize(
-      cxt.gasnet_conduit(),
-      cxt.gasnet_syncmode(),
       kind,
       value if kind == 'install' else cxt.gasnet_configured()
     )
   
   @coroutine
   def execute(me):
-    conduit, syncmode, kind, build_or_install_dir \
+    kind, dir_path = yield me.get_config()
+    
+    header = os.path.join(*(
+      [dir_path] +
+      (['include'] if kind == 'install' else []) +
+      ['gasnet_config.h']
+    ))
+    
+    import re
+    conduits = None
+    with open(header,'r') as f:
+      for line in f:
+        m = re.match('[ \t]*#define +GASNETI_CONDUITS +"([^"]*)"', line)
+        if m is not None:
+          conduits = m.group(1).split()
+          break
+        elif 'GASNETI_CONDUITS' in line:
+          print>>sys.stderr, repr(line)
+    
+    assert conduits is not None
+    yield conduits
+    
+@rule_memoized(cli='gasnet_built')
+class gasnet_built:
+  """
+  Build gasnet (if necessary). Return tuple (installed, built_dir) where
+  `installed` is a boolean indicating whether `built_dir` points to a
+  gasnet install tree or build tree.
+  """
+  version_bump = 0
+  
+  @traced
+  def get_config(me, cxt):
+    kind, value = cxt.gasnet_user()
+    install_to = cxt.gasnet_install_to()
+    return futurize(
+      kind,
+      value if kind == 'install' else cxt.gasnet_configured(),
+      install_to,
+      None if install_to else cxt.gasnet_conduit(),
+      None if install_to else cxt.gasnet_syncmode()
+    )
+  
+  @traced
+  def cxx(me, cxt):
+    return cxt.cxx()
+  
+  @coroutine
+  def execute(me):
+    kind, build_or_install_dir, install_to, conduit, syncmode \
       = yield me.get_config()
     
-    if kind != 'install':
+    if kind == 'install':
+      installed = True
+      built_dir = build_or_install_dir
+    else:
+      # We weren't given an installed gasnet, so we're looking at a
+      # configured build dir.
       build_dir = build_or_install_dir
-      print>>sys.stderr, 'Building GASNet (conduit=%s, threading=%s)...'%(conduit, syncmode)
-      yield subexec.launch(
-        ['make', syncmode],
-        cwd = os.path.join(build_dir, '%s-conduit'%conduit)
-      )
+      
+      if install_to is None:
+        # We haven't been told to install gasnet to a specific location,
+        # so we can build just what we need (conduit,threading)
+        print>>sys.stderr, 'Building GASNet (conduit=%s, threading=%s)...'%(conduit, syncmode)
+        yield subexec.launch(
+          ['make', syncmode],
+          cwd = os.path.join(build_dir, '%s-conduit'%conduit)
+        )
+        
+        if conduit == 'udp':
+          yield subexec.launch(
+            ['make', 'amudprun'],
+            cwd = os.path.join(build_dir, 'other', 'amudp')
+          )
+        
+        installed = False
+        built_dir = build_or_install_dir
+      else:
+        # User wants us to install gasnet
+        print>>sys.stderr, 'Building GASNet...'
+        yield subexec.launch(['make'], cwd=build_dir)
+        
+        print>>sys.stderr, 'Installing GASNet...'
+        yield subexec.launch(
+          ['make', 'install', 'prefix='+install_to],
+          cwd=build_dir
+        )
+        installed = True
+        built_dir = install_to
+    
+    yield (installed, built_dir)
+
+@rule_memoized(cli='gasnet')
+class gasnet:
+  """
+  Builds/installs gasnet as necessary. Returns library dependencies dictionary.
+  """
+  version_bump = 10
+  
+  @traced
+  @coroutine
+  def get_config(me, cxt):
+    installed, built_dir = yield cxt.gasnet_built()
+    cxx = yield cxt.cxx()
+    yield (
+      installed, built_dir,
+      cxt.gasnet_conduit(),
+      cxt.gasnet_syncmode(),
+      cxx
+    )
+  
+  @coroutine
+  def execute(me):
+    installed, built_dir, conduit, syncmode, cxx = yield me.get_config()
     
     makefile = os.path.join(*(
-      [build_or_install_dir] +
-      (['include'] if kind == 'install' else []) +
+      [built_dir] +
+      (['include'] if installed else []) +
       ['%s-conduit'%conduit, '%s-%s.mak'%(conduit, syncmode)]
     ))
     
-    GASNET_LD = makefile_extract(makefile, 'GASNET_LD').split()
-    GASNET_LDFLAGS = makefile_extract(makefile, 'GASNET_LDFLAGS').split()
-    GASNET_CXXCPPFLAGS = makefile_extract(makefile, 'GASNET_CXXCPPFLAGS').split()
-    GASNET_CXXFLAGS = makefile_extract(makefile, 'GASNET_CXXFLAGS').split()
-    GASNET_LIBS = makefile_extract(makefile, 'GASNET_LIBS').split()
+    GASNET_LD = shplit(makefile_extract(makefile, 'GASNET_LD'))
+    GASNET_LDFLAGS = shplit(makefile_extract(makefile, 'GASNET_LDFLAGS'))
+    GASNET_CXXCPPFLAGS = shplit(makefile_extract(makefile, 'GASNET_CXXCPPFLAGS'))
+    GASNET_CXXFLAGS = shplit(makefile_extract(makefile, 'GASNET_CXXFLAGS'))
+    GASNET_LIBS = shplit(makefile_extract(makefile, 'GASNET_LIBS'))
     
-    if kind == 'install':
+    # workaround for GASNet not giving us a C++ capable linker.
+    GASNET_LD = cxx + GASNET_LD[1:]
+    
+    if installed:
       # use gasnet install in-place
       incdirs = []
       incfiles = []
@@ -871,18 +1109,18 @@ class gasnet:
       GASNET_CXXCPPFLAGS = [x for x in GASNET_CXXCPPFLAGS if x not in incdirs]
       incdirs = [x[2:] for x in incdirs] # drop "-I" prefix
       
-      makefile = os.path.join(build_dir, 'Makefile')
+      makefile = os.path.join(built_dir, 'Makefile')
       source_dir = makefile_extract(makefile, 'TOP_SRCDIR')
-      incfiles = makefile_extract(makefile, 'include_HEADERS').split()
+      incfiles = shplit(makefile_extract(makefile, 'include_HEADERS'))
       incfiles = [os.path.join(source_dir, i) for i in incfiles]
-    
+      
       # pull "-L..." arguments out of GASNET_LIBS, keep only the "..."
       libdirs = [x[2:] for x in GASNET_LIBS if x.startswith('-L')]
       # pull "-l..." arguments out of GASNET_LIBS, keep only the "..."
       libnames = [x[2:] for x in GASNET_LIBS if x.startswith('-l')]
       
       # filter libdirs for those made by gasnet
-      libdirs = [x for x in libdirs if path_within_dir(x, build_or_install_dir)]
+      libdirs = [x for x in libdirs if path_within_dir(x, built_dir)]
       
       # find libraries in libdirs
       libfiles = []
@@ -907,7 +1145,10 @@ class gasnet:
     
     yield {
       'gasnet': {
-        'primary': True,
+        'meta': {
+          'GASNET_CONDUIT': conduit,
+          'GASNET_INSTALL' if installed else 'GASNET_BUILD': built_dir
+        },
         'incdirs': incdirs,
         'incfiles': incfiles,
         'ld': GASNET_LD,
@@ -920,18 +1161,8 @@ class gasnet:
       }
     }
 
-@rule(cli='run', path_arg='main_src')
-@coroutine
-def run(cxt, main_src, *args):
-  """
-  Build the executable for `main_src` and run it with the given
-  argument list `args`.
-  """
-  exe = yield cxt.executable(main_src)
-  os.execvp(exe, [exe] + map(str, args))
-
 ########################################################################
-## Utilties
+## Utilties                                                           ##
 ########################################################################
 
 def env(name, otherwise):
@@ -951,10 +1182,10 @@ def env(name, otherwise):
 def makefile_extract(makefile, varname):
   """
   Extract a variable's value from a makefile.
-  -s (or --no-print-directory) is required to ensure correct behavior when nobs was invoked by make
+  --no-print-directory is required to ensure correct behavior when nobs was invoked by make
   """
   import subprocess as sp
-  p = sp.Popen(['make','-s','-f','-','gimme'], stdin=sp.PIPE, stdout=sp.PIPE, stderr=sp.PIPE)
+  p = sp.Popen(['make','--no-print-directory','-f','-','gimme'], stdin=sp.PIPE, stdout=sp.PIPE, stderr=sp.PIPE)
   tmp = ('include {0}\n' + 'gimme:\n' + '\t@echo $({1})\n').format(makefile, varname)
   val, _ = p.communicate(tmp)
   if p.returncode != 0:
@@ -972,16 +1203,22 @@ def libset_merge_inplace(dst, src):
   """
   Merge libraries of `src` into `dst`.
   """
-  for k,v in src.items():
-    v1 = dict(dst.get(k,v))
-    v1_primary = v1['primary']
+  
+  for k,sv in src.items():
+    sv1 = dict(sv)
+    try: del sv1['primary']
+    except KeyError: pass
     
-    v1['primary'] = v['primary']
-    if v != v1:
+    dv = dst.get(k,sv)
+    dv1 = dict(dv)
+    try: del dv1['primary']
+    except KeyError: pass
+    
+    if sv1 != dv1:
       raise Exception("Multiple '%s' libraries with differing configurations." % k)
     
-    v1['primary'] = v['primary'] or v1_primary
-    dst[k] = v1
+    dv1['primary'] = dv.get('primary',True) or sv.get('primary',True)
+    dst[k] = dv1
 
 def libset_merge(*libsets):
   """
@@ -998,7 +1235,7 @@ def libset_as_secondary(libset):
   """
   ans = {}
   for k,v in libset.items():
-    if not v['primary']:
+    if not v.get('primary',True):
       ans[k] = v
     else:
       ans[k] = dict(v)
@@ -1048,21 +1285,23 @@ def libset_libflags(libset):
   
   def topsort(xs):
     for x in xs:
-      rec = libset.get(x, {x:{'libflags':['-l'+x]}})
+      rec = libset.get(x, {})
       
       topsort(rec.get('deplibs', []))
       
       if x not in visited:
         visited.add(x)
-
-        libfiles = rec.get('libfiles', [])
+        
+        libfiles = rec.get('libfiles', None)
+        libflags = rec.get('libflags', ['-l'+x] if libfiles is None else [])
+        libfiles = libfiles or []
         
         sorted_lpaths.append(
           ['-L' + os.path.dirname(f) for f in libfiles]
         )
         sorted_flags.append(
           ['-l' + os.path.basename(f)[3:-2] for f in libfiles] +
-          rec.get('libflags', [])
+          libflags
         )
   
   def uniquify(xs):
@@ -1083,7 +1322,7 @@ def libset_libflags(libset):
   
   return sorted_lpaths + sorted_flags
 
-def install_libset(install_path, name, libset):
+def install_libset(install_path, name, libset, meta_extra={}):
   """
   Install a library set to the given path. Produces headers and binaries
   in the typical "install_path/{bin,include,lib}" structure. Also
@@ -1091,12 +1330,65 @@ def install_libset(install_path, name, libset):
   content to a pkgconfig script) for querying the various compiler and
   linker flags.
   """
+  import os
+  import shutil
+  
   base_of = os.path.basename
   join = os.path.join
-  up = '..' + os.path.sep
-  link_or_copy = os_extra.link_or_copy
+  updir = '..' + os.path.sep
   
-  undo = []
+  class InstallError(Exception):
+    pass
+  
+  rollback = []
+  commit = []
+  suffix = '.771b861d-97e2-49db-b3a2-6d99437726bf'
+  
+  def ensure_dirs_upto(path):
+    head, tail = os.path.split(path)
+    if head=='' or os.path.isdir(head):
+      return
+    if os.path.exists(head):
+      raise InstallError('Path "%s" is not a directory.'%head)
+    
+    ensure_dirs_upto(head)
+    
+    try:
+      os.mkdir(head)
+    except OSError as e:
+      raise InstallError('Failed to create directory "%s": %s'%(head,e.message))
+    
+    rollback.append(lambda: os.rmdir(head))
+  
+  def install_file(src, dst, src_is_path_not_contents=True):
+    isfile = os.path.isfile(dst)
+    if isfile:
+      try:
+        os.rename(dst, dst+suffix)
+      except OSError as e:
+        raise InstallError('Failed to rename "%s": %s".'%(dst,e.message))
+      rollback.append((lambda dst: lambda: os.rename(dst+suffix, dst))(dst))
+      commit.append((lambda dst: lambda: os.remove(dst+suffix))(dst))
+    elif os.path.exists(dst):
+      raise InstallError('Path "%s" is not a file.'%path)
+    else:
+      ensure_dirs_upto(dst)
+    
+    if not isfile:
+      rollback.append((lambda dst: lambda: os.remove(dst))(dst))
+    
+    try:
+      if src_is_path_not_contents:
+        shutil.copyfile(src, dst)
+      else:
+        with open(dst, 'w') as f:
+          f.write(src)
+      os.chmod(dst, 0755)
+    except Exception as e:
+      raise InstallError('Could not write file "%s": %s'%(dst, e.message))
+  
+  def install_contents(contents, dst):
+    install_file(contents, dst, src_is_path_not_contents=False)
   
   try:
     libfiles_all = []
@@ -1105,30 +1397,36 @@ def install_libset(install_path, name, libset):
     for xname,rec in libset.items():
       incdirs = rec.get('incdirs', [])
       incfiles = rec.get('incfiles', [])
-      libfiles = rec.get('libfiles')
+      libfiles = rec.get('libfiles', None)
       
-      incfiles1 = []
       libfiles_all.extend(libfiles or [])
-      
-      # copy includes
-      for f in incfiles:
-        # copy for each non-upwards relative path
-        for d in reversed(incdirs):
-          rp = os.path.relpath(f,d)
-          if not rp.startswith(up):
-            # copy include file to relative path under "install_path/include"
-            src = join(d, rp)
-            dest = join(install_path, 'include', rp)
-            
-            incfiles1.append(dest)
-            os_extra.ensure_dirs(dest)
-            undo.append(dest)
-            link_or_copy(src, dest, overwrite=False)
       
       # produce installed version of library record
       rec1 = dict(rec)
-      rec1['incdirs'] = [join(install_path, 'include')]
-      rec1['incfiles'] = incfiles1
+      
+      # HACK: copy headers for primary libraries, not otherwise.
+      # TODO: We should be tracking header-header dependencies, and
+      # then only copying  the set of headers as reachable from the
+      # set of primary libraries.
+      if rec.get('primary',True):
+        incfiles1 = []
+        for incf in incfiles:
+          # copy for each non-upwards relative path
+          for incd in reversed(incdirs):
+            rel = os.path.relpath(incf, incd)
+            if not rel.startswith(updir):
+              # copy include file to relative path under "install_path/include"
+              src = join(incd, rel)
+              dst = join(install_path, 'include', rel)
+              incfiles1.append(dst)
+              install_file(src, dst)
+        
+        rec1['incdirs'] = [join(install_path, 'include')]
+        rec1['incfiles'] = incfiles1
+      else:
+        rec1['incdirs'] = []
+        rec1['incfiles'] = []
+      
       if libfiles is not None:
         rec1['libfiles'] = [join(install_path, 'lib', base_of(f)) for f in libfiles]
       
@@ -1136,38 +1434,45 @@ def install_libset(install_path, name, libset):
     
     # copy libraries
     if len(libfiles_all) != len(set(map(base_of, libfiles_all))):
-      raise errorlog.LoggedError(
-        'ERROR: Duplicate library names in list:\n  ' + '\n  '.join(libfiles_all)
+      raise InstallError(
+        'Duplicate library names in list:\n  ' + '\n  '.join(libfiles_all)
       )
     
-    for f in libfiles_all:
-      dest = join(install_path, 'lib', base_of(f))
-      undo.append(dest)
-      os_extra.ensure_dirs(dest)
-      link_or_copy(f, dest, overwrite=False)
+    for src in libfiles_all:
+      dst = join(install_path, 'lib', base_of(src))
+      install_file(src, dst)
+    
+    # build dict of library provided meta-assignments
+    metas = dict(meta_extra)
+    for rec in installed_libset.values():
+      for x,y in rec.get('meta',{}).items():
+        assert y == metas.get(x,y) # libraries provided conflicting values for same meta-varaible
+        metas[x] = y
     
     # produce metadata script
-    meta = join(install_path, 'bin', name+'-meta')
-    undo.append(meta)
-    os_extra.ensure_dirs(meta)
-    with open(meta, 'w') as fo:
-      fo.write(
+    meta_path = join(install_path, 'bin', name+'-meta')
+    meta_contents = \
 '''#!/bin/sh
 PPFLAGS="''' + ' '.join(libset_ppflags(installed_libset)) + '''"
 LDFLAGS="''' + ' '.join(libset_ldflags(installed_libset)) + '''"
 LIBFLAGS="''' + ' '.join(libset_libflags(installed_libset)) + '''"
+''' + '\n'.join(
+  ["%s='%s'"%(k,v) for k,v in sorted(metas.items()) if v is not None]
+) + '''
 [ "$1" != "" ] && eval echo '$'"$1"
-''')
-    os.chmod(meta, 0777)
+'''
+    install_contents(meta_contents, meta_path)
     
   except Exception as e:
-    for f in undo:
-      try: os_extra.rmtree(f)
+    for fn in reversed(rollback):
+      try: fn()
       except OSError: pass
     
-    if isinstance(e, OSError) and e.errno == 17: # File exists
-      raise errorlog.LoggedError(
-        'Installation aborted because it would clobber files in "'+install_path+'"'
-      )
+    if isinstance(e, InstallError):
+      raise errorlog.LoggedError('Installation to "%s" aborted: %s'%(install_path, e.message))
     else:
       raise
+  
+  else:
+    for fn in commit:
+      fn()

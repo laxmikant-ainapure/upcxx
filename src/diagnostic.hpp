@@ -35,4 +35,26 @@ namespace upcxx {
 // In debug mode this will abort. In non-debug this is a nop.
 #define UPCXX_INVOKE_UB() ::upcxx::assert_failed(__FILE__, __LINE__)
 
+namespace upcxx {
+  // ostream -like class which will print to standard error with as
+  // much atomicity as possible. Incluces current rank and trailing
+  // newline.
+  // usage:
+  //   upcxx::say() << "hello world";
+  // prints:
+  //   [0] hello world \n
+  class say {
+    std::stringstream ss;
+  public:
+    say();
+    ~say();
+    
+    template<typename T>
+    say& operator<<(T const &that) {
+      ss << that;
+      return *this;
+    }
+  };
+}
+
 #endif
