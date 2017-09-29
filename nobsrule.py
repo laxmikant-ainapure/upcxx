@@ -682,7 +682,7 @@ def run(cxt, main_src, *args):
   """
   _, libset = yield cxt.objects_and_libset(main_src)
   exe = yield cxt.executable(main_src)
-  
+
   if 'gasnet' in libset:
     meta = libset['gasnet']['meta']
     
@@ -694,9 +694,17 @@ def run(cxt, main_src, *args):
     upcxx_run = here('utils','upcxx-run')
     ranks = str(env('RANKS', 1))
     
-    os.execvpe(upcxx_run, [upcxx_run, ranks, exe] + map(str, args), env1)
+    def spawn():
+      os.execve(upcxx_run, [upcxx_run, ranks, exe] + map(str, args), env1)
   else:
-    os.execvp(exe, [exe] + map(str, args))
+    def spawn():
+      os.execv(exe, [exe] + map(str, args))
+
+  # defer execv until after regular shutdown logic
+  import atexit
+  atexit.register(spawn)
+  
+  yield None
 
 @rule(cli='install', path_arg='main_src')
 @coroutine

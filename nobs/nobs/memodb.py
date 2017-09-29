@@ -152,6 +152,7 @@ def _everything():
           while True:
             try:
               record = cPickle_load(f)
+              #print>>sys.stderr, 'record:',record[0]
               
               if record[0] == 'tree':
                 _, tr_seq, result_vals, result_kws, arts = record
@@ -174,7 +175,23 @@ def _everything():
                   full = next_full
                   i += 1
                 tip[name] = (2, full, result_vals, result_kws, arts)
+
+              elif record[0] == 'prune':
+                _, name_seq = record
+                tip = db_tree
+                fan_tip = db_tree
+                fan_name = name_seq[0]
+                for name in name_seq[:-1]:
+                  if len(tip) > 1:
+                    fan_tip = tip
+                    fan_name = name
+                  _, _, _, _, tip = tip[name]
                 
+                if len(tip) > 1:
+                  del tip[name_seq[-1]]
+                else:
+                  del fan_tip[fan_name]
+              
               elif record[0] == 'file':
                 _, apath, mtime, dig = record
                 db_files[apath] = (mtime, dig)
@@ -205,24 +222,25 @@ def _everything():
         def done(release):
           try:
             if 0.33*db._size_head < db._size_tail - db._size_head:
+              #print>>sys.stderr, 'BIG SAVE'
+              
               # prune failures
               for name_seq in db_failed_name_seqs:
                 tip = db_tree
-                fan_tip = None
+                fan_tip = db_tree
+                fan_name = name_seq[0]
                 for name in name_seq:
                   if len(tip) > 1:
                     fan_tip = tip
                     fan_name = name
-                  
                   node = tip[name]
                   if node[0] == 0:
                     _, _, _, _, tip = node
                   else:
                     assert node[0] == 3 # failed path must end in Failure
-                
-                if fan_tip is not None:
-                  del fan_tip[fan_name]
-              
+                    tip = None
+                del fan_tip[fan_name]
+
               del db_failed_name_seqs[:]
               
               with open(path_db, 'wb') as f:
@@ -262,6 +280,7 @@ def _everything():
           record = cPickle_dumps(('file',apath,mtime,digest), protocol=2)
           with open(path_db, 'ab') as f:
             f.write(record)
+            db._size_tail = f.tell()
         
         return db_files_get(apath, NO_EXIST)[1]
       
@@ -342,6 +361,15 @@ def _everything():
               if node[0] == 1:
                 raise AssertionError('Same trace and instance generated different full hashes.')
               
+              # commit prune record to file
+              record = cPickle_dumps(
+                ('prune', zip(*trace_seq)[2]),
+                protocol=2
+              )
+              with open(path_db, 'ab', 0) as f:
+                f.write(record)
+                db._size_tail = f.tell()
+              
               # delete orphaned artifacts
               def prune_arts(node):
                 tag = node[0]
@@ -419,6 +447,7 @@ def _everything():
           )
           with open(path_db, 'ab', 0) as f:
             f.write(record)
+            db._size_tail = f.tell()
         
         elif isinstance(result, async_Failure):
           cxt_tree_tip[name] = (3, full, result)
@@ -428,6 +457,7 @@ def _everything():
               os_extra_rmtree(artifact_path(*art))
           
           db_failed_name_seqs.append(zip(*trace_seq)[2])
+        
         else:
           assert False
         
