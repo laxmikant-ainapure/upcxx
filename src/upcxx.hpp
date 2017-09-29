@@ -3,7 +3,7 @@
 
 // UPCXX_VERSION release identifier format:
 // YYYYMMPP = [YEAR][MONTH][PATCH]
-#define UPCXX_VERSION 20170900
+#define UPCXX_VERSION 20170901
 
 #include <upcxx/allocate.hpp>
 #include <upcxx/backend.hpp>
