@@ -1368,7 +1368,7 @@ def install_libset(install_path, name, libset, meta_extra={}):
     
     rollback.append(lambda: os.rmdir(head))
   
-  def install_file(src, dst, src_is_path_not_contents=True):
+  def install_file(src, dst, mode, src_is_path_not_contents=True):
     isfile = os.path.isfile(dst)
     if isfile:
       try:
@@ -1391,12 +1391,12 @@ def install_libset(install_path, name, libset, meta_extra={}):
       else:
         with open(dst, 'w') as f:
           f.write(src)
-      os.chmod(dst, 0755)
+      os.chmod(dst, mode)
     except Exception as e:
       raise InstallError('Could not write file "%s": %s'%(dst, e.message))
   
-  def install_contents(contents, dst):
-    install_file(contents, dst, src_is_path_not_contents=False)
+  def install_contents(contents, dst, mode):
+    install_file(contents, dst, mode, src_is_path_not_contents=False)
   
   try:
     libfiles_all = []
@@ -1427,7 +1427,7 @@ def install_libset(install_path, name, libset, meta_extra={}):
               src = join(incd, rel)
               dst = join(install_path, 'include', rel)
               incfiles1.append(dst)
-              install_file(src, dst)
+              install_file(src, dst, 0644)
         
         rec1['incdirs'] = [join(install_path, 'include')]
         rec1['incfiles'] = incfiles1
@@ -1448,7 +1448,7 @@ def install_libset(install_path, name, libset, meta_extra={}):
     
     for src in libfiles_all:
       dst = join(install_path, 'lib', base_of(src))
-      install_file(src, dst)
+      install_file(src, dst, 0644)
     
     # build dict of library provided meta-assignments
     metas = dict(meta_extra)
@@ -1469,7 +1469,7 @@ LIBFLAGS="''' + ' '.join(libset_libflags(installed_libset)) + '''"
 ) + '''
 [ "$1" != "" ] && eval echo '$'"$1"
 '''
-    install_contents(meta_contents, meta_path)
+    install_contents(meta_contents, meta_path, 0755)
     
   except Exception as e:
     for fn in reversed(rollback):
