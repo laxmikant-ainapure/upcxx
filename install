@@ -35,6 +35,8 @@ else
   exit 1
 fi
 
+trap failure_and_die ERR
+
 . sourceme
 install_to=$(absify "$install_to")
 
@@ -106,7 +108,7 @@ else
   conduit_default=$(GASNET_CONDUIT='' nobs gasnet_conduit)
   
   mkdir -p "${install_to}/bin"
-  cat <<EOF >"${install_to}/bin/upcxx-meta"
+  cat <<EOF >| "${install_to}/bin/upcxx-meta"
 #!/bin/bash
 
 function echo_and_die {
