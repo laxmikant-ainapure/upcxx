@@ -163,6 +163,11 @@ EOF
   chmod 755 "${install_to}/bin/upcxx-meta"
   cp ./utils/upcxx-run "${install_to}/bin/upcxx-run"
   chmod 755 "${install_to}/bin/upcxx-run"
+  # install documentation
+  docdir="${install_to}/share/doc/upcxx"
+  mkdir -p $docdir
+  cp -f -R README.md LICENSE.txt docs $docdir
+  chmod -R a+rX $docdir
 fi
 
 echo "UPC++ successfully installed"
