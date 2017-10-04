@@ -22,8 +22,7 @@ The installation command above will work as is. The default compilers used will
 be gcc/g++. The `CC` and `CXX` environment variables can be set to alternatives
 to override this behavior. Additional environment variables allowing finer
 control over how UPC\+\+ is configured can be found in the
-[Advanced Installer Configuration](#advanced-installer-configuration) section
-below.
+"Advanced Installer Configuration" section below.
 
 **Installation: Mac**
 
