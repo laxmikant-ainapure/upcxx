@@ -13,7 +13,7 @@ EOF
 fi
     
 . sourceme
-rm -rf .nobs
+#rm -rf .nobs
 
 . utils/system-checks.sh
 sys_info
@@ -92,6 +92,6 @@ echo -e "\e[92mAll tests succeded\e[0m"
 
 cd ..
 
-rm -rf .nobs 2>&1 >/dev/null # ignore failures due to races
+#rm -rf .nobs 2>&1 >/dev/null # ignore failures due to races
 
 exit 0
