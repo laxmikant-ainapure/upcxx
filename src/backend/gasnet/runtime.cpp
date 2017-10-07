@@ -402,7 +402,8 @@ void upcxx::progress(progress_level level) {
       
       detail::persona_as_top(backend::master, [&]() {
         exec_n += rpcs_internal_.burst(100);
-        exec_n += rpcs_user_.burst(100);
+        if(level == progress_level::user)
+          exec_n += rpcs_user_.burst(100);
       });
     }
     
