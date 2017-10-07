@@ -59,10 +59,10 @@ environment variables:
 * `CC`, `CXX`: The C and C\+\+ compilers to use.
 * `CROSS`: The cross-configure settings script to pull from the GASNet source
   tree (computed as `<gasnet>/other/contrib/cross-configure-${CROSS}`).
-* `GASNET`: Provides the GASNetEx source tree from which the UPC\+\+ install
+* `GASNET`: Provides the GASNet-EX source tree from which the UPC\+\+ install
   script will build its own version of GASNet. This can be a path to a tarball,
   url to a tarball, or path to a full source tree.  Defaults to a url to a
-  publicly available GASNetEx tarball.
+  publicly available GASNet-EX tarball.
 * `GASNET_CONFIGURE_ARGS`: List of additional command line arguments passed to
   GASNet's configure phase.
 
