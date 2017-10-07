@@ -2,7 +2,9 @@
 #define _1e7a65b7_b8d1_4def_98a3_76038c9431cf
 
 #include <upcxx/future/core.hpp>
-#include <upcxx/backend_fwd.hpp>
+#ifdef UPCXX_BACKEND
+  #include <upcxx/backend_fwd.hpp>
+#endif
 
 namespace upcxx {
   //////////////////////////////////////////////////////////////////////
@@ -47,11 +49,13 @@ namespace upcxx {
   //////////////////////////////////////////////////////////////////////
   
   namespace detail {
-    struct future_wait_upcxx_progress_user {
-      void operator()() const {
-        upcxx::progress();
-      }
-    };
+    #ifdef UPCXX_BACKEND
+      struct future_wait_upcxx_progress_user {
+        void operator()() const {
+          upcxx::progress();
+        }
+      };
+    #endif
     
     template<typename T>
     struct is_future1: std::false_type {};
@@ -163,12 +167,19 @@ namespace upcxx {
         std::forward<Fn>(pure_fn)
       );
     }
-    
+
+    #ifdef UPCXX_BACKEND
     template<typename Fn=detail::future_wait_upcxx_progress_user>
     auto wait(Fn &&progress = detail::future_wait_upcxx_progress_user{})
+    #else
+    template<typename Fn>
+    auto wait(Fn &&progress)
+    #endif
       -> decltype(this->result()) {
+      
       while(!impl_.ready())
         progress();
+      
       return this->result();
     }
   };

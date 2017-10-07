@@ -30,12 +30,14 @@ conforming to:
       'ld':[str],
       'incdirs':[str], # "-I" directories
       'incfiles':[str] # paths to files residing in "-I" directories.
-      'ppflags':[str], # preprocessor flags to compiler minus those necessary for `incdirs` and `incfiles`
+      'ppdefs':{str:str} # preprocessor macro definitions
+      'ppflags':[str], # preprocessor flags to compiler minus those necessary for `incdirs` and `incfiles` and `ppdefs`
       'cgflags':[str], # code-gen flags to compiler
       'ldflags':[str], # flags to ld
       'libfiles':[str], # paths to binary archives
       'libflags':[str], # "-L", "-l", and other trailing linker flags minus those for `libfiles`
-      'deplibs':[str] # short-names for dependencies of this library
+      'libdeps':[str] # short-names for dependencies of this library during linking
+      'ppdeps': [str] # short-names for dependencies of this library during preprocessing
     }, ...
   }
 
@@ -186,41 +188,18 @@ def comp_version(cxt, src):
 
 @rule(path_arg='src')
 @coroutine
-def comp_lang_pp(cxt, src):
+def comp_lang_pp(cxt, src, libset):
   """
   File-specific compiler with source-language and preprocessor flags.
   """
   comp = yield cxt.comp_lang(src)
   ivt = yield cxt.include_vdirs_tree(src)
-  libs = yield cxt.libraries(src)
   yield (
     comp + 
     ['-D_GNU_SOURCE=1'] + # Required for full latest POSIX on some systems
     ['-I'+ivt] +
-    libset_ppflags(libs)
+    libset_ppflags(libset)
   )
-
-def upcxx_backend_id():
-  return env("UPCXX_BACKEND", otherwise="gasnet1_seq")
-
-@rule()
-@coroutine
-def upcxx_backend(cxt):
-  """
-  A pseudo-library used to inject the "-DUPCXX_BACKEND=X" preprocessor
-  flag and to rope in gasnet.
-  """
-  upcxx_be = {
-    'upcxx-backend': {
-      'ppflags': ['-D%s=%s'%('UPCXX_BACKEND', upcxx_backend_id())],
-      'libflags': [],
-      'deplibs': ['gasnet','pthread']
-    }
-  }
-  
-  gasnet = yield cxt.gasnet()
-  
-  yield libset_merge(upcxx_be, libset_as_secondary(gasnet))
 
 @rule()
 def cg_optlev_default(cxt):
@@ -246,14 +225,13 @@ def cg_dbgsym(cxt):
 
 @rule(cli='comp_lang_pp_cg', path_arg='src')
 @coroutine
-def comp_lang_pp_cg(cxt, src):
+def comp_lang_pp_cg(cxt, src, libset):
   """
   File-specific compiler with language, preprocessor, and code-gen flags.
   """
-  comp = yield cxt.comp_lang_pp(src)
   optlev = cxt.cg_optlev(src)
   dbgsym = cxt.cg_dbgsym()
-  libset = yield cxt.libraries(src)
+  comp = yield cxt.comp_lang_pp(src, libset)
   
   yield (
     comp +
@@ -265,15 +243,57 @@ def comp_lang_pp_cg(cxt, src):
 
 @rule(path_arg='src')
 @coroutine
-def compiler(cxt, src):
+def compiler(cxt, src, libset):
   """
   File-specific compiler lambda. Given a source file path, returns a
   function that given a path of where to place the object file, returns
   the argument list to invoke as a child process.
   """
-  comp = yield cxt.comp_lang_pp_cg(src)
+  comp = yield cxt.comp_lang_pp_cg(src, libset)
   
   yield lambda outfile: comp + ['-c', src, '-o', outfile]
+
+def upcxx_backend_id():
+  return env("UPCXX_BACKEND", otherwise="gasnet1_seq")
+
+@rule()
+@coroutine
+def upcxx_backend(cxt):
+  """
+  A pseudo-library used to inject the "-DUPCXX_BACKEND=X" preprocessor
+  flag and to rope in gasnet.
+  """
+  upcxx_be = {
+    'upcxx-backend': {
+      'ppdefs': {'UPCXX_BACKEND': upcxx_backend_id()},
+      'libflags': [],
+      'ppdeps': ['gasnet'],
+      'libdeps': ['gasnet','pthread']
+    }
+  }
+  
+  gasnet = yield cxt.gasnet()
+  pthread = yield cxt.pthread()
+  
+  yield libset_merge(
+    upcxx_be,
+    libset_as_secondary(gasnet),
+    libset_as_secondary(pthread)
+  )
+
+@cached # only execute once per nobs invocation
+def _pthread():
+  """
+  Platform specific logic for finding pthreads flags goes here.
+  """
+  return {'pthread':{'libflags':['-pthread']}}
+  
+@rule(cli='pthread')
+def pthread(cxt):
+  """
+  Return the library-set for building against pthreads. 
+  """
+  return _pthread()
 
 # Rule overriden in sub-nobsrule files.
 @rule(cli='requires_gasnet', path_arg='src')
@@ -290,6 +310,7 @@ def requires_upcxx_backend(cxt, src):
 def requires_pthread(cxt, src):
   return False
 
+# TODO: rename to required_libraries
 @rule(path_arg='src')
 @coroutine
 def libraries(cxt, src):
@@ -308,11 +329,11 @@ def libraries(cxt, src):
     maybe_upcxx_backend = {}
   
   if cxt.requires_pthread(src):
-    maybe_pthread = {'pthread':{}}
+    maybe_pthread = cxt.pthread()
   else:
     maybe_pthread = {}
   
-  yield cxt.libset_merge(maybe_gasnet, maybe_upcxx_backend, maybe_pthread)
+  yield libset_merge(maybe_gasnet, maybe_upcxx_backend, maybe_pthread)
 
 @rule()
 def gasnet_user(cxt):
@@ -407,14 +428,14 @@ class include_vdirs_tree:
   compiler flags, allows our headers to be accessed via:
     #include <upcxx/*.hpp>
   """
-  version_bump = 0
+  version_bump = 1
   
   @traced
-  def get_include_vdirs(me, cxt, src):
+  def include_vdirs(me, cxt, src):
     return cxt.include_vdirs(src)
   
   def execute(me):
-    vdirs = me.get_include_vdirs()
+    vdirs = me.include_vdirs()
     return me.mktree(vdirs, symlinks=True)
 
 @rule_memoized(cli='incs', path_arg=0)
@@ -423,23 +444,23 @@ class includes:
   Ask compiler for all the non-system headers pulled in by preprocessing
   the given source file. Returns the list of paths to included files.
   """
-  version_bump = 0
+  version_bump = 2
   
   @traced
   @coroutine
-  def get_stuff(me, cxt, src):
+  def src_and_compiler(me, cxt, src, global_libset):
     me.depend_files(src)
     
     version = yield cxt.comp_version(src)
     me.depend_fact(key=None, value=version)
+
+    comp_pp = yield cxt.comp_lang_pp(src, global_libset)
     
-    comp_pp = yield cxt.comp_lang_pp(src)
-    
-    yield comp_pp, src
+    yield (src, comp_pp)
   
   @coroutine
   def execute(me):
-    comp_pp, src = yield me.get_stuff()
+    src, comp_pp = yield me.src_and_compiler()
     
     # See here for getting this to work with other compilers:
     #  https://projects.coin-or.org/ADOL-C/browser/trunk/autoconf/depcomp?rev=357
@@ -451,33 +472,119 @@ class includes:
     deps = shplit(mk.replace("\\\n",""))[1:] # first is source file
     deps = map(os.path.abspath, deps)
     me.depend_files(*deps)
+    dpes = map(os.path.realpath, deps)
     
     yield deps
+
+# Unused logic since it might just me going overboard...
+'''
+@rule_memoized(cli='observes_ppnames', path_arg=0)
+class observes_ppnames:
+  """
+  This function attempts to answer the question whether the given file,
+  not including files it includes, contains a reference to any of the
+  given preprocessor macro names. In most cases it will admit only false
+  positives. False negatives can happen, butonly if the source file
+  computes macro names (using token pasting operator ##) and then passes
+  that as an argument to another macro (which would evaluate it).
+  Since false negatives make this operation useless, DO NOT generate
+  macro names via token pasting for any that occur in `ppnames`. This
+  restriction is actually very easy to meet since this query is only
+  used for defines coming command-line pp-flags (like GASNET_CPPFLAGS).
+  """
+  
+  @traced
+  def src_and_ppnames(me, cxt, src, ppnames):
+    return src, ppnames
+  
+  @coroutine
+  def execute(me):
+    from re import findall
+    src, ppnames = me.src_and_ppnames()
+    ppnames = set(ppnames)
+    ans = set()
+    with open(src, 'r') as f:
+      for ln in f:
+        toks = set(findall('[a-zA-Z_]+[a-zA-Z0-9_]*', ln))
+        toks &= ppnames
+        ans |= toks
+    yield ans
+
+@rule(cli='libraries_just_pp', path_arg='src')
+@coroutine
+def libraries_just_pp(cxt, src, global_libset):
+  """
+  Given a source path and "global" libset of all libraries used by any
+  source in the crawl (library/executable), returns a reduced libset
+  containing only the libraries needed for this source file to compile
+  (but not link). It would cause no harm to always return the "global"
+  libset back, but by pruning out the unnecessary libs we achieve better
+  memoization reuse. For instance, if one of the libs has a "-DFOO=x/y"
+  in its ppflags, we don't want to recompile files which don't depend on
+  FOO just because it changed. 
+  """
+
+  # the includes pulled in by `src`
+  incs = yield cxt.includes(src, global_libset)
+  incs = set(incs)
+
+  # the set of all pp-define names for the global libset
+  ppnames0 = libset_ppdefs(global_libset).keys()
+
+  # the subset of ppnames as observed by `src` and all of its includes.
+  ppnames1 = yield cxt.observes_ppnames(src, ppnames0)
+  ppnames1 = set(ppnames1)
+  for inc in incs:
+    ppnames1 |= yield cxt.observes_ppnames(inc, ppnames0)
+
+  # compute the root-set of libnames which either have a header of
+  # theirs included or a ppname referenced
+  roots = set()
+  for libname, librec in global_libset.items():
+    if 'incfiles' in librec:
+      if set(librec['incfiles']) & incs:
+        roots.add(libname)
+        continue
+
+    incdirs = librec.get('ppflags', [])
+    incdirs = [f[2:] for f in incdirs if f.startswith('-I')]
+    incdirs += librec.get('incdirs', [])
+    
+    for incdir in incdirs:
+      if any(path_within_dir(inc, incdir) for inc in incs):
+        roots.add(libname)
+        break
+    
+    if ppnames1 & set(librec.get('ppdefs',())):
+      roots.add(libname)
+  
+  yield libset_closure(global_libset, 'ppdeps', roots)
+'''
 
 @rule_memoized(cli='obj', path_arg=0)
 class compile:
   """
   Compile the given source file. Returns path to object file.
   """
-  version_bump = 0
+  version_bump = 1
   
   @traced
   @coroutine
-  def get_src_compiler(me, cxt, src):
-    compiler = yield cxt.compiler(src)
+  def src_and_compiler(me, cxt, src, pp_libset):
+    compiler = yield cxt.compiler(src, pp_libset)
     version = yield cxt.comp_version(src)
     
     me.depend_fact(key='compiler', value=version)
     
-    includes = yield cxt.includes(src)
+    includes = yield cxt.includes(src, pp_libset)
     me.depend_files(src)
     me.depend_files(*includes)
     
-    yield src, compiler
+    yield (src, compiler)
   
   @coroutine
   def execute(me):
-    src, compiler = yield me.get_src_compiler()
+    src, compiler = yield me.src_and_compiler()
     
     objfile = me.mkpath(None, suffix=os.path.basename(src)+'.o')
     yield subexec.launch(compiler(objfile))
@@ -492,17 +599,29 @@ class objects_and_libset:
   containing set of all object files and the accumulated library
   dependency set.
   """
+  version_bump = 2
+  
   @traced
-  def get_main_src(me, cxt, main_src):
+  def main_src(me, cxt, main_src):
     return main_src
   
   @traced
-  def do_includes(me, cxt, main_src, src):
-    return cxt.includes(src)
+  def includes(me, cxt, main_src, src, libset):
+    return cxt.includes(src, libset)
   
   @traced
-  def do_compile_and_libraries(me, cxt, main_src, src):
-    return futurize(cxt.compile(src), cxt.libraries(src))
+  def libraries(me, cxt, main_src, src):
+    return cxt.libraries(src)
+  
+  @traced
+  @coroutine
+  def compile(me, cxt, main_src, src, libset):
+    if 0: # do not reduce the global libset, that functionality disabled
+      pp_libset = yield cxt.libraries_just_pp(src, libset)
+    else:
+      pp_libset = libset
+    
+    yield cxt.compile(src, pp_libset)
   
   @traced
   def find_src_exts(me, cxt, main_src, base):
@@ -515,45 +634,67 @@ class objects_and_libset:
   
   @coroutine
   def execute(me):
-    main_src = me.get_main_src()
-    
-    # compile object files
+    main_src = me.main_src()
+
+    srcs_seen = set()
     incs_seen = set()
-    objs = []
     libset = {}
-    
+
+    # Transitively crawl all the files reachable from `main_src`. We
+    # only preprocess them at this point, not compile. We also ask them
+    # for the set of libraries they depend on and accumulate that into
+    # a running aggregate "global" library set. Each time we discover
+    # the global set of libraries has increased, we initiate a brand
+    # new crawl wave from the root again. We keep doing this until
+    # fixed point, i.e. every reachable file has been preprocessed
+    # with all the pp-flags from all the libraries discovered. This way
+    # everyone gets a chance to test "#ifdef UPCXX_BACKEND".
+    @coroutine
     def fresh_src(src):
-      return async.when_succeeded(
-        me.do_includes(src) >> includes_done,
-        me.do_compile_and_libraries(src) >> compile_done
-      )
-    
-    def includes_done(incs):
-      tasks = []
-      for inc in incs:
-        inc = os_extra.realpath(inc)
-        if inc not in incs_seen:
-          incs_seen.add(inc)
-          inc_base, _ = os.path.splitext(inc)
-          # `inc` must be in a crawlable directory
-          if any(path_within_dir(inc_base, x) for x in crawlable_dirs):
-            for ext in me.find_src_exts(inc_base):
-              src = inc_base + ext
-              # Don't compile source files which have been included
-              # into other source files.
-              if src not in incs_seen:
-                tasks.append(fresh_src(src))
+      srcs_seen.add(src)
       
-      return async.when_succeeded(*tasks)
+      src_libset = yield me.libraries(src)
+      
+      libset_n0 = len(libset)
+      libset_merge_inplace(libset, src_libset)
+      libset_n1 = len(libset)
+      
+      if libset_n0 != libset_n1:
+        # We grew the global library set, start a new crawl.
+        srcs_seen.clear()
+        incs_seen.clear()
+        yield fresh_src(main_src)
+      else:
+        # Find adjacent source files by matching header names we
+        # included against known source-file extensions.
+        tasks = []
+        incs = yield me.includes(src, dict(libset))
+        
+        for inc in incs:
+          inc = os_extra.realpath(inc)
+          if inc not in incs_seen:
+            incs_seen.add(inc)
+            inc_base, _ = os.path.splitext(inc)
+            # `inc` must be in a crawlable directory
+            if any(path_within_dir(inc_base, x) for x in crawlable_dirs):
+              for ext in me.find_src_exts(inc_base):
+                src = inc_base + ext
+                # Don't compile source files which have been included
+                # into other source files.
+                if src not in incs_seen and src not in srcs_seen:
+                  tasks.append(fresh_src(src))
+        
+        yield async.when_succeeded(*tasks)
     
-    def compile_done(obj, more_libs):
-      objs.append(obj)
-      libset_merge_inplace(libset, more_libs)
-    
-    # wait for all compilations
+    # Wait for crawl to complete.
     yield fresh_src(main_src)
     
-    # return pair
+    # Crawl is complete, now we compile each source file into an object.
+    objs_fu = map(lambda src: me.compile(src, libset), srcs_seen)
+    yield async.when_succeeded(*objs_fu)
+    objs = map(lambda fu:fu.value(), objs_fu)
+    
+    # Return pair the object list and global library set.
     yield (objs, libset)
 
 @rule_memoized(cli='exe', path_arg=0)
@@ -598,22 +739,30 @@ class executable:
 
 @rule_memoized(cli='lib', path_arg=0)
 class library:
-  version_bump = 7
+  """
+  Like executable(), but instead of linking the objects, stuffs them into
+  a library archive and returns that and all the metadata as a libset.
+  """
+  version_bump = 9
   
   @traced
-  def get_main_src(me, cxt, main_src):
+  def main_src(me, cxt, main_src):
     return main_src
   
   @traced
-  def includes(me, cxt, main_src, src):
-    return cxt.includes(src)
+  def includes(me, cxt, main_src, src, libset):
+    return cxt.includes(src, libset)
+
+  @traced
+  def libraries_just_pp(me, cxt, main_src, src, libset):
+    return cxt.libraries_just_pp(src, libset)
   
   @traced
   def objects_and_libset(me, cxt, main_src):
     return cxt.objects_and_libset(main_src)
   
   @traced
-  def get_include_vdirs_and_tree(me, cxt, main_src):
+  def include_vdirs_and_tree(me, cxt, main_src):
     return futurize(
       cxt.include_vdirs(main_src),
       cxt.include_vdirs_tree(main_src)
@@ -621,14 +770,19 @@ class library:
   
   @coroutine
   def execute(me):
-    main_src = me.get_main_src()
+    main_src = me.main_src()
     top_dir = here()
     
     objs, libset = yield me.objects_and_libset()
+
+    if 0:
+      pp_libset = yield me.libraries_just_pp(main_src, libset)
+    else:
+      pp_libset = libset
     
     # Headers pulled in from main file. Discard those not within this
     # repo (top_dir) or the nobs artifact cache (path_art).
-    incs = yield me.includes(main_src)
+    incs = yield me.includes(main_src, libset)
     incs = map(os_extra.realpath, incs)
     incs = [i for i in incs if
       path_within_dir(i, top_dir) or
@@ -636,10 +790,10 @@ class library:
     ]
     incs = list(set(incs))
     
-    inc_vdirs, inc_vdirs_tree = yield me.get_include_vdirs_and_tree()
+    inc_vdirs, inc_vdirs_tree = yield me.include_vdirs_and_tree()
     
-    # Reconstruct paths to includes as relative to vdirs in case the
-    # symlinks get squashed out.
+    # Reconstruct paths to includes as relative to vdirs because the
+    # symlinks get squashed out by includes().
     incs1 = []
     updir = '..' + os.path.sep
     for inc in incs:
@@ -668,8 +822,9 @@ class library:
       {libname: {
         'incdirs': [inc_vdirs_tree],
         'incfiles': incs,
+        'ppdeps': list(pp_libset.keys()),
         'libfiles': [libpath],
-        'deplibs': list(libset.keys())
+        'libdeps': list(libset.keys())
       }}
     )
 
@@ -1073,7 +1228,7 @@ class gasnet:
   """
   Builds/installs gasnet as necessary. Returns library dependencies dictionary.
   """
-  version_bump = 10
+  version_bump = 14
   
   @traced
   @coroutine
@@ -1086,9 +1241,15 @@ class gasnet:
       cxt.gasnet_syncmode(),
       cxx
     )
+
+  @traced
+  def includes(me, cxt, src, libset):
+    return cxt.includes(src, libset)
   
   @coroutine
   def execute(me):
+    import os
+
     installed, built_dir, conduit, syncmode, cxx = yield me.get_config()
     
     makefile = os.path.join(*(
@@ -1112,15 +1273,38 @@ class gasnet:
       incfiles = []
       libfiles = []
     else:
-      # pull "-I..." arguments out of GASNET_CXXCPPFLAGS
-      incdirs = [x for x in GASNET_CXXCPPFLAGS if x.startswith('-I')]
-      GASNET_CXXCPPFLAGS = [x for x in GASNET_CXXCPPFLAGS if x not in incdirs]
-      incdirs = [x[2:] for x in incdirs] # drop "-I" prefix
-      
       makefile = os.path.join(built_dir, 'Makefile')
-      source_dir = makefile_extract(makefile, 'TOP_SRCDIR')
-      incfiles = shplit(makefile_extract(makefile, 'include_HEADERS'))
-      incfiles = [os.path.join(source_dir, i) for i in incfiles]
+
+      if 0:
+        # Giving up on identifying each gasnet header the user might need.
+        # EVEN THOUGH this is the right (and working) way to do it.
+        
+        dummy_fd, dummy_path = me.mkstemp(suffix='.cpp')
+        os.write(dummy_fd,
+          "#include <gasnet.h>\n" +
+          "#include <gasnetex.h>\n" +
+          "#include <gasnet_tools.h>\n"
+        )
+        os.close(dummy_fd)
+        
+        incfiles = yield me.includes(
+          dummy_path,
+          {'gasnet': {'ppflags': GASNET_CXXCPPFLAGS}}
+        )
+        
+        # pull "-I..." arguments out of GASNET_CXXCPPFLAGS
+        incdirs = [x for x in GASNET_CXXCPPFLAGS if x.startswith('-I')]
+        GASNET_CXXCPPFLAGS = [x for x in GASNET_CXXCPPFLAGS if x not in incdirs]
+        incdirs = [x[2:] for x in incdirs] # drop "-I" prefix
+        
+      else:
+        # Instead we bring no headers. This will break users trying to
+        # include gasnet from a upcxx `install --single` tree.
+        incdirs = []
+        incfiles = []
+        # Leaving "-I..." flags in GASNET_CXXCPPFLAGS even though they'
+        # will all point into a build directory which might be in
+        # .nobs.
       
       # pull "-L..." arguments out of GASNET_LIBS, keep only the "..."
       libdirs = [x[2:] for x in GASNET_LIBS if x.startswith('-L')]
@@ -1150,6 +1334,17 @@ class gasnet:
           (x.startswith('-l') and x[2:] in libnames_matched)
         )
       ]
+
+    if 0: # Pertains to big block of disabled code (see: libraries_just_pp)
+      # Pull all flags like "-DGASNET*" out of CXXCPPFLAGS. These will
+      # go into the 'ppdefs' of the libset, remaining flags into 'ppflags'.
+      import re
+      ppdefs = [s for s in GASNET_CXXCPPFLAGS if s.startswith('-DGASNET')]  
+      GASNET_CXXCPPFLAGS = [s for s in GASNET_CXXCPPFLAGS if s not in ppdefs]
+      ppdefs = [re.match('-D(GASNET[a-zA-Z0-9_]*)(=(.*))?', s) for s in ppdefs]
+      ppdefs = dict((m.group(1), m.group(3) or '') for m in ppdefs)
+    else:
+      ppdefs = {}
     
     yield {
       'gasnet': {
@@ -1162,10 +1357,11 @@ class gasnet:
         'ld': GASNET_LD,
         'ldflags': GASNET_LDFLAGS,
         'ppflags': GASNET_CXXCPPFLAGS,
+        'ppdefs': ppdefs,
         'cgflags': GASNET_CXXFLAGS,
         'libfiles': libfiles,
         'libflags': GASNET_LIBS,
-        'deplibs': [] # all dependencies flattened into libflags by gasnet
+        'libdeps': [] # all dependencies flattened into libflags by gasnet
       }
     }
 
@@ -1250,15 +1446,58 @@ def libset_as_secondary(libset):
       ans[k]['primary'] = False
   return ans
 
+def libset_closure(libset, depsfield, rootnames=None):
+  if rootnames is None:
+    rootnames = [x for x,y in libset.items() if y.get('primary',True)]
+  
+  ans = dict((x,libset[x]) for x in rootnames)
+  more = list(rootnames)
+  
+  while len(more) != 0:
+    a = more.pop()
+    for b in libset.get(a, {}).get(depsfield, ()):
+      if b not in ans:
+        ans[b] = libset.get(b, {})
+        more.append(b)
+  
+  return ans
+
+def libset_ppdefs(libset):
+  """
+  Return the aggregate dict of preprocessor macros needed by all libraries.
+  """
+  ppdefs = {}
+  for rec in libset.values():
+    for x,y in rec.get('ppdefs', {}).items():
+      y0 = ppdefs.get(x,y)
+      if y != y0:
+        raise Exception("Conflicting values for preprocessor macro definition %s=%s and %s=%s."%(x,y,x,y0))
+      ppdefs[x] = y
+  return ppdefs
+
 def libset_ppflags(libset):
+  """
+  Return the aggregate list of preprocessor flags needed by all libraries.
+  Includes all information from: incfiles, incdirs, ppdefs, ppflags.
+  """
   flags = []
+
+  ppdefs = libset_ppdefs(libset)
+  for x,y in ppdefs.items():
+    if y:
+      flags.append('-D%s=%s'%(x,y))
+    else:
+      flags.append('-D%s'%x)
+  
   for rec in libset.values():
     flags.extend(rec.get('ppflags', []))
+  
   for rec in libset.values():
     for d in rec.get('incdirs', []):
       flag = '-I' + d
       if flag not in flags:
         flags.append(flag)
+  
   return flags
 
 def libset_cgflags(libset):
@@ -1295,7 +1534,7 @@ def libset_libflags(libset):
     for x in xs:
       rec = libset.get(x, {})
       
-      topsort(rec.get('deplibs', []))
+      topsort(rec.get('libdeps', []))
       
       if x not in visited:
         visited.add(x)
@@ -1399,48 +1638,58 @@ def install_libset(install_path, name, libset, meta_extra={}):
     install_file(contents, dst, mode, src_is_path_not_contents=False)
   
   try:
-    libfiles_all = []
+    ####################################################################
+    # produce a new version of libset representing the post-install libset
+    # (with the headers and library files moved)
     installed_libset = {}
+    empty_lib = {'libflags':[]}
     
-    for xname,rec in libset.items():
+    ####################################################################
+    # copy/transform preprocessor stuff from libset to installed_libset
+    
+    for xname,rec in libset_closure(libset, 'ppdeps').items():
       incdirs = rec.get('incdirs', [])
       incfiles = rec.get('incfiles', [])
-      libfiles = rec.get('libfiles', None)
       
-      libfiles_all.extend(libfiles or [])
-      
-      # produce installed version of library record
-      rec1 = dict(rec)
-      
-      # HACK: copy headers for primary libraries, not otherwise.
-      # TODO: We should be tracking header-header dependencies, and
-      # then only copying  the set of headers as reachable from the
-      # set of primary libraries.
-      if rec.get('primary',True):
-        incfiles1 = []
-        for incf in incfiles:
-          # copy for each non-upwards relative path
-          for incd in reversed(incdirs):
-            rel = os.path.relpath(incf, incd)
-            if not rel.startswith(updir):
-              # copy include file to relative path under "install_path/include"
-              src = join(incd, rel)
-              dst = join(install_path, 'include', rel)
-              incfiles1.append(dst)
-              install_file(src, dst, 0644)
-        
-        rec1['incdirs'] = [join(install_path, 'include')]
-        rec1['incfiles'] = incfiles1
-      else:
-        rec1['incdirs'] = []
-        rec1['incfiles'] = []
-      
-      if libfiles is not None:
-        rec1['libfiles'] = [join(install_path, 'lib', base_of(f)) for f in libfiles]
+      incfiles1 = []
+      for incf in incfiles:
+        # copy for each non-upwards relative path
+        for incd in reversed(incdirs):
+          rel = os.path.relpath(incf, incd)
+          if not rel.startswith(updir):
+            # copy include file to relative path under "install_path/include"
+            src = join(incd, rel)
+            dst = join(install_path, 'include', rel)
+            incfiles1.append(dst)
+            install_file(src, dst, 0644)
+
+      rec1 = dict(empty_lib)
+      rec1.update({
+        'incdirs': [join(install_path, 'include')],
+        'incfiles': incfiles1,
+      })
+      if 'ppflags' in rec: rec1['ppflags'] = rec['ppflags']
+      if 'ppdefs'  in rec: rec1['ppdefs'] = rec['ppdefs']
       
       installed_libset[xname] = rec1
     
-    # copy libraries
+    ####################################################################
+    # copy/transform library stuff from libset to installed_libset
+    
+    libfiles_all = []
+    
+    for xname,rec in libset_closure(libset, 'libdeps').items():
+      rec1 = installed_libset.get(xname, dict(empty_lib))
+      installed_libset[xname] = rec1
+      
+      if 'libfiles' in rec:
+        libfiles = rec['libfiles']
+        libfiles_all.extend(libfiles)
+        rec1['libfiles'] = [join(install_path, 'lib', base_of(f)) for f in libfiles]
+      
+      if 'libflags' in rec: rec1['libflags'] = rec['libflags']
+      if 'ldflags'  in rec: rec1['ldflags'] = rec['ldflags']
+    
     if len(libfiles_all) != len(set(map(base_of, libfiles_all))):
       raise InstallError(
         'Duplicate library names in list:\n  ' + '\n  '.join(libfiles_all)
@@ -1450,6 +1699,21 @@ def install_libset(install_path, name, libset, meta_extra={}):
       dst = join(install_path, 'lib', base_of(src))
       install_file(src, dst, 0644)
     
+    ####################################################################
+    # copy over all the other fields from libset into installed_libset
+    
+    for xname,rec1 in installed_libset.items():
+      ignore = (
+        'incfiles','incdirs','ppflags','ppdefs',
+        'libfiles','libflags','ldflags'
+      )
+      rec1.update(
+        dict((x,y) for x,y in libset.get(xname,{}).items() if x not in ignore)
+      )
+    
+    ####################################################################
+    # produce metadata script
+
     # build dict of library provided meta-assignments
     metas = dict(meta_extra)
     for rec in installed_libset.values():
@@ -1457,7 +1721,6 @@ def install_libset(install_path, name, libset, meta_extra={}):
         assert y == metas.get(x,y) # libraries provided conflicting values for same meta-varaible
         metas[x] = y
     
-    # produce metadata script
     meta_path = join(install_path, 'bin', name+'-meta')
     meta_contents = \
 '''#!/bin/sh
@@ -1470,7 +1733,7 @@ LIBFLAGS="''' + ' '.join(libset_libflags(installed_libset)) + '''"
 [ "$1" != "" ] && eval echo '$'"$1"
 '''
     install_contents(meta_contents, meta_path, 0755)
-    
+  
   except Exception as e:
     for fn in reversed(rollback):
       try: fn()

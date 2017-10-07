@@ -6,10 +6,6 @@
  */
 
 #include <upcxx/backend_fwd.hpp>
-
-// Pulls in diagnostic.cpp which defines backend::rank_n/me
-#include <upcxx/diagnostic.hpp>
-
 #include <upcxx/future.hpp>
 #include <upcxx/persona.hpp>
 

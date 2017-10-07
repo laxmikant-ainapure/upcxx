@@ -36,7 +36,7 @@ namespace upcxx {
 #define UPCXX_INVOKE_UB() ::upcxx::assert_failed(__FILE__, __LINE__)
 
 namespace upcxx {
-  // ostream -like class which will print to standard error with as
+  // ostream-like class which will print to standard error with as
   // much atomicity as possible. Incluces current rank and trailing
   // newline.
   // usage:

@@ -13,9 +13,11 @@ namespace detail  = upcxx::detail;
 namespace gasnet  = upcxx::backend::gasnet;
 
 using upcxx::future;
+using upcxx::intrank_t;
 using upcxx::parcel_reader;
 using upcxx::parcel_writer;
 using upcxx::persona;
+using upcxx::persona_scope;
 using upcxx::progress_level;
 
 using backend::persona_state;
@@ -44,8 +46,13 @@ static_assert(
 ////////////////////////////////////////////////////////////////////////
 // from: upcxx/backend.hpp
 
-upcxx::persona backend::master;
-upcxx::persona_scope *backend::initial_master_scope = nullptr;
+int backend::init_count = 0;
+  
+intrank_t backend::rank_n = -1;
+intrank_t backend::rank_me; // leave undefined so valgrind can catch it.
+
+persona backend::master;
+persona_scope *backend::initial_master_scope = nullptr;
 
 ////////////////////////////////////////////////////////////////////////
 // from: upcxx/backend/gasnet/runtime.hpp
@@ -55,8 +62,6 @@ size_t gasnet::am_size_rdzv_cutover;
 ////////////////////////////////////////////////////////////////////////
 
 namespace {
-  int init_count_ = 0;
-  
   rpc_inbox rpcs_internal_;
   rpc_inbox rpcs_user_;
   
@@ -99,7 +104,7 @@ namespace {
 // from: upcxx/backend.hpp
 
 void upcxx::init() {
-  if(0 != init_count_++)
+  if(0 != backend::init_count++)
     return;
   
   int ok;
@@ -157,9 +162,9 @@ void upcxx::init() {
 }
 
 void upcxx::finalize() {
-  UPCXX_ASSERT_ALWAYS(init_count_ > 0);
+  UPCXX_ASSERT_ALWAYS(backend::init_count > 0);
   
-  if(0 != --init_count_)
+  if(0 != --backend::init_count)
     return;
   
   upcxx::barrier();

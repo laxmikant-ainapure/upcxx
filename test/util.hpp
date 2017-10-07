@@ -2,9 +2,10 @@
 #define _f0b217aa_607e_4aa4_8147_82a0d66d6303
 
 #ifdef UPCXX_BACKEND
-#include <upcxx/backend_fwd.hpp>
+  #include <upcxx/backend_fwd.hpp>
 #endif
 
+#include <iostream>
 #include <string>
 
 #ifdef UPCXX_USE_COLOR
@@ -39,9 +40,11 @@ inline std::string test_name(const char *file) {
   }
 
   inline void print_test_success(bool success=true) {
-      // include a barrier to ensure all other threads have finished working.
-      // flush stdout to prevent any garbling of output
-      upcxx::barrier();
+      if(upcxx::backend::init_count > 0) {
+          // include a barrier to ensure all other threads have finished working.
+          // flush stdout to prevent any garbling of output
+          upcxx::barrier();
+      }
       
       if(0 == upcxx::rank_me())
           std::cout << std::flush<< KLGREEN << "Test result: "<<(success?"SUCCESS":"FAILURE") << KNORM << std::endl;

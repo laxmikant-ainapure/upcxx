@@ -585,13 +585,19 @@ def _everything():
           os_extra.mktree(path, entries, symlinks=symlinks)
           return path
         
-        def mktemp(me):
+        def mktemp(me, *mkstemp_args, **mkstemp_kws):
           import tempfile
-          fd, path = tempfile.mkstemp()
+          fd, path = tempfile.mkstemp(*mkstemp_args, **mkstemp_kws)
           os.close(fd)
           os.remove(path)
           me._temps.append(path)
           return path
+        
+        def mkstemp(me, *mkstemp_args, **mkstemp_kws):
+          import tempfile
+          fd, path = tempfile.mkstemp(*mkstemp_args, **mkstemp_kws)
+          me._temps.append(path)
+          return fd, path
         
         def mkdtemp(me):
           import tempfile
