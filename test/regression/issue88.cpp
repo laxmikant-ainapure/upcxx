@@ -12,17 +12,11 @@ int main() {
   upcxx::init();
   print_test_header();
 
-  if(upcxx::rank_n() < 2) {
-    if(upcxx::rank_me() == 0) {
-      std::cerr << "Test requires 2 ranks.\n";
-      std::abort();
-    }
-  }
-  
   bool success = true;
 
   if(upcxx::rank_me() == 0) {
-    upcxx::future<int> got = upcxx::rpc(1, [=]() { return upcxx::rank_me(); });
+    upcxx::intrank_t nebr = (upcxx::rank_me() + 1) % upcxx::rank_n();
+    upcxx::future<int> got = upcxx::rpc(nebr, [=]() { return upcxx::rank_me(); });
     
     int countdown = 10*1000*1000;
     while(!got.ready() && --countdown)
