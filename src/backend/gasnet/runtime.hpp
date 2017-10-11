@@ -11,27 +11,8 @@
 
 ////////////////////////////////////////////////////////////////////////
 
-#define gasnet1_seq 100
-#define gasnetex_par 101
-#if UPCXX_BACKEND == gasnet1_seq
-  #undef gasnet1_seq
-  #undef gasnetex_par
-  #define UPCXX_GASNET1_SEQ 1
-#elif UPCXX_BACKEND == gasnetex_par
-  #undef gasnet1_seq
-  #undef gasnetex_par
-  #define UPCXX_GASNETEX_PAR 1
-#else
-  #error "Invalid UPCXX_BACKEND."
-#endif
-
-#ifndef UPCXX_GASNET1_SEQ
-  #define UPCXX_GASNET1_SEQ 0
-#endif
-
-#ifndef UPCXX_GASNETEX_PAR
-  #define UPCXX_GASNETEX_PAR 0
-#endif
+#define UPCXX_GASNET1_SEQ  UPCXX_BACKEND_gasnet1_seq
+#define UPCXX_GASNETEX_PAR UPCXX_BACKEND_gasnetex_par
 
 ////////////////////////////////////////////////////////////////////////
 // declarations for: upcxx/backend/gasnet/runtime.cpp

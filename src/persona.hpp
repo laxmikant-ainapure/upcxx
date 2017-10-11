@@ -3,7 +3,7 @@
 
 #include <upcxx/backend_fwd.hpp>
 #include <upcxx/future.hpp>
-#include <upcxx/lpc_inbox.hpp>
+#include <upcxx/lpc/inbox.hpp>
 
 #include <type_traits>
 

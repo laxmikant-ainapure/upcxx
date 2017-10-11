@@ -7,7 +7,7 @@ function upcxx_sourceme {
   # useful utility for printing ifdef/define guards to be pasted into
   # header files.
   function uuifdef {
-    x="_$(uuidgen|tr \\- _)"
+    local x="_$(uuidgen|tr \\- _)"
     echo "#ifndef $x"
     echo "#define $x"
     echo "#endif"

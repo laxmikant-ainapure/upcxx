@@ -119,15 +119,8 @@ namespace backend {
 ////////////////////////////////////////////////////////////////////////
 // Include backend-specific headers:
 
-// We dispatch on backend type using preprocessor symbol which is
-// defined to be another symbol that otherwise doesn't exist. So we
-// define and immediately undefine them.
-#define gasnet1_seq 100
-#define gasnetex_par 101
-#if UPCXX_BACKEND == gasnet1_seq || UPCXX_BACKEND == gasnetex_par
-  #undef gasnet1_seq
-  #undef gasnetex_par
+#if UPCXX_BACKEND_gasnet1_seq || UPCXX_BACKEND_gasnetex_par
   #include <upcxx/backend/gasnet/runtime.hpp>
-#else
+#elif !defined(NOBS_DISCOVERY)
   #error "Invalid UPCXX_BACKEND."
 #endif

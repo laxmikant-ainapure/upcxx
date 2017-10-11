@@ -12,8 +12,7 @@
 
 #include <unistd.h>
 
-#define gasnetex_par 101
-#if UPCXX_BACKEND != gasnetex_par
+#if defined(UPCXX_BACKEND) && !UPCXX_BACKEND_gasnetex_par
   #error "UPCXX_BACKEND must be gasnetex_par"
 #endif
 

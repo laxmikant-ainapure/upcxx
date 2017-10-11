@@ -247,7 +247,7 @@ namespace upcxx {
     // future_header_dependent: dependent headers are those that...
     // - Wait for other futures to finish and then fire some specific action.
     // - Use their bodies to store their state while in wait.
-    // - Don't store their own results, they're "result_" points to the
+    // - Don't store their own results, their "result_" points to the
     //   future_header_result<T...> holding the result.
     
     struct future_header_dependent final: future_header {
