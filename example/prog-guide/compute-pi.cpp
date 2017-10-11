@@ -6,7 +6,7 @@
 using namespace std;
 
 // choose a point at random
-int hit()
+int64_t hit()
 {
     double x = static_cast<double>(rand()) / RAND_MAX;
     double y = static_cast<double>(rand()) / RAND_MAX;
@@ -15,17 +15,18 @@ int hit()
 }
 
 // sum the hits to rank 0
-int reduce_to_rank0(int my_hits)
+// std::int64_t is used to prevent overflows
+int64_t reduce_to_rank0(int64_t my_hits)
 {
     // wait for a collective reduction that sums all local values
-    return upcxx::allreduce(my_hits, plus<int>()).wait();
+    return upcxx::allreduce(my_hits, plus<int64_t>()).wait();
 }
 
 int main(int argc, char **argv)
 {
     upcxx::init();
     // each rank gets its own copy of local variables
-    int my_hits = 0;
+    int64_t my_hits = 0;
     // the number of trials to run on each rank
     int my_trials = 100000;
     // each rank gets its own local copies of input arguments
@@ -37,7 +38,7 @@ int main(int argc, char **argv)
         my_hits += hit();
     }
     // sum the hits and print out the final result
-    int hits = reduce_to_rank0(my_hits);
+    int64_t hits = reduce_to_rank0(my_hits);
     // only rank 0 prints the result
     if (upcxx::rank_me() == 0) {
         // the total number of trials over all ranks

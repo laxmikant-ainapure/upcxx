@@ -8,7 +8,7 @@
 using namespace std;
 
 // choose a point at random
-int hit()
+int64_t hit()
 {
     double x = static_cast<double>(rand()) / RAND_MAX;
     double y = static_cast<double>(rand()) / RAND_MAX;
@@ -25,14 +25,14 @@ int main(int argc, char **argv)
 
     if (upcxx::rank_me() == 0) {
         // the number of trials to run on each rank
-        int trials_per_rank = 100000;
+        int64_t trials_per_rank = 100000;
         if (argc == 2) trials_per_rank = atoi(argv[1]);
-        int hits = 0;
-        int my_hits = 0;
+        int64_t hits = 0;
+        int64_t my_hits = 0;
 
         upcxx::persona scheduler_persona;
         mutex scheduler_lock;
-        list<upcxx::future<int> > remote_rpcs;
+        list<upcxx::future<int64_t> > remote_rpcs;
         {
             // Scope block delimits domain of persona scope instance
             auto scope = upcxx::persona_scope(scheduler_lock, scheduler_persona);
@@ -42,9 +42,9 @@ int main(int argc, char **argv)
                 // returned future in the list of remote rpcs
                 remote_rpcs.push_back( 
                     upcxx::rpc(rank,
-                               [](int my_trials) {
-                                   int my_hits = 0;
-                                   for (int i = 0; i < my_trials; i++) {
+                               [](int64_t my_trials) {
+                                   int64_t my_hits = 0;
+                                   for (int64_t i = 0; i < my_trials; i++) {
                                        my_hits += hit();
                                    }
                                    done = 1;
@@ -64,7 +64,7 @@ int main(int argc, char **argv)
             #pragma omp section
             {
                 // do the computation
-                for (int i = 0; i < trials_per_rank; i++) {
+                for (int64_t i = 0; i < trials_per_rank; i++) {
                     my_hits += hit();
                 }
             } // end omp section
@@ -76,7 +76,7 @@ int main(int argc, char **argv)
                 while (!remote_rpcs.empty()) {
                     upcxx::progress();
                     auto it = find_if(remote_rpcs.begin(), remote_rpcs.end(),
-                                      [](upcxx::future<int> & f) {return f.ready();});
+                                      [](upcxx::future<int64_t> & f) {return f.ready();});
                     if (it != remote_rpcs.end()) {
                         auto &fut = *it;
                         // accumulate the result
@@ -89,7 +89,7 @@ int main(int argc, char **argv)
         } // end omp parallel sections
         hits += my_hits;
         // the total number of trials over all ranks
-        int trials = upcxx::rank_n() * trials_per_rank;
+        int64_t trials = upcxx::rank_n() * trials_per_rank;
         cout << "pi estimated as " << 4.0 * hits / trials << endl;
     } else {
         // other ranks progress until quiescence is reached (i.e. done == 1)
