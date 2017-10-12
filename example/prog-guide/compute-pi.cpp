@@ -42,7 +42,7 @@ int main(int argc, char **argv)
     // only rank 0 prints the result
     if (upcxx::rank_me() == 0) {
         // the total number of trials over all ranks
-        int trials = upcxx::rank_n() * my_trials;
+        int64_t trials = upcxx::rank_n() * my_trials;
         cout << "pi estimate: " << 4.0 * hits / trials << ", "
              << "rank 0 alone: " << 4.0 * my_hits / my_trials << endl; 
     }
