@@ -311,19 +311,15 @@ void gasnet::send_am_eager_persona(
     std::size_t buf_align
   ) {
   
-  uintptr_t per_lo_u = reinterpret_cast<uintptr_t>(recipient_persona) & 0xffffffffu;
-  uintptr_t per_hi_u = reinterpret_cast<uintptr_t>(recipient_persona) >> 31 >> 1;
-  
-  gasnet_handlerarg_t per_lo_h=0, per_hi_h=0;
-  std::memcpy(&per_lo_h, &per_lo_u, sizeof(gasnet_handlerarg_t));
-  std::memcpy(&per_hi_h, &per_hi_u, sizeof(gasnet_handlerarg_t));
+  gasnet_handlerarg_t per_lo = reinterpret_cast<intptr_t>(recipient_persona) & 0xffffffffu;
+  gasnet_handlerarg_t per_hi = reinterpret_cast<intptr_t>(recipient_persona) >> 31 >> 1;
   
   gasnet_AMRequestMedium3(
     recipient_rank,
     id_am_eager_persona,
     buf, buf_size,
     buf_align<<1 | (level == progress_level::user ? 1 : 0),
-    per_lo_h, per_hi_h
+    per_lo, per_hi
   );
   
   after_gasnet();
@@ -540,19 +536,18 @@ namespace {
       gasnet_token_t,
       void *buf, size_t buf_size,
       gasnet_handlerarg_t buf_align_and_level,
-      gasnet_handlerarg_t per_lo_h,
-      gasnet_handlerarg_t per_hi_h
+      gasnet_handlerarg_t per_lo,
+      gasnet_handlerarg_t per_hi
     ) {
     
     UPCXX_ASSERT(backend::rank_n!=-1);
     size_t buf_align = buf_align_and_level>>1;
     bool level_user = buf_align_and_level & 1;
     
-    uintptr_t per_lo_u=0, per_hi_u=0;
-    std::memcpy(&per_lo_u, &per_lo_h, sizeof(gasnet_handlerarg_t));
-    std::memcpy(&per_hi_u, &per_hi_h, sizeof(gasnet_handlerarg_t));
-    
-    persona *per = reinterpret_cast<persona*>(per_hi_u<<31<<1 | per_lo_u);
+    persona *per = reinterpret_cast<persona*>(
+      static_cast<intptr_t>(per_hi)<<31<<1 |
+      static_cast<intptr_t>(per_lo)
+    );
     per = per == nullptr ? &backend::master : per;
     
     rpc_message *m = rpc_message::build_copy(buf, buf_size, buf_align);
