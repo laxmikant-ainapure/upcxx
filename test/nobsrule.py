@@ -15,6 +15,11 @@ REQUIRES_PTHREAD = [
   'uts/uts_hybrid.cpp',
 ]
 
+REQUIRES_OPENMP = [
+  'uts/uts_omp.cpp',
+  'uts/uts_omp_ranks.cpp'
+]
+
 ########################################################################
 ### End of test registration. Changes below not recommended.         ###
 ########################################################################
@@ -23,6 +28,7 @@ REQUIRES_PTHREAD = [
 #NO_REQUIRES_UPCXX_BACKEND = map(here, NO_REQUIRES_UPCXX_BACKEND)
 REQUIRES_GASNET  = map(here, REQUIRES_GASNET)
 REQUIRES_PTHREAD = map(here, REQUIRES_PTHREAD)
+REQUIRES_OPENMP  = map(here, REQUIRES_OPENMP)
 
 @rule()
 def requires_gasnet(cxt, src):
@@ -32,6 +38,10 @@ def requires_gasnet(cxt, src):
 def requires_pthread(cxt, src):
   return src in REQUIRES_PTHREAD
 
+@rule()
+def requires_openmp(cxt, src):
+  return src in REQUIRES_OPENMP
+  
 @rule()
 def include_vdirs(cxt, src):
   ans = dict(cxt.include_vdirs(src)) # inherit value from parent nobsrule

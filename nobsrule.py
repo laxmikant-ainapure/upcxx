@@ -83,6 +83,13 @@ def pthread(cxt):
   """
   return _pthread()
 
+@rule(cli='omp')
+def openmp(cxt):
+  return {'openmp': {
+    'ppflags': ['-fopenmp'],
+    'libflags': ['-fopenmp']
+  }}
+
 # Rule overriden in sub-nobsrule files.
 @rule(cli='requires_gasnet', path_arg='src')
 def requires_gasnet(cxt, src):
@@ -91,6 +98,11 @@ def requires_gasnet(cxt, src):
 # Rule overriden in sub-nobsrule files.
 @rule(cli='requires_pthread', path_arg='src')
 def requires_pthread(cxt, src):
+  return False
+
+# Rule overriden in sub-nobsrule files.
+@rule(cli='requires_openmp', path_arg='src')
+def requires_openmp(cxt, src):
   return False
 
 # TODO: rename to required_libraries
@@ -110,8 +122,13 @@ def required_libraries(cxt, src):
     maybe_pthread = cxt.pthread()
   else:
     maybe_pthread = {}
+
+  if cxt.requires_openmp(src):
+    maybe_openmp = cxt.openmp()
+  else:
+    maybe_openmp = {}
   
-  yield libset_merge(maybe_gasnet, maybe_pthread)
+  yield libset_merge(maybe_gasnet, maybe_pthread, maybe_openmp)
 
 @rule()
 def gasnet_user(cxt):
