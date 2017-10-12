@@ -546,7 +546,7 @@ namespace {
     
     persona *per = reinterpret_cast<persona*>(
       static_cast<intptr_t>(per_hi)<<31<<1 |
-      static_cast<intptr_t>(per_lo)
+      (static_cast<intptr_t>(per_lo) & 0xffffffffll)
     );
     per = per == nullptr ? &backend::master : per;
     
