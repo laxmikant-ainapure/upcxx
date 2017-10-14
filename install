@@ -43,6 +43,7 @@ install_to=$(absify "$install_to")
 . utils/system-checks.sh
 sys_info
 platform_sanity_checks
+platform_settings
 
 if [ "$single" -eq 1 ]; then
   nobs install src/upcxx.cpp "$install_to" \
