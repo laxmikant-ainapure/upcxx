@@ -544,11 +544,20 @@ namespace {
     size_t buf_align = buf_align_and_level>>1;
     bool level_user = buf_align_and_level & 1;
     
+    // Reconstructing a pointer from two gasnet_handlerarg_t is nuanced
+    // since the size of gasnet_handlerarg_t is unspecified. The high
+    // bits (per_hi) can be safely upshifted into place, on a 32-bit
+    // system the result will just be zero. The low bits (per_lo) must
+    // not be permitted to sign-extend. Masking against 0xf's achieves
+    // this because all literals are non-negative. So the result of the
+    // AND could either be signed or unsigned depending on if the mask
+    // (a positive value) can be expressed in the desitination signed
+    // type (intptr_t).
     persona *per = reinterpret_cast<persona*>(
       static_cast<intptr_t>(per_hi)<<31<<1 |
-      (static_cast<intptr_t>(per_lo) & 0xffffffffll)
+      (per_lo & 0xffffffff)
     );
-    per = per == nullptr ? &backend::master : per;
+    per = per == nullptr ? &backend::master : per; 
     
     rpc_message *m = rpc_message::build_copy(buf, buf_size, buf_align);
     
