@@ -37,7 +37,7 @@ $(OPENMP_EXAMPLES): % : %.cpp
 	fi
 
 clean:
-	rm -f $(EXAMPLES) $(OPENMP_EXAMPLES)
+	rm -f $(EXAMPLES)
 
 .PHONY: clean all
 
