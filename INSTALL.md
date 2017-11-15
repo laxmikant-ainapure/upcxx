@@ -110,10 +110,12 @@ script will assume sensible defaults for these parameters based on the
 installation configuration. The following environment variables can be set to
 influence which backend `upcxx-meta` selects:
 
-* `UPCXX_GASNET_CONDUIT=[smp|udp|aries]`: The GASNet conduit to use.  `smp` is
-  the typical high-performance choice for single-node multi-core runs, `udp` is
-  a useful low-performance alternative for testing and debugging, and `aries` is
-  the high-performance Cray XC network. The default value is platform dependent.
+* `UPCXX_GASNET_CONDUIT=[smp|udp|aries|ibv]`: The GASNet conduit to use:
+   `smp` is the typical high-performance choice for single-node multi-core runs 
+   `udp` is a useful low-performance alternative for testing and debugging 
+   `aries` is the high-performance Cray XC network
+   `ibv` is the high-performance InfiniBand network
+  The default value is platform dependent.
 * `UPCXX_THREADMODE=[seq|par]`: The value `seq` limits the application to only
   calling "communicating" upcxx routines from the thread that invoked
   `upcxx::init`, and only while that thread is holding the master persona. The
