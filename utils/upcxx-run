@@ -141,13 +141,7 @@ def set_ssh_servers(ssh_servers, nranks, conduit):
     else:
         num_servers = 0
     
-    if num_servers == 0:
-        if not any(env in os.environ for env in ('GASNET_SSH_SERVERS', 'GASNET_SPAWNFN', 'GASNET_IBV_SPAWNFN')):
-            print_error_and_abort('For ' + conduit + ' conduit, need to specify ' + \
-                                  '-ssh-servers' + (' or -localhost,' if conduit == 'udp' else '') + \
-                                  ' or set one of the environment variables ' + \
-                                  'GASNET_SSH_SERVERS, GASNET_SPAWNFN, or GASNET_IBV_SPAWNFN')
-    elif conduit == 'udp' and num_servers < nranks:
+    if conduit == 'udp' and num_servers < nranks:
         print_error_and_abort('For UDP conduit, need to specify at least one host per rank in ' + \
                               '-ssh-servers or environment variable GASNET_SSH_SERVERS, or use -localhost parameter')
     if ssh_servers:
