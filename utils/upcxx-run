@@ -140,10 +140,17 @@ def set_ssh_servers(ssh_servers, nranks, conduit):
         num_servers = len(re.split(split_chars, os.environ['SSH_SERVERS']))
     else:
         num_servers = 0
-    
-    if conduit == 'udp' and num_servers < nranks:
+
+    if conduit == 'udp' and num_servers > 0 and num_servers < nranks:
         print_error_and_abort('For UDP conduit, need to specify at least one host per rank in ' + \
                               '-ssh-servers or environment variable GASNET_SSH_SERVERS, or use -localhost parameter')
+        
+    # FIXME: this leaves all the checking to gasnet. This has the disadvantage that the error
+    # messsages will only refer to environment variables as solutions, and not mention parameters
+    # to upcxx-run. Hopefully we can make this more friendly in future.
+    if num_servers == 0:
+        return
+    
     if ssh_servers:
         os.environ['SSH_SERVERS'] = ssh_servers
         os.environ['GASNET_SSH_SERVERS'] = ssh_servers
