@@ -142,15 +142,19 @@ def set_ssh_servers(ssh_servers, nranks, conduit):
         num_servers = 0
     
     if num_servers == 0:
-        print_error_and_abort('For ' + conduit + ' conduit, need to specify ' + \
-                              '-ssh-servers' + (' or -localhost,' if conduit == 'udp' else '') + \
-                              ' or set environment variable GASNET_SSH_SERVERS')
+        if not any(env in os.environ for env in ('GASNET_SSH_SERVERS', 'GASNET_SPAWNFN', 'GASNET_IBV_SPAWNFN')):
+            print_error_and_abort('For ' + conduit + ' conduit, need to specify ' + \
+                                  '-ssh-servers' + (' or -localhost,' if conduit == 'udp' else '') + \
+                                  ' or set one of the environment variables ' + \
+                                  'GASNET_SSH_SERVERS, GASNET_SPAWNFN, or GASNET_IBV_SPAWNFN')
     elif conduit == 'udp' and num_servers < nranks:
         print_error_and_abort('For UDP conduit, need to specify at least one host per rank in ' + \
                               '-ssh-servers or environment variable GASNET_SSH_SERVERS, or use -localhost parameter')
     if ssh_servers:
         os.environ['SSH_SERVERS'] = ssh_servers
         os.environ['GASNET_SSH_SERVERS'] = ssh_servers
+        os.environ['GASNET_SPAWNFN'] = 'S'
+        os.environ['GASNET_IBV_SPAWNFN'] = 'ssh'
 
     
 def main():
@@ -181,6 +185,9 @@ def main():
 
     if args.verbose:
         print 'UPCXX_RUN:', args.cmd, 'is compiled with', conduit, 'conduit'
+
+    if args.sshservers and args.localhost:
+        print_error_and_abort('Conflicting options: cannot specify both -ssh-servers and -localhost')
         
     if conduit == 'smp':
         os.environ['GASNET_PSHM_NODES'] = str(args.nranks)
@@ -201,7 +208,10 @@ def main():
         
     if conduit != 'udp' and args.localhost:
         print 'Ignoring -localhost setting: only applies to UDP conduit, not', conduit
-    
+        
+    if args.sshservers and conduit not in ['udp', 'ibv']:
+        print 'Ignoring -ssh-servers setting: only applies to UDP and IBV conduits, not', conduit
+        
     try:
         gasnet_max_segsize = os.environ['GASNET_MAX_SEGSIZE']
         if gasnet_max_segsize[-1] == 'K':
