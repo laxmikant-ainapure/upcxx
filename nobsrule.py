@@ -805,7 +805,7 @@ def run(cxt, main_src, *args):
     ranks = str(env('RANKS', 1))
     
     def spawn():
-      os.execve(upcxx_run, [upcxx_run, ranks, exe] + map(str, args), env1)
+      os.execve(upcxx_run, [upcxx_run, '-n', ranks, exe] + map(str, args), env1)
   else:
     def spawn():
       os.execv(exe, [exe] + map(str, args))
