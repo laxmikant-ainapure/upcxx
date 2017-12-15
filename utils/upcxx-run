@@ -1,12 +1,14 @@
 #!/usr/bin/env python
 
+# make it also work with python 3
+from __future__ import print_function
+
 import sys
 import os
 import argparse
 import subprocess
 import string
 import re
-import math
 
 
 HEAPSZ_UNITS = ['m', 'mb', 'M', 'MB', 'g', 'gb', 'G', 'GB', 'T', 'TB']
@@ -48,29 +50,29 @@ def load_args():
     global _parser
     _parser = argparse.ArgumentParser(description='A portable parallel job launcher for UPC++ programs, v1.0')
     _parser.add_argument('-n', '-np', dest='nranks', type=ranks_type, default=None, metavar='NUM',
-                        help='Spawn NUM number of UPC++ ranks. Required.')
+                         help='Spawn NUM number of UPC++ ranks. Required.')
     _parser.add_argument('-shared-heap', dest='heapsz', type=heapsz_type, default='128MB',
-                        help='Requests HEAPSZ size of shared memory per rank. ' + \
+                         help='Requests HEAPSZ size of shared memory per rank. ' + \
                         'Units must be specified as ' + ', '.join(HEAPSZ_UNITS) + '. Default %(default)s')
     _parser.add_argument('-backtrace', dest='backtrace', default=False, action='store_true',
-                        help='Enable backtraces. Compile with -g for full debugging information.')
+                         help='Enable backtraces. Compile with -g for full debugging information.')
     _parser.add_argument('-show', dest='show', default=False, action='store_true',
-                        help='Testing: don\'t start the job, just output the command line that would ' + \
+                         help='Testing: don\'t start the job, just output the command line that would ' + \
                         'have been executed')
     _parser.add_argument('-info', dest='info', default=False, action='store_true',
-                        help='Display useful information about the executable')
+                         help='Display useful information about the executable')
     _parser.add_argument('-ssh-servers', dest='sshservers', type=str, default=None, metavar='HOSTS',
-                        help='List of SSH servers, comma separated.')
+                         help='List of SSH servers, comma separated.')
     _parser.add_argument('-localhost', dest='localhost', default=False, action='store_true',
-                        help='Run UDP-conduit program on local host only')
+                         help='Run UDP-conduit program on local host only')
     _parser.add_argument('-v', dest='verbose', default=False, action='store_true',
-                        help='Verbose output')
+                         help='Verbose output')
     _parser.add_argument('-vv', dest='veryverbose', default=False, action='store_true',
-                        help='Very verbose output')
+                         help='Very verbose output')
     cmd_arg_group = _parser.add_argument_group('command to execute')
     cmd_arg_group.add_argument('cmd', default=None, metavar='command', help='UPC++ executable')
     cmd_arg_group.add_argument('cmd_args', default=[], nargs=argparse.REMAINDER, metavar='...',
-                        help='arguments')
+                               help='arguments')
 
     _parser._optionals.title = 'options'
     return _parser.parse_args()
@@ -78,39 +80,47 @@ def load_args():
 
 def print_error_and_abort(err):
     _parser.print_usage()
-    print '\nError: ' + err
+    print('\nError: ' + err)
     sys.exit(0)
     
 
 def is_printable(text, printables=""):
-    return (set(str(text)) - set(string.printable + printables) == set())
+    return set(str(text)) - set(string.printable + printables) == set()
 
 
 def print_info(command):
     try:
-        with open(command, 'r') as f:
-            for line in f:
-                for field in line.split('$'):
-                    if not is_printable(field) or len(field) <= 1:
-                        continue
-                    if field.startswith('GASNET') or field.startswith('GASNet') or field.startswith('UPCXX') or \
-                       field.startswith('upcxx') or field.startswith('AMUDP'):
-                        if ':' in field and not '%' in field:
-                            print field.strip()
+        if sys.version_info[0] == 2:
+            f = open(command, 'r')
+        else:
+            f = open(command, 'r', encoding='ISO-8859-1')
+        for line in f:
+            for field in line.split('$'):
+                if not is_printable(field) or len(field) <= 1:
+                    continue
+                if field.startswith('GASNET') or field.startswith('GASNet') or field.startswith('UPCXX') or \
+                   field.startswith('upcxx') or field.startswith('AMUDP'):
+                    if ':' in field and not '%' in field:
+                        print(field.strip())
+        f.close()
     except IOError as err:
-        print 'Error: ' + err.strerror + ': "' + command + '"'
+        print('Error: ' + err.strerror + ': "' + command + '"')
         sys.exit(1)
 
 
 def get_key_in_exec(command, key):
     try:
-        with open(command, 'r') as f:
-            for line in f:
-                for field in line.split('$'):
-                    if field.startswith(key):
-                        return field[len(key):].strip()
+        if sys.version_info[0] == 2:
+            f = open(command, 'r')
+        else:
+            f = open(command, 'r', encoding='ISO-8859-1')
+        for line in f:
+            for field in line.split('$'):
+                if field.startswith(key):
+                    return field[len(key):].strip()
+        f.close()
     except IOError as err:
-        print 'Error: ' + err.strerror + ': "' + command + '"'
+        print('Error: ' + err.strerror + ': "' + command + '"')
         sys.exit(1)
     return None
     
@@ -159,8 +169,8 @@ def set_ssh_servers(ssh_servers, nranks, conduit):
 
     
 def main():
-    if sys.version_info < (2,6):
-        print 'Error: Python version >= 2.6 required'
+    if sys.version_info < (2, 6):
+        print('Error: Python version >= 2.6 required')
         return 1
     
     args = load_args()
@@ -185,7 +195,7 @@ def main():
         args.verbose = True
 
     if args.verbose:
-        print 'UPCXX_RUN:', args.cmd, 'is compiled with', conduit, 'conduit'
+        print('UPCXX_RUN:', args.cmd, 'is compiled with', conduit, 'conduit')
 
     if args.sshservers and args.localhost:
         print_error_and_abort('Conflicting options: cannot specify both -ssh-servers and -localhost')
@@ -208,10 +218,10 @@ def main():
         print_error_and_abort('Unknown GASNet conduit: ' + conduit)
         
     if conduit != 'udp' and args.localhost:
-        print 'Ignoring -localhost setting: only applies to UDP conduit, not', conduit
+        print('Ignoring -localhost setting: only applies to UDP conduit, not', conduit)
         
     if args.sshservers and conduit not in ['udp', 'ibv']:
-        print 'Ignoring -ssh-servers setting: only applies to UDP and IBV conduits, not', conduit
+        print('Ignoring -ssh-servers setting: only applies to UDP and IBV conduits, not', conduit)
         
     try:
         gasnet_max_segsize = os.environ['GASNET_MAX_SEGSIZE']
@@ -228,14 +238,14 @@ def main():
         # look for segsize in executable
         gasnet_max_segsize = get_gasnet_max_segsize(args.cmd)
         if args.verbose:
-            print 'UPCXX_RUN: GASNet max_segsize defaults to', gasnet_max_segsize, 'bytes'
+            print('UPCXX_RUN: GASNet max_segsize defaults to', gasnet_max_segsize, 'bytes')
 
     if args.cmd_args:
         cmd += args.cmd_args
     
     if spawner:
         if args.verbose:
-            print 'UPCXX_RUN: Looking for spawner "' + spawner + '" in:'
+            print('UPCXX_RUN: Looking for spawner "' + spawner + '" in:')
         paths = []
         try:
             gasnet_prefix = os.environ['GASNET_PREFIX']
@@ -256,7 +266,7 @@ def main():
         spawner_path = None
         for path in paths:
             if args.verbose:
-                print 'UPCXX_RUN:    ' + path
+                print('UPCXX_RUN:    ' + path)
             if os.path.exists(path):
                 if os.path.exists(path + '/' + spawner):
                     spawner_path = path + '/' + spawner
@@ -264,7 +274,7 @@ def main():
         if spawner_path:
             vflag = []
             if args.verbose:
-                print 'UPCXX_RUN: Found spawner "' + spawner_path + '"'
+                print('UPCXX_RUN: Found spawner "' + spawner_path + '"')
             if args.veryverbose:
                 vflag = ['-v']
             cmd = [spawner_path] + vflag + cmd
@@ -273,24 +283,25 @@ def main():
 
     os.environ['UPCXX_SEGMENT_MB'] = str(args.heapsz / ONE_MB)
     if gasnet_max_segsize <= args.heapsz + 4 * ONE_MB:
-        print 'WARNING: GASNET_MAX_SEGSIZE', gasnet_max_segsize, 'is low for a shared heap of', args.heapsz,
+        old_segsize = gasnet_max_segsize
         gasnet_max_segsize = args.heapsz + 4 * ONE_MB
         if gasnet_max_segsize < 10 * ONE_MB:
             gasnet_max_segsize = 10 * ONE_MB
-        print '  Setting to', gasnet_max_segsize
+        print('WARNING: GASNET_MAX_SEGSIZE', old_segsize, 'is too low for a shared heap of %d;' % args.heapsz, 
+              'setting to', gasnet_max_segsize)
         os.environ['GASNET_MAX_SEGSIZE'] = str(gasnet_max_segsize / ONE_MB) + 'M'
 
     if args.backtrace:
         os.environ['GASNET_BACKTRACE'] = '1'
 
     if args.verbose or args.show:
-        print 'UPCXX_RUN: Environment:'
-        for env_key in sorted(os.environ.keys()):
+        print('UPCXX_RUN: Environment:')
+        for env_key in sorted(os.environ):
             if env_key.startswith('GASNET') or env_key.startswith('UPCXX') or env_key == 'SSH_SERVERS':
-                print 'UPCXX_RUN:   ', env_key, '=', os.environ[env_key]
-        print 'UPCXX_RUN: Command line:\n'
-        print '    ' + ' '.join(cmd)
-        print ''
+                print('UPCXX_RUN:   ', env_key, '=', os.environ[env_key])
+        print('UPCXX_RUN: Command line:\n')
+        print('    ' + ' '.join(cmd))
+        print('')
 
     if not args.show:
         subprocess.call(cmd)
