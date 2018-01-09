@@ -8,7 +8,7 @@
 #include <vector>
 
 #include <omp.h>
-#include <unistd.h>
+#include <sched.h>
 
 #define VRANKS_IMPL "omp"
 #define VRANK_LOCAL thread_local
@@ -41,6 +41,8 @@ namespace vranks {
   void spawn(Fn fn) {
     int vrank_n = upcxx::os_env<int>("THREADS", 10);
     vranks.resize(vrank_n);
+
+    omp_set_num_threads(vrank_n);
     
     #pragma omp parallel num_threads(vrank_n)
     {

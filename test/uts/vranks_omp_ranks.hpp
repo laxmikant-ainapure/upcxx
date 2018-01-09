@@ -10,7 +10,7 @@
 #include <vector>
 
 #include <omp.h>
-#include <unistd.h>
+#include <sched.h>
 
 #if defined(UPCXX_BACKEND) && !UPCXX_BACKEND_gasnetex_par
   #error "UPCXX_BACKEND must be gasnetex_par"
@@ -46,6 +46,8 @@ namespace vranks {
     
     std::atomic<int> bar1{0};
 
+    omp_set_num_threads(thread_per_rank);
+    
     #pragma omp parallel num_threads(thread_per_rank)
     {
       int thread_me = omp_get_thread_num();
