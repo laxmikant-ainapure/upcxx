@@ -86,10 +86,10 @@ namespace upcxx {
   // future_is_trivially_ready: Trait for detecting trivially ready
   // futures. Specializations provided in each future implementation.
   
-  template<typename FutureOrKind>
-  struct future_is_trivially_ready {
-    static constexpr bool value = false;
-  };
+  template<typename Future>
+  struct future_is_trivially_ready/*{
+    static constexpr bool value;
+  }*/;
   
   //////////////////////////////////////////////////////////////////////
   // Future/continuation function-application support
