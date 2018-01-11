@@ -220,12 +220,12 @@ namespace upcxx {
       static future_header the_nil;
       
       // Modify the refcount, but do not take action.
-      inline void refs_add(int n) {
+      void refs_add(int n) {
         int ref_n = this->ref_n_;
         int trash;
         (ref_n >= 0 ? this->ref_n_ : trash) = ref_n + n;
       }
-      inline int refs_drop(int n) { // returns new refcount
+      int refs_drop(int n) { // returns new refcount
         int ref_n = this->ref_n_;
         bool write_back = ref_n >= 0;
         ref_n -= (ref_n >= 0 ? n : 0);
@@ -270,10 +270,10 @@ namespace upcxx {
       
       // Override refcount arithmetic with more efficient form since we
       // know future_header_dependents are never statically allocated.
-      inline void refs_add(int n) {
+      void refs_add(int n) {
         this->ref_n_ += n;
       }
-      inline int refs_drop(int n) {
+      int refs_drop(int n) {
         return (this->ref_n_ -= n);
       }
     };
@@ -523,7 +523,7 @@ namespace upcxx {
     }
 
     template<typename ...T>
-    inline void future_header_ops_general::decref_header(future_header *hdr) {
+    void future_header_ops_general::decref_header(future_header *hdr) {
       if(0 == hdr->refs_drop(1))
         delete_header<T...>(hdr);
     }

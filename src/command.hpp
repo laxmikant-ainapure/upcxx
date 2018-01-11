@@ -77,7 +77,7 @@ namespace upcxx {
   }
   
   template<typename Fn1>
-  inline void command_size_ubound(parcel_layout &ub, Fn1 &&fn) {
+  void command_size_ubound(parcel_layout &ub, Fn1 &&fn) {
     typedef typename std::decay<Fn1>::type Fn;
     typedef future<>(*exec_t)(parcel_reader&);
     
@@ -87,7 +87,7 @@ namespace upcxx {
   }
   
   template<typename Fn1>
-  inline void command_pack(
+  void command_pack(
       parcel_writer &w, std::size_t size_ub,
       Fn1 &&fn
     ) {
