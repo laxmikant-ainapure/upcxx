@@ -66,6 +66,8 @@ The following features from that specification are not yet implemented:
    now)
  * `rput_then_rpc`
  * Teams
+ * Vector broadcast `broadcast(T *buf, size_t count, ...)`
+ * `barrier_async`
  * Serialization
  * Non-contiguous transfers
 
