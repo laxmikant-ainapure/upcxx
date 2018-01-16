@@ -113,12 +113,26 @@ else
   
   mkdir -p "${install_to}/bin"
   cat <<EOF >| "${install_to}/bin/upcxx-meta"
+# This file is generated during installation - do not edit
 #!/bin/bash
 
 function echo_and_die {
   echo \$* >&2
   exit 1
 }
+
+PARAMS="PPFLAGS LIBFLAGS LDFLAGS CXX CC GASNET_CONDUIT GASNET_INSTALL"
+FAIL=true
+for P in \$PARAMS; do
+    if [[ "\$1" == "\$P" ]]; then
+        FAIL=false
+        break
+    fi
+done
+
+if [[ \$FAIL == true ]]; then
+    echo_and_die "Error: parameter passed to upcxx-meta must be one of \$PARAMS"
+fi
 
 case \${UPCXX_CODEMODE} in
 "")
