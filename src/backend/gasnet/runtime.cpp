@@ -119,10 +119,19 @@ void upcxx::init() {
   };
   
   size_t segment_size = size_t(os_env<double>("UPCXX_SEGMENT_MB", 128)*(1<<20));
-  // Do this instead? segment_size = gasnet_getMaxLocalSegmentSize();
-  
+
   backend::rank_n = gasnet_nodes();
   backend::rank_me = gasnet_mynode();
+  
+  // now adjust the segment size if it's less than the GASNET_MAX_SEGSIZE
+  size_t gasnet_max_segsize = gasnet_getMaxLocalSegmentSize();
+  if (segment_size >= gasnet_max_segsize) {
+      if (upcxx::rank_me() == 0) 
+          cerr << "WARNING: Requested UPCXX segment size (" << segment_size << ") "
+              "is larger than the GASNet segment size (" << gasnet_max_segsize << "). "
+              "Adjusted segment size to " << (gasnet_max_segsize) << ".\n";
+      segment_size = gasnet_max_segsize;
+  }
   
   backend::initial_master_scope = new persona_scope{backend::master};
   
