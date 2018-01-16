@@ -32,17 +32,24 @@ def ranks_type(a):
     return v
 
 
-def heapsz_type(a):
+def memstr_parse(s):
     heapsz_units = '|'.join(HEAPSZ_UNITS)
-    m = re.search('^([1-9]\d*)(' + heapsz_units + ')$', a)
+    m = re.search('^([1-9]\d*)(' + heapsz_units + ')$', s)
     if not m:
-        raise argparse.ArgumentTypeError('shared heap must be an integer > 0 and have a suffix of one of: ' + \
-                                         ', '.join(HEAPSZ_UNITS))
+        return None
     num = int(m.group(1))
     if 'M' in m.group(2).upper():
         num *= ONE_MB
     else:
         num *= ONE_GB
+    return num
+    
+
+def heapsz_type(a):
+    num = memstr_parse(a)
+    if num is None:
+        raise argparse.ArgumentTypeError('shared heap must be an integer > 0 and have a suffix of one of: ' + \
+                                         ', '.join(HEAPSZ_UNITS))
     return num
 
     
@@ -224,15 +231,10 @@ def main():
         print('Ignoring -ssh-servers setting: only applies to UDP and IBV conduits, not', conduit)
         
     try:
-        gasnet_max_segsize = os.environ['GASNET_MAX_SEGSIZE']
-        if gasnet_max_segsize[-1] == 'K':
-            gasnet_max_segsize = int(gasnet_max_segsize[:-1]) * ONE_KB
-        elif gasnet_max_segsize[-1] == 'M':
-            gasnet_max_segsize = int(gasnet_max_segsize[:-1]) * ONE_MB
-        elif gasnet_max_segsize[-1] == 'G':
-            gasnet_max_segsize = int(gasnet_max_segsize[:-1]) * ONE_GB
-        else:
-            print_error_and_abort('GASNET_MAX_SEGSIZE setting is wrong. It must be an integer, with a suffix of K, M or G')
+        gasnet_max_segsize = memstr_parse(os.environ['GASNET_MAX_SEGSIZE'])
+        if gasnet_max_segsize == None:
+            print_error_and_abort('GASNET_MAX_SEGSIZE setting is wrong. It must be an integer, with a suffix of ' + \
+                                  ', '.join(HEAPSZ_UNITS))
 
     except KeyError:
         # look for segsize in executable
