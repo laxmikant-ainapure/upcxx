@@ -113,8 +113,8 @@ else
   
   mkdir -p "${install_to}/bin"
   cat <<EOF >| "${install_to}/bin/upcxx-meta"
-# This file is generated during installation - do not edit
 #!/bin/bash
+# This file is generated during installation - do not edit
 
 function echo_and_die {
   echo \$* >&2
