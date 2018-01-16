@@ -125,7 +125,7 @@ void upcxx::init() {
   
   // now adjust the segment size if it's less than the GASNET_MAX_SEGSIZE
   size_t gasnet_max_segsize = gasnet_getMaxLocalSegmentSize();
-  if (segment_size >= gasnet_max_segsize) {
+  if (segment_size > gasnet_max_segsize) {
       if (upcxx::rank_me() == 0) 
           cerr << "WARNING: Requested UPCXX segment size (" << segment_size << ") "
               "is larger than the GASNet segment size (" << gasnet_max_segsize << "). "
