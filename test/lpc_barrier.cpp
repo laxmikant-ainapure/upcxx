@@ -4,7 +4,7 @@
 #include <mutex>
 #include <thread>
 
-#include <unistd.h>
+#include <sched.h>
 
 #include <upcxx/persona.hpp>
 

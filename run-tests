@@ -56,6 +56,7 @@ check_result() {
 export GASNET_CONDUIT=$CONDUIT
 export GASNET_BACKTRACE=1
 # default to debugging mode
+export ASSERT=${ASSERT:=1}
 export DBGSYM=${DBGSYM:=1}
 export OPTLEV=${OPTLEV:=0}
 

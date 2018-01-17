@@ -40,6 +40,14 @@ def required_libraries(cxt, src):
         'UPCXX_LPC_INBOX_%s'%cxt.upcxx_lpc_inbox_id(): 1
       }
     }}
+
+  elif src == here('diagnostic.hpp'):
+    # Anyone including "diagnostic.hpp" gets UPCXX_ASSERT_ENABLED defined.
+    return {'upcxx-diagnostic': {
+      'ppdefs': {
+        'UPCXX_ASSERT_ENABLED': 1 if cxt.upcxx_assert_enabled() else 0
+      }
+    }}
     
   else:
     # Parent "nobsrule.py" handles other cases.

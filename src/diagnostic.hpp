@@ -25,9 +25,12 @@ namespace upcxx {
 
 #define UPCXX_ASSERT_DISPATCH(_1, _2, NAME, ...) NAME
 
-// Assert that will only happen in debug-mode. For now we just
-// always enable it.
-#define UPCXX_ASSERT(...) UPCXX_ASSERT_DISPATCH(__VA_ARGS__, UPCXX_ASSERT_2, UPCXX_ASSERT_1, _DUMMY)(__VA_ARGS__)
+// Assert that will only happen in debug-mode.
+#if UPCXX_ASSERT_ENABLED
+  #define UPCXX_ASSERT(...) UPCXX_ASSERT_DISPATCH(__VA_ARGS__, UPCXX_ASSERT_2, UPCXX_ASSERT_1, _DUMMY)(__VA_ARGS__)
+#else
+  #define UPCXX_ASSERT(...) ((void)0)
+#endif
 
 // Assert that happens regardless of debug-mode.
 #define UPCXX_ASSERT_ALWAYS(...) UPCXX_ASSERT_DISPATCH(__VA_ARGS__, UPCXX_ASSERT_2, UPCXX_ASSERT_1, _DUMMY)(__VA_ARGS__)

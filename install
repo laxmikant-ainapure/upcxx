@@ -63,7 +63,7 @@ else
   esac
   
   function foreach_codemode {
-    export DBGSYM=1 OPTLEV=0
+    export ASSERT=1 DBGSYM=1 OPTLEV=0
     export upcxx_codemode='debug'
     export gasnet_codemode='debug'
     foreach_backend
@@ -71,13 +71,13 @@ else
     if false; then
       # Attempting O2 is pointless since gasnet forces everyone to O3
       # through the CXXFLAGS it exports in makefile fragments.
-      export DBGSYM=0 OPTLEV=2
+      export ASSERT=0 DBGSYM=0 OPTLEV=2
       export upcxx_codemode='O2'
       export gasnet_codemode='opt'
       foreach_backend
     fi
     
-    export DBGSYM=0 OPTLEV=3
+    export ASSERT=0 DBGSYM=0 OPTLEV=3
     export upcxx_codemode='O3'
     export gasnet_codemode='opt'
     foreach_backend

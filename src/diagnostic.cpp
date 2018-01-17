@@ -11,39 +11,22 @@
 #include <unistd.h>
 #include <signal.h>
 
-namespace upcxx {
-  bool dbgbrk_spin_init = false;
-  bool dbgbrk_spin = true;
-}
-
 ////////////////////////////////////////////////////////////////////////
 
-void upcxx::dbgbrk() {
-  if(!dbgbrk_spin_init) {
-    dbgbrk_spin_init = true;
-    char *val = getenv("UPCXX_DBGBRK_SPIN");
-    dbgbrk_spin = val != nullptr && val[0] != '\0' && val[0] != ' ' && val[0] != '0';
+#if UPCXX_BACKEND_GASNET
+  #include <gasnetex.h>
+  #include <gasnet_tools.h>
+
+  extern "C" {
+    volatile int upcxx_frozen;
   }
-  
-  if(dbgbrk_spin) {
-    int pid = getpid();
-    
-    char exe[1024]; {
-      int n = readlink("/proc/self/exe", exe, sizeof(exe)-1);
-      exe[n] = '\0';
-    }
-    
-    std::stringstream ss;
-    ss << "UPC++ spinning for debugger. You should:\n"
-      "  gdb --pid="<<pid<<' '<<exe<<'\n'<<
-      "  set dbgbrk_spin=0\n";
-      //"gdb --pid="<<pid<<" -ex 'set dbgbrk_spin=0' "<<exe;
-    std::cerr << ss.str();
-    
-    while(dbgbrk_spin)
-      sched_yield();
+
+  void upcxx::dbgbrk() {
+    gasnett_freezeForDebuggerNow(&upcxx_frozen, "upcxx_frozen");
   }
-}
+#else
+  void upcxx::dbgbrk() {}
+#endif
 
 void upcxx::assert_failed(const char *file, int line, const char *msg) {
   std::stringstream ss;

@@ -8,7 +8,7 @@
 #include <thread>
 #include <vector>
 
-#include <unistd.h>
+#include <sched.h>
 
 #define VRANKS_IMPL "threads"
 #define VRANK_LOCAL thread_local

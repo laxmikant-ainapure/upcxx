@@ -10,7 +10,7 @@
 #include <thread>
 #include <vector>
 
-#include <unistd.h>
+#include <sched.h>
 
 #if defined(UPCXX_BACKEND) && !UPCXX_BACKEND_GASNET_PAR
   #error "UPCXX_BACKEND must be gasnet_par"

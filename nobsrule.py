@@ -330,6 +330,10 @@ def comp_version(cxt, src):
   else:
     raise Exception("Unrecognized source file extension: "+src)
 
+@rule()
+def upcxx_assert_enabled(cxt):
+  return bool(env('ASSERT', False))
+
 @rule(path_arg='src')
 @coroutine
 def comp_lang_pp(cxt, src, libset):
