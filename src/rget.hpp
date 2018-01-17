@@ -5,156 +5,145 @@
 #include <upcxx/completion.hpp>
 #include <upcxx/global_ptr.hpp>
 
+// For the time being, our implementation of put/get requires the
+// gasnet backend. Ideally we would detect gasnet via UPCXX_BACKEND_GASNET
+// and if not present, rely on a reference implementation over
+// upcxx::backend generic API.
+#include <upcxx/backend/gasnet/runtime.hpp>
+
 namespace upcxx {
   namespace detail {
-    struct rget_byref;
-    template<typename T> struct rget_byval;
+    ////////////////////////////////////////////////////////////////////
+    // Calls gasnet get(). Fills in `cb->handle` and registers `cb` with
+    // backend.
     
-    template<typename Mode/*rget_byref|rget_byval<T>*/, typename Cx>
-    struct rget_state_operxn;
-    template<typename Cx>
-    struct rget_state_remote;
+    void rma_get_nb(
+      void *buf_d,
+      intrank_t rank_s,
+      const void *buf_s,
+      std::size_t buf_size,
+      backend::gasnet::handle_cb *cb
+    );
+
+    void rma_get_b(
+      void *buf_d,
+      intrank_t rank_s,
+      const void *buf_s,
+      std::size_t buf_size
+    );
     
-    template<>
-    struct rget_state_operxn<rget_byref, nil_cx> {
-      rget_state_operxn(nil_cx) {}
-      
-      void completed() {}
+    ////////////////////////////////////////////////////////////////////
+    // Types used as `EventValues` in `detail::completions_state`.
+
+    // by-reference rget always produces no-value events.
+    struct rget_byref_event_values {
+      template<typename Event>
+      using tuple_t = std::tuple<>;
     };
+
+    // by-value rget produces a T for operation_cx, no-value otherwise.
     template<typename T>
-    struct rget_state_operxn<rget_byval<T>, nil_cx> {
-      rget_state_operxn(nil_cx) {}
-      
-      void completed(T *buffer) {}
+    struct rget_byval_event_values {
+      template<typename Event>
+      using tuple_t = typename std::conditional<
+          std::is_same<Event, operation_cx_event>::value,
+          std::tuple<T>,
+          std::tuple<>
+        >::type;
     };
+
+    ////////////////////////////////////////////////////////////////////
+    // rget_cb_remote: base class of rget_cb_{byref|byval} for handling
+    // remote completion
     
-    template<int ordinal>
-    struct rget_state_operxn<rget_byref, future_cx<ordinal>> {
-      promise<> pro;
+    template<typename CxStateRemote,
+             bool has_remote = !CxStateRemote::empty>
+    struct rget_cb_remote;
+
+    template<typename CxStateRemote>
+    struct rget_cb_remote<CxStateRemote, /*has_remote=*/false> {
+      rget_cb_remote(intrank_t, CxStateRemote) {}
       
-      rget_state_operxn(future_cx<ordinal>) {}
-      
-      void completed() {
-        backend::during_user(std::move(pro));
-      }
+      void send_remote() {/*nop*/}
     };
-    
-    template<typename T, int ordinal>
-    struct rget_state_operxn<rget_byval<T>, future_cx<ordinal>> {
-      promise<T> pro;
+
+    template<typename CxStateRemote>
+    struct rget_cb_remote<CxStateRemote, /*has_remote=*/true> {
+      intrank_t rank_s;
+      CxStateRemote state_remote;
       
-      rget_state_operxn(future_cx<ordinal>) {}
-      
-      void completed(T *buf_d) {
-        struct deferred {
-          promise<T> pro;
-          T *buf_d;
-          
-          void operator()() {
-            pro.fulfill_result(std::move(*buf_d));
-            delete buf_d;
-          }
-        };
-        
-        backend::during_user(deferred{std::move(pro), buf_d});
+      rget_cb_remote(intrank_t rank_s, CxStateRemote state_remote):
+        rank_s{rank_s},
+        state_remote{std::move(state_remote)} {
       }
-    };
-    
-    template<>
-    struct rget_state_operxn<rget_byref, promise_cx<>> {
-      promise<> *pro;
-      
-      rget_state_operxn(promise_cx<> &&cx):
-        pro{&cx.pro_} {
-      }
-      
-      void completed() {
-        backend::during_user(pro);
-      }
-    };
-    template<typename T>
-    struct rget_state_operxn<rget_byval<T>, promise_cx<T>> {
-      promise<T> *pro;
-      
-      rget_state_operxn(promise_cx<T> &&cx):
-        pro{&cx.pro_} {
-      }
-      
-      void completed(T *buf_d) {
-        promise<T> *pro1 = this->pro; // avoid "this" capture
-        backend::during_user([=]() {
-          pro1->fulfill_result(std::move(*buf_d));
-          delete buf_d;
-        });
+
+      void send_remote() {
+        backend::send_am_master<progress_level::user>(
+          rank_s,
+          std::move(state_remote)
+        );
       }
     };
     
-    template<>
-    struct rget_state_remote<nil_cx> {
-      rget_state_remote(nil_cx) {}
-      
-      void completed(intrank_t owner) {}
-    };
+    ////////////////////////////////////////////////////////////////////
+    // rget_cb_byref: tracks status of of rget by-reference
     
-    template<typename Fn>
-    struct rget_state_remote<rpc_cx<Fn>> {
-      Fn fn;
+    template<typename CxStateHere, typename CxStateRemote>
+    struct rget_cb_byref final:
+      rget_cb_remote<CxStateRemote>,
+      backend::gasnet::handle_cb {
       
-      rget_state_remote(rpc_cx<Fn> &&cx):
-        fn{std::move(cx.fn_)} {
+      CxStateHere state_here;
+      
+      rget_cb_byref(
+          intrank_t rank_s,
+          CxStateHere state_here,
+          CxStateRemote state_remote
+        ):
+        rget_cb_remote<CxStateRemote>{rank_s, std::move(state_remote)},
+        state_here{std::move(state_here)} {
       }
-      
-      void completed(intrank_t owner) {
-        backend::send_am_master<progress_level::user>(owner, std::move(fn));
-      }
-    };
-    
-    template<typename Mode, typename R, typename O>
-    struct rget_states {
-      intrank_t owner;
-      rget_state_remote<R> r;
-      rget_state_operxn<Mode,O> o;
-      
-      rget_states(intrank_t owner, completions<nil_cx,R,O> &&cxs):
-        owner{owner},
-        r{std::move(cxs.remote)},
-        o{std::move(cxs.operxn)} {
+
+      void execute_and_delete(backend::gasnet::handle_cb_successor) {
+        this->send_remote();
+        this->state_here.template operator()<operation_cx_event>();
+        delete this;
       }
     };
+
+    ////////////////////////////////////////////////////////////////////
+    // rget_cb_byval: tracks status of of rget by-value
     
-    template<typename Mode, typename R, typename O>
-    struct rget_futures_of {
-      using return_type = void;
+    template<typename T, typename CxStateHere, typename CxStateRemote>
+    struct rget_cb_byval final:
+      rget_cb_remote<CxStateRemote>,
+      backend::gasnet::handle_cb {
+
+      CxStateHere state_here;
+      T buffer;
       
-      rget_futures_of(rget_states<Mode,R,O> &st) {}
-      
-      void operator()() {}
-    };
-    
-    template<typename R>
-    struct rget_futures_of<rget_byref, R, future_cx<0>> {
-      using return_type = future<>;
-      
-      future<> fut_;
-      
-      rget_futures_of(rget_states<rget_byref, R, future_cx<0>> &st):
-        fut_{st.o.pro.get_future()} {
+      rget_cb_byval(
+          intrank_t rank_s,
+          CxStateHere state_here,
+          CxStateRemote state_remote
+        ):
+        rget_cb_remote<CxStateRemote>{rank_s, std::move(state_remote)},
+        state_here{std::move(state_here)} {
       }
-      
-      future<> operator()() { return std::move(fut_); }
-    };
-    
-    template<typename T, typename R>
-    struct rget_futures_of<rget_byval<T>, R, future_cx<0>> {
-      using return_type = future<T>;
-      
-      future<T> fut_;
-      
-      rget_futures_of(rget_states<rget_byval<T>, R, future_cx<0>> &st):
-        fut_{st.o.pro.get_future()} {
+
+      void execute_and_delete(backend::gasnet::handle_cb_successor) {
+        this->send_remote();
+        this->state_here.template operator()<operation_cx_event>(std::move(buffer));
+        delete this;
       }
-      
-      future<T> operator()() { return std::move(fut_); }
+
+      // we allocate this class in the segment for performance with gasnet
+      static void* operator new(std::size_t size) {
+        return upcxx::allocate(size, alignof(rget_cb_byval));
+      }
+      static void operator delete(void *p) {
+        upcxx::deallocate(p);
+      }
     };
   }
   
@@ -162,62 +151,84 @@ namespace upcxx {
   // rget
   
   template<typename T,
-           typename R = nil_cx,
-           typename O = future_cx<0>>
-  typename detail::rget_futures_of<detail::rget_byval<T>,R,O>::return_type
+           typename Cxs = completions<future_cx<operation_cx_event>>>
+  typename detail::completions_returner<
+      /*EventPredicate=*/detail::event_is_here,
+      /*EventValues=*/detail::rget_byval_event_values<T>,
+      Cxs
+    >::return_t
   rget(
       global_ptr<T> gp_s,
-      completions<nil_cx,R,O> cxs = completions<nil_cx,R,O>{}
+      Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
     ) {
+
+    UPCXX_ASSERT_ALWAYS((detail::completions_has_event<Cxs, operation_cx_event>::value));
     
-    using state_type = detail::rget_states<detail::rget_byval<T>, R, O>;
+    using cxs_here_t = detail::completions_state<
+      /*EventPredicate=*/detail::event_is_here,
+      /*EventValues=*/detail::rget_byval_event_values<T>,
+      Cxs>;
+    using cxs_remote_t = detail::completions_state<
+      /*EventPredicate=*/detail::event_is_remote,
+      /*EventValues=*/detail::rget_byval_event_values<T>,
+      Cxs>;
+
+    auto *cb = new detail::rget_cb_byval<T,cxs_here_t,cxs_remote_t>{
+      gp_s.rank_,
+      cxs_here_t{std::move(cxs)},
+      cxs_remote_t{std::move(cxs)}
+    };
+
+    auto returner = detail::completions_returner<
+        /*EventPredicate=*/detail::event_is_here,
+        /*EventValues=*/detail::rget_byval_event_values<T>,
+        Cxs
+      >{cb->state_here};
     
-    T *buf_d = new T;
+    detail::rma_get_nb(&cb->buffer, gp_s.rank_, gp_s.raw_ptr_, sizeof(T), cb);
     
-    backend::rma_get_cb_wstate<state_type> *cb = backend::make_rma_get_cb<state_type>(
-      state_type{
-        gp_s.rank_, std::move(cxs)
-      },
-      /*operxn_cx*/[=](state_type &st) {
-        st.r.completed(st.owner);
-        st.o.completed(buf_d);
-      }
-    );
-    
-    auto answerer = detail::rget_futures_of<detail::rget_byval<T>,R,O>(cb->state);
-    
-    backend::rma_get(buf_d, gp_s.rank_, gp_s.raw_ptr_, sizeof(T), cb);
-    
-    return answerer();
+    return returner();
   }
   
   template<typename T,
-           typename R = nil_cx,
-           typename O = future_cx<0>>
-  typename detail::rget_futures_of<detail::rget_byref,R,O>::return_type
+           typename Cxs = completions<future_cx<operation_cx_event>>>
+  typename detail::completions_returner<
+      /*EventPredicate=*/detail::event_is_here,
+      /*EventValues=*/detail::rget_byref_event_values,
+      Cxs
+    >::return_t
   rget(
       global_ptr<T> gp_s,
       T *buf_d, std::size_t n,
-      completions<nil_cx,R,O> cxs = completions<nil_cx,R,O>{}
+      Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
     ) {
+
+    UPCXX_ASSERT_ALWAYS((detail::completions_has_event<Cxs, operation_cx_event>::value));
     
-    using state_type = detail::rget_states<detail::rget_byref, R, O>;
+    using cxs_here_t = detail::completions_state<
+      /*EventPredicate=*/detail::event_is_here,
+      /*EventValues=*/detail::rget_byref_event_values,
+      Cxs>;
+    using cxs_remote_t = detail::completions_state<
+      /*EventPredicate=*/detail::event_is_remote,
+      /*EventValues=*/detail::rget_byref_event_values,
+      Cxs>;
+
+    auto *cb = new detail::rget_cb_byref<cxs_here_t,cxs_remote_t>{
+      gp_s.rank_,
+      cxs_here_t{std::move(cxs)},
+      cxs_remote_t{std::move(cxs)}
+    };
+
+    auto returner = detail::completions_returner<
+        /*EventPredicate=*/detail::event_is_here,
+        /*EventValues=*/detail::rget_byref_event_values,
+        Cxs
+      >{cb->state_here};
     
-    backend::rma_get_cb_wstate<state_type> *cb = backend::make_rma_get_cb<state_type>(
-      state_type{
-        gp_s.rank_, std::move(cxs)
-      },
-      /*operxn_cx*/[](state_type &st) {
-        st.r.completed(st.owner);
-        st.o.completed();
-      }
-    );
+    detail::rma_get_nb(buf_d, gp_s.rank_, gp_s.raw_ptr_, n*sizeof(T), cb);
     
-    auto answerer = detail::rget_futures_of<detail::rget_byref,R,O>(cb->state);
-    
-    backend::rma_get(buf_d, gp_s.rank_, gp_s.raw_ptr_, n*sizeof(T), cb);
-    
-    return answerer();
+    return returner();
   }
 }
 #endif

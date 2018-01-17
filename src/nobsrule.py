@@ -29,7 +29,7 @@ def required_libraries(cxt, src):
     return {'upcxx-backend': {
       'ppdefs': {
         'UPCXX_BACKEND': 1,
-        'UPCXX_BACKEND_%s'%cxt.upcxx_backend_id(): 1
+        'UPCXX_BACKEND_%s'%cxt.upcxx_backend_id().upper(): 1
       }
     }}
     

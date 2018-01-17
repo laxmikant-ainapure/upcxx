@@ -1,13 +1,15 @@
 #ifndef _f93ccf7a_35a8_49c6_b7b2_55c3c1a9640c
 #define _f93ccf7a_35a8_49c6_b7b2_55c3c1a9640c
 
-#ifndef UPCXX_BACKEND_gasnet1_seq
-  #define UPCXX_BACKEND_gasnet1_seq 0
+#ifndef UPCXX_BACKEND_GASNET_SEQ
+  #define UPCXX_BACKEND_GASNET_SEQ 0
 #endif
 
-#ifndef UPCXX_BACKEND_gasnetex_par
-  #define UPCXX_BACKEND_gasnetex_par 0
+#ifndef UPCXX_BACKEND_GASNET_PAR
+  #define UPCXX_BACKEND_GASNET_PAR 0
 #endif
+
+#define UPCXX_BACKEND_GASNET (UPCXX_BACKEND_GASNET_SEQ | UPCXX_BACKEND_GASNET_PAR)
 
 /* This header declares some core user-facing API to break include
  * cycles with headers included by the real "backend.hpp". This header
@@ -56,7 +58,7 @@ namespace backend {
   extern intrank_t rank_me;
 }}
   
-#if UPCXX_BACKEND_gasnetex_par
+#if UPCXX_BACKEND_GASNET_PAR
   #include <upcxx/backend/gasnet/handle_cb.hpp>
   
   namespace upcxx {

@@ -64,14 +64,6 @@ namespace upcxx {
       }
     }
     
-    void finalize_anonymous() {
-      UPCXX_ASSERT(this->countdown_-1 >= 0);
-      if(0 == --this->countdown_) {
-        auto *hdr = static_cast<detail::future_header_result<T...>*>(this->hdr_);
-        hdr->readify();
-      }
-    }
-    
     template<typename ...U>
     void fulfill_result(U &&...values) {
       auto *hdr = static_cast<detail::future_header_result<T...>*>(this->hdr_);
@@ -87,6 +79,26 @@ namespace upcxx {
       hdr->construct_results(std::move(values));
       if(0 == --this->countdown_)
         hdr->readify();
+    }
+    
+    future1<
+        detail::future_kind_shref<detail::future_header_ops_result>,
+        T...
+      >
+    finalize() {
+      UPCXX_ASSERT(this->countdown_-1 >= 0);
+
+      if(0 == --this->countdown_) {
+        auto *hdr = static_cast<detail::future_header_result<T...>*>(this->hdr_);
+        hdr->readify();
+      }
+      
+      return static_cast<
+          detail::future_impl_shref<
+            detail::future_header_ops_result,
+            T...
+          > const&
+        >(*this);
     }
     
     future1<

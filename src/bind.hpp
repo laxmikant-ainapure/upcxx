@@ -285,7 +285,8 @@ namespace upcxx {
     // bindings.
     
     // general case
-    template<typename FnDecayed>
+    template<typename FnDecayed, int sizeof_B/*=sizeof...(B)*/,
+             bool Fn_trivial = binding_is_trivial<FnDecayed>::value>
     struct bind {
       template<typename Fn, typename ...B>
       bound_function<Fn&&, B&&...> operator()(Fn &&fn, B &&...b) const {
@@ -297,10 +298,32 @@ namespace upcxx {
         };
       }
     };
-    
+
+    // no bound args case, non-trivially bound Fn
+    template<typename FnDecayed>
+    struct bind<FnDecayed, /*sizeof...(B)=*/0, /*Fn_trivial=*/false> {
+      template<typename Fn>
+      bound_function<Fn&&> operator()(Fn &&fn) const {
+        return bound_function<Fn&&>{
+          binding<Fn&&>::on_wire(std::forward<Fn>(fn)),
+          std::tuple<>{}
+        };
+      }
+    };
+
+    // no bound args case, trivially bound Fn
+    template<typename FnDecayed>
+    struct bind<FnDecayed, /*sizeof...(B)=*/0, /*Fn_trivial=*/true> {
+      template<typename Fn>
+      Fn operator()(Fn fn) const {
+        return std::move(fn);
+      }
+    };
+
     // nested bind(bind(...),...) case.
-    template<typename Fn0, typename ...B0>
-    struct bind<bound_function<Fn0, B0...>> {
+    template<typename Fn0, typename ...B0, int sizeof_B1,
+             bool Fn_trivial>
+    struct bind<bound_function<Fn0, B0...>, sizeof_B1, Fn_trivial> {
       template<typename Bf, typename ...B1>
       bound_function<Fn0, B0..., B1&&...> operator()(Bf &&bf, B1 &&...b1) const {
         return bound_function<Fn0, B0..., B1&&...>{
@@ -319,18 +342,13 @@ namespace upcxx {
   template<typename Fn, typename ...B>
   auto bind(Fn &&fn, B &&...b)
     -> decltype(
-      detail::bind<typename std::decay<Fn>::type>()(
+      detail::bind<typename std::decay<Fn>::type, sizeof...(B)>()(
         std::forward<Fn>(fn), std::forward<B>(b)...
       )
     ) {
-    return detail::bind<typename std::decay<Fn>::type>()(
+    return detail::bind<typename std::decay<Fn>::type, sizeof...(B)>()(
       std::forward<Fn>(fn), std::forward<B>(b)...
     );
-  }
-  
-  template<typename Fn>
-  Fn&& bind(Fn &&fn) {
-    return std::forward<Fn>(fn);
   }
 }
 
@@ -347,12 +365,18 @@ namespace upcxx {
         std::integral_constant<int,tail>
       )
       -> decltype(
-        detail::bind<typename std::decay<typename std::tuple_element<tail, std::tuple<P...>>::type>::type>()(
+        detail::bind<
+            typename std::decay<typename std::tuple_element<tail, std::tuple<P...>>::type>::type,
+            sizeof...(heads)+1
+          >()(
           std::move(std::get<tail>(parms)),
           std::move(std::get<heads>(parms))...
         )
       ) {
-      return detail::bind<typename std::decay<typename std::tuple_element<tail, std::tuple<P...>>::type>::type>()(
+      return detail::bind<
+          typename std::decay<typename std::tuple_element<tail, std::tuple<P...>>::type>::type,
+          sizeof...(heads)+1
+        >()(
         std::move(std::get<tail>(parms)),
         std::move(std::get<heads>(parms))...
       );
@@ -374,10 +398,11 @@ namespace upcxx {
       std::integral_constant<int, sizeof...(P)-1>()
     );
   }
-  
+
   template<typename Fn>
-  Fn&& bind_last(Fn &&fn) {
-    return std::forward<Fn>(fn);
+  auto bind_last(Fn fn)
+    -> decltype(bind(std::move(fn))) {
+    return bind(std::move(fn));
   }
 }
 #endif

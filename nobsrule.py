@@ -61,8 +61,8 @@ valid too.
 
 def upcxx_backend_id():
   return env("UPCXX_BACKEND",
-             otherwise="gasnet1_seq",
-             universe=("gasnet1_seq","gasnetex_par"))
+             otherwise="gasnet_seq",
+             universe=("gasnet_seq","gasnet_par"))
 
 def upcxx_lpc_inbox_id():
   return env('UPCXX_LPC_INBOX',
@@ -185,8 +185,8 @@ def gasnet_syncmode(cxt):
   GASNet sync-mode to use.
   """
   return {
-      'gasnet1_seq': 'seq',
-      'gasnetex_par': 'par'
+      'gasnet_seq': 'seq',
+      'gasnet_par': 'par'
     }[upcxx_backend_id()]
 
 @rule(cli='gasnet_syncmode')

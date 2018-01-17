@@ -86,7 +86,7 @@ run_test "rput.cpp" "par"
 run_test "uts/uts_ranks.cpp"
 THREADS="$RANKS" run_test "uts/uts_threads.cpp"
 
-UPCXX_BACKEND=gasnetex_par run_test "uts/uts_hybrid.cpp"
+UPCXX_BACKEND=gasnet_par run_test "uts/uts_hybrid.cpp"
 
 echo -e "\e[92mAll tests succeded\e[0m"
 

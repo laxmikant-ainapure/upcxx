@@ -84,10 +84,10 @@ else
   }
   
   function foreach_backend {
-    export UPCXX_BACKEND=gasnet1_seq
+    export UPCXX_BACKEND=gasnet_seq
     foreach_conduit
     
-    export UPCXX_BACKEND=gasnetex_par
+    export UPCXX_BACKEND=gasnet_par
     foreach_conduit
   }
   
@@ -169,10 +169,10 @@ esac
 
 case \${UPCXX_THREADMODE} in
 seq)
-  UPCXX_BACKEND=gasnet1_seq
+  UPCXX_BACKEND=gasnet_seq
   ;;
 par)
-  UPCXX_BACKEND=gasnetex_par
+  UPCXX_BACKEND=gasnet_par
   ;;
 esac
 

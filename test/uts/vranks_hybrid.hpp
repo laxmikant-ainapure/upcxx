@@ -12,8 +12,8 @@
 
 #include <unistd.h>
 
-#if defined(UPCXX_BACKEND) && !UPCXX_BACKEND_gasnetex_par
-  #error "UPCXX_BACKEND must be gasnetex_par"
+#if defined(UPCXX_BACKEND) && !UPCXX_BACKEND_GASNET_PAR
+  #error "UPCXX_BACKEND must be gasnet_par"
 #endif
 
 #define VRANKS_IMPL "ranks+threads"
