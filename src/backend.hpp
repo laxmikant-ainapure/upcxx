@@ -8,6 +8,7 @@
 #include <upcxx/backend_fwd.hpp>
 #include <upcxx/future.hpp>
 #include <upcxx/persona.hpp>
+#include <vector>
 
 ////////////////////////////////////////////////////////////////////////
 
@@ -42,6 +43,13 @@ namespace backend {
   
   template<progress_level level, typename Fn>
   void send_am_persona(intrank_t recipient_rank, persona *recipient_persona, Fn &&fn);
+
+
+  std::vector<intrank_t> supernode();
+  bool is_local(void* ptr_);
+  void* pshm_remote_addr2local(intrank_t srcRank, void* rawPtr);
+  void *pshm_local_addr2remote(void *addr, intrank_t &rank_out);
+  
 }}
 
 ////////////////////////////////////////////////////////////////////////
