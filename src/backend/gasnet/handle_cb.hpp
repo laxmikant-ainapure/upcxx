@@ -19,7 +19,8 @@ namespace gasnet {
   
   struct handle_cb {
     handle_cb *next_ = reinterpret_cast<handle_cb*>(0x1);
-    std::uintptr_t handle;
+    std::uintptr_t handle = 0;
+    
     virtual void execute_and_delete(handle_cb_successor) = 0;
   };
 

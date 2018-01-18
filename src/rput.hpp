@@ -273,17 +273,17 @@ namespace upcxx {
       /*EventValues=*/detail::rput_event_values,
       Cxs>;
 
-    auto cbs_static = detail::rput_cbs_byval<T, cxs_here_t, cxs_remote_t>{
+    detail::rput_cbs_byval<T, cxs_here_t, cxs_remote_t> cbs_static{
       gp_d.rank_,
       cxs_here_t{std::move(cxs)},
       cxs_remote_t{std::move(cxs)},
       std::move(value_s),
     };
-
-    auto *cbs = cbs_static.static_scope
+    
+    auto *cbs = decltype(cbs_static)::static_scope
       ? &cbs_static
       : new decltype(cbs_static){std::move(cbs_static)};
-
+    
     auto returner = detail::completions_returner<
         /*EventPredicate=*/detail::event_is_here,
         /*EventValues=*/detail::rput_event_values,
@@ -318,13 +318,13 @@ namespace upcxx {
       /*EventValues=*/detail::rput_event_values,
       Cxs>;
 
-    auto cbs_static = detail::rput_cbs_byref<cxs_here_t, cxs_remote_t>{
+    detail::rput_cbs_byref<cxs_here_t, cxs_remote_t> cbs_static{
       gp_d.rank_,
       cxs_here_t{std::move(cxs)},
       cxs_remote_t{std::move(cxs)}
     };
 
-    auto *cbs = cbs_static.static_scope
+    auto *cbs = decltype(cbs_static)::static_scope
       ? &cbs_static
       : new decltype(cbs_static){std::move(cbs_static)};
     
