@@ -353,7 +353,7 @@ namespace upcxx {
   // action. `operator()` will expect that the runtime values it receives
   // match the types reported by this map for the given event.
   namespace detail {
-    template<template<typename> typename EventPredicate,
+    template<template<typename> class EventPredicate,
              typename EventValues,
              typename Cxs>
     struct completions_state /*{
@@ -368,7 +368,7 @@ namespace upcxx {
       void operator()(V&&...);
     }*/;
     
-    template<template<typename> typename EventPredicate,
+    template<template<typename> class EventPredicate,
              typename EventValues>
     struct completions_state<EventPredicate, EventValues,
                              completions<>> {
@@ -433,7 +433,7 @@ namespace upcxx {
       }
     };
     
-    template<template<typename> typename EventPredicate,
+    template<template<typename> class EventPredicate,
              typename EventValues, typename CxH, typename ...CxT>
     struct completions_state<EventPredicate, EventValues,
                              completions<CxH,CxT...>>:
@@ -513,7 +513,7 @@ namespace upcxx {
     }
   };
   
-  template<template<typename> typename EventPredicate,
+  template<template<typename> class EventPredicate,
            typename EventValues>
   struct commanding<
       detail::completions_state<EventPredicate, EventValues, completions<>>
@@ -529,7 +529,7 @@ namespace upcxx {
     }
   };
 
-  template<template<typename> typename EventPredicate,
+  template<template<typename> class EventPredicate,
            typename EventValues, typename CxH, typename ...CxT>
   struct commanding<
       detail::completions_state<EventPredicate, EventValues,
@@ -563,11 +563,11 @@ namespace upcxx {
   // detail::completions_state&. Call operator() to get the return value.
 
   namespace detail {
-    template<template<typename> typename EventPredicate,
+    template<template<typename> class EventPredicate,
              typename EventValues, typename Cxs>
     struct completions_returner;
 
-    template<template<typename> typename EventPredicate,
+    template<template<typename> class EventPredicate,
              typename EventValues>
     struct completions_returner<EventPredicate, EventValues, completions<>> {
       using return_t = void;
@@ -580,12 +580,12 @@ namespace upcxx {
       void operator()() const {/*return void*/}
     };
     
-    template<template<typename> typename EventPredicate,
+    template<template<typename> class EventPredicate,
              typename EventValues, typename Cxs,
              typename TailReturn>
     struct completions_returner_head;
     
-    template<template<typename> typename EventPredicate,
+    template<template<typename> class EventPredicate,
              typename EventValues, typename CxH_event, typename ...CxT,
              typename ...TailReturn_tuplees>
     struct completions_returner_head<
@@ -617,7 +617,7 @@ namespace upcxx {
       }
     };
 
-    template<template<typename> typename EventPredicate,
+    template<template<typename> class EventPredicate,
              typename EventValues, typename CxH_event, typename ...CxT,
              typename TailReturn_not_tuple>
     struct completions_returner_head<
@@ -649,7 +649,7 @@ namespace upcxx {
       }
     };
 
-    template<template<typename> typename EventPredicate,
+    template<template<typename> class EventPredicate,
              typename EventValues, typename CxH_event, typename ...CxT>
     struct completions_returner_head<
         EventPredicate, EventValues,
@@ -674,7 +674,7 @@ namespace upcxx {
       }
     };
     
-    template<template<typename> typename EventPredicate,
+    template<template<typename> class EventPredicate,
              typename EventValues, typename CxH_not_future, typename ...CxT,
              typename TailReturn>
     struct completions_returner_head<
@@ -699,7 +699,7 @@ namespace upcxx {
       }
     };
     
-    template<template<typename> typename EventPredicate,
+    template<template<typename> class EventPredicate,
              typename EventValues, typename CxH, typename ...CxT>
     struct completions_returner<EventPredicate, EventValues,
                                 completions<CxH,CxT...>>:

@@ -1,8 +1,6 @@
 #include <upcxx/rput.hpp>
 #include <upcxx/backend/gasnet/runtime_internal.hpp>
 
-#include <gasnetex.h>
-
 namespace gasnet = upcxx::backend::gasnet;
 
 template<bool source_handled, bool source_deferred_else_now>

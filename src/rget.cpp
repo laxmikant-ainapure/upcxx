@@ -1,6 +1,5 @@
 #include <upcxx/rget.hpp>
 #include <upcxx/backend/gasnet/runtime_internal.hpp>
-#include <gasnetex.h>
 
 namespace gasnet = upcxx::backend::gasnet;
 

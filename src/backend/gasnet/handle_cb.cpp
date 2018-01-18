@@ -1,6 +1,5 @@
 #include <upcxx/backend/gasnet/handle_cb.hpp>
-
-#include <gasnetex.h>
+#include <upcxx/backend/gasnet/runtime_internal.hpp>
 
 using upcxx::backend::gasnet::handle_cb_queue;
 

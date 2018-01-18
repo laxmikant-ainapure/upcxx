@@ -186,8 +186,8 @@ namespace upcxx {
         auto *cbs = static_cast<FinalType*>(this);
         
         rma_put_nb<
-            /*source_handled=*/cbs->source_handled,
-            /*source_deferred_else_now=*/cbs->source_deferred_else_now>
+            /*source_handled=*/FinalType::source_handled,
+            /*source_deferred_else_now=*/FinalType::source_deferred_else_now>
           (rank, buf_d, buf_s, size, cbs->source_cb(), this);
       }
       

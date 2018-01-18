@@ -6,8 +6,6 @@
 
 #include <cstring>
 
-#include <gasnet.h>
-
 #include <sched.h>
 #include <unistd.h>
 
@@ -33,16 +31,18 @@ using namespace std;
 
 ////////////////////////////////////////////////////////////////////////
 
-#if UPCXX_BACKEND_GASNET_SEQ && !GASNET_SEQ
-  #error "This backend is gasnet-seq only!"
-#endif
+#if !NOBS_DISCOVERY
+  #if UPCXX_BACKEND_GASNET_SEQ && !GASNET_SEQ
+    #error "This backend is gasnet-seq only!"
+  #endif
 
-#if UPCXX_BACKEND_GASNET_PAR && !GASNET_PAR
-  #error "This backend is gasnet-par only!"
-#endif
+  #if UPCXX_BACKEND_GASNET_PAR && !GASNET_PAR
+    #error "This backend is gasnet-par only!"
+  #endif
 
-#if GASNET_SEGMENT_EVERYTHING
-  #error "Segment-everything not supported."
+  #if GASNET_SEGMENT_EVERYTHING
+    #error "Segment-everything not supported."
+  #endif
 #endif
 
 static_assert(

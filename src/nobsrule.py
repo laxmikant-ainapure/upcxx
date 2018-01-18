@@ -4,19 +4,6 @@ on the structure and interpretation of a rule-file.
 """
 
 @rule()
-def requires_gasnet(cxt, src):
-  return src in [
-    # Compiling any source in "backend/gasnet/" requires gasnet.
-    here('backend/gasnet/handle_cb.cpp'),
-    here('backend/gasnet/runtime.cpp'),
-
-    # We pretend that anyone including "backend/gasnet/runtime.hpp" needs
-    # gasnet pp-stuff, but that isn't really the case. This is just to
-    # be nice so clients can include the same gasnet headers we do.
-    here('backend/gasnet/runtime.hpp')
-  ]
-
-@rule()
 def requires_pthread(cxt, src):
   return src in [
     here('lpc/inbox_locked.hpp')
@@ -32,7 +19,18 @@ def required_libraries(cxt, src):
         'UPCXX_BACKEND_%s'%cxt.upcxx_backend_id().upper(): 1
       }
     }}
-    
+
+  elif src in [
+      # Compiling anything that includes this requires gasnet.
+      here('backend/gasnet/runtime_internal.hpp'),
+      
+      # We pretend that anyone including "backend/gasnet/runtime.hpp" needs
+      # gasnet pp-stuff, but that isn't really the case. This is just to
+      # be nice so clients can include the same gasnet headers we do.
+      here('backend/gasnet/runtime.hpp')
+    ]:
+    return cxt.gasnet()
+  
   elif src == here('lpc/inbox.hpp'):
     # Anyone including "lpc_inbox.hpp" needs UPCXX_LPC_INBOX_<impl> defined.
     return {'upcxx-lpc-inbox': {

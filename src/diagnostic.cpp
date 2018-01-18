@@ -14,8 +14,7 @@
 ////////////////////////////////////////////////////////////////////////
 
 #if UPCXX_BACKEND_GASNET
-  #include <gasnetex.h>
-  #include <gasnet_tools.h>
+  #include <upcxx/backend/gasnet/runtime_internal.hpp>
 
   extern "C" {
     volatile int upcxx_frozen;
