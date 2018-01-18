@@ -4,45 +4,48 @@
   #include <upcxx/backend_fwd.hpp>
 #endif
 
+#if UPCXX_BACKEND_GASNET
+  #include <upcxx/backend/gasnet/runtime_internal.hpp>
+#endif
+
 #include <iostream>
 #include <sstream>
 
-#include <sys/types.h>
-#include <unistd.h>
-#include <signal.h>
-
 ////////////////////////////////////////////////////////////////////////
 
-#if UPCXX_BACKEND_GASNET
-  #include <upcxx/backend/gasnet/runtime_internal.hpp>
-
-  extern "C" {
-    volatile int upcxx_frozen;
-  }
-
-  void upcxx::dbgbrk() {
-    gasnett_freezeForDebuggerNow(&upcxx_frozen, "upcxx_frozen");
-  }
-#else
-  void upcxx::dbgbrk() {}
-#endif
+void upcxx::dbgbrk() {}
 
 void upcxx::assert_failed(const char *file, int line, const char *msg) {
   std::stringstream ss;
 
-  ss << "UPC++ assertion failure";
+  ss << std::string(70, '/') << '\n';
+  ss << "UPC++ assertion failure:\n";
 
   #ifdef UPCXX_BACKEND
-    ss << " on rank " << upcxx::backend::rank_me;
+    ss << " rank=" << upcxx::backend::rank_me<<'\n';
 	#endif
   
-  ss << " ["<<file<<':'<<line<<']';
+  ss << " file="<<file<<':'<<line<<'\n';
   if(msg != nullptr && '\0' != msg[0])
-    ss << ": " << msg;
-  ss << '\n';
+    ss << '\n' << msg << '\n';
   
+  #if UPCXX_BACKEND_GASNET
+    if(0 == gasnett_getenv_int_withdefault("GASNET_FREEZE_ON_ERROR", 0, 0)) {
+      ss << "\n"
+"To have UPC++ freeze during these errors so you can attach a debugger, "
+"rerun the program with GASNET_FREEZE_ON_ERROR=1 in the environment.\n";
+    }
+  #endif
+
+  ss << std::string(70, '/') << '\n';
   std::cerr << ss.str();
+
+  #if UPCXX_BACKEND_GASNET
+    gasnett_freezeForDebuggerErr();
+  #endif
+  
   dbgbrk();
+  
   std::abort();
 }
 

@@ -11,7 +11,7 @@ namespace upcxx {
 #define UPCXX_ASSERT_1(ok) \
   do { \
     if(!(ok)) \
-      ::upcxx::assert_failed(__FILE__, __LINE__); \
+      ::upcxx::assert_failed(__FILE__, __LINE__, "Failed condition: " #ok); \
   } while(0);
 
 #define UPCXX_ASSERT_2(ok, ios_msg) \
