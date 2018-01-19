@@ -4,7 +4,6 @@
 #include <sstream>
 
 namespace upcxx {
-  void dbgbrk();
   void assert_failed(const char *file, int line, const char *msg=nullptr);
 }
 
