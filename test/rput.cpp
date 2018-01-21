@@ -38,7 +38,7 @@ int main() {
   future<> done_g, done_s;
   
   int value = 100+me;
-  #if 0
+  #if 1
     std::tie(done_g, done_s) = upcxx::rput(
       &value, nebr_thing, 1,
       operation_cx::as_future() |
@@ -48,7 +48,7 @@ int main() {
   #else
     std::tie(done_g, done_s) = upcxx::rput(
       &value, nebr_thing, 1,
-      operation_cx::as_buffered() |
+      operation_cx::as_blocking() |
       operation_cx::as_future() |
       source_cx::as_future() |
       remote_cx::as_rpc([=]() { got_rpc++; })
@@ -72,8 +72,8 @@ int main() {
         delete pro1;
         delete pro2;
 
-        UPCXX_ASSERT(got == 100 + me, "got incorrect value, " << got << " != " << (100 + me));
-        UPCXX_ASSERT(got == buf, "got not equal to buf");
+        UPCXX_ASSERT_ALWAYS(got == 100 + me, "got incorrect value, " << got << " != " << (100 + me));
+        UPCXX_ASSERT_ALWAYS(got == buf, "got not equal to buf");
         std::cout << "get(put(X)) == X\n";
       });
   });

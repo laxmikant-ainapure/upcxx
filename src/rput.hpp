@@ -13,8 +13,10 @@
 
 namespace upcxx {
   namespace detail {
+    enum class rma_put_source_mode { now, defer, handle };
+    
     // rma_put_nb: Does the actual gasnet non-blocking put
-    template<bool source_handled, bool source_deferred_else_now>
+    template<rma_put_source_mode src_mode>
     void rma_put_nb(
       intrank_t rank_d, void *buf_d,
       const void *buf_s, std::size_t size,
@@ -48,13 +50,13 @@ namespace upcxx {
     // rput_cb_source: rput_cbs_{byref|byval} inherits this to hold
     // source-copmletion details.
     template<typename FinalType, typename CxStateHere, typename CxStateRemote,
-             bool buffered = completions_has_event_buffered<
+             bool sync = completions_is_event_sync<
                  typename CxStateHere::completions_t,
                  source_cx_event
                >::value,
              // only use handle when the user has asked for source_cx
-             // notification AND hasn't specified that it be buffered.
-             bool use_handle = !buffered && completions_has_event<
+             // notification AND hasn't specified that it be sync.
+             bool use_handle = !sync && completions_has_event<
                  typename CxStateHere::completions_t,
                  source_cx_event
                >::value
@@ -64,7 +66,7 @@ namespace upcxx {
     // rput_cb_operation: rput_cbs_{byref|byval} inherits this to hold
     // operation-completion details.
     template<typename FinalType, typename CxStateHere, typename CxStateRemote,
-             bool static_scope = completions_has_event_buffered<
+             bool static_scope = completions_is_event_sync<
                  typename CxStateHere::completions_t,
                  operation_cx_event
                >::value
@@ -79,12 +81,11 @@ namespace upcxx {
     template<typename FinalType, typename CxStateHere, typename CxStateRemote>
     struct rput_cb_source<
         FinalType, CxStateHere, CxStateRemote,
-        /*buffered=*/false, /*use_handle=*/true
+        /*sync=*/false, /*use_handle=*/true
       >:
       backend::gasnet::handle_cb {
       
-      static constexpr bool source_handled = true;
-      static constexpr bool source_deferred_else_now = false;
+      static constexpr auto source_mode = rma_put_source_mode::handle;
 
       backend::gasnet::handle_cb* source_cb() {
         return this;
@@ -95,21 +96,23 @@ namespace upcxx {
         
         cbs->state_here.template operator()<source_cx_event>();
         
-        static_cast<
-            rput_cb_operation<FinalType, CxStateHere, CxStateRemote>*
-          >(cbs)->succession(add_succ);
+        add_succ(
+          static_cast<
+              rput_cb_operation<FinalType, CxStateHere, CxStateRemote>*
+            >(cbs)
+        );
       }
     };
 
     // rput_cb_source: Case user does not care about source_cx_event.
     template<typename FinalType, typename CxStateHere, typename CxStateRemote,
-             bool buffered>
+             bool sync>
     struct rput_cb_source<
         FinalType, CxStateHere, CxStateRemote,
-        buffered, /*use_handle=*/false
+        sync, /*use_handle=*/false
       > {
-      static constexpr bool source_handled = false;
-      static constexpr bool source_deferred_else_now = !buffered;
+      static constexpr auto source_mode =
+        sync ? rma_put_source_mode::now : rma_put_source_mode::defer;
 
       backend::gasnet::handle_cb* source_cb() {
         return nullptr;
@@ -176,18 +179,12 @@ namespace upcxx {
 
       static constexpr bool static_scope = false;
       
-      void succession(backend::gasnet::handle_cb_successor add_succ) {
-        add_succ(this);
-      }
-
       void initiate(
           intrank_t rank, void *buf_d, const void *buf_s, std::size_t size
         ) {
         auto *cbs = static_cast<FinalType*>(this);
         
-        rma_put_nb<
-            /*source_handled=*/FinalType::source_handled,
-            /*source_deferred_else_now=*/FinalType::source_deferred_else_now>
+        rma_put_nb</*source_mode=*/FinalType::source_mode>
           (rank, buf_d, buf_s, size, cbs->source_cb(), this);
       }
       

@@ -50,9 +50,15 @@ namespace upcxx {
     promise<T...> &pro_;
   };
 
-  // Synchronous completion
+  // Synchronous completion via best-effort buffering
   template<typename Event>
   struct buffered_cx {
+    using event_t = Event;
+  };
+
+  // Synchronous completion via blocking on network/peers
+  template<typename Event>
+  struct blocking_cx {
     using event_t = Event;
   };
 
@@ -150,23 +156,28 @@ namespace upcxx {
   }
 
   //////////////////////////////////////////////////////////////////////
-  // detail::completions_has_event_buffered: detects if there exists a
-  // buffered_cx action tagged by the given event in the completions list
+  // detail::completions_is_event_sync: detects if there exists a
+  // buffered_cx or blocking_cx action tagged by the given event in the
+  // completions list
 
   namespace detail {
     template<typename Cxs, typename Event>
-    struct completions_has_event_buffered;
+    struct completions_is_event_sync;
     
     template<typename Event>
-    struct completions_has_event_buffered<completions<>, Event> {
+    struct completions_is_event_sync<completions<>, Event> {
       static constexpr bool value = false;
     };
     template<typename ...CxT, typename Event>
-    struct completions_has_event_buffered<completions<buffered_cx<Event>,CxT...>, Event> {
+    struct completions_is_event_sync<completions<buffered_cx<Event>,CxT...>, Event> {
+      static constexpr bool value = true;
+    };
+    template<typename ...CxT, typename Event>
+    struct completions_is_event_sync<completions<blocking_cx<Event>,CxT...>, Event> {
       static constexpr bool value = true;
     };
     template<typename CxH, typename ...CxT, typename Event>
-    struct completions_has_event_buffered<completions<CxH,CxT...>, Event> {
+    struct completions_is_event_sync<completions<CxH,CxT...>, Event> {
       static constexpr bool value =
         completions_has_event<completions<CxT...>, Event>::value;
     };
@@ -176,15 +187,17 @@ namespace upcxx {
   // User-interface for obtaining a completion tied to an event.
 
   namespace detail {
-    // Base template for completions at initiator
     template<typename Event>
-    struct here_cx_helper {
+    struct support_as_future {
       using as_future_t = completions<future_cx<Event>>;
 
       static constexpr as_future_t as_future() {
         return {future_cx<Event>{}};
       }
+    };
 
+    template<typename Event>
+    struct support_as_promise {
       template<typename ...T>
       using as_promise_t = completions<promise_cx<Event, T...>>;
 
@@ -192,7 +205,10 @@ namespace upcxx {
       static constexpr as_promise_t<T...> as_promise(promise<T...> &pro) {
         return {promise_cx<Event, T...>{pro}};
       }
-      
+    };
+
+    template<typename Event>
+    struct support_as_lpc {
       template<typename Fn>
       using as_lpc_t = completions<lpc_cx<Event, Fn>>;
 
@@ -202,7 +218,10 @@ namespace upcxx {
           lpc_cx<Event, Fn>{target, static_cast<Fn&&>(func)}
         };
       }
+    };
 
+    template<typename Event>
+    struct support_as_buffered {
       using as_buffered_t = completions<buffered_cx<Event>>;
 
       static constexpr as_buffered_t as_buffered() {
@@ -211,7 +230,16 @@ namespace upcxx {
     };
 
     template<typename Event>
-    struct remote_cx_helper {
+    struct support_as_blocking {
+      using as_blocking_t = completions<blocking_cx<Event>>;
+
+      static constexpr as_blocking_t as_blocking() {
+        return {blocking_cx<Event>{}};
+      }
+    };
+
+    template<typename Event>
+    struct support_as_rpc {
       template<typename Fn, typename ...Args>
       using rpc_cx_t =
         rpc_cx<Event,
@@ -232,12 +260,24 @@ namespace upcxx {
     };
   }
 
-  struct source_cx:    detail::here_cx_helper<source_cx_event> {};
-  struct operation_cx: detail::here_cx_helper<operation_cx_event> {};
-  struct remote_cx:    detail::remote_cx_helper<remote_cx_event> {};
+  struct source_cx:
+    detail::support_as_blocking<source_cx_event>,
+    detail::support_as_buffered<source_cx_event>,
+    detail::support_as_future<source_cx_event>,
+    detail::support_as_lpc<source_cx_event>,
+    detail::support_as_promise<source_cx_event> {};
+  
+  struct operation_cx:
+    detail::support_as_blocking<operation_cx_event>,
+    detail::support_as_future<operation_cx_event>,
+    detail::support_as_lpc<operation_cx_event>,
+    detail::support_as_promise<operation_cx_event> {};
+  
+  struct remote_cx:
+    detail::support_as_rpc<remote_cx_event> {};
   
   //////////////////////////////////////////////////////////////////////
-  // state_of_cx: Per action state that survives until the event
+  // cx_state: Per action state that survives until the event
   // is triggered. For future_cx's this holds a promise instance which
   // seeds the future given back to the user. All other cx actions get
   // their information stored as-is. All of these expose `operator()(T...)`
@@ -245,20 +285,26 @@ namespace upcxx {
   
   namespace detail {
     template<typename Cx /* the action */,
-             typename EventArgsTup /* tuple containing list of action types*/>
-    struct state_of_cx;
+             typename EventArgsTup /* tuple containing list of action's value types*/>
+    struct cx_state;
     
     template<typename Event>
-    struct state_of_cx<buffered_cx<Event>, std::tuple<>> {
-      state_of_cx(buffered_cx<Event>) {}
+    struct cx_state<buffered_cx<Event>, std::tuple<>> {
+      cx_state(buffered_cx<Event>) {}
+      void operator()() {}
+    };
+    
+    template<typename Event>
+    struct cx_state<blocking_cx<Event>, std::tuple<>> {
+      cx_state(blocking_cx<Event>) {}
       void operator()() {}
     };
     
     template<typename Event, typename ...T>
-    struct state_of_cx<future_cx<Event>, std::tuple<T...>> {
+    struct cx_state<future_cx<Event>, std::tuple<T...>> {
       promise<T...> pro_;
       
-      state_of_cx(future_cx<Event>) {}
+      cx_state(future_cx<Event>) {}
       
       void operator()(T ...vals) {
         backend::during_user(std::move(pro_), std::move(vals)...);
@@ -267,10 +313,10 @@ namespace upcxx {
 
     // promise and events have matching (non-empty) types
     template<typename Event, typename ...T>
-    struct state_of_cx<promise_cx<Event,T...>, std::tuple<T...>> {
+    struct cx_state<promise_cx<Event,T...>, std::tuple<T...>> {
       promise<T...> &pro_;
 
-      state_of_cx(promise_cx<Event,T...> cx):
+      cx_state(promise_cx<Event,T...> cx):
         pro_{cx.pro_} {
         pro_.require_anonymous(1);
       }
@@ -281,10 +327,10 @@ namespace upcxx {
     };
     // event is empty
     template<typename Event, typename ...T>
-    struct state_of_cx<promise_cx<Event,T...>, std::tuple<>> {
+    struct cx_state<promise_cx<Event,T...>, std::tuple<>> {
       promise<T...> &pro_;
 
-      state_of_cx(promise_cx<Event,T...> cx):
+      cx_state(promise_cx<Event,T...> cx):
         pro_{cx.pro_} {
         pro_.require_anonymous(1);
       }
@@ -296,10 +342,10 @@ namespace upcxx {
     };
     // promise and event are empty
     template<typename Event>
-    struct state_of_cx<promise_cx<Event>, std::tuple<>> {
+    struct cx_state<promise_cx<Event>, std::tuple<>> {
       promise<> &pro_;
 
-      state_of_cx(promise_cx<Event> cx):
+      cx_state(promise_cx<Event> cx):
         pro_{cx.pro_} {
         pro_.require_anonymous(1);
       }
@@ -311,11 +357,11 @@ namespace upcxx {
     };
     
     template<typename Event, typename Fn, typename ...T>
-    struct state_of_cx<lpc_cx<Event,Fn>, std::tuple<T...>> {
+    struct cx_state<lpc_cx<Event,Fn>, std::tuple<T...>> {
       persona *target_;
       Fn fn_;
       
-      state_of_cx(lpc_cx<Event,Fn> cx):
+      cx_state(lpc_cx<Event,Fn> cx):
         target_{cx.target_},
         fn_{std::move(cx.fn_)} {
       }
@@ -328,9 +374,9 @@ namespace upcxx {
     };
     
     template<typename Event, typename Fn, typename ...T>
-    struct state_of_cx<rpc_cx<Event,Fn>, std::tuple<T...>> {
+    struct cx_state<rpc_cx<Event,Fn>, std::tuple<T...>> {
       Fn fn_;
-      state_of_cx(rpc_cx<Event,Fn> cx):
+      cx_state(rpc_cx<Event,Fn> cx):
         fn_{std::move(cx.fn_)} {
       }
     };
@@ -404,7 +450,7 @@ namespace upcxx {
       > {
       static constexpr bool empty = false;
 
-      state_of_cx<Cx, typename EventValues::template tuple_t<typename Cx::event_t>> state_;
+      cx_state<Cx, typename EventValues::template tuple_t<typename Cx::event_t>> state_;
       
       completions_state_head(Cx cx):
         state_{std::move(cx)} {
