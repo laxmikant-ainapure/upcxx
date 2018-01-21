@@ -5,12 +5,12 @@
   #define UPCXX_LPC_INBOX_locked 0
 #endif
 
-#ifndef UPCXX_LPC_INBOX_lockless
-  #define UPCXX_LPC_INBOX_lockless 0
+#ifndef UPCXX_LPC_INBOX_lockfree
+  #define UPCXX_LPC_INBOX_lockfree 0
 #endif
 
-#ifndef UPCXX_LPC_INBOX_syncless
-  #define UPCXX_LPC_INBOX_syncless 0
+#ifndef UPCXX_LPC_INBOX_syncfree
+  #define UPCXX_LPC_INBOX_syncfree 0
 #endif
 
 #include <upcxx/diagnostic.hpp>
