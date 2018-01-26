@@ -49,10 +49,10 @@ if [ "$single" -eq 1 ]; then
   nobs install src/upcxx.cpp "$install_to" \
     || failure_and_die
 else
-  # Let's not purge nobs before each install to:
+  # Let's not purge nobs before each install FOR DEVELOPERS to:
   #  1. Make installations after incremental updates fast.
   #  2. Encourage devs tripping on remaining bugs, so they can be reported.
-  #rm -rf .nobs
+  test -d .git || rm -rf .nobs
   
   case $(nobs gasnet_user_kind) in
   tarball|tarball-url|source)
