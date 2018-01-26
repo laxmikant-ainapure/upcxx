@@ -4,6 +4,11 @@
 from __future__ import print_function
 
 import sys
+
+if sys.version_info < (2, 7, 5):
+    sys.stderr.write('ERROR: Python version >= 2.7.5 required\n')
+    exit(1)
+
 import os
 import argparse
 import subprocess
@@ -176,10 +181,6 @@ def set_ssh_servers(ssh_servers, nranks, conduit):
 
     
 def main():
-    if sys.version_info < (2, 6):
-        print('Error: Python version >= 2.6 required')
-        return 1
-    
     args = load_args()
     
     if not args.info and not args.nranks:
