@@ -10,11 +10,11 @@ cd <upcxx-source-path>
 
 This will build the UPC\+\+ library and install it to the `<upcxx-install-path>`
 directory. Users are recommended to use paths to non-existent or empty
-directories as the installation path so that uninstallation is as trivial as `rm
--rf <upcxx-install-path>`.  Note that the install process downloads the GASNet
-communication library, so an Internet connection is needed. Depending on the
-platform, additional configuration may be necessary before invoking `install`.
-See below.
+directories as the installation path so that uninstallation is as trivial as
+`rm -rf <upcxx-install-path>`.  Note that the install process downloads the
+GASNet communication library, so an Internet connection is needed. Depending on
+the platform, additional configuration may be necessary before invoking
+`install`. See below.
 
 **Installation: Linux**
 
@@ -94,9 +94,10 @@ The `<c++ compiler>` used to build the application must be the same as the one
 used for the UPC\+\+ installation.
 
 For an example of a Makefile which builds UPC++ applications, look at
-`example/prog-guide/Makefile`. This directory also has code for running all the
-examples given in the programmer's guide. To use that `Makefile`, first set the
-`UPCXX_INSTALL` shell variable to the `<upcxx-install-path>`.
+[example/prog-guide/Makefile](example/prog-guide/Makefile). This directory also
+has code for running all the examples given in the programmer's guide. To use
+that `Makefile`, first set the `UPCXX_INSTALL` shell variable to the
+`<upcxx-install-path>`.
 
 ## UPC\+\+ Backends ##
 
@@ -110,12 +111,14 @@ script will assume sensible defaults for these parameters based on the
 installation configuration. The following environment variables can be set to
 influence which backend `upcxx-meta` selects:
 
-* `UPCXX_GASNET_CONDUIT=[smp|udp|aries|ibv]`: The GASNet conduit to use:
-   `smp` is the typical high-performance choice for single-node multi-core runs 
-   `udp` is a useful low-performance alternative for testing and debugging 
-   `aries` is the high-performance Cray XC network
-   `ibv` is the high-performance InfiniBand network
-  The default value is platform dependent.
+* `UPCXX_GASNET_CONDUIT=[smp|udp|aries|ibv]`: The GASNet conduit to use (the
+  default value is platform dependent):
+    * `smp` is the typical high-performance choice for single-node multi-core
+      runs .
+    * `udp` is a useful low-performance alternative for testing and debugging. 
+    * `aries` is the high-performance Cray XC network.
+    * `ibv` is the high-performance InfiniBand network.
+
 * `UPCXX_THREADMODE=[seq|par]`: The value `seq` limits the application to only
   calling "communicating" upcxx routines from the thread that invoked
   `upcxx::init`, and only while that thread is holding the master persona. The
@@ -125,6 +128,7 @@ influence which backend `upcxx-meta` selects:
   concurrency from a multi-threaded application but at the expensive of greater
   internal synchronization (higher overheads per operation).  The default value
   is always `seq`.
+  
 * `UPCXX_CODEMODE=[O3|debug]`: `O3` is for highly compiler-optimized
   code. `debug` produces unoptimized code, includes extra error checking
   assertions, and is annotated with the symbol tables needed by debuggers. The
