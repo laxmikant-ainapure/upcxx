@@ -137,11 +137,22 @@ influence which backend `upcxx-meta` selects:
 # Running UPC\+\+ Programs #
 
 To run a parallel UPC\+\+ application, use the `upcxx-run` launcher provided in
-the installation directory:
+the `utils` subdirectory in the installation.
 
 ```bash
-<upcxx-install-path>/bin/upcxx-run <ranks> <exe> <args...>
+<upcxx-install-path>/bin/upcxx-run -n <ranks> <exe> <args...>
 ```
 
 This will run the executable and arguments `<exe> <args...>` in a parallel
 context with `<ranks>` number of UPC\+\+ ranks.
+
+Upon startup, each UPC\+\+ rank creates a fixed-size shared memory heap that will never grow. By
+default, this heap is 128 MB per rank. This can be adjust by passing a `-shared-heap` parameter
+to the run script, which takes a suffix of KB, MB or GB; e.g. to reserve 1GB per rank, call:
+
+```bash
+<upcxx-install-path>/bin/upcxx-run -shared-heap 1G -n <ranks> <exe> <args...>
+```
+
+There are several additional options that can be passed to `upcxx-run`. Execute with `-h` to get a
+list of options. 
