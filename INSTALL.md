@@ -137,7 +137,7 @@ influence which backend `upcxx-meta` selects:
 # Running UPC\+\+ Programs #
 
 To run a parallel UPC\+\+ application, use the `upcxx-run` launcher provided in
-the `utils` subdirectory in the installation.
+the installation.
 
 ```bash
 <upcxx-install-path>/bin/upcxx-run -n <ranks> <exe> <args...>
