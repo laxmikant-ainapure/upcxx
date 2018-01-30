@@ -71,6 +71,18 @@ To run a test script, see [docs/testing.md](docs/testing.md)
 This is a BETA preview release of UPC++ v1.0. This release supports most of the
 functionality specified in the [UPC++ 1.0 Draft 5 Specification](docs/spec.pdf).
 
+New features/enhancements:
+
+ * Generalized completion. This allows the application to be notified about the
+   status of UPC\+\+ operations in a handful of ways. For each event, the user
+   is free to choose among: futures, promises, callbacks, delivery of remote
+   rpc, and in some cases even blocking until the event has occurred.
+ * Internal use of lock-free datastructures for `lpc` queues.
+     * Enabled by default. See [INSTALL.md](INSTALL.md) for instructions on how
+       to build UPC\+\+ with the older lock-based datastructure.
+ * Improvements to the `upcxx-run` command.
+ * Improvements to internal assertion checking and diagnostics.
+  
 The following features from that specification are not yet implemented:
 
  * Teams

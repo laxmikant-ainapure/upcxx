@@ -65,6 +65,14 @@ environment variables:
   publicly available GASNet-EX tarball.
 * `GASNET_CONFIGURE_ARGS`: List of additional command line arguments passed to
   GASNet's configure phase.
+* `UPCXX_LPC_INBOX=[lockfree|locked|syncfree]`. The implementation to use for
+  the internal `lpc` queues of personas.
+    * `lockfree`: (default) Highest performance: one atomic instruction per
+       enqueue.
+    * `locked`: Simple mutex-based linked list. Lower performance, but also
+       lower risk with respect to potential bugs in implementation.
+    * `syncfree`: Thread unsafe queues. Will not function correctly in a
+      multi-threaded context.
 
 # Compiling Against UPC\+\+ #
 
