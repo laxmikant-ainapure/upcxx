@@ -66,7 +66,7 @@ def upcxx_backend_id():
 
 def upcxx_lpc_inbox_id():
   return env('UPCXX_LPC_INBOX',
-             otherwise='locked',
+             otherwise='lockfree',
              universe=('locked','lockfree','syncfree'))
 
 @cached # only execute once per nobs invocation
