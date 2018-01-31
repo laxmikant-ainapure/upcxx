@@ -20,6 +20,7 @@ sys_info
 
 echo "Checking platform..."
 platform_sanity_checks
+platform_settings
 
 # Check for supported conduits
 eval "case '$CONDUIT' in
