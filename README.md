@@ -66,6 +66,9 @@ To run a test script, see [docs/testing.md](docs/testing.md)
 
 ## ChangeLog
 
+### PENDING: to eventually become Release 2018.3.0
+
+
 ### 2018.01.31: Release 2018.1.0 BETA
 
 This is a BETA preview release of UPC++ v1.0. This release supports most of the
