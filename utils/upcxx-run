@@ -1,78 +1,315 @@
-#!/usr/bin/env perl
-require 5.004;
-use strict;
+#!/usr/bin/env python
 
-my $debug = $ENV{'UPCXX_VERBOSE'} or 0;
+# make it also work with python 3
+from __future__ import print_function
 
-if (@ARGV < 2) {
-  my $myname = $0; $myname =~ s@^(.*/)@@;
-  print STDERR "usage: $myname <num_ranks> <executable> [arguments...]\n";
-  exit 1;
-}
+import sys
 
-my $np = shift;
-my $exe = shift;
+if sys.version_info < (2, 7, 5):
+    sys.stderr.write('ERROR: Python version >= 2.7.5 required\n')
+    exit(1)
 
-die "Value '$np' is not a valid rank count\n" unless ($np =~ /^[1-9][0-9]*$/);
-open (FILE, $exe) || die "Could not open executable '$exe'";
+import os
+import argparse
+import subprocess
+import string
+import re
 
-$exe = "./$exe" if not $exe =~ m@/@;
 
-my $conduit;
-{   local $/ = '$'; # use $ as the line break symbol
-    while (<FILE>) {
-        next unless(/^GASNet/);
-        if (/GASNetConduitName: ([A-Z]*) \$/o) {
-           $conduit = lc($1);
-           last;
-        }
-    }
-    close(FILE);
-}
+HEAPSZ_UNITS = ['m', 'mb', 'M', 'MB', 'g', 'gb', 'G', 'GB', 'T', 'TB']
+ONE_KB = 1024
+ONE_MB = ONE_KB * ONE_KB
+ONE_GB = ONE_MB * ONE_KB
+ONE_TB = ONE_GB * ONE_KB
 
-my @cmd;
-my $spawner;
-if (!$conduit) {
-  die "'$exe' does not appear to be a UPC++/GASNet executable\n";
-} elsif ($conduit eq 'smp') {
-    $ENV{'GASNET_PSHM_NODES'} = $np;
-    print "GASNET_PSHM_NODES=$np\n" if $debug;
-    @cmd = ( $exe );
-} elsif ($conduit eq 'udp') {
-    $spawner = 'amudprun';
-    @cmd = ( '-np', $np, $exe );
-} elsif (grep { /$conduit/ } qw/mpi ibv aries gemini pami/) {
-    $spawner = "gasnetrun_$conduit";
-    @cmd = ( '-n', $np, $exe );
-} else {
-    die "Unknown gasnet conduit '$conduit'\n";
-}
 
-if ($spawner) { 
-  # look for spawner in some known directories, otherwise rely on path
-  my $mypath = $0; $mypath =~ s@/[^/]*$@@;
-  my @spawner_path = (
-    ($ENV{'GASNET_PREFIX'} and "$ENV{'GASNET_PREFIX'}/bin"),
-    ($ENV{'GASNET_PREFIX'} and "$ENV{'GASNET_PREFIX'}/$conduit-conduit/contrib"),
-    ($ENV{'GASNET_PREFIX'} and "$ENV{'GASNET_PREFIX'}/other/amudp"),
-    ($mypath and "$mypath/../gasnet.debug/bin"),
-    ($mypath and "$mypath/../gasnet.opt/bin"),
-    ($ENV{'UPCXX_INSTALL'} and "$ENV{'UPCXX_INSTALL'}/gasnet.debug/bin"),
-    ($ENV{'UPCXX_INSTALL'} and "$ENV{'UPCXX_INSTALL'}/gasnet.opt/bin"),
-  );
-  print "spawner_path=".join(":", @spawner_path)."\n" if $debug;
-  foreach my $path (@spawner_path) {
-    if ($path and -x "$path/$spawner") {
-      $spawner = "$path/$spawner";
-      print "found spawner: $spawner\n" if $debug;
-      last;
-    }
-  }
-  unshift @cmd, $spawner;
-}
+# stores the arg parser usage string
+_parser = None
 
-push @cmd, @ARGV;
-print join(" ",@cmd)."\n" if $debug;
 
-exec (@cmd) || die $!;
+def ranks_type(a):
+    try:
+        v = int(a)
+    except ValueError:
+        raise argparse.ArgumentTypeError('invalid format (' + a + ') - must be an integer')
+    if v <= 0:
+        raise argparse.ArgumentTypeError('number of ranks must be an integer > 0')
+    return v
 
+
+def memstr_parse(s):
+    heapsz_units = '|'.join(HEAPSZ_UNITS)
+    m = re.search('^([1-9]\d*)(' + heapsz_units + ')$', s)
+    if not m:
+        return None
+    num = int(m.group(1))
+    if 'M' in m.group(2).upper():
+        num *= ONE_MB
+    else:
+        num *= ONE_GB
+    return num
+    
+
+def heapsz_type(a):
+    num = memstr_parse(a)
+    if num is None:
+        raise argparse.ArgumentTypeError('shared heap must be an integer > 0 and have a suffix of one of: ' + \
+                                         ', '.join(HEAPSZ_UNITS))
+    return num
+
+    
+def load_args():
+    global _parser
+    _parser = argparse.ArgumentParser(description='A portable parallel job launcher for UPC++ programs, v1.0')
+    _parser.add_argument('-n', '-np', dest='nranks', type=ranks_type, default=None, metavar='NUM',
+                         help='Spawn NUM number of UPC++ ranks. Required.')
+    _parser.add_argument('-shared-heap', dest='heapsz', type=heapsz_type, default='128MB',
+                         help='Requests HEAPSZ size of shared memory per rank. ' + \
+                        'Units must be specified as ' + ', '.join(HEAPSZ_UNITS) + '. Default %(default)s')
+    _parser.add_argument('-backtrace', dest='backtrace', default=False, action='store_true',
+                         help='Enable backtraces. Compile with -g for full debugging information.')
+    _parser.add_argument('-show', dest='show', default=False, action='store_true',
+                         help='Testing: don\'t start the job, just output the command line that would ' + \
+                        'have been executed')
+    _parser.add_argument('-info', dest='info', default=False, action='store_true',
+                         help='Display useful information about the executable')
+    _parser.add_argument('-ssh-servers', dest='sshservers', type=str, default=None, metavar='HOSTS',
+                         help='List of SSH servers, comma separated.')
+    _parser.add_argument('-localhost', dest='localhost', default=False, action='store_true',
+                         help='Run UDP-conduit program on local host only')
+    _parser.add_argument('-v', dest='verbose', default=False, action='store_true',
+                         help='Verbose output')
+    _parser.add_argument('-vv', dest='veryverbose', default=False, action='store_true',
+                         help='Very verbose output')
+    cmd_arg_group = _parser.add_argument_group('command to execute')
+    cmd_arg_group.add_argument('cmd', default=None, metavar='command', help='UPC++ executable')
+    cmd_arg_group.add_argument('cmd_args', default=[], nargs=argparse.REMAINDER, metavar='...',
+                               help='arguments')
+
+    _parser._optionals.title = 'options'
+    return _parser.parse_args()
+
+
+def print_error_and_abort(err):
+    _parser.print_usage()
+    print('\nError: ' + err)
+    sys.exit(0)
+    
+
+def is_printable(text, printables=""):
+    return set(str(text)) - set(string.printable + printables) == set()
+
+
+def print_info(command):
+    try:
+        if sys.version_info[0] == 2:
+            f = open(command, 'r')
+        else:
+            f = open(command, 'r', encoding='ISO-8859-1')
+        for line in f:
+            for field in line.split('$'):
+                if not is_printable(field) or len(field) <= 1:
+                    continue
+                if field.startswith('GASNET') or field.startswith('GASNet') or field.startswith('UPCXX') or \
+                   field.startswith('upcxx') or field.startswith('AMUDP'):
+                    if ':' in field and not '%' in field:
+                        print(field.strip())
+        f.close()
+    except IOError as err:
+        print('Error: ' + err.strerror + ': "' + command + '"')
+        sys.exit(1)
+
+
+def get_key_in_exec(command, key):
+    try:
+        if sys.version_info[0] == 2:
+            f = open(command, 'r')
+        else:
+            f = open(command, 'r', encoding='ISO-8859-1')
+        for line in f:
+            for field in line.split('$'):
+                if field.startswith(key):
+                    return field[len(key):].strip()
+        f.close()
+    except IOError as err:
+        print('Error: ' + err.strerror + ': "' + command + '"')
+        sys.exit(1)
+    return None
+    
+
+def get_conduit(command):
+    conduit = get_key_in_exec(command, 'GASNetConduitName:')
+    return None if not conduit else conduit.lower()
+
+
+def get_gasnet_max_segsize(command):
+    try:
+        segsize = get_key_in_exec(command, 'GASNetDefaultMaxSegsize:')
+        return eval(re.sub('\(_*u?int64_t\)', '', segsize))
+    except:
+        print_error_and_abort(command + ' does not appear to be a UPC++ executable')
+
+
+def set_ssh_servers(ssh_servers, nranks, conduit):
+    split_chars = ',|/|;|:| '
+    if conduit != 'udp':
+        split_chars += '|\t|\n|\r'
+    if ssh_servers:
+        num_servers = len(re.split(split_chars, ssh_servers))
+    elif 'GASNET_SSH_SERVERS' in os.environ:
+        num_servers = len(re.split(split_chars, os.environ['GASNET_SSH_SERVERS']))
+    elif 'SSH_SERVERS' in os.environ:
+        num_servers = len(re.split(split_chars, os.environ['SSH_SERVERS']))
+    else:
+        num_servers = 0
+
+    if conduit == 'udp' and num_servers > 0 and num_servers < nranks:
+        print_error_and_abort('For UDP conduit, need to specify at least one host per rank in ' + \
+                              '-ssh-servers or environment variable GASNET_SSH_SERVERS, or use -localhost parameter')
+        
+    # FIXME: this leaves all the checking to gasnet. This has the disadvantage that the error
+    # messsages will only refer to environment variables as solutions, and not mention parameters
+    # to upcxx-run. Hopefully we can make this more friendly in future.
+    if num_servers == 0:
+        return
+    
+    if ssh_servers:
+        os.environ['SSH_SERVERS'] = ssh_servers
+        os.environ['GASNET_SSH_SERVERS'] = ssh_servers
+        os.environ['GASNET_SPAWNFN'] = 'S'
+        os.environ['GASNET_IBV_SPAWNFN'] = 'ssh'
+
+    
+def main():
+    args = load_args()
+    
+    if not args.info and not args.nranks:
+        print_error_and_abort('Must specify the number of ranks, -n or -np')
+
+    if os.path.basename(args.cmd) == args.cmd:
+        args.cmd = './' + args.cmd
+    cmd = [args.cmd]
+    conduit = get_conduit(args.cmd)
+    if not conduit:
+        print_error_and_abort('"' + args.cmd + '" does not appear to be a UPC++/GASNet executable')
+
+    if args.info:
+        print_info(args.cmd)
+        return 0
+        
+    spawner = None
+    if args.veryverbose:
+        os.environ['GASNET_VERBOSEENV'] = '1'
+        args.verbose = True
+
+    if args.verbose:
+        print('UPCXX_RUN:', args.cmd, 'is compiled with', conduit, 'conduit')
+
+    if args.sshservers and args.localhost:
+        print_error_and_abort('Conflicting options: cannot specify both -ssh-servers and -localhost')
+        
+    if conduit == 'smp':
+        os.environ['GASNET_PSHM_NODES'] = str(args.nranks)
+    elif conduit == 'udp':
+        spawner = 'amudprun'
+        cmd = ['-np', str(args.nranks)] + cmd
+        if args.localhost:
+            os.environ['GASNET_SPAWNFN'] = 'L'
+        else:
+            set_ssh_servers(args.sshservers, args.nranks, conduit)
+    elif conduit in ['mpi', 'ibv', 'aries', 'gemini', 'pami']:
+        spawner = 'gasnetrun_' + conduit
+        cmd = ['-n', str(args.nranks)] + cmd
+        if conduit == 'ibv':
+            set_ssh_servers(args.sshservers, args.nranks, conduit)
+    else:
+        print_error_and_abort('Unknown GASNet conduit: ' + conduit)
+        
+    if conduit != 'udp' and args.localhost:
+        print('Ignoring -localhost setting: only applies to UDP conduit, not', conduit)
+        
+    if args.sshservers and conduit not in ['udp', 'ibv']:
+        print('Ignoring -ssh-servers setting: only applies to UDP and IBV conduits, not', conduit)
+        
+    try:
+        gasnet_max_segsize = memstr_parse(os.environ['GASNET_MAX_SEGSIZE'])
+        if gasnet_max_segsize == None:
+            print_error_and_abort('GASNET_MAX_SEGSIZE setting is wrong. It must be an integer, with a suffix of ' + \
+                                  ', '.join(HEAPSZ_UNITS))
+
+    except KeyError:
+        # look for segsize in executable
+        gasnet_max_segsize = get_gasnet_max_segsize(args.cmd)
+        if args.verbose:
+            print('UPCXX_RUN: GASNet max_segsize defaults to', gasnet_max_segsize, 'bytes')
+
+    if args.cmd_args:
+        cmd += args.cmd_args
+    
+    if spawner:
+        if args.verbose:
+            print('UPCXX_RUN: Looking for spawner "' + spawner + '" in:')
+        paths = []
+        try:
+            gasnet_prefix = os.environ['GASNET_PREFIX']
+            paths.append(gasnet_prefix + '/bin')
+            paths.append(gasnet_prefix + '/' + conduit + '-conduit/contrib')
+            paths.append(gasnet_prefix + '/other/amudp')
+        except KeyError:
+            pass
+        mypath = os.path.dirname(os.path.realpath(__file__))
+        paths.append(mypath + '/../gasnet.opt/bin')
+        paths.append(mypath + '/../gasnet.debug/bin')
+        try:
+            upcxx_install = os.environ['UPCXX_INSTALL']
+            paths.append(upcxx_install + '/gasnet.opt/bin')
+            paths.append(upcxx_install + '/gasnet.debug/bin')
+        except KeyError:
+            pass
+        spawner_path = None
+        for path in paths:
+            if args.verbose:
+                print('UPCXX_RUN:    ' + path)
+            if os.path.exists(path):
+                if os.path.exists(path + '/' + spawner):
+                    spawner_path = path + '/' + spawner
+                    break
+        if spawner_path:
+            vflag = []
+            if args.verbose:
+                print('UPCXX_RUN: Found spawner "' + spawner_path + '"')
+            if args.veryverbose:
+                vflag = ['-v']
+            cmd = [spawner_path] + vflag + cmd
+        else:
+            print_error_and_abort('Could not find spawner "' + spawner + '"')
+
+    os.environ['UPCXX_SEGMENT_MB'] = str(args.heapsz / ONE_MB)
+    if gasnet_max_segsize <= args.heapsz + 4 * ONE_MB:
+        old_segsize = gasnet_max_segsize
+        gasnet_max_segsize = args.heapsz + 4 * ONE_MB
+        if gasnet_max_segsize < 10 * ONE_MB:
+            gasnet_max_segsize = 10 * ONE_MB
+        print('WARNING: GASNET_MAX_SEGSIZE', old_segsize, 'is too low for a shared heap of %d;' % args.heapsz, 
+              'setting to', gasnet_max_segsize)
+        os.environ['GASNET_MAX_SEGSIZE'] = str(gasnet_max_segsize / ONE_MB) + 'M'
+
+    if args.backtrace:
+        os.environ['GASNET_BACKTRACE'] = '1'
+
+    if args.verbose or args.show:
+        print('UPCXX_RUN: Environment:')
+        for env_key in sorted(os.environ):
+            if env_key.startswith('GASNET') or env_key.startswith('UPCXX') or env_key == 'SSH_SERVERS':
+                print('UPCXX_RUN:   ', env_key, '=', os.environ[env_key])
+        print('UPCXX_RUN: Command line:\n')
+        print('    ' + ' '.join(cmd))
+        print('')
+
+    if not args.show:
+        subprocess.call(cmd)
+
+
+        
+if __name__ == '__main__':
+    main()

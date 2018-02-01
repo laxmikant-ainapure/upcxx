@@ -35,18 +35,24 @@ else
   exit 1
 fi
 
+trap failure_and_die ERR
+
 . sourceme
 install_to=$(absify "$install_to")
 
 . utils/system-checks.sh
 sys_info
 platform_sanity_checks
+platform_settings
 
 if [ "$single" -eq 1 ]; then
   nobs install src/upcxx.cpp "$install_to" \
     || failure_and_die
 else
-  rm -rf .nobs
+  # Let's not purge nobs before each install FOR DEVELOPERS to:
+  #  1. Make installations after incremental updates fast.
+  #  2. Encourage devs tripping on remaining bugs, so they can be reported.
+  test -d .git || rm -rf .nobs
   
   case $(nobs gasnet_user_kind) in
   tarball|tarball-url|source)
@@ -57,7 +63,7 @@ else
   esac
   
   function foreach_codemode {
-    export DBGSYM=1 OPTLEV=0
+    export ASSERT=1 DBGSYM=1 OPTLEV=0
     export upcxx_codemode='debug'
     export gasnet_codemode='debug'
     foreach_backend
@@ -65,23 +71,23 @@ else
     if false; then
       # Attempting O2 is pointless since gasnet forces everyone to O3
       # through the CXXFLAGS it exports in makefile fragments.
-      export DBGSYM=0 OPTLEV=2
+      export ASSERT=0 DBGSYM=0 OPTLEV=2
       export upcxx_codemode='O2'
       export gasnet_codemode='opt'
       foreach_backend
     fi
     
-    export DBGSYM=0 OPTLEV=3
+    export ASSERT=0 DBGSYM=0 OPTLEV=3
     export upcxx_codemode='O3'
     export gasnet_codemode='opt'
     foreach_backend
   }
   
   function foreach_backend {
-    export UPCXX_BACKEND=gasnet1_seq
+    export UPCXX_BACKEND=gasnet_seq
     foreach_conduit
     
-    export UPCXX_BACKEND=gasnetex_par
+    export UPCXX_BACKEND=gasnet_par
     foreach_conduit
   }
   
@@ -106,13 +112,27 @@ else
   conduit_default=$(GASNET_CONDUIT='' nobs gasnet_conduit)
   
   mkdir -p "${install_to}/bin"
-  cat <<EOF >"${install_to}/bin/upcxx-meta"
+  cat <<EOF >| "${install_to}/bin/upcxx-meta"
 #!/bin/bash
+# This file is generated during installation - do not edit
 
 function echo_and_die {
   echo \$* >&2
   exit 1
 }
+
+PARAMS="PPFLAGS LIBFLAGS LDFLAGS CXX CC GASNET_CONDUIT GASNET_INSTALL"
+FAIL=true
+for P in \$PARAMS; do
+    if [[ "\$1" == "\$P" ]]; then
+        FAIL=false
+        break
+    fi
+done
+
+if [[ \$FAIL == true ]]; then
+    echo_and_die "Error: parameter passed to upcxx-meta must be one of \$PARAMS"
+fi
 
 case \${UPCXX_CODEMODE} in
 "")
@@ -149,10 +169,10 @@ esac
 
 case \${UPCXX_THREADMODE} in
 seq)
-  UPCXX_BACKEND=gasnet1_seq
+  UPCXX_BACKEND=gasnet_seq
   ;;
 par)
-  UPCXX_BACKEND=gasnetex_par
+  UPCXX_BACKEND=gasnet_par
   ;;
 esac
 
@@ -161,6 +181,11 @@ EOF
   chmod 755 "${install_to}/bin/upcxx-meta"
   cp ./utils/upcxx-run "${install_to}/bin/upcxx-run"
   chmod 755 "${install_to}/bin/upcxx-run"
+  # install documentation
+  docdir="${install_to}/share/doc/upcxx"
+  mkdir -p $docdir
+  cp -f -R README.md LICENSE.txt docs $docdir
+  chmod -R a+rX $docdir
 fi
 
 echo "UPC++ successfully installed"

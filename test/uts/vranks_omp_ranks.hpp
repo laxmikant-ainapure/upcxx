@@ -1,5 +1,5 @@
-#ifndef _f387e40c_d7ab_4dbf_a130_3bcd835cc3b9
-#define _f387e40c_d7ab_4dbf_a130_3bcd835cc3b9
+#ifndef _6dd7e289_751e_45bc_90dc_006795a19ea7
+#define _6dd7e289_751e_45bc_90dc_006795a19ea7
 
 #include <upcxx/backend.hpp>
 #include <upcxx/persona.hpp>
@@ -7,16 +7,16 @@
 #include <upcxx/os_env.hpp>
 
 #include <atomic>
-#include <thread>
 #include <vector>
 
+#include <omp.h>
 #include <sched.h>
 
 #if defined(UPCXX_BACKEND) && !UPCXX_BACKEND_GASNET_PAR
   #error "UPCXX_BACKEND must be gasnet_par"
 #endif
 
-#define VRANKS_IMPL "ranks+threads"
+#define VRANKS_IMPL "ranks+omp"
 #define VRANK_LOCAL thread_local
 
 namespace vranks {
@@ -44,34 +44,26 @@ namespace vranks {
     thread_per_rank = upcxx::os_env<int>("THREADS", 4);
     thread_agents.resize(thread_per_rank);
     
-    std::vector<std::thread*> threads{(unsigned)thread_per_rank};
-    std::atomic<int> bar0{0}, bar1{0};
+    std::atomic<int> bar1{0};
+
+    omp_set_num_threads(thread_per_rank);
     
-    auto thread_main = [&](int thread_me) {
+    #pragma omp parallel num_threads(thread_per_rank)
+    {
+      int thread_me = omp_get_thread_num();
       thread_agents[thread_me] = &upcxx::default_persona();
       
-      bar0.fetch_add(1);
-      while(bar0.load(std::memory_order_acquire) != thread_per_rank)
-        sched_yield();
+      #pragma omp barrier
       
       fn(
         /*agent_me*/thread_me + thread_per_rank*upcxx::rank_me(),
         /*agent_n*/thread_per_rank*upcxx::rank_n()
       );
       
+      // cant omp barrier because we have to service progress
       bar1.fetch_add(1);
       while(bar1.load(std::memory_order_acquire) != thread_per_rank)
         upcxx::progress();
-    };
-    
-    for(int t=1; t < thread_per_rank; t++)
-      threads[t] = new std::thread{thread_main, t};
-    
-    thread_main(0);
-    
-    for(int t=1; t < thread_per_rank; t++) {
-      threads[t]->join();
-      delete threads[t];
     }
     
     upcxx::finalize();

@@ -125,7 +125,7 @@ decreasing precedence:
 ## External GASNet ##
 
 Setting the `GASNET` environment variable to point to the absolute path of a
-configured and built, or installed, GASNetEx directory will cause `nobs` to skip
+configured and built, or installed, GASNet-EX directory will cause `nobs` to skip
 building its own. It is your responsibility that the compilers found by the
 compiler selection mechanism above are compatible with those used by the given
 gasnet. It is an error to have both the `GASNET` and `CROSS` variables set

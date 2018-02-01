@@ -1,10 +1,21 @@
 #ifndef _f93ccf7a_35a8_49c6_b7b2_55c3c1a9640c
 #define _f93ccf7a_35a8_49c6_b7b2_55c3c1a9640c
 
-/* This header declares some core user-facing API without
- * pulling in any of its imlpementation. Non-parallel programs can 
- * safely include this so long as they dont use anything besides
- * upcxx::rank_n/me().
+#ifndef UPCXX_BACKEND_GASNET_SEQ
+  #define UPCXX_BACKEND_GASNET_SEQ 0
+#endif
+
+#ifndef UPCXX_BACKEND_GASNET_PAR
+  #define UPCXX_BACKEND_GASNET_PAR 0
+#endif
+
+#define UPCXX_BACKEND_GASNET (UPCXX_BACKEND_GASNET_SEQ | UPCXX_BACKEND_GASNET_PAR)
+
+/* This header declares some core user-facing API to break include
+ * cycles with headers included by the real "backend.hpp". This header
+ * does not pull in the implementation of what it exposes, so you can't
+ * use anything that has a runtime analog unless guarded by a:
+ *   #ifdef UPCXX_BACKEND
  */
 
 #include <cstddef>
@@ -32,7 +43,7 @@ namespace upcxx {
                  std::size_t alignment = alignof(std::max_align_t));
   void deallocate(void *p);
   
-  void progress(progress_level lev = progress_level::user);
+  void progress(progress_level level = progress_level::user);
   
   void barrier();
 }
@@ -42,42 +53,27 @@ namespace upcxx {
 
 namespace upcxx {
 namespace backend {
-  // These are actually defined in diagnostic.cpp so that asserts can
-  // print the current rank without pulling in the backend for
-  // non-parallel programs.
+  extern int init_count;
   extern intrank_t rank_n;
   extern intrank_t rank_me;
 }}
   
-// We dispatch on backend type using preprocessor symbol which is
-// defined to be another symbol that otherwise doesn't exist. So we
-// define and immediately undefine them.
-#define gasnet1_seq 100
-#define gasnetex_par 101
-#if UPCXX_BACKEND == gasnet1_seq
-  #undef gasnet1_seq
-  #undef gasnetex_par
-  
-  namespace upcxx {
-  namespace backend {
-    struct persona_state {};
-  }}
-#elif UPCXX_BACKEND == gasnetex_par
-  #undef gasnet1_seq
-  #undef gasnetex_par
-  
+#if UPCXX_BACKEND_GASNET_PAR
   #include <upcxx/backend/gasnet/handle_cb.hpp>
   
   namespace upcxx {
   namespace backend {
     struct persona_state {
+      // personas carry their list of oustanding gasnet handles
       gasnet::handle_cb_queue hcbs;
     };
   }}
 #else
   namespace upcxx {
   namespace backend {
-    struct persona_state {};
+    struct persona_state {
+      // personas carry no extra state
+    };
   }}
 #endif
 

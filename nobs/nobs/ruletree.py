@@ -421,6 +421,8 @@ def _everything():
     path_root = os_path_abspath(path_root)
     node_cache = {}
     node_cache_get = node_cache.get
+    node_root = None # defined after node_at()
+    node_empty = (None, {}, {}.get, {}, {}.get)
     
     # Node: (parent, defs, defs.get, clis, clis.get),
     #   parent: Node
@@ -434,18 +436,23 @@ def _everything():
       if node is not node_cache_get:
         return node
       
-      path_parent = os_path_dirname(path)
+      def slashed(path):
+        slash = os.path.sep
+        return path + slash*(not path.endswith(slash))
+      
+      if not slashed(path).startswith(slashed(path_root)):
+        return node_root
       
       try:
         same_as_root = os_path_samefile(path_root, path)
       except OSError:
         same_as_root = False
       
-      if not same_as_root and path_parent != path:
-        parent = node_at(path_parent)
+      if not same_as_root:
+        parent = node_at(os_path_dirname(path))
       else:
         nil = {}
-        parent = (None, nil, nil.get, nil, nil.get)
+        parent = node_empty
       
       path_rule = os_path_join(path, 'nobsrule.py')
       try:
@@ -556,7 +563,14 @@ def _everything():
               y_nd = nd_defs_get(x, nd_defs_get)
               
               if y_nd is nd_defs_get:
-                raise NameError("No definition for '%s'." % x)
+                if patharg is not None:
+                  raise NameError(
+"No definition for '"+x+"' found. Make sure a rule-definition exists in " +
+"'"+os.path.join(path_root, 'nobsrule.py')+"' or in a 'nobsrule.py' " +
+"within that directory tree along the path to '"+patharg(a,kw)+"'."
+                  )
+                else:
+                  raise NameError("No definition for '%s'"%x)
               
               y, nd = y_nd
               nd_parent, _, _, _, _ = nd

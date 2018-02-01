@@ -1,11 +1,12 @@
 #include <upcxx/backend/gasnet/runtime.hpp>
-
+#include <upcxx/backend/gasnet/runtime_internal.hpp>
 #include <upcxx/backend/gasnet/rpc_inbox.hpp>
+
 #include <upcxx/os_env.hpp>
 
 #include <cstring>
 
-#include <gasnet.h>
+#include <sched.h>
 #include <unistd.h>
 
 namespace backend = upcxx::backend;
@@ -13,9 +14,11 @@ namespace detail  = upcxx::detail;
 namespace gasnet  = upcxx::backend::gasnet;
 
 using upcxx::future;
+using upcxx::intrank_t;
 using upcxx::parcel_reader;
 using upcxx::parcel_writer;
 using upcxx::persona;
+using upcxx::persona_scope;
 using upcxx::progress_level;
 
 using backend::persona_state;
@@ -28,107 +31,146 @@ using namespace std;
 
 ////////////////////////////////////////////////////////////////////////
 
-#if UPCXX_GASNET1_SEQ && !GASNET_SEQ
-  #error "This backend is gasnet-seq only!"
-#endif
+#if !NOBS_DISCOVERY
+  #if UPCXX_BACKEND_GASNET_SEQ && !GASNET_SEQ
+    #error "This backend is gasnet-seq only!"
+  #endif
 
-#if UPCXX_GASNETEX_PAR && !GASNET_PAR
-  #error "This backend is gasnet-par only!"
+  #if UPCXX_BACKEND_GASNET_PAR && !GASNET_PAR
+    #error "This backend is gasnet-par only!"
+  #endif
+
+  #if GASNET_SEGMENT_EVERYTHING
+    #error "Segment-everything not supported."
+  #endif
 #endif
 
 static_assert(
-  sizeof(gasnet_handle_t) <= sizeof(uintptr_t),
-  "gasnet_handle_t doesn't fit into a machine word!"
+  sizeof(gex_Event_t) == sizeof(uintptr_t),
+  "Failed: sizeof(gex_Event_t) == sizeof(uintptr_t)"
 );
 
 ////////////////////////////////////////////////////////////////////////
 // from: upcxx/backend.hpp
 
-upcxx::persona backend::master;
-upcxx::persona_scope *backend::initial_master_scope = nullptr;
+int backend::init_count = 0;
+  
+intrank_t backend::rank_n = -1;
+intrank_t backend::rank_me; // leave undefined so valgrind can catch it.
+
+persona backend::master;
+persona_scope *backend::initial_master_scope = nullptr;
 
 ////////////////////////////////////////////////////////////////////////
 // from: upcxx/backend/gasnet/runtime.hpp
 
 size_t gasnet::am_size_rdzv_cutover;
 
+#if UPCXX_BACKEND_GASNET_SEQ
+  handle_cb_queue gasnet::master_hcbs;
+#endif
+
+////////////////////////////////////////////////////////////////////////
+// from: upcxx/backend/gasnet/runtime_internal.hpp
+
+gex_TM_t gasnet::world_team;
+
 ////////////////////////////////////////////////////////////////////////
 
 namespace {
-  int init_count_ = 0;
-  
+  // master-owned
   rpc_inbox rpcs_internal_;
   rpc_inbox rpcs_user_;
-  
-  #if UPCXX_GASNET1_SEQ
-    handle_cb_queue hcbs_;
-  #elif UPCXX_GASNETEX_PAR
-    // in par-mode personas carry their own handle_cb_queue in persona_state
-  #endif
 }
 
 ////////////////////////////////////////////////////////////////////////
 
 namespace {
-  void after_gasnet();
-  
   enum {
-    id_am_eager_restricted = 128,
+    id_am_eager_restricted = GEX_AM_INDEX_BASE,
     id_am_eager_master,
     id_am_eager_persona
   };
     
-  void am_eager_restricted(gasnet_token_t, void *buf, size_t buf_size, gasnet_handlerarg_t buf_align);
-  void am_eager_master(gasnet_token_t, void *buf, size_t buf_size, gasnet_handlerarg_t buf_align_and_level);
-  void am_eager_persona(gasnet_token_t, void *buf, size_t buf_size, gasnet_handlerarg_t buf_align_and_level,
-                        gasnet_handlerarg_t persona_ptr_lo, gasnet_handlerarg_t persona_ptr_hi);
+  void am_eager_restricted(gex_Token_t, void *buf, size_t buf_size, gex_AM_Arg_t buf_align);
+  void am_eager_master(gex_Token_t, void *buf, size_t buf_size, gex_AM_Arg_t buf_align_and_level);
+  void am_eager_persona(gex_Token_t, void *buf, size_t buf_size, gex_AM_Arg_t buf_align_and_level,
+                        gex_AM_Arg_t persona_ptr_lo, gex_AM_Arg_t persona_ptr_hi);
+
+  #define AM_ENTRY(name, arg_n) \
+    {id_##name, (void(*)())name, GEX_FLAG_AM_MEDIUM | GEX_FLAG_AM_REQUEST, arg_n, nullptr, #name}
+  
+  gex_AM_Entry_t am_table[] = {
+    AM_ENTRY(am_eager_restricted, 1),
+    AM_ENTRY(am_eager_master, 1),
+    AM_ENTRY(am_eager_persona, 3)
+  };
 }
 
 ////////////////////////////////////////////////////////////////////////
 
-#if !GASXX_SEGMENT_EVERYTHING
-  #include <upcxx/dl_malloc.h>
-  
-  namespace {
-    std::mutex segment_lock_;
-    mspace segment_mspace_;
-  }
-#endif
+#include <upcxx/dl_malloc.h>
+
+namespace {
+  std::mutex segment_lock_;
+  mspace segment_mspace_;
+}
   
 ////////////////////////////////////////////////////////////////////////
 // from: upcxx/backend.hpp
 
 void upcxx::init() {
-  if(0 != init_count_++)
+  if(0 != backend::init_count++)
     return;
   
   int ok;
-  
-  ok = gasnet_init(nullptr, nullptr);
+
+  gex_Client_t client;
+  gex_EP_t endpoint;
+  gex_Segment_t segment;
+
+  ok = gex_Client_Init(
+    &client, &endpoint, &gasnet::world_team,
+    "upcxx", nullptr, nullptr, 0
+  );
   UPCXX_ASSERT_ALWAYS(ok == GASNET_OK);
-  
-  gasnet_handlerentry_t am_table[] = {
-    {id_am_eager_restricted, (void(*)())am_eager_restricted},
-    {id_am_eager_master,     (void(*)())am_eager_master},
-    {id_am_eager_persona,    (void(*)())am_eager_persona}
-  };
-  
+
   size_t segment_size = size_t(os_env<double>("UPCXX_SEGMENT_MB", 128)*(1<<20));
+  // page size should always be a power of 2
+  segment_size = (segment_size + GASNET_PAGESIZE-1) & -GASNET_PAGESIZE;
   // Do this instead? segment_size = gasnet_getMaxLocalSegmentSize();
   
-  backend::rank_n = gasnet_nodes();
-  backend::rank_me = gasnet_mynode();
+  backend::rank_n = gex_TM_QuerySize(gasnet::world_team);
+  backend::rank_me = gex_TM_QueryRank(gasnet::world_team);
+  
+  // now adjust the segment size if it's less than the GASNET_MAX_SEGSIZE
+  size_t gasnet_max_segsize = gasnet_getMaxLocalSegmentSize();
+  if (segment_size > gasnet_max_segsize) {
+      if (upcxx::rank_me() == 0) 
+          cerr << "WARNING: Requested UPCXX segment size (" << segment_size << ") "
+              "is larger than the GASNet segment size (" << gasnet_max_segsize << "). "
+              "Adjusted segment size to " << (gasnet_max_segsize) << ".\n";
+      segment_size = gasnet_max_segsize;
+  }
   
   backend::initial_master_scope = new persona_scope{backend::master};
   
-  ok = gasnet_attach(
-    am_table, sizeof(am_table)/sizeof(am_table[0]),
-    segment_size & -GASNET_PAGESIZE, // page size should always be a power of 2
-    0
-  );
+  ok = gex_Segment_Attach(&segment, gasnet::world_team, segment_size);
   UPCXX_ASSERT_ALWAYS(ok == GASNET_OK);
-  
-  size_t am_medium_size = gasnet_AMMaxMedium();
+
+  ok = gex_EP_RegisterHandlers(endpoint, am_table, sizeof(am_table)/sizeof(am_table[0]));
+  UPCXX_ASSERT_ALWAYS(ok == GASNET_OK);
+
+  size_t am_medium_size = gex_AM_MaxRequestMedium(
+    gasnet::world_team,
+    GEX_RANK_INVALID,
+    GEX_EVENT_NOW,
+    /*flags*/0,
+    3
+  );
+  gasnet_barrier_notify(0, GASNET_BARRIERFLAG_ANONYMOUS);
+  ok = gasnet_barrier_wait(0, GASNET_BARRIERFLAG_ANONYMOUS);
+  UPCXX_ASSERT_ALWAYS(ok == GASNET_OK);
   
   /* TODO: I pulled this from thin air. We want to lean towards only
    * sending very small messages eagerly so as not to clog the landing
@@ -145,21 +187,22 @@ void upcxx::init() {
                              1024;
   
   // setup shared segment allocator
-  #if !GASXX_SEGMENT_EVERYTHING
-    gasnet_seginfo_t *segs = new gasnet_seginfo_t[backend::rank_n];
-    gasnet_getSegmentInfo(segs, backend::rank_n);
-    gasnet_seginfo_t seg_me = segs[backend::rank_me];
-    delete[] segs;
-    
-    segment_mspace_ = create_mspace_with_base(seg_me.addr, seg_me.size, 1);
-    mspace_set_footprint_limit(segment_mspace_, seg_me.size);
-  #endif
+  void *segment_base;
+  
+  ok = gex_Segment_QueryBound(
+    gasnet::world_team, backend::rank_me,
+    &segment_base, nullptr, &segment_size
+  );
+  UPCXX_ASSERT_ALWAYS(ok == GASNET_OK);
+  
+  segment_mspace_ = create_mspace_with_base(segment_base, segment_size, 1);
+  mspace_set_footprint_limit(segment_mspace_, segment_size);
 }
 
 void upcxx::finalize() {
-  UPCXX_ASSERT_ALWAYS(init_count_ > 0);
+  UPCXX_ASSERT_ALWAYS(backend::init_count > 0);
   
-  if(0 != --init_count_)
+  if(0 != --backend::init_count)
     return;
   
   upcxx::barrier();
@@ -187,81 +230,25 @@ void upcxx::barrier() {
 }
 
 void* upcxx::allocate(size_t size, size_t alignment) {
-  #if !GASXX_SEGMENT_EVERYTHING
-    #if UPCXX_GASNET1_SEQ
-      UPCXX_ASSERT(backend::master.active_with_caller());
-    #elif UPCXX_GASNETEX_PAR
-      std::lock_guard<std::mutex> locked{segment_lock_};
-    #endif
-    
-    void *p = mspace_memalign(segment_mspace_, alignment, size);
-    //UPCXX_ASSERT(p != nullptr);
-    return p;
-  #else
-    return operator new(size);
+  #if UPCXX_BACKEND_GASNET_SEQ
+    UPCXX_ASSERT(backend::master.active_with_caller());
+  #elif UPCXX_BACKEND_GASNET_PAR
+    std::lock_guard<std::mutex> locked{segment_lock_};
   #endif
+  
+  void *p = mspace_memalign(segment_mspace_, alignment, size);
+  //UPCXX_ASSERT(p != nullptr);
+  return p;
 }
 
 void upcxx::deallocate(void *p) {
-  #if !GASXX_SEGMENT_EVERYTHING
-    #if UPCXX_GASNET1_SEQ
-      UPCXX_ASSERT(backend::master.active_with_caller());
-    #elif UPCXX_GASNETEX_PAR
-      std::lock_guard<std::mutex> locked{segment_lock_};
-    #endif
-    
-    mspace_free(segment_mspace_, p);
-  #else
-    operator delete(p);
-  #endif
-}
-
-void backend::rma_get(
-    void *buf_d,
-    intrank_t rank_s,
-    void const *buf_s,
-    size_t buf_size,
-    backend::rma_get_cb *cb
-  ) {
-  
-  UPCXX_ASSERT(!UPCXX_GASNET1_SEQ || backend::master.active_with_caller());
-  
-  gasnet_handle_t handle = gasnet_get_nb_bulk(
-    buf_d, rank_s, const_cast<void*>(buf_s), buf_size
-  );
-  cb->handle = reinterpret_cast<uintptr_t>(handle);
-  
-  #if UPCXX_GASNET1_SEQ
-    hcbs_.enqueue(cb);
-  #elif UPCXX_GASNETEX_PAR
-    upcxx::current_persona().backend_state_.hcbs.enqueue(cb);
+  #if UPCXX_BACKEND_GASNET_SEQ
+    UPCXX_ASSERT(backend::master.active_with_caller());
+  #elif UPCXX_BACKEND_GASNET_PAR
+    std::lock_guard<std::mutex> locked{segment_lock_};
   #endif
   
-  after_gasnet();
-}
-
-void backend::rma_put(
-    intrank_t rank_d,
-    void *buf_d,
-    void const *buf_s,
-    size_t buf_size,
-    backend::rma_put_cb *cb
-  ) {
-  
-  UPCXX_ASSERT(!UPCXX_GASNET1_SEQ || backend::master.active_with_caller());
-  
-  gasnet_handle_t handle = gasnet_put_nb_bulk(
-    rank_d, buf_d, const_cast<void*>(buf_s), buf_size
-  );
-  cb->handle = reinterpret_cast<uintptr_t>(handle);
-  
-  #if UPCXX_GASNET1_SEQ
-    hcbs_.enqueue(cb);
-  #elif UPCXX_GASNETEX_PAR
-    upcxx::current_persona().backend_state_.hcbs.enqueue(cb);
-  #endif
-  
-  after_gasnet();
+  mspace_free(segment_mspace_, p);
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -274,7 +261,12 @@ void gasnet::send_am_eager_restricted(
     std::size_t buf_align
   ) {
   
-  gasnet_AMRequestMedium1(recipient, id_am_eager_restricted, buf, buf_size, buf_align);
+  gex_AM_RequestMedium1(
+    world_team, recipient,
+    id_am_eager_restricted, buf, buf_size,
+    GEX_EVENT_NOW, /*flags*/0,
+    buf_align
+  );
   
   after_gasnet();
 }
@@ -287,10 +279,10 @@ void gasnet::send_am_eager_master(
     std::size_t buf_align
   ) {
   
-  gasnet_AMRequestMedium1(
-    recipient,
-    id_am_eager_master,
-    buf, buf_size,
+  gex_AM_RequestMedium1(
+    world_team, recipient,
+    id_am_eager_master, buf, buf_size,
+    GEX_EVENT_NOW, /*flags*/0,
     buf_align<<1 | (level == progress_level::user ? 1 : 0)
   );
   
@@ -306,22 +298,55 @@ void gasnet::send_am_eager_persona(
     std::size_t buf_align
   ) {
   
-  uintptr_t per_lo_u = reinterpret_cast<uintptr_t>(recipient_persona) & 0xffffffffu;
-  uintptr_t per_hi_u = reinterpret_cast<uintptr_t>(recipient_persona) >> 31 >> 1;
-  
-  gasnet_handlerarg_t per_lo_h=0, per_hi_h=0;
-  std::memcpy(&per_lo_h, &per_lo_u, sizeof(gasnet_handlerarg_t));
-  std::memcpy(&per_hi_h, &per_hi_u, sizeof(gasnet_handlerarg_t));
-  
-  gasnet_AMRequestMedium3(
-    recipient_rank,
-    id_am_eager_persona,
-    buf, buf_size,
+  gex_AM_Arg_t per_lo = reinterpret_cast<intptr_t>(recipient_persona) & 0xffffffffu;
+  gex_AM_Arg_t per_hi = reinterpret_cast<intptr_t>(recipient_persona) >> 31 >> 1;
+
+  gex_AM_RequestMedium3(
+    world_team, recipient_rank,
+    id_am_eager_persona, buf, buf_size,
+    GEX_EVENT_NOW, /*flags*/0,
     buf_align<<1 | (level == progress_level::user ? 1 : 0),
-    per_lo_h, per_hi_h
+    per_lo, per_hi
   );
   
   after_gasnet();
+}
+
+namespace {
+  template<typename Fn>
+  struct rma_get_cb final: gasnet::handle_cb {
+    Fn fn_;
+    rma_get_cb(Fn fn): fn_{std::move(fn)} {}
+
+    void execute_and_delete(gasnet::handle_cb_successor add) {
+      fn_();
+      delete this;
+    }
+  };
+
+  template<typename Fn>
+  void rma_get(
+      void *buf_d,
+      intrank_t rank_s,
+      void const *buf_s,
+      size_t buf_size,
+      Fn fn
+    ) {
+    
+    UPCXX_ASSERT(!UPCXX_BACKEND_GASNET_SEQ || backend::master.active_with_caller());
+
+    auto *cb = new rma_get_cb<Fn>{std::move(fn)};
+    
+    gex_Event_t h = gex_RMA_GetNB(
+      gasnet::world_team,
+      buf_d, rank_s, const_cast<void*>(buf_s), buf_size,
+      /*flags*/0
+    );
+    cb->handle = reinterpret_cast<uintptr_t>(h);
+    
+    gasnet::register_cb(cb);
+    gasnet::after_gasnet();
+  }
 }
 
 template<progress_level level>
@@ -345,26 +370,22 @@ void gasnet::send_am_rdzv(
       void *buf_d = upcxx::allocate(buf_size, buf_align);
       UPCXX_ASSERT_ALWAYS(buf_d != nullptr, "Exhausted shared segment!");
       
-      backend::rma_get(
+      rma_get(
         buf_d, rank_s, buf_s, buf_size,
-        
-        make_rma_get_cb<std::tuple<>>(
-          std::tuple<>{},
-          [=](std::tuple<>) {
-            // Notify source rank it can free buffer.
-            gasnet::send_am_restricted(rank_s,
-              [=]() { upcxx::deallocate(buf_s); }
-            );
-            
-            backend::during_level<level>([=]() {
-              // Execute buffer.
-              parcel_reader r{buf_d};
-              command_execute(r) >> [=]() {
-                upcxx::deallocate(buf_d);
-              };
-            });
-          }
-        )
+        [=]() {
+          // Notify source rank it can free buffer.
+          gasnet::send_am_restricted(rank_s,
+            [=]() { upcxx::deallocate(buf_s); }
+          );
+          
+          backend::during_level<level>([=]() {
+            // Execute buffer.
+            parcel_reader r{buf_d};
+            command_execute(r) >> [=]() {
+              upcxx::deallocate(buf_d);
+            };
+          });
+        }
       );
     }
   );
@@ -372,6 +393,43 @@ void gasnet::send_am_rdzv(
 
 template void gasnet::send_am_rdzv<progress_level::internal>(intrank_t, persona*, void*, size_t, size_t);
 template void gasnet::send_am_rdzv<progress_level::user>(intrank_t, persona*, void*, size_t, size_t);
+
+void gasnet::after_gasnet() {
+  if(detail::tl_progressing >= 0)
+    return;
+  detail::tl_progressing = (int)progress_level::internal;
+  
+  bool have_master = UPCXX_BACKEND_GASNET_SEQ || backend::master.active_with_caller();
+  int total_exec_n = 0;
+  int exec_n;
+  
+  do {
+    exec_n = 0;
+    
+    if(have_master) {
+      #if UPCXX_BACKEND_GASNET_SEQ
+        exec_n += gasnet::master_hcbs.burst(4);
+      #endif
+      
+      detail::persona_as_top(backend::master, [&]() {
+        exec_n += rpcs_internal_.burst(20);
+      });
+    }
+    
+    detail::persona_foreach_active([&](persona &p) {
+      #if UPCXX_BACKEND_GASNET_PAR
+        exec_n += p.backend_state_.hcbs.burst(4);
+      #endif
+      exec_n += detail::persona_burst(p, progress_level::internal);
+    });
+    
+    total_exec_n += exec_n;
+  }
+  while(total_exec_n < 100 && exec_n != 0);
+  
+  detail::tl_progressing = -1;
+}
+
 
 ////////////////////////////////////////////////////////////////////////
 // from: upcxx/backend.hpp
@@ -391,18 +449,19 @@ void upcxx::progress(progress_level level) {
     exec_n = 0;
     
     if(have_master) {
-      #if UPCXX_GASNET1_SEQ
-        exec_n += hcbs_.burst(4);
+      #if UPCXX_BACKEND_GASNET_SEQ
+        exec_n += gasnet::master_hcbs.burst(4);
       #endif
       
       detail::persona_as_top(backend::master, [&]() {
         exec_n += rpcs_internal_.burst(100);
-        exec_n += rpcs_user_.burst(100);
+        if(level == progress_level::user)
+          exec_n += rpcs_user_.burst(100);
       });
     }
     
     detail::persona_foreach_active([&](persona &p) {
-      #if UPCXX_GASNETEX_PAR
+      #if UPCXX_BACKEND_GASNET_PAR
         exec_n += p.backend_state_.hcbs.burst(4);
       #endif
       exec_n += detail::persona_burst(p, level);
@@ -439,46 +498,10 @@ void upcxx::progress(progress_level level) {
 // anonymous namespace
 
 namespace {
-  void after_gasnet() {
-    if(detail::tl_progressing >= 0)
-      return;
-    detail::tl_progressing = (int)progress_level::internal;
-    
-    bool have_master = UPCXX_GASNET1_SEQ || backend::master.active_with_caller();
-    int total_exec_n = 0;
-    int exec_n;
-    
-    do {
-      exec_n = 0;
-      
-      if(have_master) {
-        #if UPCXX_GASNET1_SEQ
-          exec_n += hcbs_.burst(4);
-        #endif
-        
-        detail::persona_as_top(backend::master, [&]() {
-          exec_n += rpcs_internal_.burst(20);
-        });
-      }
-      
-      detail::persona_foreach_active([&](persona &p) {
-        #if UPCXX_GASNETEX_PAR
-          exec_n += p.backend_state_.hcbs.burst(4);
-        #endif
-        exec_n += detail::persona_burst(p, progress_level::internal);
-      });
-      
-      total_exec_n += exec_n;
-    }
-    while(total_exec_n < 100 && exec_n != 0);
-    
-    detail::tl_progressing = -1;
-  }
-  
   void am_eager_restricted(
-      gasnet_token_t,
+      gex_Token_t,
       void *buf, size_t buf_size,
-      gasnet_handlerarg_t buf_align
+      gex_AM_Arg_t buf_align
     ) {
     
     future<> buf_done;
@@ -504,9 +527,9 @@ namespace {
   }
   
   void am_eager_master(
-      gasnet_token_t,
+      gex_Token_t,
       void *buf, size_t buf_size,
-      gasnet_handlerarg_t buf_align_and_level
+      gex_AM_Arg_t buf_align_and_level
     ) {
     
     UPCXX_ASSERT(backend::rank_n!=-1);
@@ -515,7 +538,7 @@ namespace {
     
     rpc_message *m = rpc_message::build_copy(buf, buf_size, buf_align);
     
-    if(UPCXX_GASNETEX_PAR && !backend::master.active_with_caller()) {
+    if(UPCXX_BACKEND_GASNET_PAR && !backend::master.active_with_caller()) {
       detail::persona_defer(
         backend::master,
         level_user ? progress_level::user : progress_level::internal,
@@ -531,27 +554,35 @@ namespace {
   }
   
   void am_eager_persona(
-      gasnet_token_t,
+      gex_Token_t,
       void *buf, size_t buf_size,
-      gasnet_handlerarg_t buf_align_and_level,
-      gasnet_handlerarg_t per_lo_h,
-      gasnet_handlerarg_t per_hi_h
+      gex_AM_Arg_t buf_align_and_level,
+      gex_AM_Arg_t per_lo,
+      gex_AM_Arg_t per_hi
     ) {
     
     UPCXX_ASSERT(backend::rank_n!=-1);
     size_t buf_align = buf_align_and_level>>1;
     bool level_user = buf_align_and_level & 1;
     
-    uintptr_t per_lo_u=0, per_hi_u=0;
-    std::memcpy(&per_lo_u, &per_lo_h, sizeof(gasnet_handlerarg_t));
-    std::memcpy(&per_hi_u, &per_hi_h, sizeof(gasnet_handlerarg_t));
-    
-    persona *per = reinterpret_cast<persona*>(per_hi_u<<31<<1 | per_lo_u);
-    per = per == nullptr ? &backend::master : per;
+    // Reconstructing a pointer from two gex_AM_Arg_t is nuanced
+    // since the size of gex_AM_Arg_t is unspecified. The high
+    // bits (per_hi) can be safely upshifted into place, on a 32-bit
+    // system the result will just be zero. The low bits (per_lo) must
+    // not be permitted to sign-extend. Masking against 0xf's achieves
+    // this because all literals are non-negative. So the result of the
+    // AND could either be signed or unsigned depending on if the mask
+    // (a positive value) can be expressed in the desitination signed
+    // type (intptr_t).
+    persona *per = reinterpret_cast<persona*>(
+      static_cast<intptr_t>(per_hi)<<31<<1 |
+      (per_lo & 0xffffffff)
+    );
+    per = per == nullptr ? &backend::master : per; 
     
     rpc_message *m = rpc_message::build_copy(buf, buf_size, buf_align);
     
-    if(UPCXX_GASNETEX_PAR && (per != &backend::master || !per->active_with_caller())) {
+    if(UPCXX_BACKEND_GASNET_PAR && (per != &backend::master || !per->active_with_caller())) {
       detail::persona_defer(
         *per,
         level_user ? progress_level::user : progress_level::internal,

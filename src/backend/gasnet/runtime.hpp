@@ -11,26 +11,8 @@
 
 ////////////////////////////////////////////////////////////////////////
 
-#define gasnet1_seq 100
-#define gasnetex_par 101
-#if UPCXX_BACKEND == gasnet1_seq
-  #undef gasnet1_seq
-  #undef gasnetex_par
-  #define UPCXX_GASNET1_SEQ 1
-#elif UPCXX_BACKEND == gasnetex_par
-  #undef gasnet1_seq
-  #undef gasnetex_par
-  #define UPCXX_GASNETEX_PAR 1
-#else
-  #error "Invalid UPCXX_BACKEND."
-#endif
-
-#ifndef UPCXX_GASNET1_SEQ
-  #define UPCXX_GASNET1_SEQ 0
-#endif
-
-#ifndef UPCXX_GASNETEX_PAR
-  #define UPCXX_GASNETEX_PAR 0
+#if !NOBS_DISCOVERY && !UPCXX_BACKEND_GASNET
+  #error "This header can only be used when the GASNet backend is enabled."
 #endif
 
 ////////////////////////////////////////////////////////////////////////
@@ -40,6 +22,15 @@ namespace upcxx {
 namespace backend {
 namespace gasnet {
   extern std::size_t am_size_rdzv_cutover;
+
+  #if UPCXX_BACKEND_GASNET_SEQ
+    extern handle_cb_queue master_hcbs;
+  #endif
+  
+  void after_gasnet();
+
+  // Register a handle callback for the current persona
+  void register_cb(handle_cb *cb);
   
   // Send AM (packed command), receiver executes in handler.
   void send_am_eager_restricted(
@@ -90,14 +81,16 @@ namespace backend {
   
   template<typename Fn>
   void during_level(std::integral_constant<progress_level, progress_level::internal>, Fn &&fn) {
-    UPCXX_ASSERT(!UPCXX_GASNET1_SEQ || backend::master.active_with_caller());
+    UPCXX_ASSERT(!UPCXX_BACKEND_GASNET_SEQ || backend::master.active_with_caller());
     fn();
   }
   template<typename Fn>
   void during_level(std::integral_constant<progress_level, progress_level::user>, Fn &&fn) {
-    UPCXX_ASSERT(!UPCXX_GASNET1_SEQ || backend::master.active_with_caller());
+    UPCXX_ASSERT(!UPCXX_BACKEND_GASNET_SEQ || backend::master.active_with_caller());
     
-    persona &p = UPCXX_GASNET1_SEQ ? backend::master : *detail::tl_top_persona;
+    persona &p = UPCXX_BACKEND_GASNET_SEQ
+      ? backend::master
+      : *detail::tl_top_persona;
     
     detail::persona_during(
       p, progress_level::user, std::forward<Fn>(fn),
@@ -115,7 +108,7 @@ namespace backend {
   
   template<upcxx::progress_level level, typename Fn>
   void send_am_master(intrank_t recipient, Fn &&fn) {
-    UPCXX_ASSERT(!UPCXX_GASNET1_SEQ || backend::master.active_with_caller());
+    UPCXX_ASSERT(!UPCXX_BACKEND_GASNET_SEQ || backend::master.active_with_caller());
     
     parcel_layout ub;
     command_size_ubound(ub, fn);
@@ -147,7 +140,7 @@ namespace backend {
       persona *recipient_persona,
       Fn &&fn
     ) {
-    UPCXX_ASSERT(!UPCXX_GASNET1_SEQ || backend::master.active_with_caller());
+    UPCXX_ASSERT(!UPCXX_BACKEND_GASNET_SEQ || backend::master.active_with_caller());
     
     parcel_layout ub;
     command_size_ubound(ub, fn);
@@ -260,11 +253,24 @@ namespace upcxx {
 namespace backend {
 namespace gasnet {
   //////////////////////////////////////////////////////////////////////
+  // register_handle_cb
+  
+  inline void register_cb(handle_cb *cb) {
+    UPCXX_ASSERT(!UPCXX_BACKEND_GASNET_SEQ || backend::master.active_with_caller());
+
+    #if UPCXX_BACKEND_GASNET_SEQ
+      gasnet::master_hcbs.enqueue(cb);
+    #elif UPCXX_BACKEND_GASNET_PAR
+      upcxx::current_persona().backend_state_.hcbs.enqueue(cb);
+    #endif
+  }
+  
+  //////////////////////////////////////////////////////////////////////
   // send_am_restricted
   
   template<typename Fn>
   void send_am_restricted(intrank_t recipient, Fn &&fn) {
-    UPCXX_ASSERT(!UPCXX_GASNET1_SEQ || backend::master.active_with_caller());
+    UPCXX_ASSERT(!UPCXX_BACKEND_GASNET_SEQ || backend::master.active_with_caller());
     
     parcel_layout ub;
     command_size_ubound(ub, fn);

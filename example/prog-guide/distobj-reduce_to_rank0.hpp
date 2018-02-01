@@ -1,11 +1,11 @@
-int reduce_to_rank0(int my_hits)
+int64_t reduce_to_rank0(int64_t my_hits)
 {
     // declare a distributed on every rank
-    upcxx::dist_object<int> all_hits(0);
+    upcxx::dist_object<int64_t> all_hits(0);
     // set the local value of the distributed object on each rank
     *all_hits = my_hits;
     upcxx::barrier();
-    int hits = 0;
+    int64_t hits = 0;
     if (upcxx::rank_me() == 0) {
         // rank 0 gets all the values
         for (int i = 0; i < upcxx::rank_n(); i++) {

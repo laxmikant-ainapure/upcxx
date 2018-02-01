@@ -109,7 +109,8 @@ namespace upcxx {
   };
   
   //////////////////////////////////////////////////////////////////////
-  // trait_forall
+  // trait_forall: logical conjunction of one trait applied to
+  // variadically-many argument types.
   
   template<template<typename...> class Test, typename ...T>
   struct trait_forall;
@@ -130,7 +131,7 @@ namespace upcxx {
   };
   
   //////////////////////////////////////////////////////////////////////
-  // trait_any
+  // trait_any: disjunction, combines multiple traits into a new trait.
   
   template<template<typename...> class ...Tr>
   struct trait_any;
@@ -151,7 +152,7 @@ namespace upcxx {
   };
   
   //////////////////////////////////////////////////////////////////////
-  // trait_all
+  // trait_all: conjunction, combines multiple traits into a new trait
   
   template<template<typename...> class ...Tr>
   struct trait_all;
@@ -327,7 +328,7 @@ namespace upcxx {
   // tuple_rvals: Get a tuple of rvalue-references to tuple componenets.
   // Components which are already `&` or `&&` are returned unmodified.
   // Non-reference componenets are returned as `&&` only if the tuple is
-  // passed by non-const `&', otherwise the non-reference type is used
+  // passed by non-const `&`, otherwise the non-reference type is used
   // and the value is moved or copied from the input to output tuple.
   
   namespace detail {

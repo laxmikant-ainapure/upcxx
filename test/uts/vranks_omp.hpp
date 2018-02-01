@@ -1,16 +1,16 @@
-#ifndef _62625b7f_859f_4b3a_a765_ff3505ce3d8b
-#define _62625b7f_859f_4b3a_a765_ff3505ce3d8b
+#ifndef _bcf4d64e_19bd_4080_86c4_57aaf780e98c
+#define _bcf4d64e_19bd_4080_86c4_57aaf780e98c
 
 #include <upcxx/persona.hpp>
 #include <upcxx/os_env.hpp>
 
 #include <atomic>
-#include <thread>
 #include <vector>
 
+#include <omp.h>
 #include <sched.h>
 
-#define VRANKS_IMPL "threads"
+#define VRANKS_IMPL "omp"
 #define VRANK_LOCAL thread_local
 
 namespace vranks {
@@ -41,27 +41,17 @@ namespace vranks {
   void spawn(Fn fn) {
     int vrank_n = upcxx::os_env<int>("THREADS", 10);
     vranks.resize(vrank_n);
+
+    omp_set_num_threads(vrank_n);
     
-    std::vector<std::thread*> threads{(unsigned)vrank_n};
-    std::atomic<int> bar0{0};
-    
-    auto thread_main = [&](int vrank_me) {
+    #pragma omp parallel num_threads(vrank_n)
+    {
+      int vrank_me = omp_get_thread_num();
       vranks[vrank_me] = &upcxx::default_persona();
-      bar0.fetch_add(1);
-      while(bar0.load(std::memory_order_acquire) != vrank_n)
-        sched_yield();
+      
+      #pragma omp barrier
       
       fn(vrank_me, vrank_n);
-    };
-    
-    for(int vr=1; vr < vrank_n; vr++)
-      threads[vr] = new std::thread{thread_main, vr};
-    
-    thread_main(0);
-    
-    for(int vr=1; vr < vrank_n; vr++) {
-      threads[vr]->join();
-      delete threads[vr];
     }
   }
 }

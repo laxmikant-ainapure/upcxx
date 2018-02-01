@@ -2,8 +2,9 @@
 
 import sys
 
-if sys.version_info < (2,6):
-  sys.stdout.write('ERROR: Python 2.6 required.\n')
+if sys.version_info < (2,7,5): # send to stderr to enure install visibility
+  sys.stdout.write('ERROR: Python >= 2.7.5 required.\n')
+  sys.stderr.write('ERROR: Python >= 2.7.5 required.\n')
   exit(1)
 
 if sys.version_info[0] != 2:

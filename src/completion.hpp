@@ -1,132 +1,780 @@
 #ifndef _96368972_b5ed_4e48_ac4f_8c868279e3dd
 #define _96368972_b5ed_4e48_ac4f_8c868279e3dd
 
+#include <upcxx/backend.hpp>
 #include <upcxx/bind.hpp>
 #include <upcxx/future.hpp>
+#include <upcxx/persona.hpp>
+#include <upcxx/utility.hpp>
+
+#include <tuple>
 
 namespace upcxx {
-  struct nil_cx {};
+  //////////////////////////////////////////////////////////////////////
+  // Event names for common completion events as used by rput/rget etc.
+  // This set is extensible from anywhere in the source.
   
-  template<typename Fn>
+  struct source_cx_event;
+  struct remote_cx_event;
+  struct operation_cx_event;
+
+  namespace detail {
+    // Useful type predicates for selecting events (as needed by
+    // completions_state's EventPredicate argument).
+    template<typename Event>
+    struct event_is_here: std::false_type {};
+    template<>
+    struct event_is_here<source_cx_event>: std::true_type {};
+    template<>
+    struct event_is_here<operation_cx_event>: std::true_type {};
+
+    template<typename Event>
+    struct event_is_remote: std::false_type {};
+    template<>
+    struct event_is_remote<remote_cx_event>: std::true_type {};
+  }
+    
+  //////////////////////////////////////////////////////////////////////
+  // Signalling actions tagged by the event they react to.
+
+  // Future completion
+  template<typename Event>
+  struct future_cx {
+    using event_t = Event;
+  };
+
+  // Promise completion
+  template<typename Event, typename ...T>
+  struct promise_cx {
+    using event_t = Event;
+    promise<T...> &pro_;
+  };
+
+  // Synchronous completion via best-effort buffering
+  template<typename Event>
+  struct buffered_cx {
+    using event_t = Event;
+  };
+
+  // Synchronous completion via blocking on network/peers
+  template<typename Event>
+  struct blocking_cx {
+    using event_t = Event;
+  };
+
+  // LPC completion
+  template<typename Event, typename Fn>
+  struct lpc_cx {
+    using event_t = Event;
+    
+    persona *target_;
+    Fn func_;
+
+    lpc_cx(persona &target, Fn func):
+      target_{&target},
+      func_{std::move(func)} {
+    }
+  };
+
+  // RPC completion. Arguments are bound into fn_.
+  template<typename Event, typename Fn>
   struct rpc_cx {
+    using event_t = Event;
+    
     Fn fn_;
     rpc_cx(Fn fn): fn_{std::move(fn)} {}
   };
   
-  template<int ordinal>
-  struct future_cx {};
+  //////////////////////////////////////////////////////////////////////
+  // completions<...>: A list of tagged completion actions. We use
+  // lisp-like lists where the head is the first element and the tail
+  // is the list of everything after.
   
-  template<typename ...T>
-  struct promise_cx {
-    promise<T...> &pro_;
+  template<typename ...Cxs>
+  struct completions;
+  template<>
+  struct completions<> {};
+  template<typename H, typename ...T>
+  struct completions<H,T...>: completions<T...> {
+    H head;
+
+    H&& head_moved() {
+      return static_cast<H&&>(head);
+    }
+    completions<T...>&& tail_moved() {
+      return static_cast<completions<T...>&&>(*this);
+    }
+    
+    constexpr completions(H head, T ...tail):
+      completions<T...>{std::move(tail)...},
+      head{std::move(head)} {
+    }
+    constexpr completions(H head, completions<T...> tail):
+      completions<T...>{std::move(tail)},
+      head{std::move(head)} {
+    }
   };
+
+  //////////////////////////////////////////////////////////////////////
+  // operator "|": Concatenates two completions lists.
+  
+  template<typename ...B>
+  constexpr completions<B...> operator|(
+      completions<> a, completions<B...> b
+    ) {
+    return std::move(b);
+  }
+  template<typename Ah, typename ...At, typename ...B>
+  constexpr completions<Ah,At...,B...> operator|(
+      completions<Ah,At...> a,
+      completions<B...> b
+    ) {
+    return completions<Ah,At...,B...>{
+      a.head_moved(),
+      a.tail_moved() | std::move(b)
+    };
+  }
+
+  //////////////////////////////////////////////////////////////////////
+  // detail::completions_has_event: detects if there exists an action
+  // tagged by the given event in the completions list.
+
+  namespace detail {
+    template<typename Cxs, typename Event>
+    struct completions_has_event;
+    
+    template<typename Event>
+    struct completions_has_event<completions<>, Event> {
+      static constexpr bool value = false;
+    };
+    template<typename CxH, typename ...CxT, typename Event>
+    struct completions_has_event<completions<CxH,CxT...>, Event> {
+      static constexpr bool value =
+        std::is_same<Event, typename CxH::event_t>::value ||
+        completions_has_event<completions<CxT...>, Event>::value;
+    };
+  }
+
+  //////////////////////////////////////////////////////////////////////
+  // detail::completions_is_event_sync: detects if there exists a
+  // buffered_cx or blocking_cx action tagged by the given event in the
+  // completions list
+
+  namespace detail {
+    template<typename Cxs, typename Event>
+    struct completions_is_event_sync;
+    
+    template<typename Event>
+    struct completions_is_event_sync<completions<>, Event> {
+      static constexpr bool value = false;
+    };
+    template<typename ...CxT, typename Event>
+    struct completions_is_event_sync<completions<buffered_cx<Event>,CxT...>, Event> {
+      static constexpr bool value = true;
+    };
+    template<typename ...CxT, typename Event>
+    struct completions_is_event_sync<completions<blocking_cx<Event>,CxT...>, Event> {
+      static constexpr bool value = true;
+    };
+    template<typename CxH, typename ...CxT, typename Event>
+    struct completions_is_event_sync<completions<CxH,CxT...>, Event> {
+      static constexpr bool value =
+        completions_has_event<completions<CxT...>, Event>::value;
+    };
+  }
   
   //////////////////////////////////////////////////////////////////////
+  // User-interface for obtaining a completion tied to an event.
+
+  namespace detail {
+    template<typename Event>
+    struct support_as_future {
+      using as_future_t = completions<future_cx<Event>>;
+
+      static constexpr as_future_t as_future() {
+        return {future_cx<Event>{}};
+      }
+    };
+
+    template<typename Event>
+    struct support_as_promise {
+      template<typename ...T>
+      using as_promise_t = completions<promise_cx<Event, T...>>;
+
+      template<typename ...T>
+      static constexpr as_promise_t<T...> as_promise(promise<T...> &pro) {
+        return {promise_cx<Event, T...>{pro}};
+      }
+    };
+
+    template<typename Event>
+    struct support_as_lpc {
+      template<typename Fn>
+      using as_lpc_t = completions<lpc_cx<Event, Fn>>;
+
+      template<typename Fn>
+      static constexpr as_lpc_t<Fn> as_lpc(persona &target, Fn func) {
+        return {
+          lpc_cx<Event, Fn>{target, static_cast<Fn&&>(func)}
+        };
+      }
+    };
+
+    template<typename Event>
+    struct support_as_buffered {
+      using as_buffered_t = completions<buffered_cx<Event>>;
+
+      static constexpr as_buffered_t as_buffered() {
+        return {buffered_cx<Event>{}};
+      }
+    };
+
+    template<typename Event>
+    struct support_as_blocking {
+      using as_blocking_t = completions<blocking_cx<Event>>;
+
+      static constexpr as_blocking_t as_blocking() {
+        return {blocking_cx<Event>{}};
+      }
+    };
+
+    template<typename Event>
+    struct support_as_rpc {
+      template<typename Fn, typename ...Args>
+      using rpc_cx_t =
+        rpc_cx<Event,
+               decltype(upcxx::bind(std::declval<Fn>(),
+                                    std::declval<Args>()...))>;
+
+      template<typename Fn, typename ...Args>
+      using as_rpc_t = completions<rpc_cx_t<Fn, Args...>>;
+      
+      template<typename Fn, typename ...Args>
+      static as_rpc_t<Fn&&, Args&&...> as_rpc(Fn &&fn, Args &&...args) {
+        return {
+          rpc_cx_t<Fn&&, Args&&...>{
+            upcxx::bind(static_cast<Fn&&>(fn), static_cast<Args&&>(args)...)
+          }
+        };
+      }
+    };
+  }
+
+  struct source_cx:
+    detail::support_as_blocking<source_cx_event>,
+    detail::support_as_buffered<source_cx_event>,
+    detail::support_as_future<source_cx_event>,
+    detail::support_as_lpc<source_cx_event>,
+    detail::support_as_promise<source_cx_event> {};
+  
+  struct operation_cx:
+    detail::support_as_blocking<operation_cx_event>,
+    detail::support_as_future<operation_cx_event>,
+    detail::support_as_lpc<operation_cx_event>,
+    detail::support_as_promise<operation_cx_event> {};
+  
+  struct remote_cx:
+    detail::support_as_rpc<remote_cx_event> {};
+  
+  //////////////////////////////////////////////////////////////////////
+  // cx_state: Per action state that survives until the event
+  // is triggered. For future_cx's this holds a promise instance which
+  // seeds the future given back to the user. All other cx actions get
+  // their information stored as-is. All of these expose `operator()(T...)`
+  // which is used to "fire" the action  safely from any progress context.
   
   namespace detail {
-    template<typename A, typename B, int B_ord_bump>
-    struct disjoin_cx;
+    template<typename Cx /* the action */,
+             typename EventArgsTup /* tuple containing list of action's value types*/>
+    struct cx_state;
     
-    template<typename A, int B_ord_bump>
-    struct disjoin_cx<A, nil_cx, B_ord_bump> {
-      using type = A;
-      
-      A&& operator()(A &&a, nil_cx &&b) {
-        return std::move(a);
-      }
-    };
-    template<typename B, int B_ord_bump>
-    struct disjoin_cx<nil_cx, B, B_ord_bump> {
-      using type = B;
-      
-      B&& operator()(nil_cx &&a, B &&b) {
-        return std::move(b);
-      }
-    };
-    template<int B_ord_old, int B_ord_bump>
-    struct disjoin_cx<nil_cx, future_cx<B_ord_old>, B_ord_bump> {
-      using type = future_cx<B_ord_old + B_ord_bump>;
-      
-      future_cx<B_ord_old + B_ord_bump> operator()(nil_cx &&a, future_cx<B_ord_old> &&b) {
-        return {};
-      }
-    };
-    template<int B_ord0>
-    struct disjoin_cx<nil_cx, nil_cx, B_ord0> {
-      using type = nil_cx;
-      
-      nil_cx operator()(nil_cx &&a, nil_cx &&b) {
-        return {};
-      }
+    template<typename Event>
+    struct cx_state<buffered_cx<Event>, std::tuple<>> {
+      cx_state(buffered_cx<Event>) {}
+      void operator()() {}
     };
     
-    template<typename Cx>
-    struct is_future_cx: std::false_type {};
-    template<int ordinal>
-    struct is_future_cx<future_cx<ordinal>>: std::true_type {};
+    template<typename Event>
+    struct cx_state<blocking_cx<Event>, std::tuple<>> {
+      cx_state(blocking_cx<Event>) {}
+      void operator()() {}
+    };
+    
+    template<typename Event, typename ...T>
+    struct cx_state<future_cx<Event>, std::tuple<T...>> {
+      promise<T...> pro_;
+      
+      cx_state(future_cx<Event>) {}
+      
+      void operator()(T ...vals) {
+        backend::during_user(std::move(pro_), std::move(vals)...);
+      }
+    };
+
+    // promise and events have matching (non-empty) types
+    template<typename Event, typename ...T>
+    struct cx_state<promise_cx<Event,T...>, std::tuple<T...>> {
+      promise<T...> &pro_;
+
+      cx_state(promise_cx<Event,T...> cx):
+        pro_{cx.pro_} {
+        pro_.require_anonymous(1);
+      }
+      
+      void operator()(T ...vals) {
+        backend::during_user(pro_, std::move(vals)...);
+      }
+    };
+    // event is empty
+    template<typename Event, typename ...T>
+    struct cx_state<promise_cx<Event,T...>, std::tuple<>> {
+      promise<T...> &pro_;
+
+      cx_state(promise_cx<Event,T...> cx):
+        pro_{cx.pro_} {
+        pro_.require_anonymous(1);
+      }
+      
+      void operator()() {
+        promise<T...> *pro = &pro_;
+        backend::during_user([=]() { pro->fulfill_anonymous(1); });
+      }
+    };
+    // promise and event are empty
+    template<typename Event>
+    struct cx_state<promise_cx<Event>, std::tuple<>> {
+      promise<> &pro_;
+
+      cx_state(promise_cx<Event> cx):
+        pro_{cx.pro_} {
+        pro_.require_anonymous(1);
+      }
+      
+      void operator()() {
+        promise<> *pro = &pro_;
+        backend::during_user([=]() { pro->fulfill_anonymous(1); });
+      }
+    };
+    
+    template<typename Event, typename Fn, typename ...T>
+    struct cx_state<lpc_cx<Event,Fn>, std::tuple<T...>> {
+      persona *target_;
+      Fn fn_;
+      
+      cx_state(lpc_cx<Event,Fn> cx):
+        target_{cx.target_},
+        fn_{std::move(cx.fn_)} {
+      }
+      
+      void operator()(T ...vals) {
+        target_->lpc_ff(
+          std::bind(std::move(fn_), std::move(vals)...)
+        );
+      }
+    };
+    
+    template<typename Event, typename Fn, typename ...T>
+    struct cx_state<rpc_cx<Event,Fn>, std::tuple<T...>> {
+      Fn fn_;
+      cx_state(rpc_cx<Event,Fn> cx):
+        fn_{std::move(cx.fn_)} {
+      }
+    };
   }
-  
+
   //////////////////////////////////////////////////////////////////////
-  
-  template<typename SourceCx, typename RemoteCx, typename OpxnCx>
-  struct completions {
-    SourceCx source;
-    RemoteCx remote;
-    OpxnCx operxn;
+  // detail::completions_state: Constructed against a user-supplied
+  // completions<...> value. This is what remembers the actions or
+  // holds the promises (need by future returns) and so should probably
+  // be heap allocated. To fire all actions registered to an event
+  // call `operator()` with the event type as the first template arg.
+  //
+  // EventPredicate<Event>::value: Maps an event-type to a compile-time
+  // bool value for enabling that event in this object. Events which
+  // aren't enabled are not copied out of the constructor-time
+  // completions<...> instance and execute no-ops under operator().
+  //
+  // EventValues::future_t<Event>: Maps an event-type to a type-list
+  // (as future) which types the values reported by the completed
+  // action. `operator()` will expect that the runtime values it receives
+  // match the types reported by this map for the given event.
+  namespace detail {
+    template<template<typename> class EventPredicate,
+             typename EventValues,
+             typename Cxs>
+    struct completions_state /*{
+      using completions_t = Cxs;
+
+      // True iff no events contained in `Cxs` are enabled by `EventPredicate`.
+      static constexpr bool empty;
+
+      // Fire actions corresponding to `Event` if its enabled. Type-list
+      // V... should match the T... in `EventValues::future_t<Event>`.
+      template<typename Event, typename ...V>
+      void operator()(V&&...);
+    }*/;
     
-    static constexpr int future_n =
-      (detail::is_future_cx<SourceCx>::value ? 1 : 0) +
-      (detail::is_future_cx<OpxnCx>::value ? 1 : 0);
+    template<template<typename> class EventPredicate,
+             typename EventValues>
+    struct completions_state<EventPredicate, EventValues,
+                             completions<>> {
+
+      using completions_t = completions<>;
+      static constexpr bool empty = true;
+      
+      completions_state(completions<>) {}
+      
+      template<typename Event, typename ...V>
+      void operator()(V &&...vals) {/*nop*/}
+    };
+
+    template<bool event_selected, typename EventValues, typename Cx>
+    struct completions_state_head;
+    
+    template<typename EventValues,
+             typename Cx>
+    struct completions_state_head<
+        /*event_enabled=*/false, EventValues, Cx
+      > {
+      static constexpr bool empty = true;
+
+      completions_state_head(Cx cx) {}
+      
+      template<typename Event, typename ...V>
+      void operator()(V&&...) {/*nop*/}
+    };
+    
+    template<typename EventValues, typename Cx>
+    struct completions_state_head<
+        /*event_enabled=*/true, EventValues, Cx
+      > {
+      static constexpr bool empty = false;
+
+      cx_state<Cx, typename EventValues::template tuple_t<typename Cx::event_t>> state_;
+      
+      completions_state_head(Cx cx):
+        state_{std::move(cx)} {
+      }
+      
+      template<typename ...V>
+      void operator_case(std::integral_constant<bool,true>, V &&...vals) {
+        // Event matches CxH::event_t
+        state_.operator()(std::forward<V>(vals)...);
+      }
+      template<typename ...V>
+      void operator_case(std::integral_constant<bool,false>, V &&...vals) {
+        // Event mismatch = nop
+      }
+
+      // fire state if Event == CxH::event_t
+      template<typename Event, typename ...V>
+      void operator()(V &&...vals) {
+        this->operator_case(
+          std::integral_constant<
+            bool,
+            std::is_same<Event, typename Cx::event_t>::value
+          >{},
+          std::forward<V>(vals)...
+        );
+      }
+    };
+    
+    template<template<typename> class EventPredicate,
+             typename EventValues, typename CxH, typename ...CxT>
+    struct completions_state<EventPredicate, EventValues,
+                             completions<CxH,CxT...>>:
+        // head base class
+        completions_state_head<EventPredicate<typename CxH::event_t>::value,
+                               EventValues, CxH>,
+        // tail base class
+        completions_state<EventPredicate, EventValues,
+                          completions<CxT...>> {
+
+      using completions_t = completions<CxH, CxT...>;
+      
+      using head_t = completions_state_head<
+          /*event_enabled=*/EventPredicate<typename CxH::event_t>::value,
+          EventValues, CxH
+        >;
+      using tail_t = completions_state<EventPredicate, EventValues,
+                                       completions<CxT...>>;
+
+      static constexpr bool empty = head_t::empty && tail_t::empty;
+      
+      completions_state(completions<CxH,CxT...> &&cxs):
+        head_t{cxs.head_moved()},
+        tail_t{cxs.tail_moved()} {
+      }
+
+      head_t& head() { return static_cast<head_t&>(*this); }
+      head_t const& head() const { return *this; }
+      
+      tail_t& tail() { return static_cast<tail_t&>(*this); }
+      tail_t const& tail() const { return *this; }
+      
+      template<typename Event, typename ...V>
+      void operator()(V &&...vals) {
+        // fire the head element
+        head_t::template operator()<Event>(vals...);
+        // recurse to fire remaining elements
+        tail_t::template operator()<Event>(std::move(vals)...);
+      }
+    };
+  }
+
+  //////////////////////////////////////////////////////////////////////
+  // Producing a packed command from a completions_state of rpc_cx's
+  
+  template<typename EventValues, typename Event, typename Fn>
+  struct commanding<
+      detail::completions_state_head<
+        /*event_enabled=*/true, EventValues, rpc_cx<Event,Fn>
+      >
+    > {
+    using type = detail::completions_state_head<true, EventValues, rpc_cx<Event,Fn>>;
+    
+    static void size_ubound(parcel_layout &lay, type const &s) {
+      commanding<Fn>::size_ubound(lay, s.state_.fn_);
+    }
+    static void pack(parcel_writer &w, type const &s) {
+      commanding<Fn>::pack(w, s.state_.fn_);
+    }
+    static auto execute(parcel_reader &r)
+      -> decltype(commanding<Fn>::execute(r)) {
+      return commanding<Fn>::execute(r);
+    }
+  };
+
+  template<typename EventValues, typename Cx>
+  struct commanding<
+      detail::completions_state_head</*event_enabled=*/false, EventValues, Cx>
+    > {
+    using type = detail::completions_state_head<false, EventValues, Cx>;
+    
+    static void size_ubound(parcel_layout &lay, type const &s) {}
+    static void pack(parcel_writer &w, type const &cxs) {}
+    static auto execute(parcel_reader &r)
+      -> decltype(make_future()) {
+      return make_future();
+    }
   };
   
-  template<typename AS, typename AR, typename AO,
-           typename BS, typename BR, typename BO>
-  completions<
-      typename detail::disjoin_cx<AS, BS, completions<AS, AR, AO>::future_n>::type,
-      typename detail::disjoin_cx<AR, BR, completions<AS, AR, AO>::future_n>::type,
-      typename detail::disjoin_cx<AO, BO, completions<AS, AR, AO>::future_n>::type
-    >
-    operator|(
-      completions<AS, AR, AO> a,
-      completions<BS, BR, BO> b
-    ) {
+  template<template<typename> class EventPredicate,
+           typename EventValues>
+  struct commanding<
+      detail::completions_state<EventPredicate, EventValues, completions<>>
+    > {
+    using type = detail::completions_state<EventPredicate, EventValues,
+                                           completions<>>;
     
-    static constexpr int B_ord_bump = completions<AS, AR, AO>::future_n;
-    
-    return completions<
-        typename detail::disjoin_cx<AS, BS, B_ord_bump>::type,
-        typename detail::disjoin_cx<AR, BR, B_ord_bump>::type,
-        typename detail::disjoin_cx<AO, BO, B_ord_bump>::type
-      >{
-      detail::disjoin_cx<AS, BS, B_ord_bump>()(std::move(a.source), std::move(b.source)),
-      detail::disjoin_cx<AR, BR, B_ord_bump>()(std::move(a.remote), std::move(b.remote)),
-      detail::disjoin_cx<AO, BO, B_ord_bump>()(std::move(a.operxn), std::move(b.operxn))
-    };
-  }
+    static void size_ubound(parcel_layout &lay, type const &x) {}
+    static void pack(parcel_writer &w, type const &x) {}
+    static auto execute(parcel_reader &r)
+      -> decltype(make_future()) {
+      return make_future();
+    }
+  };
+
+  template<template<typename> class EventPredicate,
+           typename EventValues, typename CxH, typename ...CxT>
+  struct commanding<
+      detail::completions_state<EventPredicate, EventValues,
+                                completions<CxH,CxT...>>
+    > {
+    using type = detail::completions_state<EventPredicate, EventValues,
+                                           completions<CxH,CxT...>>;
+
+    static void size_ubound(parcel_layout &lay, type const &cxs) {
+      commanding<typename type::head_t>::size_ubound(lay, cxs.head());
+      commanding<typename type::tail_t>::size_ubound(lay, cxs.tail());
+    }
+    static void pack(parcel_writer &w, type const &cxs) {
+      commanding<typename type::head_t>::pack(w, cxs.head());
+      commanding<typename type::tail_t>::pack(w, cxs.tail());
+    }
+    static auto execute(parcel_reader &r)
+      -> decltype(
+        when_all(commanding<typename type::head_t>::execute(r),
+                 commanding<typename type::tail_t>::execute(r))
+      ) {
+      auto a = commanding<typename type::head_t>::execute(r);
+      auto b = commanding<typename type::tail_t>::execute(r);
+      return when_all(a, b);
+    }
+  };
   
   //////////////////////////////////////////////////////////////////////
-  
-  constexpr completions<future_cx<0>, nil_cx, nil_cx> source_cx_as_future = {};
-  constexpr completions<nil_cx, nil_cx, future_cx<0>> operxn_cx_as_future = {};
-  
-  template<typename ...T>
-  completions<promise_cx<T...>, nil_cx, nil_cx> source_cx_as_promise(promise<T...> &pro) {
-    return {{pro}, {}, {}};
-  }
-  
-  template<typename ...T>
-  completions<nil_cx, nil_cx, promise_cx<T...>> operxn_cx_as_promise(promise<T...> &pro) {
-    return {{}, {}, {pro}};
-  }
-  
-  template<typename Fn, typename ...Args>
-  auto remote_cx_as_rpc(Fn &&fn, Args &&...args)
-    -> completions<
-      nil_cx,
-      rpc_cx<decltype(upcxx::bind(std::forward<Fn>(fn), std::forward<Args>(args)...))>,
-      nil_cx
-    > {
-    return {{}, {upcxx::bind(std::forward<Fn>(fn), std::forward<Args>(args)...)}, {}};
+  // detail::completions_returner: Manage return type for completions<...>
+  // object. Construct one of these instances against a
+  // detail::completions_state&. Call operator() to get the return value.
+
+  namespace detail {
+    template<template<typename> class EventPredicate,
+             typename EventValues, typename Cxs>
+    struct completions_returner;
+
+    template<template<typename> class EventPredicate,
+             typename EventValues>
+    struct completions_returner<EventPredicate, EventValues, completions<>> {
+      using return_t = void;
+
+      completions_returner(
+          completions_state<EventPredicate, EventValues, completions<>>&
+        ) {
+      }
+      
+      void operator()() const {/*return void*/}
+    };
+    
+    template<template<typename> class EventPredicate,
+             typename EventValues, typename Cxs,
+             typename TailReturn>
+    struct completions_returner_head;
+    
+    template<template<typename> class EventPredicate,
+             typename EventValues, typename CxH_event, typename ...CxT,
+             typename ...TailReturn_tuplees>
+    struct completions_returner_head<
+        EventPredicate, EventValues,
+        completions<future_cx<CxH_event>, CxT...>,
+        std::tuple<TailReturn_tuplees...>
+      > {
+      
+      using return_t = std::tuple<
+          future_from_tuple_t<
+            // kind for promise-built future
+            detail::future_kind_shref<detail::future_header_ops_result>,
+            typename EventValues::template tuple_t<CxH_event>
+          >,
+          TailReturn_tuplees...
+        >;
+
+      return_t ans_;
+      return_t&& operator()() { return std::move(ans_); }
+      
+      template<typename CxState, typename Tail>
+      completions_returner_head(CxState &s, Tail &&tail):
+        ans_{
+          std::tuple_cat(
+            std::make_tuple(s.head().state_.pro_.get_future()),
+            tail()
+          )
+        } {
+      }
+    };
+
+    template<template<typename> class EventPredicate,
+             typename EventValues, typename CxH_event, typename ...CxT,
+             typename TailReturn_not_tuple>
+    struct completions_returner_head<
+        EventPredicate, EventValues,
+        completions<future_cx<CxH_event>, CxT...>,
+        TailReturn_not_tuple
+      > {
+      
+      using return_t = std::tuple<
+          future_from_tuple_t<
+            // kind for promise-built future
+            detail::future_kind_shref<detail::future_header_ops_result>,
+            typename EventValues::template tuple_t<CxH_event>
+          >,
+          TailReturn_not_tuple
+        >;
+      
+      return_t ans_;
+      return_t&& operator()() { return std::move(ans_); }
+      
+      template<typename CxState, typename Tail>
+      completions_returner_head(CxState &s, Tail &&tail):
+        ans_{
+          std::make_tuple(
+            s.head().state_.pro_.get_future(),
+            tail()
+          )
+        } {
+      }
+    };
+
+    template<template<typename> class EventPredicate,
+             typename EventValues, typename CxH_event, typename ...CxT>
+    struct completions_returner_head<
+        EventPredicate, EventValues,
+        completions<future_cx<CxH_event>, CxT...>,
+        void
+      > {
+      
+      using return_t = future_from_tuple_t<
+          // kind for promise-built future
+          detail::future_kind_shref<detail::future_header_ops_result>,
+          typename EventValues::template tuple_t<CxH_event>
+        >;
+      
+      return_t ans_;
+      return_t&& operator()() { return std::move(ans_); }
+      
+      template<typename CxState, typename Tail>
+      completions_returner_head(CxState &s, Tail&&):
+        ans_{
+          s.head().state_.pro_.get_future()
+        } {
+      }
+    };
+    
+    template<template<typename> class EventPredicate,
+             typename EventValues, typename CxH_not_future, typename ...CxT,
+             typename TailReturn>
+    struct completions_returner_head<
+        EventPredicate, EventValues,
+        completions<CxH_not_future, CxT...>,
+        TailReturn
+      >:
+      completions_returner<
+          EventPredicate, EventValues, completions<CxT...>
+        > {
+      
+      template<typename CxState>
+      completions_returner_head(
+          CxState&,
+          completions_returner<
+            EventPredicate, EventValues, completions<CxT...>
+          > &&tail
+        ):
+        completions_returner<
+            EventPredicate, EventValues, completions<CxT...>
+          >{std::move(tail)} {
+      }
+    };
+    
+    template<template<typename> class EventPredicate,
+             typename EventValues, typename CxH, typename ...CxT>
+    struct completions_returner<EventPredicate, EventValues,
+                                completions<CxH,CxT...>>:
+      completions_returner_head<
+        EventPredicate, EventValues,
+        completions<CxH,CxT...>,
+        typename completions_returner<
+            EventPredicate, EventValues, completions<CxT...>
+          >::return_t
+      > {
+
+      completions_returner(
+          completions_state<
+              EventPredicate, EventValues, completions<CxH,CxT...>
+            > &s
+        ):
+        completions_returner_head<
+          EventPredicate, EventValues,
+          completions<CxH,CxT...>,
+          typename completions_returner<
+              EventPredicate, EventValues, completions<CxT...>
+            >::return_t
+        >{s,
+          completions_returner<
+              EventPredicate, EventValues, completions<CxT...>
+            >{s.tail()}
+        } {
+      }
+    };
   }
 }
 #endif

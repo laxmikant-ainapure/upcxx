@@ -73,16 +73,19 @@ void rpc_barrier() {
     
     #if 1
       // Use random message sizes
-      upcxx::rpc_ff(peer, barrier_action{epoch, round});
+      future<> src_cx = upcxx::rpc_ff(peer, source_cx::as_future(), barrier_action{epoch, round});
     #else
       // The more concise lambda way, none of the barrier_action code
       // is necessary.
-      upcxx::rpc_ff(peer, [=]() {
+      future<> src_cx = upcxx::rpc_ff(peer, source_cx::as_future(), [=]() {
         state_bits[epoch & 1] |= bit;
       });
     #endif
+
+    bool src_cx_waiting = true;
+    src_cx.then([&](){ src_cx_waiting = false; });
     
-    while(0 == (state_bits[epoch & 1] & bit))
+    while(src_cx_waiting || 0 == (state_bits[epoch & 1] & bit))
       upcxx::progress();
     
     round += 1;
@@ -114,15 +117,21 @@ int main() {
   intrank_t left = (rank_me + 1 + rank_n) % rank_n;
 
   {
-    future<int> fut = upcxx::rpc(right, []() {
-      cout << upcxx::rank_me() << ": from left\n";
-      cout.flush();
-      got_left = true;
-      return 0xbeef;
-    });
+    future<> src;
+    future<int> op;
+    std::tie(src, op) = upcxx::rpc(
+      right,
+      source_cx::as_future() | operation_cx::as_future(),
+      []() {
+        cout << upcxx::rank_me() << ": from left\n";
+        cout.flush();
+        got_left = true;
+        return 0xbeef;
+      }
+    );
     
-    fut.wait();
-    UPCXX_ASSERT_ALWAYS(fut.result() == 0xbeef, "rpc returned wrong value");
+    when_all(src,op).wait();
+    UPCXX_ASSERT_ALWAYS(op.result() == 0xbeef, "rpc returned wrong value");
   }
   
   rpc_barrier();

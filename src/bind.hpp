@@ -22,49 +22,60 @@ namespace upcxx {
     // on_wire: Compute the value to be serialized on the wire.
     static on_wire_type on_wire(T);
     
-    // off_wire: Given the deserialized wire value, produce a future
-    // to the off-wire type.
-    static future<off_wire_type> off_wire(U);
+    // off_wire: Given a lvalue-reference to deserialized wire value,
+    // produce a future of the off-wire type as a value or future-of-value.
+    static off_wire_type off_wire(on_wire_type&);
+    // -- or --
+    static future<off_wire_type> off_wire(on_wire_type&);
   }*/;
   
   template<typename T>
-  struct binding {
+  struct binding_trivial {
     using on_wire_type = T;
     using off_wire_type = T;
     
-    static T on_wire(T x) {
-      return std::move(x);
-    }
-    
-    static auto off_wire(T x)
-      -> decltype(make_future(std::move(x))) {
-      return make_future(std::move(x));
-    }
-    
-    // This is the trivial binding of type T that uses T itself for
-    // the on-wire type and a trivially ready future<T> as off-wire.
-    static constexpr bool is_trivial = true;
+    static T on_wire(T x) { return std::move(x); }
+    static T off_wire(T &&x) { return std::move(x); }
+    static T& off_wire(T &x) { return x; }
   };
-  
-  template<typename T, typename trivial=std::false_type>
-  struct binding_is_trivial {
-    static constexpr bool value = trivial::value;
-  };
+
+  // binding defaults to trivial
   template<typename T>
-  struct binding_is_trivial<T, std::integral_constant<bool, binding<T>::is_trivial>> {
-    static constexpr bool value = binding<T>::is_trivial;
+  struct binding: binding_trivial<T> {};
+
+  // binding of reference-to-function is handled on the wire as a
+  // pointer-to-function.
+  template<typename Ret, typename ...Arg>
+  struct binding<Ret(&)(Arg...)> {
+    typedef Ret(*on_wire_type)(Arg...);
+    typedef Ret(&off_wire_type)(Arg...);
+    
+    static on_wire_type on_wire(off_wire_type x) { return &x; }
+    static off_wire_type off_wire(on_wire_type x) { return *x; }
   };
   
-  // binding implicitly decays
+  // binding implicitly decays (except references-to-functions handled above).
   template<typename T>
   struct binding<T&>: binding<T> {};
   template<typename T>
-  struct binding<T&&>: binding<T> {};
+  struct binding<T&&>: binding<T&> {};
   template<typename T>
   struct binding<T const>: binding<T> {};
   template<typename T>
   struct binding<T volatile>: binding<T> {};
   
+  //////////////////////////////////////////////////////////////////////
+  // binding_is_immediate: immediate bindings are those that don't return
+  // futures from off_wire()
+  
+  template<typename T,
+           typename Offed = decltype(
+             binding<T>::off_wire(std::declval<typename binding<T>::on_wire_type&>())
+           )>
+  struct binding_is_immediate: std::true_type {};
+
+  template<typename T, typename Kind, typename ...U>
+  struct binding_is_immediate<T, /*Offed=*/future1<Kind,U...>>: std::false_type {};
   
   //////////////////////////////////////////////////////////////////////
   // bound_function: Packable callable wrapping an internal callable
@@ -83,19 +94,22 @@ namespace upcxx {
     template<
       typename Fn, typename BndTup/*std::tuple<B...>*/,
       
-      // whether all of Fn and B... trivially binding?
-      bool all_trivial = binding_is_trivial<Fn>::value
-                      && upcxx::trait_forall_tupled<binding_is_trivial, BndTup>::value
+      // whether all of Fn and B... immediately available off-wire?
+      bool all_immediate = binding_is_immediate<Fn>::value
+                        && upcxx::trait_forall_tupled<binding_is_immediate, BndTup>::value
       >
     struct bound_function_base;
     
     template<typename Fn, typename ...B>
     struct bound_function_base<
-        Fn, std::tuple<B...>, /*all_trivial=*/true
+        Fn, std::tuple<B...>, /*all_immediate=*/true
       > {
       
       typename binding<Fn>::on_wire_type fn_;
       std::tuple<typename binding<B>::on_wire_type...> b_;
+
+      template<typename T>
+      static T& as_lref(T &&rref) { return rref; }
       
       template<typename Me, int ...bi, typename ...Arg>
       static auto apply_(
@@ -104,13 +118,19 @@ namespace upcxx {
           Arg &&...a
         )
         -> decltype(
-          me.fn_(
-            std::get<bi>(const_cast<std::tuple<typename binding<B>::on_wire_type...>&>(me.b_))...,
+          binding<Fn>::off_wire(me.fn_)(
+            std::declval<typename binding<B>::off_wire_type&>()...,
             std::forward<Arg>(a)...
           )
         ) {
-        return me.fn_(
-          std::get<bi>(const_cast<std::tuple<typename binding<B>::on_wire_type...>&>(me.b_))...,
+        return binding<Fn>::off_wire(me.fn_)(
+          as_lref(
+            binding<B>::off_wire(
+              const_cast<typename binding<B>::on_wire_type&>(
+                std::get<bi>(me.b_)
+              )
+            )
+          )...,
           std::forward<Arg>(a)...
         );
       }
@@ -118,7 +138,7 @@ namespace upcxx {
     
     template<typename Fn, typename ...B>
     struct bound_function_base<
-        Fn, std::tuple<B...>, /*all_trivial=*/false
+        Fn, std::tuple<B...>, /*all_immediate=*/false
       > {
       
       typename binding<Fn>::on_wire_type fn_;
@@ -157,16 +177,24 @@ namespace upcxx {
         )
         -> decltype(
           upcxx::when_all(
-            binding<Fn>::off_wire(me.fn_),
-            binding<B>::off_wire(
-              std::get<bi>(const_cast<std::tuple<typename binding<B>::on_wire_type...>&>(me.b_))
+            to_future(
+              binding<Fn>::off_wire(std::declval<typename binding<Fn>::on_wire_type&&>())
+            ),
+            to_future(
+              binding<B>::off_wire(std::declval<typename binding<B>::on_wire_type&&>())
             )...
           ) >> std::declval<applicator<Arg&&...>>()
         ) {
         return upcxx::when_all(
-            binding<Fn>::off_wire(me.fn_),
-            binding<B>::off_wire(
-              std::get<bi>(const_cast<std::tuple<typename binding<B>::on_wire_type...>&>(me.b_))
+            to_future(
+              binding<Fn>::off_wire(std::move(me.fn_))
+            ),
+            to_future(
+              binding<B>::off_wire(
+                static_cast<typename binding<B>::on_wire_type&&>(
+                  const_cast<typename binding<B>::on_wire_type&>(std::get<bi>(me.b_))
+                )
+              )
             )...
           ) >> applicator<Arg&&...>{
             std::tuple<Arg&&...>{std::forward<Arg>(a)...}
@@ -299,11 +327,6 @@ namespace upcxx {
       std::forward<Fn>(fn), std::forward<B>(b)...
     );
   }
-  
-  template<typename Fn>
-  Fn&& bind(Fn &&fn) {
-    return std::forward<Fn>(fn);
-  }
 }
 
 
@@ -348,8 +371,9 @@ namespace upcxx {
   }
   
   template<typename Fn>
-  Fn&& bind_last(Fn &&fn) {
-    return std::forward<Fn>(fn);
+  auto bind_last(Fn fn)
+    -> decltype(bind(std::move(fn))) {
+    return bind(std::move(fn));
   }
 }
 #endif

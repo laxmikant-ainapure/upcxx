@@ -86,10 +86,10 @@ namespace upcxx {
   // future_is_trivially_ready: Trait for detecting trivially ready
   // futures. Specializations provided in each future implementation.
   
-  template<typename FutureOrKind>
-  struct future_is_trivially_ready {
-    static constexpr bool value = false;
-  };
+  template<typename Future>
+  struct future_is_trivially_ready/*{
+    static constexpr bool value;
+  }*/;
   
   //////////////////////////////////////////////////////////////////////
   // Future/continuation function-application support
@@ -220,12 +220,12 @@ namespace upcxx {
       static future_header the_nil;
       
       // Modify the refcount, but do not take action.
-      inline void refs_add(int n) {
+      void refs_add(int n) {
         int ref_n = this->ref_n_;
         int trash;
         (ref_n >= 0 ? this->ref_n_ : trash) = ref_n + n;
       }
-      inline int refs_drop(int n) { // returns new refcount
+      int refs_drop(int n) { // returns new refcount
         int ref_n = this->ref_n_;
         bool write_back = ref_n >= 0;
         ref_n -= (ref_n >= 0 ? n : 0);
@@ -247,7 +247,7 @@ namespace upcxx {
     // future_header_dependent: dependent headers are those that...
     // - Wait for other futures to finish and then fire some specific action.
     // - Use their bodies to store their state while in wait.
-    // - Don't store their own results, they're "result_" points to the
+    // - Don't store their own results, their "result_" points to the
     //   future_header_result<T...> holding the result.
     
     struct future_header_dependent final: future_header {
@@ -270,10 +270,10 @@ namespace upcxx {
       
       // Override refcount arithmetic with more efficient form since we
       // know future_header_dependents are never statically allocated.
-      inline void refs_add(int n) {
+      void refs_add(int n) {
         this->ref_n_ += n;
       }
-      inline int refs_drop(int n) {
+      int refs_drop(int n) {
         return (this->ref_n_ -= n);
       }
     };
@@ -523,7 +523,7 @@ namespace upcxx {
     }
 
     template<typename ...T>
-    inline void future_header_ops_general::decref_header(future_header *hdr) {
+    void future_header_ops_general::decref_header(future_header *hdr) {
       if(0 == hdr->refs_drop(1))
         delete_header<T...>(hdr);
     }

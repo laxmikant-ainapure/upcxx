@@ -13,7 +13,7 @@ EOF
 fi
     
 . sourceme
-rm -rf .nobs
+test -d .git || rm -rf .nobs
 
 . utils/system-checks.sh
 sys_info
@@ -56,6 +56,7 @@ check_result() {
 export GASNET_CONDUIT=$CONDUIT
 export GASNET_BACKTRACE=1
 # default to debugging mode
+export ASSERT=${ASSERT:=1}
 export DBGSYM=${DBGSYM:=1}
 export OPTLEV=${OPTLEV:=0}
 
@@ -86,12 +87,12 @@ run_test "rput.cpp" "par"
 run_test "uts/uts_ranks.cpp"
 THREADS="$RANKS" run_test "uts/uts_threads.cpp"
 
-UPCXX_BACKEND=gasnetex_par run_test "uts/uts_hybrid.cpp"
+UPCXX_BACKEND=gasnet_par run_test "uts/uts_hybrid.cpp"
 
 echo -e "\e[92mAll tests succeded\e[0m"
 
 cd ..
 
-rm -rf .nobs 2>&1 >/dev/null # ignore failures due to races
+test -d .git || rm -rf .nobs 2>&1 >/dev/null # ignore failures due to races
 
 exit 0

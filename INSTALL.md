@@ -10,11 +10,11 @@ cd <upcxx-source-path>
 
 This will build the UPC\+\+ library and install it to the `<upcxx-install-path>`
 directory. Users are recommended to use paths to non-existent or empty
-directories as the installation path so that uninstallation is as trivial as `rm
--rf <upcxx-install-path>`.  Note that the install process downloads the GASNet
-communication library, so an Internet connection is needed. Depending on the
-platform, additional configuration may be necessary before invoking `install`.
-See below.
+directories as the installation path so that uninstallation is as trivial as
+`rm -rf <upcxx-install-path>`.  Note that the install process downloads the
+GASNet communication library, so an Internet connection is needed. Depending on
+the platform, additional configuration may be necessary before invoking
+`install`. See below.
 
 **Installation: Linux**
 
@@ -22,8 +22,7 @@ The installation command above will work as is. The default compilers used will
 be gcc/g++. The `CC` and `CXX` environment variables can be set to alternatives
 to override this behavior. Additional environment variables allowing finer
 control over how UPC\+\+ is configured can be found in the
-[Advanced Installer Configuration](#advanced-installer-configuration) section
-below.
+"Advanced Installer Configuration" section below.
 
 **Installation: Mac**
 
@@ -60,12 +59,20 @@ environment variables:
 * `CC`, `CXX`: The C and C\+\+ compilers to use.
 * `CROSS`: The cross-configure settings script to pull from the GASNet source
   tree (computed as `<gasnet>/other/contrib/cross-configure-${CROSS}`).
-* `GASNET`: Provides the GASNetEx source tree from which the UPC\+\+ install
+* `GASNET`: Provides the GASNet-EX source tree from which the UPC\+\+ install
   script will build its own version of GASNet. This can be a path to a tarball,
   url to a tarball, or path to a full source tree.  Defaults to a url to a
-  publicly available GASNetEx tarball.
+  publicly available GASNet-EX tarball.
 * `GASNET_CONFIGURE_ARGS`: List of additional command line arguments passed to
   GASNet's configure phase.
+* `UPCXX_LPC_INBOX=[lockfree|locked|syncfree]`. The implementation to use for
+  the internal `lpc` queues of personas.
+    * `lockfree`: (default) Highest performance: one atomic instruction per
+       enqueue.
+    * `locked`: Simple mutex-based linked list. Lower performance, but also
+       lower risk with respect to potential bugs in implementation.
+    * `syncfree`: Thread unsafe queues. Will not function correctly in a
+      multi-threaded context.
 
 # Compiling Against UPC\+\+ #
 
@@ -95,9 +102,10 @@ The `<c++ compiler>` used to build the application must be the same as the one
 used for the UPC\+\+ installation.
 
 For an example of a Makefile which builds UPC++ applications, look at
-`example/prog-guide/Makefile`. This directory also has code for running all the
-examples given in the programmer's guide. To use that `Makefile`, first set the
-`UPCXX_INSTALL` shell variable to the `<upcxx-install-path>`.
+[example/prog-guide/Makefile](example/prog-guide/Makefile). This directory also
+has code for running all the examples given in the programmer's guide. To use
+that `Makefile`, first set the `UPCXX_INSTALL` shell variable to the
+`<upcxx-install-path>`.
 
 ## UPC\+\+ Backends ##
 
@@ -111,10 +119,14 @@ script will assume sensible defaults for these parameters based on the
 installation configuration. The following environment variables can be set to
 influence which backend `upcxx-meta` selects:
 
-* `UPCXX_GASNET_CONDUIT=[smp|udp|aries]`: The GASNet conduit to use.  `smp` is
-  the typical high-performance choice for single-node multi-core runs, `udp` is
-  a useful low-performance alternative for testing and debugging, and `aries` is
-  the high-performance Cray XC network. The default value is platform dependent.
+* `UPCXX_GASNET_CONDUIT=[smp|udp|aries|ibv]`: The GASNet conduit to use (the
+  default value is platform dependent):
+    * `smp` is the typical high-performance choice for single-node multi-core
+      runs .
+    * `udp` is a useful low-performance alternative for testing and debugging. 
+    * `aries` is the high-performance Cray XC network.
+    * `ibv` is the high-performance InfiniBand network.
+
 * `UPCXX_THREADMODE=[seq|par]`: The value `seq` limits the application to only
   calling "communicating" upcxx routines from the thread that invoked
   `upcxx::init`, and only while that thread is holding the master persona. The
@@ -124,6 +136,7 @@ influence which backend `upcxx-meta` selects:
   concurrency from a multi-threaded application but at the expensive of greater
   internal synchronization (higher overheads per operation).  The default value
   is always `seq`.
+  
 * `UPCXX_CODEMODE=[O3|debug]`: `O3` is for highly compiler-optimized
   code. `debug` produces unoptimized code, includes extra error checking
   assertions, and is annotated with the symbol tables needed by debuggers. The
@@ -132,11 +145,22 @@ influence which backend `upcxx-meta` selects:
 # Running UPC\+\+ Programs #
 
 To run a parallel UPC\+\+ application, use the `upcxx-run` launcher provided in
-the installation directory:
+the installation.
 
 ```bash
-<upcxx-install-path>/bin/upcxx-run <ranks> <exe> <args...>
+<upcxx-install-path>/bin/upcxx-run -n <ranks> <exe> <args...>
 ```
 
 This will run the executable and arguments `<exe> <args...>` in a parallel
 context with `<ranks>` number of UPC\+\+ ranks.
+
+Upon startup, each UPC\+\+ rank creates a fixed-size shared memory heap that will never grow. By
+default, this heap is 128 MB per rank. This can be adjust by passing a `-shared-heap` parameter
+to the run script, which takes a suffix of KB, MB or GB; e.g. to reserve 1GB per rank, call:
+
+```bash
+<upcxx-install-path>/bin/upcxx-run -shared-heap 1G -n <ranks> <exe> <args...>
+```
+
+There are several additional options that can be passed to `upcxx-run`. Execute with `-h` to get a
+list of options. 
