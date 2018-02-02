@@ -23,4 +23,4 @@ Otherwise, e.g.
 
 Run as usual, e.g. 
 
-`GASNET_PSHM_NODES=4 ./hello-world`
+`upcxx-run -n 4 ./hello-world`

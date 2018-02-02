@@ -43,6 +43,10 @@ namespace quiescence {
     #include "quiescence-reduce_to_rank0.hpp"
 }
 
+namespace promises {
+    #include "promises2-distobj-reduce_to_rank0.hpp"
+}
+
 int hit()
 {
     double x = static_cast<double>(rand()) / RAND_MAX;
@@ -85,6 +89,7 @@ int main(int argc, char **argv)
     ACCM(async_distobj, distobj);
     ACCM(atomics, async_distobj);
     ACCM(quiescence, atomics);
+    ACCM(promises, quiescence);
     // now check that the result is reasonable
     if (!upcxx::rank_me()) {
         double pi = 4.0 * hits_rpc / trials;
