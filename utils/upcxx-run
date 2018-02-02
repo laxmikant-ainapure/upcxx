@@ -4,11 +4,6 @@
 from __future__ import print_function
 
 import sys
-
-if sys.version_info < (2, 7, 5):
-    sys.stderr.write('ERROR: Python version >= 2.7.5 required\n')
-    exit(1)
-
 import os
 import argparse
 import subprocess
@@ -34,6 +29,15 @@ def ranks_type(a):
         raise argparse.ArgumentTypeError('invalid format (' + a + ') - must be an integer')
     if v <= 0:
         raise argparse.ArgumentTypeError('number of ranks must be an integer > 0')
+    return v
+
+def nodes_type(a):
+    try:
+        v = int(a)
+    except ValueError:
+        raise argparse.ArgumentTypeError('invalid format (' + a + ') - must be an integer')
+    if v <= 0:
+        raise argparse.ArgumentTypeError('number of nodes must be an integer > 0')
     return v
 
 
@@ -63,6 +67,8 @@ def load_args():
     _parser = argparse.ArgumentParser(description='A portable parallel job launcher for UPC++ programs, v1.0')
     _parser.add_argument('-n', '-np', dest='nranks', type=ranks_type, default=None, metavar='NUM',
                          help='Spawn NUM number of UPC++ ranks. Required.')
+    _parser.add_argument('-N', dest='nnodes', type=nodes_type, default=None, metavar='NUM',
+                         help='Run on NUM of nodes.')
     _parser.add_argument('-shared-heap', dest='heapsz', type=heapsz_type, default='128MB',
                          help='Requests HEAPSZ size of shared memory per rank. ' + \
                         'Units must be specified as ' + ', '.join(HEAPSZ_UNITS) + '. Default %(default)s')
@@ -181,6 +187,10 @@ def set_ssh_servers(ssh_servers, nranks, conduit):
 
     
 def main():
+    if sys.version_info < (2, 6):
+        print('Error: Python version >= 2.6 required')
+        return 1
+    
     args = load_args()
     
     if not args.info and not args.nranks:
@@ -220,6 +230,8 @@ def main():
     elif conduit in ['mpi', 'ibv', 'aries', 'gemini', 'pami']:
         spawner = 'gasnetrun_' + conduit
         cmd = ['-n', str(args.nranks)] + cmd
+        if args.nnodes:
+            cmd = ['-N', str(args.nnodes)] + cmd
         if conduit == 'ibv':
             set_ssh_servers(args.sshservers, args.nranks, conduit)
     else:
