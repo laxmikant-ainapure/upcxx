@@ -91,7 +91,10 @@ void test_put_get(void) {
 int main(int argc, char **argv) {
     upcxx::init();
     
-    upcxx::atomic::init_implicit_domains();
+    upcxx::atomic::init_implicit_domain<int32_t>();
+    upcxx::atomic::init_implicit_domain<int64_t>();
+    upcxx::atomic::init_implicit_domain<uint64_t>();
+//    upcxx::atomic::init_implicit_domain<double>();
     
     print_test_header();
     
