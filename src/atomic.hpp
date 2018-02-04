@@ -58,51 +58,24 @@ namespace upcxx {
         }
         return gex_op;
       }
-    }
-
-    template<typename T>
-    struct domain {};
-
-    template<>
-    struct domain<int64_t> {
-      gex_AD_t gex_ad;
-
-      domain(std::vector<operation> ops, int flags = 0) {
-        gex_AD_Create(&gex_ad, backend::gasnet::world_team, GEX_DT_I64, detail::get_gex_ops(ops),
-            flags);
-      }
-
-      ~domain() {
-        gex_AD_Destroy(gex_ad);
-      }
-    };
-
-
-    namespace detail {
 
       template<typename T>
-      uintptr_t generic_gex_AD_OpNB(gex_AD_t ad, T *rp, gex_Rank_t trank, void *taddr,
-                                    gex_OP_t opcode, T op1, T op2, gex_Flags_t flags);
+      uintptr_t gex_aop(gex_AD_t ad, T *rp, global_ptr<T> gptr, gex_OP_t opcode, T op1, T op2);
 
 #define ADD_OP_DOMAIN(TYPE, GEXTYPE) \
       template<> \
-      uintptr_t generic_gex_AD_OpNB<TYPE>(gex_AD_t ad, TYPE *rp, gex_Rank_t trank, void *taddr, \
-                                          gex_OP_t opcode, TYPE op1, TYPE op2, gex_Flags_t flags) \
-      { return reinterpret_cast<uintptr_t>(gex_AD_OpNB_##GEXTYPE(ad, rp, trank, taddr, \
-      opcode, op1, op2, flags)); }
+      uintptr_t gex_aop<TYPE>(gex_AD_t ad, TYPE *rp, global_ptr<TYPE> gptr, \
+                              gex_OP_t opcode, TYPE op1, TYPE op2) \
+      { return reinterpret_cast<uintptr_t>(gex_AD_OpNB_##GEXTYPE( \
+          ad, rp, gptr.rank_, gptr.raw_ptr_, opcode, op1, op2, 0)); }
 
       ADD_OP_DOMAIN(int32_t, I32);
       ADD_OP_DOMAIN(int64_t, I64);
       ADD_OP_DOMAIN(uint32_t, U32);
       ADD_OP_DOMAIN(uint64_t, U64);
 
-    }
-
-
-    template<typename T>
-    future<T> get(global_ptr<T> gptr, std::memory_order order, const domain<T> &d) {
-
-      struct my_cb final: backend::gasnet::handle_cb {
+      template <typename T>
+      struct cb_with_result final: backend::gasnet::handle_cb {
         promise<T> p;
         T result;
 
@@ -120,20 +93,7 @@ namespace upcxx {
         }
       };
 
-      my_cb *cb = new my_cb;
-      cb->handle = detail::generic_gex_AD_OpNB<T>(d.gex_ad, &cb->result,
-          gptr.rank_, gptr.raw_ptr_, GEX_OP_GET, 0, 0, 0);
-      auto ans = cb->p.get_future();
-      backend::gasnet::register_cb(cb);
-      backend::gasnet::after_gasnet();
-      return ans;
-    }
-
-
-    template<typename T>
-    future<> set(global_ptr<T> gptr, T val, std::memory_order order, const domain<T> &d)	{
-
-      struct my_cb final: backend::gasnet::handle_cb {
+      struct cb_no_result final: backend::gasnet::handle_cb {
         promise<> p;
 
         void execute_and_delete(backend::gasnet::handle_cb_successor) {
@@ -150,9 +110,36 @@ namespace upcxx {
         }
       };
 
-      my_cb *cb = new my_cb;
-      cb->handle = detail::generic_gex_AD_OpNB<T>(d.gex_ad, nullptr,
-          gptr.rank_, gptr.raw_ptr_, GEX_OP_SET, val, 0, 0);
+    }
+
+    template<typename T>
+    struct domain {};
+
+    template<>
+    struct domain<int64_t> {
+      gex_AD_t gex_ad;
+      domain(std::vector<operation> ops, int flags = 0) {
+        gex_AD_Create(&gex_ad, backend::gasnet::world_team, GEX_DT_I64, detail::get_gex_ops(ops),
+            flags);
+      }
+      ~domain() { gex_AD_Destroy(gex_ad); }
+    };
+
+    template<typename T>
+    future<T> get(global_ptr<T> gptr, std::memory_order order, const domain<T> &d) {
+      auto *cb = new detail::cb_with_result<T>();
+      cb->handle = detail::gex_aop<T>(d.gex_ad, &cb->result, gptr, GEX_OP_GET, 0, 0);
+      auto ans = cb->p.get_future();
+      backend::gasnet::register_cb(cb);
+      backend::gasnet::after_gasnet();
+      return ans;
+    }
+
+
+    template<typename T>
+    future<> set(global_ptr<T> gptr, T val, std::memory_order order, const domain<T> &d)	{
+      auto *cb = new detail::cb_no_result();
+      cb->handle = detail::gex_aop<T>(d.gex_ad, nullptr, gptr, GEX_OP_SET, val, 0);
       auto ans = cb->p.get_future();
       backend::gasnet::register_cb(cb);
       backend::gasnet::after_gasnet();
@@ -162,28 +149,8 @@ namespace upcxx {
 
     template<typename T>
     future<T> fadd(global_ptr<T> gptr, T val, std::memory_order order, const domain<T> &d) {
-
-      struct my_cb final: backend::gasnet::handle_cb {
-        promise<T> p;
-        T result;
-
-        void execute_and_delete(backend::gasnet::handle_cb_successor) {
-          if (false) {
-            upcxx::backend::during_user(std::move(p), result);
-            delete this;
-          } else {
-            backend::during_user(
-                [this]() {
-                  p.fulfill_result(result);
-                  delete this;
-                });
-          }
-        }
-      };
-
-      my_cb *cb = new my_cb;
-      cb->handle = detail::generic_gex_AD_OpNB<T>(d.gex_ad, &cb->result,
-          gptr.rank_, gptr.raw_ptr_, GEX_OP_FADD, val, 0, 0);
+      auto *cb = new detail::cb_with_result<T>();
+      cb->handle = detail::gex_aop<T>(d.gex_ad, &cb->result, gptr, GEX_OP_FADD, val, 0);
       auto ans = cb->p.get_future();
       backend::gasnet::register_cb(cb);
       backend::gasnet::after_gasnet();
@@ -193,28 +160,8 @@ namespace upcxx {
 
     template<typename T>
     future<T> fsub(global_ptr<T> gptr, T val, std::memory_order order, const domain<T> &d) {
-
-      struct my_cb final: backend::gasnet::handle_cb {
-        promise<T> p;
-        T result;
-
-        void execute_and_delete(backend::gasnet::handle_cb_successor) {
-          if (false) {
-            upcxx::backend::during_user(std::move(p), result);
-            delete this;
-          } else {
-            backend::during_user(
-                [this]() {
-                  p.fulfill_result(result);
-                  delete this;
-                });
-          }
-        }
-      };
-
-      my_cb *cb = new my_cb;
-      cb->handle = detail::generic_gex_AD_OpNB<T>(d.gex_ad, &cb->result,
-          gptr.rank_, gptr.raw_ptr_, GEX_OP_FSUB, val, 0, 0);
+      auto *cb = new detail::cb_with_result<T>();
+      cb->handle = detail::gex_aop<T>(d.gex_ad, &cb->result, gptr, GEX_OP_FSUB, val, 0);
       auto ans = cb->p.get_future();
       backend::gasnet::register_cb(cb);
       backend::gasnet::after_gasnet();
