@@ -24,99 +24,89 @@
 
 namespace upcxx {
   namespace atomic {
+
+    enum operation {
+      GET, SET,
+      ADD, FADD,
+      SUB, FSUB,
+      INC, FINC,
+      DEC, FDEC,
+      CSWAP
+    };
+
     namespace detail {
 
-#ifdef __GNUG__
-      template<typename T>
-      std::string demangle_typeid(void) {
-        const char *tname = typeid(T).name();
-        int status = -4; // some arbitrary value to eliminate the compiler warning
-        std::unique_ptr<char, void(*)(void*)> res {
-          abi::__cxa_demangle(tname, NULL, NULL, &status),
-          std::free
-        };
-        return (status==0) ? res.get() : tname ;
+      gex_OP_t get_gex_ops(std::vector<operation> ops)
+      {
+        gex_OP_t gex_op = 0;
+
+        for (auto op : ops) {
+          switch (op) {
+            case SET: gex_op |= GEX_OP_SET; break;
+            case GET: gex_op |= GEX_OP_GET; break;
+            case ADD: gex_op |= GEX_OP_ADD; break;
+            case FADD: gex_op |= GEX_OP_FADD; break;
+            case SUB: gex_op |= GEX_OP_SUB; break;
+            case FSUB: gex_op |= GEX_OP_FSUB; break;
+            case INC: gex_op |= GEX_OP_INC; break;
+            case FINC: gex_op |= GEX_OP_FINC; break;
+            case DEC: gex_op |= GEX_OP_DEC; break;
+            case FDEC: gex_op |= GEX_OP_FDEC; break;
+            case CSWAP: gex_op |= GEX_OP_CSWAP; break;
+              break;
+          }
+        }
+        return gex_op;
       }
-#else
-      template<typename T>
-      std::string demangle_typeid(void) {
-        return std::string(typeid(T).name());
+    }
+
+    template<typename T>
+    struct domain {};
+
+    template<>
+    struct domain<int64_t> {
+      gex_AD_t gex_ad;
+
+      domain(std::vector<operation> ops, int flags = 0) {
+        gex_AD_Create(&gex_ad, backend::gasnet::world_team, GEX_DT_I64, detail::get_gex_ops(ops),
+            flags);
       }
-#endif
 
-      const gex_OP_t gex_implicit_ops = GEX_OP_SET|GEX_OP_GET|GEX_OP_ADD|GEX_OP_SUB|GEX_OP_FADD|
-          GEX_OP_FSUB|GEX_OP_INC|GEX_OP_FINC|GEX_OP_DEC|GEX_OP_FDEC|GEX_OP_CSWAP;
+      ~domain() {
+        gex_AD_Destroy(gex_ad);
+      }
+    };
 
-      gex_AD_t implicit_domain_int32_t;
-      gex_AD_t implicit_domain_int64_t;
-      gex_AD_t implicit_domain_uint32_t;
-      gex_AD_t implicit_domain_uint64_t;
+
+    namespace detail {
 
       template<typename T>
-      uintptr_t generic_gex_AD_OpNB(T *rp, gex_Rank_t trank, void *taddr,
+      uintptr_t generic_gex_AD_OpNB(gex_AD_t ad, T *rp, gex_Rank_t trank, void *taddr,
                                     gex_OP_t opcode, T op1, T op2, gex_Flags_t flags);
 
-      template<>
-      uintptr_t generic_gex_AD_OpNB<int32_t>(int32_t *rp, gex_Rank_t trank, void *taddr,
-                                             gex_OP_t opcode, int32_t op1, int32_t op2,
-                                             gex_Flags_t flags)
-      {
-        return reinterpret_cast<uintptr_t>(gex_AD_OpNB_I32(implicit_domain_int32_t, rp,
-            trank, taddr, opcode, op1, op2, flags));
-      }
+#define ADD_OP_DOMAIN(TYPE, GEXTYPE) \
+      template<> \
+      uintptr_t generic_gex_AD_OpNB<TYPE>(gex_AD_t ad, TYPE *rp, gex_Rank_t trank, void *taddr, \
+                                          gex_OP_t opcode, TYPE op1, TYPE op2, gex_Flags_t flags) \
+      { return reinterpret_cast<uintptr_t>(gex_AD_OpNB_##GEXTYPE(ad, rp, trank, taddr, \
+      opcode, op1, op2, flags)); }
 
-      template<>
-      uintptr_t generic_gex_AD_OpNB<int64_t>(int64_t *rp, gex_Rank_t trank, void *taddr,
-                                             gex_OP_t opcode, int64_t op1, int64_t op2,
-                                             gex_Flags_t flags)
-      {
-        return reinterpret_cast<uintptr_t>(gex_AD_OpNB_I64(implicit_domain_int64_t, rp,
-            trank, taddr, opcode, op1, op2, flags));
-      }
+      ADD_OP_DOMAIN(int32_t, I32);
+      ADD_OP_DOMAIN(int64_t, I64);
+      ADD_OP_DOMAIN(uint32_t, U32);
+      ADD_OP_DOMAIN(uint64_t, U64);
+
     }
 
-    template<typename T>
-    void init_implicit_domain(void) {
-      // FIXME: is there any better way to do this?
-      std::string tname = detail::demangle_typeid<T>();
-      if (tname == "int") {
-        gex_AD_Create(&detail::implicit_domain_int32_t, backend::gasnet::world_team,
-            GEX_DT_I32, detail::gex_implicit_ops, 0);
-      } else if (tname == "long") {
-        gex_AD_Create(&detail::implicit_domain_int64_t, backend::gasnet::world_team,
-            GEX_DT_I64, detail::gex_implicit_ops, 0);
-      } else if (tname == "unsigned int") {
-        gex_AD_Create(&detail::implicit_domain_uint32_t, backend::gasnet::world_team,
-            GEX_DT_U32, detail::gex_implicit_ops, 0);
-      } else if (tname == "unsigned long") {
-        gex_AD_Create(&detail::implicit_domain_uint64_t, backend::gasnet::world_team,
-            GEX_DT_U64, detail::gex_implicit_ops, 0);
-      } else {
-        if (upcxx::rank_me() == 0)
-          UPCXX_ASSERT_ALWAYS(0, "Type \"" << tname << "\" not a valid atomic type\n");
-      }
-    }
 
     template<typename T>
-    future<T> get(global_ptr<T> p, std::memory_order order)	{
-      return rpc(p.where(), [](global_ptr<T> p) { return *p.local(); }, p);
-    }
-
-    template<typename T>
-    future<> set(global_ptr<T> p, T val, std::memory_order order)	{
-      return rpc(p.where(), [](global_ptr<T> p, T val) { *(p.local()) = val; }, p, val);
-    }
-
-    template<typename T>
-    future<T> fetch_add(global_ptr<T> gptr, T val, std::memory_order order) {
+    future<T> get(global_ptr<T> gptr, std::memory_order order, const domain<T> &d) {
 
       struct my_cb final: backend::gasnet::handle_cb {
         promise<T> p;
         T result;
 
         void execute_and_delete(backend::gasnet::handle_cb_successor) {
-          // we are now running in "internal" progress, cant fulfill until
-          // user progress
           if (false) {
             upcxx::backend::during_user(std::move(p), result);
             delete this;
@@ -124,21 +114,110 @@ namespace upcxx {
             backend::during_user(
                 [this]() {
                   p.fulfill_result(result);
-                  delete this; // need "final" for this delete
+                  delete this;
                 });
           }
         }
       };
 
       my_cb *cb = new my_cb;
-
-      cb->handle = detail::generic_gex_AD_OpNB<T>(&cb->result, gptr.rank_, gptr.raw_ptr_,
-          GEX_OP_FADD, val, 0, 0);
-
+      cb->handle = detail::generic_gex_AD_OpNB<T>(d.gex_ad, &cb->result,
+          gptr.rank_, gptr.raw_ptr_, GEX_OP_GET, 0, 0, 0);
       auto ans = cb->p.get_future();
       backend::gasnet::register_cb(cb);
       backend::gasnet::after_gasnet();
+      return ans;
+    }
 
+
+    template<typename T>
+    future<> set(global_ptr<T> gptr, T val, std::memory_order order, const domain<T> &d)	{
+
+      struct my_cb final: backend::gasnet::handle_cb {
+        promise<> p;
+
+        void execute_and_delete(backend::gasnet::handle_cb_successor) {
+          if (false) {
+            upcxx::backend::during_user(std::move(p));
+            delete this;
+          } else {
+            backend::during_user(
+                [this]() {
+                  p.fulfill_result();
+                  delete this;
+                });
+          }
+        }
+      };
+
+      my_cb *cb = new my_cb;
+      cb->handle = detail::generic_gex_AD_OpNB<T>(d.gex_ad, nullptr,
+          gptr.rank_, gptr.raw_ptr_, GEX_OP_SET, val, 0, 0);
+      auto ans = cb->p.get_future();
+      backend::gasnet::register_cb(cb);
+      backend::gasnet::after_gasnet();
+      return ans;
+    }
+
+
+    template<typename T>
+    future<T> fadd(global_ptr<T> gptr, T val, std::memory_order order, const domain<T> &d) {
+
+      struct my_cb final: backend::gasnet::handle_cb {
+        promise<T> p;
+        T result;
+
+        void execute_and_delete(backend::gasnet::handle_cb_successor) {
+          if (false) {
+            upcxx::backend::during_user(std::move(p), result);
+            delete this;
+          } else {
+            backend::during_user(
+                [this]() {
+                  p.fulfill_result(result);
+                  delete this;
+                });
+          }
+        }
+      };
+
+      my_cb *cb = new my_cb;
+      cb->handle = detail::generic_gex_AD_OpNB<T>(d.gex_ad, &cb->result,
+          gptr.rank_, gptr.raw_ptr_, GEX_OP_FADD, val, 0, 0);
+      auto ans = cb->p.get_future();
+      backend::gasnet::register_cb(cb);
+      backend::gasnet::after_gasnet();
+      return ans;
+    }
+
+
+    template<typename T>
+    future<T> fsub(global_ptr<T> gptr, T val, std::memory_order order, const domain<T> &d) {
+
+      struct my_cb final: backend::gasnet::handle_cb {
+        promise<T> p;
+        T result;
+
+        void execute_and_delete(backend::gasnet::handle_cb_successor) {
+          if (false) {
+            upcxx::backend::during_user(std::move(p), result);
+            delete this;
+          } else {
+            backend::during_user(
+                [this]() {
+                  p.fulfill_result(result);
+                  delete this;
+                });
+          }
+        }
+      };
+
+      my_cb *cb = new my_cb;
+      cb->handle = detail::generic_gex_AD_OpNB<T>(d.gex_ad, &cb->result,
+          gptr.rank_, gptr.raw_ptr_, GEX_OP_FSUB, val, 0, 0);
+      auto ans = cb->p.get_future();
+      backend::gasnet::register_cb(cb);
+      backend::gasnet::after_gasnet();
       return ans;
     }
 
