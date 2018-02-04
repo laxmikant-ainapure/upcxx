@@ -74,7 +74,7 @@ void test_put_get(upcxx::atomic::domain<int64_t> &dom) {
   for (int i = 0; i < ITERS * 10; i++) {
     auto v = upcxx::atomic::get(target_counter, memory_order_relaxed, dom).wait();
     //auto v = upcxx::atomic::atomic_op<upcxx::atomic::get, int64_t>(target_counter, memory_order_relaxed).wait();
-    UPCXX_ASSERT_ALWAYS(v >=0 && v < rank_n(), "atomic_get out of range");
+    UPCXX_ASSERT_ALWAYS(v >=0 && v < rank_n(), "atomic_get out of range: " << v);
     upcxx::atomic::set(target_counter, (int64_t)rank_me(), memory_order_relaxed, dom).wait();
   }
   
