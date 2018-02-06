@@ -86,10 +86,17 @@ namespace upcxx {
         return ans;
       }
 
-      future<T> get(global_ptr<T> gptr) { return operation<AOP::GET>(gptr); }
       future<T> set(global_ptr<T> gptr, T op1) { return operation<AOP::SET>(gptr, op1); }
-      future<T> fadd(global_ptr<T> gptr, T op1) { return operation<AOP::FADD>(gptr, op1);}
-
+      future<T> get(global_ptr<T> gptr) { return operation<AOP::GET>(gptr); }
+      future<T> inc(global_ptr<T> gptr) { return operation<AOP::INC>(gptr); }
+      future<T> dec(global_ptr<T> gptr) { return operation<AOP::DEC>(gptr); }
+      future<T> finc(global_ptr<T> gptr) { return operation<AOP::FINC>(gptr); }
+      future<T> fdec(global_ptr<T> gptr) { return operation<AOP::FDEC>(gptr); }
+      future<T> add(global_ptr<T> gptr, T op1) { return operation<AOP::ADD>(gptr, op1); }
+      future<T> sub(global_ptr<T> gptr, T op1) { return operation<AOP::SUB>(gptr, op1); }
+      future<T> fadd(global_ptr<T> gptr, T op1) { return operation<AOP::FADD>(gptr, op1); }
+      future<T> fsub(global_ptr<T> gptr, T op1) { return operation<AOP::FSUB>(gptr, op1); }
+      future<T> cswap(global_ptr<T> gptr, T op1, T op2) { return operation<AOP::CSWAP>(gptr, op1, op2); }
     };
 
   } // namespace atomic
