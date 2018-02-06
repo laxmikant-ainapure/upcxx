@@ -35,6 +35,7 @@ namespace upcxx {
     uintptr_t gex_op(gex_AD_t ad, T *p, upcxx::global_ptr<T> gp, gex_OP_t opcode, T op1, T op2,
                      gex_Flags_t flags);
 
+    // FIXME: any way to avoid using macros?
 #define SET_GEX_OP_DT(T, GT) \
     template<> gex_DT_t get_gex_dt<T>() { return GEX_DT_##GT; } \
     template<> \
@@ -122,7 +123,7 @@ namespace upcxx {
     template<typename T>
     using op_ptr = future<T> (*)(global_ptr<T> gptr, T val, const domain<T> &d, std::memory_order);
 
-    // NB: this alias generates a warning for C++11, but still seems to work
+    // FIXME: this alias generates a warning for C++11, but still seems to work
     template<typename T> constexpr op_ptr<T> fadd = op<FADD, T>;
 
   } // namespace atomic
