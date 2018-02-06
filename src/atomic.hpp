@@ -50,7 +50,7 @@ namespace upcxx {
 
       domain(std::vector<AOP> ops, int flags = 0) {
         gex_OP_t gex_ops = 0;
-        for (auto op : ops) gex_ops |= static_cast<gex_OP_t>(op);
+        for (auto next_op : ops) gex_ops |= static_cast<gex_OP_t>(next_op);
         gex_AD_Create(&gex_ad, backend::gasnet::world_team, detail::gex_dt<T>(), gex_ops, flags);
       }
 
@@ -59,7 +59,7 @@ namespace upcxx {
       }
 
       template<AOP OP>
-      future<T> op(global_ptr<T> gptr, T op1=0, T op2=0)
+      future<T> operation(global_ptr<T> gptr, T op1=0, T op2=0)
       {
         struct op_cb final: backend::gasnet::handle_cb {
           promise<T> p;
@@ -85,6 +85,10 @@ namespace upcxx {
         backend::gasnet::after_gasnet();
         return ans;
       }
+
+      future<T> get(global_ptr<T> gptr) { return operation<AOP::GET>(gptr); }
+      future<T> set(global_ptr<T> gptr, T op1) { return operation<AOP::SET>(gptr, op1); }
+      future<T> fadd(global_ptr<T> gptr, T op1) { return operation<AOP::FADD>(gptr, op1);}
 
     };
 
