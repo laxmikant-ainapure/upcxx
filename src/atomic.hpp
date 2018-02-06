@@ -35,7 +35,7 @@ namespace upcxx {
     }
 
     // all supported atomic operations
-    enum operation {
+    enum class AOP : gex_OP_t {
       GET = GEX_OP_GET, SET = GEX_OP_SET,
       ADD = GEX_OP_ADD, FADD = GEX_OP_FADD,
       SUB = GEX_OP_SUB, FSUB = GEX_OP_FSUB,
@@ -48,9 +48,9 @@ namespace upcxx {
     struct domain {
       gex_AD_t gex_ad;
 
-      domain(std::vector<operation> ops, int flags = 0) {
+      domain(std::vector<AOP> ops, int flags = 0) {
         gex_OP_t gex_ops = 0;
-        for (auto op : ops) gex_ops |= op;
+        for (auto op : ops) gex_ops |= static_cast<gex_OP_t>(op);
         gex_AD_Create(&gex_ad, backend::gasnet::world_team, detail::gex_dt<T>(), gex_ops, flags);
       }
 
@@ -59,7 +59,7 @@ namespace upcxx {
       }
     };
 
-    template<operation OP, typename T>
+    template<AOP OP, typename T>
     future<T> op(const domain<T> &d, global_ptr<T> gptr, T op1=0, T op2=0)
     {
       struct op_cb final: backend::gasnet::handle_cb {
@@ -79,13 +79,13 @@ namespace upcxx {
         }
       };
       auto *cb = new op_cb();
-      cb->handle = detail::gex_op<T>(d.gex_ad, &cb->result, gptr, OP, op1, op2, 0);
+      cb->handle = detail::gex_op<T>(d.gex_ad, &cb->result, gptr, static_cast<gex_OP_t>(OP), op1, op2, 0);
       auto ans = cb->p.get_future();
       backend::gasnet::register_cb(cb);
       backend::gasnet::after_gasnet();
       return ans;
     }
-    
+
   } // namespace atomic
 } // namespace upcxx
 

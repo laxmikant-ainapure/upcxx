@@ -17,6 +17,7 @@ using upcxx::rank_me;
 using upcxx::rank_n;
 using upcxx::barrier;
 using upcxx::global_ptr;
+using upcxx::atomic::AOP;
 
 const int ITERS = 10;
 global_ptr<int64_t> counter;
@@ -34,7 +35,7 @@ void test_fetch_add(bool use_atomics, upcxx::atomic::domain<int64_t> &dom) {
       cout << "Test fetch_add: atomics, expect value " << expected_val << endl;
     }
     // always use atomics to access or modify counter
-    upcxx::atomic::op<upcxx::atomic::SET>(dom, target_counter, (int64_t)0).wait();
+    upcxx::atomic::op<AOP::SET>(dom, target_counter, (int64_t)0).wait();
   }
   barrier();
   for (int i = 0; i < ITERS; i++) {
@@ -43,7 +44,7 @@ void test_fetch_add(bool use_atomics, upcxx::atomic::domain<int64_t> &dom) {
       auto prev = rget(target_counter).wait();
       rput(prev + 1, target_counter).wait();
     } else {
-      auto prev = upcxx::atomic::op<upcxx::atomic::FADD>(dom, target_counter, (int64_t)1).wait();
+      auto prev = upcxx::atomic::op<AOP::FADD>(dom, target_counter, (int64_t)1).wait();
       UPCXX_ASSERT_ALWAYS(prev >= 0 && prev < rank_n() * ITERS, 
               "atomic::fetch_add result out of range");
     }
@@ -65,14 +66,14 @@ void test_put_get(upcxx::atomic::domain<int64_t> &dom) {
   if (rank_me() == 0) {
     cout << "Test puts and gets: expect a random rank number" << endl;
     // always use atomics to access or modify counter
-    upcxx::atomic::op<upcxx::atomic::SET>(dom, target_counter, (int64_t)0).wait();
+    upcxx::atomic::op<AOP::SET>(dom, target_counter, (int64_t)0).wait();
   }
   barrier();
   
   for (int i = 0; i < ITERS * 10; i++) {
-    auto v = upcxx::atomic::op<upcxx::atomic::GET>(dom, target_counter).wait();    
+    auto v = upcxx::atomic::op<upcxx::atomic::AOP::GET>(dom, target_counter).wait();    
     UPCXX_ASSERT_ALWAYS(v >=0 && v < rank_n(), "atomic_get out of range: " << v);
-    upcxx::atomic::op<upcxx::atomic::SET>(dom, target_counter, (int64_t)rank_me()).wait();
+    upcxx::atomic::op<upcxx::atomic::AOP::SET>(dom, target_counter, (int64_t)rank_me()).wait();
   }
   
   barrier();
@@ -89,8 +90,7 @@ void test_put_get(upcxx::atomic::domain<int64_t> &dom) {
 int main(int argc, char **argv) {
   upcxx::init();
   
-  upcxx::atomic::domain<int64_t> ad_i64({upcxx::atomic::GET, upcxx::atomic::SET, 
-                                         upcxx::atomic::FADD});
+  upcxx::atomic::domain<int64_t> ad_i64({AOP::GET, AOP::SET, AOP::FADD});
 
   print_test_header();
   
