@@ -17,158 +17,115 @@
 #include <upcxx/global_ptr.hpp>
 #include <upcxx/rpc.hpp>
 
-#ifdef __GNUG__
-#include <memory>
-#include <cxxabi.h>
-#endif
-
 namespace upcxx {
   namespace atomic {
-
+    // all supported atomic operations
     enum operation {
-      GET, SET,
-      ADD, FADD,
-      SUB, FSUB,
-      INC, FINC,
-      DEC, FDEC,
-      CSWAP
+      GET = GEX_OP_GET, SET = GEX_OP_SET,
+      ADD = GEX_OP_ADD, FADD = GEX_OP_FADD,
+      SUB = GEX_OP_SUB, FSUB = GEX_OP_FSUB,
+      INC = GEX_OP_INC, FINC = GEX_OP_FINC,
+      DEC = GEX_OP_DEC, FDEC = GEX_OP_FDEC,
+      CSWAP = GEX_OP_CSWAP
     };
 
-    namespace detail {
-
-      gex_OP_t get_gex_ops(std::vector<operation> ops)
-      {
-        gex_OP_t gex_op = 0;
-
-        for (auto op : ops) {
-          switch (op) {
-            case SET: gex_op |= GEX_OP_SET; break;
-            case GET: gex_op |= GEX_OP_GET; break;
-            case ADD: gex_op |= GEX_OP_ADD; break;
-            case FADD: gex_op |= GEX_OP_FADD; break;
-            case SUB: gex_op |= GEX_OP_SUB; break;
-            case FSUB: gex_op |= GEX_OP_FSUB; break;
-            case INC: gex_op |= GEX_OP_INC; break;
-            case FINC: gex_op |= GEX_OP_FINC; break;
-            case DEC: gex_op |= GEX_OP_DEC; break;
-            case FDEC: gex_op |= GEX_OP_FDEC; break;
-            case CSWAP: gex_op |= GEX_OP_CSWAP; break;
-              break;
-          }
-        }
-        return gex_op;
-      }
-
-      template<typename T>
-      uintptr_t gex_aop(gex_AD_t ad, T *rp, global_ptr<T> gptr, gex_OP_t opcode, T op1, T op2);
-
-#define ADD_OP_DOMAIN(TYPE, GEXTYPE) \
-      template<> \
-      uintptr_t gex_aop<TYPE>(gex_AD_t ad, TYPE *rp, global_ptr<TYPE> gptr, \
-                              gex_OP_t opcode, TYPE op1, TYPE op2) \
-      { return reinterpret_cast<uintptr_t>(gex_AD_OpNB_##GEXTYPE( \
-          ad, rp, gptr.rank_, gptr.raw_ptr_, opcode, op1, op2, 0)); }
-
-      ADD_OP_DOMAIN(int32_t, I32);
-      ADD_OP_DOMAIN(int64_t, I64);
-      ADD_OP_DOMAIN(uint32_t, U32);
-      ADD_OP_DOMAIN(uint64_t, U64);
-
-      template <typename T>
-      struct cb_with_result final: backend::gasnet::handle_cb {
-        promise<T> p;
-        T result;
-
-        void execute_and_delete(backend::gasnet::handle_cb_successor) {
-          if (false) {
-            upcxx::backend::during_user(std::move(p), result);
-            delete this;
-          } else {
-            backend::during_user(
-                [this]() {
-                  p.fulfill_result(result);
-                  delete this;
-                });
-          }
-        }
-      };
-
-      struct cb_no_result final: backend::gasnet::handle_cb {
-        promise<> p;
-
-        void execute_and_delete(backend::gasnet::handle_cb_successor) {
-          if (false) {
-            upcxx::backend::during_user(std::move(p));
-            delete this;
-          } else {
-            backend::during_user(
-                [this]() {
-                  p.fulfill_result();
-                  delete this;
-                });
-          }
-        }
-      };
-
-    }
+    template<typename T> gex_DT_t get_gex_dt();
 
     template<typename T>
-    struct domain {};
+    uintptr_t gex_op(gex_AD_t ad, T *p, upcxx::global_ptr<T> gp, gex_OP_t opcode, T op1, T op2,
+                     gex_Flags_t flags);
 
-    template<>
-    struct domain<int64_t> {
-      gex_AD_t gex_ad;
-      domain(std::vector<operation> ops, int flags = 0) {
-        gex_AD_Create(&gex_ad, backend::gasnet::world_team, GEX_DT_I64, detail::get_gex_ops(ops),
-            flags);
-      }
-      ~domain() { gex_AD_Destroy(gex_ad); }
+#define SET_GEX_OP_DT(T, GT) \
+    template<> gex_DT_t get_gex_dt<T>() { return GEX_DT_##GT; } \
+    template<> \
+    inline uintptr_t gex_op<T>(gex_AD_t ad, T *p, upcxx::global_ptr<T> gp, gex_OP_t opcode, \
+                               T op1, T op2, gex_Flags_t flags) \
+    { \
+      return reinterpret_cast<uintptr_t>(gex_AD_OpNB_##GT(ad, p, gp.rank_, gp.raw_ptr_, opcode, \
+          op1, op2, flags)); \
+    }
+
+    SET_GEX_OP_DT(int32_t, I32);
+    SET_GEX_OP_DT(int64_t, I64);
+    SET_GEX_OP_DT(uint32_t, U32);
+    SET_GEX_OP_DT(uint64_t, U64);
+
+    template<typename T>
+    class domain {
+      private:
+        gex_AD_t gex_ad;
+
+      public:
+        domain(std::vector<operation> ops, int flags = 0) {
+          gex_OP_t gex_ops = 0;
+          for (auto op : ops) gex_ops |= op;
+          gex_AD_Create(&gex_ad, backend::gasnet::world_team, get_gex_dt<T>(), gex_ops, flags);
+        }
+
+        ~domain() {
+          gex_AD_Destroy(gex_ad);
+        }
+
+        future<T> op(global_ptr<T> gp, gex_OP_t opcode, T op1, T op2) const {
+
+          struct op_cb final: backend::gasnet::handle_cb {
+            promise<T> p;
+            T result;
+
+            void execute_and_delete(backend::gasnet::handle_cb_successor) {
+              if (false) {
+                upcxx::backend::during_user(std::move(p), result);
+                delete this;
+              } else {
+                backend::during_user(
+                    [this]() {
+                      p.fulfill_result(result);
+                      delete this;
+                    });
+              }
+            }
+          };
+
+          auto *cb = new op_cb();
+          cb->handle = gex_op<T>(gex_ad, &cb->result, gp, opcode, op1, op2, 0);
+          auto ans = cb->p.get_future();
+          backend::gasnet::register_cb(cb);
+          backend::gasnet::after_gasnet();
+          return ans;
+        }
     };
 
-    template<typename T>
-    future<T> get(global_ptr<T> gptr, std::memory_order order, const domain<T> &d) {
-      auto *cb = new detail::cb_with_result<T>();
-      cb->handle = detail::gex_aop<T>(d.gex_ad, &cb->result, gptr, GEX_OP_GET, 0, 0);
-      auto ans = cb->p.get_future();
-      backend::gasnet::register_cb(cb);
-      backend::gasnet::after_gasnet();
-      return ans;
+    // GET, INC, FINC, DEC, FDEC
+    template<operation OP, typename T>
+    future<T> op(global_ptr<T> gptr, const domain<T> &d,
+                 std::memory_order order = std::memory_order_relaxed)
+    {
+      return d.op(gptr, OP, 0, 0);
     }
 
-
-    template<typename T>
-    future<> set(global_ptr<T> gptr, T val, std::memory_order order, const domain<T> &d)	{
-      auto *cb = new detail::cb_no_result();
-      cb->handle = detail::gex_aop<T>(d.gex_ad, nullptr, gptr, GEX_OP_SET, val, 0);
-      auto ans = cb->p.get_future();
-      backend::gasnet::register_cb(cb);
-      backend::gasnet::after_gasnet();
-      return ans;
+    // FADD, FSUB, SET
+    template<operation OP, typename T>
+    future<T> op(global_ptr<T> gptr, T val, const domain<T> &d,
+                 std::memory_order order = std::memory_order_relaxed)
+    {
+      return d.op(gptr, OP, val, 0);
     }
 
-
-    template<typename T>
-    future<T> fadd(global_ptr<T> gptr, T val, std::memory_order order, const domain<T> &d) {
-      auto *cb = new detail::cb_with_result<T>();
-      cb->handle = detail::gex_aop<T>(d.gex_ad, &cb->result, gptr, GEX_OP_FADD, val, 0);
-      auto ans = cb->p.get_future();
-      backend::gasnet::register_cb(cb);
-      backend::gasnet::after_gasnet();
-      return ans;
+    // CSWAP
+    template<operation OP, typename T>
+    future<T> op(global_ptr<T> gptr, T val1, T val2, const domain<T> &d,
+                 std::memory_order order = std::memory_order_relaxed)
+    {
+      return d.op(gptr, OP, val1, val2);
     }
 
-
     template<typename T>
-    future<T> fsub(global_ptr<T> gptr, T val, std::memory_order order, const domain<T> &d) {
-      auto *cb = new detail::cb_with_result<T>();
-      cb->handle = detail::gex_aop<T>(d.gex_ad, &cb->result, gptr, GEX_OP_FSUB, val, 0);
-      auto ans = cb->p.get_future();
-      backend::gasnet::register_cb(cb);
-      backend::gasnet::after_gasnet();
-      return ans;
-    }
+    using op_ptr = future<T> (*)(global_ptr<T> gptr, T val, const domain<T> &d, std::memory_order);
 
-  }
+    // NB: this alias generates a warning for C++11, but still seems to work
+    template<typename T> constexpr op_ptr<T> fadd = op<FADD, T>;
+
+  } // namespace atomic
 } // namespace upcxx
 
 #endif

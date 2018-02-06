@@ -18,7 +18,6 @@ using upcxx::rank_n;
 using upcxx::barrier;
 using upcxx::global_ptr;
 
-
 const int ITERS = 10;
 global_ptr<int64_t> counter;
 // let's all hit the same rank
@@ -35,7 +34,7 @@ void test_fetch_add(bool use_atomics, upcxx::atomic::domain<int64_t> &dom) {
       cout << "Test fetch_add: atomics, expect value " << expected_val << endl;
     }
     // always use atomics to access or modify counter
-    upcxx::atomic::set(target_counter, (int64_t)0, memory_order_relaxed, dom).wait();
+    upcxx::atomic::op<upcxx::atomic::SET>(target_counter, (int64_t)0, dom).wait();
   }
   barrier();
   for (int i = 0; i < ITERS; i++) {
@@ -44,8 +43,8 @@ void test_fetch_add(bool use_atomics, upcxx::atomic::domain<int64_t> &dom) {
       auto prev = rget(target_counter).wait();
       rput(prev + 1, target_counter).wait();
     } else {
-      auto prev = upcxx::atomic::fadd<int64_t>(target_counter, 1, 
-              memory_order_relaxed, dom).wait();
+//      auto prev = upcxx::atomic::op<upcxx::atomic::FADD>(target_counter, (int64_t)1, dom).wait();
+      auto prev = upcxx::atomic::fadd<int64_t>(target_counter, 1, dom, memory_order_relaxed).wait();
       UPCXX_ASSERT_ALWAYS(prev >= 0 && prev < rank_n() * ITERS, 
               "atomic::fetch_add result out of range");
     }
@@ -67,15 +66,14 @@ void test_put_get(upcxx::atomic::domain<int64_t> &dom) {
   if (rank_me() == 0) {
     cout << "Test puts and gets: expect a random rank number" << endl;
     // always use atomics to access or modify counter
-    upcxx::atomic::set(target_counter, (int64_t)0, memory_order_relaxed, dom).wait();
+    upcxx::atomic::op<upcxx::atomic::SET>(target_counter, (int64_t)0, dom).wait();
   }
   barrier();
   
   for (int i = 0; i < ITERS * 10; i++) {
-    auto v = upcxx::atomic::get(target_counter, memory_order_relaxed, dom).wait();
-    //auto v = upcxx::atomic::atomic_op<upcxx::atomic::get, int64_t>(target_counter, memory_order_relaxed).wait();
+    auto v = upcxx::atomic::op<upcxx::atomic::GET>(target_counter, dom).wait();
     UPCXX_ASSERT_ALWAYS(v >=0 && v < rank_n(), "atomic_get out of range: " << v);
-    upcxx::atomic::set(target_counter, (int64_t)rank_me(), memory_order_relaxed, dom).wait();
+    upcxx::atomic::op<upcxx::atomic::SET>(target_counter, (int64_t)rank_me(), dom).wait();
   }
   
   barrier();
@@ -93,8 +91,8 @@ int main(int argc, char **argv) {
   upcxx::init();
   
   upcxx::atomic::domain<int64_t> ad_i64({upcxx::atomic::GET, upcxx::atomic::SET, 
-                                        upcxx::atomic::FADD});
-  
+          upcxx::atomic::FADD});
+
   print_test_header();
   
   if (rank_me() == target_rank) counter = upcxx::allocate<int64_t>();
