@@ -35,7 +35,7 @@ void test_fetch_add(bool use_atomics, upcxx::atomic::domain<int64_t> &dom) {
       cout << "Test fetch_add: atomics, expect value " << expected_val << endl;
     }
     // always use atomics to access or modify counter
-    upcxx::atomic::op<AOP::SET>(dom, target_counter, (int64_t)0).wait();
+    dom.op<AOP::SET>(target_counter, (int64_t)0).wait();
   }
   barrier();
   for (int i = 0; i < ITERS; i++) {
@@ -44,7 +44,7 @@ void test_fetch_add(bool use_atomics, upcxx::atomic::domain<int64_t> &dom) {
       auto prev = rget(target_counter).wait();
       rput(prev + 1, target_counter).wait();
     } else {
-      auto prev = upcxx::atomic::op<AOP::FADD>(dom, target_counter, (int64_t)1).wait();
+      auto prev = dom.op<AOP::FADD>(target_counter, (int64_t)1).wait();
       UPCXX_ASSERT_ALWAYS(prev >= 0 && prev < rank_n() * ITERS, 
               "atomic::fetch_add result out of range");
     }
@@ -66,14 +66,14 @@ void test_put_get(upcxx::atomic::domain<int64_t> &dom) {
   if (rank_me() == 0) {
     cout << "Test puts and gets: expect a random rank number" << endl;
     // always use atomics to access or modify counter
-    upcxx::atomic::op<AOP::SET>(dom, target_counter, (int64_t)0).wait();
+    dom.op<AOP::SET>(target_counter, (int64_t)0).wait();
   }
   barrier();
   
   for (int i = 0; i < ITERS * 10; i++) {
-    auto v = upcxx::atomic::op<upcxx::atomic::AOP::GET>(dom, target_counter).wait();    
+    auto v = dom.op<AOP::GET>(target_counter).wait();    
     UPCXX_ASSERT_ALWAYS(v >=0 && v < rank_n(), "atomic_get out of range: " << v);
-    upcxx::atomic::op<upcxx::atomic::AOP::SET>(dom, target_counter, (int64_t)rank_me()).wait();
+    dom.op<AOP::SET>(target_counter, (int64_t)rank_me()).wait();
   }
   
   barrier();

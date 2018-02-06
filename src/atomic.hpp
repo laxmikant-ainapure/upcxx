@@ -57,34 +57,36 @@ namespace upcxx {
       ~domain() {
         gex_AD_Destroy(gex_ad);
       }
-    };
 
-    template<AOP OP, typename T>
-    future<T> op(const domain<T> &d, global_ptr<T> gptr, T op1=0, T op2=0)
-    {
-      struct op_cb final: backend::gasnet::handle_cb {
-        promise<T> p;
-        T result;
-        void execute_and_delete(backend::gasnet::handle_cb_successor) {
-          if (false) {
-            upcxx::backend::during_user(std::move(p), result);
-            delete this;
-          } else {
-            backend::during_user(
-                [this]() {
-                  p.fulfill_result(result);
-                  delete this;
-                });
+      template<AOP OP>
+      future<T> op(global_ptr<T> gptr, T op1=0, T op2=0)
+      {
+        struct op_cb final: backend::gasnet::handle_cb {
+          promise<T> p;
+          T result;
+          void execute_and_delete(backend::gasnet::handle_cb_successor) {
+            if (false) {
+              upcxx::backend::during_user(std::move(p), result);
+              delete this;
+            } else {
+              backend::during_user(
+                  [this]() {
+                    p.fulfill_result(result);
+                    delete this;
+                  });
+            }
           }
-        }
-      };
-      auto *cb = new op_cb();
-      cb->handle = detail::gex_op<T>(d.gex_ad, &cb->result, gptr, static_cast<gex_OP_t>(OP), op1, op2, 0);
-      auto ans = cb->p.get_future();
-      backend::gasnet::register_cb(cb);
-      backend::gasnet::after_gasnet();
-      return ans;
-    }
+        };
+        auto *cb = new op_cb();
+        cb->handle = detail::gex_op<T>(gex_ad, &cb->result, gptr,
+                                       static_cast<gex_OP_t>(OP), op1, op2, 0);
+        auto ans = cb->p.get_future();
+        backend::gasnet::register_cb(cb);
+        backend::gasnet::after_gasnet();
+        return ans;
+      }
+
+    };
 
   } // namespace atomic
 } // namespace upcxx
