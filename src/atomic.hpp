@@ -10,7 +10,30 @@
 namespace upcxx {
   namespace atomic {
 
+    // all supported atomic operations
+    enum class AOP : gex_OP_t {
+      GET = GEX_OP_GET, SET = GEX_OP_SET,
+      ADD = GEX_OP_ADD, FADD = GEX_OP_FADD,
+      SUB = GEX_OP_SUB, FSUB = GEX_OP_FSUB,
+      INC = GEX_OP_INC, FINC = GEX_OP_FINC,
+      DEC = GEX_OP_DEC, FDEC = GEX_OP_FDEC,
+      CSWAP = GEX_OP_CSWAP
+    };
+
     namespace detail {
+      std::string get_aop_name(AOP aop)
+      {
+        switch(aop) {
+          case AOP::GET: return "GET";
+          case AOP::SET: return "SET";
+          case AOP::ADD: return "ADD";
+          case AOP::FADD: return "FADD";
+          case AOP::SUB: return "SUB";
+          case AOP::FSUB: return "FSUB";
+          default: return "Unknown";
+        }
+      }
+
       template<typename T> gex_DT_t gex_dt();
       template<> gex_DT_t gex_dt<int32_t>() { return GEX_DT_I32; }
       template<> gex_DT_t gex_dt<int64_t>() { return GEX_DT_I64; }
@@ -32,24 +55,16 @@ namespace upcxx {
       SET_GEX_OP(int64_t, I64);
       SET_GEX_OP(uint32_t, U32);
       SET_GEX_OP(uint64_t, U64);
-    }
 
-    // all supported atomic operations
-    enum class AOP : gex_OP_t {
-      GET = GEX_OP_GET, SET = GEX_OP_SET,
-      ADD = GEX_OP_ADD, FADD = GEX_OP_FADD,
-      SUB = GEX_OP_SUB, FSUB = GEX_OP_FSUB,
-      INC = GEX_OP_INC, FINC = GEX_OP_FINC,
-      DEC = GEX_OP_DEC, FDEC = GEX_OP_FDEC,
-      CSWAP = GEX_OP_CSWAP
-    };
+    }
 
     template<typename T>
     struct domain {
       gex_AD_t gex_ad;
+      gex_OP_t gex_ops;
 
       domain(std::vector<AOP> ops, int flags = 0) {
-        gex_OP_t gex_ops = 0;
+        gex_ops = 0;
         for (auto next_op : ops) gex_ops |= static_cast<gex_OP_t>(next_op);
         gex_AD_Create(&gex_ad, backend::gasnet::world_team, detail::gex_dt<T>(), gex_ops, flags);
       }
@@ -61,6 +76,8 @@ namespace upcxx {
       template<AOP OP>
       future<T> operation(global_ptr<T> gptr, T op1=0, T op2=0)
       {
+        UPCXX_ASSERT_ALWAYS((gex_OP_t)OP & gex_ops,
+            "Atomic operation " << detail::get_aop_name(OP) << " not included in domain\n");
         struct op_cb final: backend::gasnet::handle_cb {
           promise<T> p;
           T result;
@@ -98,7 +115,12 @@ namespace upcxx {
       future<T> fsub(global_ptr<T> gptr, T op1) { return operation<AOP::FSUB>(gptr, op1); }
       future<T> cswap(global_ptr<T> gptr, T op1, T op2) { return operation<AOP::CSWAP>(gptr, op1, op2); }
     };
-
+/*
+    template<typename T>
+    using op_t = future<T> (*)(global_ptr<T> gptr, T op1, T op2);
+    template<typename T>
+    op_t<T> new_cswap = domain<T>::cswap;
+ */
   } // namespace atomic
 } // namespace upcxx
 
