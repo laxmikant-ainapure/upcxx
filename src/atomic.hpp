@@ -115,12 +115,7 @@ namespace upcxx {
       future<T> fsub(global_ptr<T> gptr, T op1) { return operation<AOP::FSUB>(gptr, op1); }
       future<T> cswap(global_ptr<T> gptr, T op1, T op2) { return operation<AOP::CSWAP>(gptr, op1, op2); }
     };
-/*
-    template<typename T>
-    using op_t = future<T> (*)(global_ptr<T> gptr, T op1, T op2);
-    template<typename T>
-    op_t<T> new_cswap = domain<T>::cswap;
- */
+    
   } // namespace atomic
 } // namespace upcxx
 
