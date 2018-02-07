@@ -3,9 +3,7 @@
 
 #include <gasnet_ratomic.h>
 #include <upcxx/backend/gasnet/runtime_internal.hpp>
-#include <upcxx/backend.hpp>
-#include <upcxx/global_ptr.hpp>
-#include <upcxx/rpc.hpp>
+
 
 namespace upcxx {
   namespace atomic {
