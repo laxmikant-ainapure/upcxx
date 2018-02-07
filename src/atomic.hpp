@@ -2,12 +2,70 @@
 #define _4fd2caba_e406_4f0e_ab34_0e0224ec36a5
 
 #include <gasnet_ratomic.h>
+
+#error "You can't include this header from headers included by the user"
+
 #include <upcxx/backend/gasnet/runtime_internal.hpp>
 
 
 namespace upcxx {
   namespace atomic {
 
+    #error "Hello, Steve"
+    /*
+    Due to the header restriction, we cant use gasnet types since
+    the gasnet headers arent available to us. You will need
+    your own enum values and a mapping in the .cpp from those to
+    gasnet aops. But, instead of an enum, I recommend is using an extern
+    global variable per op, and using addresses of those as our "enum":
+
+    // *** atomic.hpp ***
+    namespace upcxx { namespace detail {
+
+    extern const std::uintptr_t gex_op_get, gex_op_add, ...;
+
+    }}
+    
+    // *** atomic.cpp ***
+    #include <.../runtime_internal.hpp> // brings in gasnet
+
+    namespace upcxx { namespace detail {
+
+    const uintptr_t gex_op_get = GEX_OP_GET,
+                    gex_op_add = GEX_OP_ADD,
+                    ...;
+
+    }}
+
+    With this, you would replace occurrences of AOP's with
+    "const std::uintptr_t*", or typedef AOP to uintptr_t since the user
+    needs to use AOPs to construct a domain. Then at initiation time,
+    just dereference the pointer to get gasnet's enum value.
+
+    You also need to move initiation "gex_AD_OpNB_***" into the .cpp as
+    well. I would wrap it in our own function, templated on the datatype,
+    and passing in the op as "uintptr_t const*".
+
+    // *** atomic.hpp ***
+    // returns gasnet handle
+    template<typename T>
+    uintptr_t amo(..., uintptr_t const *op, T arg1, T arg2);
+
+    // *** atomic.cpp ***
+    // provide definition for each amo<T> individually. A macro is the
+    // best way to factor out redundancies.
+    template<>
+    uintptr_t amo<int32_t>(..., uintptr_t const *op, int32_t arg1, int32_t arg2) {
+      return reinterpret_cast<uintptr_t>(gex_AD_OpNB_I32(..., *op, arg1, arg2));
+    }
+    template<>
+    uintptr_t amo<int64_t>(..., uintptr_t const *op, int64_t arg1, int64_t arg2) {
+      return reinterpret_cast<uintptr_t>(gex_AD_OpNB_I64(..., *op, arg1, arg2));
+    }
+    // amo<uint32_t> and amo<uint64_t>
+    */
+      
+           
     // All supported atomic operations.
     enum class AOP : gex_OP_t {
       GET = GEX_OP_GET, SET = GEX_OP_SET,
@@ -33,6 +91,9 @@ namespace upcxx {
         }
       }
 
+      #error "Hello, Steve"
+      /* Again, you cant use gasnet types. My big comment explains how to
+      pass the template type into the .cpp */
       // Specializers for conversion of standard integer types to gasnet types.
       template<typename T> gex_DT_t gex_dt();
       template<> gex_DT_t gex_dt<int32_t>() { return GEX_DT_I32; }
@@ -61,6 +122,10 @@ namespace upcxx {
     // Atomic domain for an ?int*_t type.
     template<typename T>
     struct domain {
+      #error "Hello, Steve"
+      /* No gasnet, use uintptr_t. Anything that calls gasnet must be in
+      .cpp */
+      
       // The opaque gasnet atomic domain handle.
       gex_AD_t gex_ad;
       // The or'd value for all the atomic operations.
