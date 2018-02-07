@@ -8,7 +8,7 @@
 namespace upcxx {
   namespace atomic {
 
-    // all supported atomic operations
+    // All supported atomic operations.
     enum class AOP : gex_OP_t {
       GET = GEX_OP_GET, SET = GEX_OP_SET,
       ADD = GEX_OP_ADD, FADD = GEX_OP_FADD,
@@ -19,6 +19,8 @@ namespace upcxx {
     };
 
     namespace detail {
+
+      // Helper for error messages.
       std::string get_aop_name(AOP aop) {
         switch(aop) {
           case AOP::GET: return "GET";
@@ -31,19 +33,20 @@ namespace upcxx {
         }
       }
 
+      // Specializers for conversion of standard integer types to gasnet types.
       template<typename T> gex_DT_t gex_dt();
       template<> gex_DT_t gex_dt<int32_t>() { return GEX_DT_I32; }
       template<> gex_DT_t gex_dt<int64_t>() { return GEX_DT_I64; }
       template<> gex_DT_t gex_dt<uint32_t>() { return GEX_DT_U32; }
       template<> gex_DT_t gex_dt<uint64_t>() { return GEX_DT_U64; }
 
+      // Specializers that wrap the gasnet integer type operations.
       template<typename T>
-      uintptr_t gex_op(gex_AD_t, T*, upcxx::global_ptr<T>, gex_OP_t, T, T, gex_Flags_t);
-
+      uintptr_t gex_op(gex_AD_t, T*, global_ptr<T>, gex_OP_t, T, T, gex_Flags_t);
       // FIXME: any way to avoid using macros?
 #define SET_GEX_OP(T, GT) \
       template<> \
-      inline uintptr_t gex_op<T>(gex_AD_t ad, T *p, upcxx::global_ptr<T> gp, gex_OP_t opcode, \
+      inline uintptr_t gex_op<T>(gex_AD_t ad, T *p, global_ptr<T> gp, gex_OP_t opcode, \
                                  T op1, T op2, gex_Flags_t flags) { \
         return reinterpret_cast<uintptr_t>( \
             gex_AD_OpNB_##GT(ad, p, gp.rank_, gp.raw_ptr_, opcode, op1, op2, flags));}
@@ -55,33 +58,48 @@ namespace upcxx {
 
     }
 
+    // Atomic domain for an ?int*_t type.
     template<typename T>
     struct domain {
+      // The opaque gasnet atomic domain handle.
       gex_AD_t gex_ad;
+      // The or'd value for all the atomic operations.
       gex_OP_t gex_ops;
 
+      // The constructor takes a vector of operations. Currently, flags is unsupported.
       domain(std::vector<AOP> ops, int flags = 0) {
         gex_ops = 0;
         for (auto next_op : ops) gex_ops |= static_cast<gex_OP_t>(next_op);
+        // Create the gasnet atomic domain for the world team.
         gex_AD_Create(&gex_ad, backend::gasnet::world_team, detail::gex_dt<T>(), gex_ops, flags);
       }
 
       ~domain() {
+        // Destroy the gasnet atomic domain
         gex_AD_Destroy(gex_ad);
       }
 
+      // Generic atomic operation. This can take 0, 1 or 2 operands.
       template<AOP OP>
       future<T> operation(global_ptr<T> gptr, T op1=0, T op2=0) {
+        // Fail if attempting to use an atomic operation not part of this domain.
         UPCXX_ASSERT_ALWAYS((gex_OP_t)OP & gex_ops,
             "Atomic operation " << detail::get_aop_name(OP) << " not included in domain\n");
+        // The class that handles the gasnet event.
+        // Must be declared final for the 'delete this' call.
         struct op_cb final: backend::gasnet::handle_cb {
+          // The promise to fulfill when the operation completes.
           promise<T> p;
+          // The result of the operation - may be ignored.
           T result;
+          // The callback executed upon event completion.
           void execute_and_delete(backend::gasnet::handle_cb_successor) {
+            // Now we are running in internal progress - can't fulfill until user progress.
             if (false) {
-              upcxx::backend::during_user(std::move(p), result);
+              backend::during_user(std::move(p), result);
               delete this;
             } else {
+              // The operation has completed - fulfill the result and delete callback object.
               backend::during_user(
                   [this]() {
                     p.fulfill_result(result);
@@ -90,15 +108,22 @@ namespace upcxx {
             }
           }
         };
+        // Create the callback object..
         auto *cb = new op_cb();
+        // Get the handle for the gasnet function.
         cb->handle = detail::gex_op<T>(gex_ad, &cb->result, gptr,
                                        static_cast<gex_OP_t>(OP), op1, op2, 0);
+        // Get the future from the callback object.
         auto ans = cb->p.get_future();
+        // Register the callback with gasnet.
         backend::gasnet::register_cb(cb);
+        // Make sure UPCXX does internal work after the gasnet call.
         backend::gasnet::after_gasnet();
+        // Return the future of the callback object.
         return ans;
       }
 
+      // Convenience functions for all the operations.
       future<> set(global_ptr<T> gptr, T op1) {
         return operation<AOP::SET>(gptr, op1).then([](T op1){}); }
       future<T> get(global_ptr<T> gptr) { return operation<AOP::GET>(gptr); }
