@@ -95,17 +95,12 @@ namespace upcxx {
           // The callback executed upon event completion.
           void execute_and_delete(backend::gasnet::handle_cb_successor) {
             // Now we are running in internal progress - can't fulfill until user progress.
-            if (false) {
-              backend::during_user(std::move(p), result);
-              delete this;
-            } else {
-              // The operation has completed - fulfill the result and delete callback object.
-              backend::during_user(
-                  [this]() {
-                    p.fulfill_result(result);
-                    delete this;
-                  });
-            }
+            backend::during_user(
+                [this]() {
+                  // The operation has completed - fulfill the result and delete callback object.
+                  p.fulfill_result(result);
+                  delete this;
+                });
           }
         };
         // Create the callback object..
