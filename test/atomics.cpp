@@ -44,7 +44,8 @@ void test_fetch_add(bool use_atomics, upcxx::atomic::domain<int64_t> &dom) {
       auto prev = rget(target_counter).wait();
       rput(prev + 1, target_counter).wait();
     } else {
-//      auto prev = dom.fsub(target_counter, (int64_t)1).wait();
+      // This should cause an assert failure
+      //auto prev = dom.fsub(target_counter, (int64_t)1).wait();
       auto prev = dom.fadd(target_counter, (int64_t)1).wait();
       UPCXX_ASSERT_ALWAYS(prev >= 0 && prev < rank_n() * ITERS, 
               "atomic::fetch_add result out of range");
