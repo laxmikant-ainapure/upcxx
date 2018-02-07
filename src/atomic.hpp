@@ -19,8 +19,7 @@ namespace upcxx {
     };
 
     namespace detail {
-      std::string get_aop_name(AOP aop)
-      {
+      std::string get_aop_name(AOP aop) {
         switch(aop) {
           case AOP::GET: return "GET";
           case AOP::SET: return "SET";
@@ -45,8 +44,8 @@ namespace upcxx {
 #define SET_GEX_OP(T, GT) \
       template<> \
       inline uintptr_t gex_op<T>(gex_AD_t ad, T *p, upcxx::global_ptr<T> gp, gex_OP_t opcode, \
-                                 T op1, T op2, gex_Flags_t flags) \
-      { return reinterpret_cast<uintptr_t>( \
+                                 T op1, T op2, gex_Flags_t flags) { \
+        return reinterpret_cast<uintptr_t>( \
             gex_AD_OpNB_##GT(ad, p, gp.rank_, gp.raw_ptr_, opcode, op1, op2, flags));}
 
       SET_GEX_OP(int32_t, I32);
@@ -72,8 +71,7 @@ namespace upcxx {
       }
 
       template<AOP OP>
-      future<T> operation(global_ptr<T> gptr, T op1=0, T op2=0)
-      {
+      future<T> operation(global_ptr<T> gptr, T op1=0, T op2=0) {
         UPCXX_ASSERT_ALWAYS((gex_OP_t)OP & gex_ops,
             "Atomic operation " << detail::get_aop_name(OP) << " not included in domain\n");
         struct op_cb final: backend::gasnet::handle_cb {
