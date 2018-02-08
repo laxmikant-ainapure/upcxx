@@ -38,12 +38,12 @@ SET_GEX_OP(uint32_t, U32);
 SET_GEX_OP(uint64_t, U64);
 
 template<typename T>
-atomic::domain<T>::domain(std::vector<atomic::AOP> ops, int flags) {
+atomic::domain<T>::domain(std::vector<atomic::AOP> ops) {
   gex_ops = 0;
   for (auto next_op : ops) gex_ops |= to_gex_op[next_op];
   // Create the gasnet atomic domain for the world team.
-  gex_AD_Create(reinterpret_cast<gex_AD_t*>(&gex_ad), gasnet::world_team, gex_dt<T>(), 
-                gex_ops, flags);
+  // QUERY: do we ever need to set any of the flags?
+  gex_AD_Create(reinterpret_cast<gex_AD_t*>(&gex_ad), gasnet::world_team, gex_dt<T>(), gex_ops, 0);
 }
 
 template<typename T>
@@ -80,6 +80,7 @@ upcxx::future<T> atomic::domain<T>::op(atomic::AOP aop, upcxx::global_ptr<T> gpt
   // Create the callback object..
   auto *cb = new op_cb();
   // Get the handle for the gasnet function.
+  // FIXME: flags will depend on the memory order
   cb->handle = gex_AD_OpNB<T>(reinterpret_cast<gex_AD_t>(gex_ad), &cb->result, gptr, gex_op, 
                               val1, val2, 0);
   // Get the future from the callback object.

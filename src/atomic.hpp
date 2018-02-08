@@ -22,7 +22,7 @@ namespace upcxx {
         uint32_t gex_ops;
       public:
         // The constructor takes a vector of operations. Currently, flags is unsupported.
-        domain(std::vector<AOP> ops, int flags = 0);
+        domain(std::vector<AOP> ops);
         ~domain();
 
         // Generic atomic operation. This can take 0, 1 or 2 operands.
