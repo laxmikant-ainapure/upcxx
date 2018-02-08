@@ -17,7 +17,6 @@ using upcxx::rank_me;
 using upcxx::rank_n;
 using upcxx::barrier;
 using upcxx::global_ptr;
-using upcxx::atomic::AOP;
 
 const int ITERS = 10;
 global_ptr<int64_t> counter;
@@ -92,7 +91,8 @@ void test_put_get(upcxx::atomic::domain<int64_t> &dom) {
 int main(int argc, char **argv) {
   upcxx::init();
   
-  upcxx::atomic::domain<int64_t> ad_i64({AOP::GET, AOP::SET, AOP::FADD});
+  upcxx::atomic::domain<int64_t> ad_i64({upcxx::atomic::GET, upcxx::atomic::SET, 
+          upcxx::atomic::FADD});
 
   print_test_header();
   

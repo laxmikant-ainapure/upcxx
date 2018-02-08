@@ -38,12 +38,12 @@ SET_GEX_OP(uint32_t, U32);
 SET_GEX_OP(uint64_t, U64);
 
 template<typename T>
-atomic::domain<T>::domain(std::vector<atomic::AOP> ops) {
+atomic::domain<T>::domain(std::vector<int> ops, int flags) {
   gex_ops = 0;
   for (auto next_op : ops) gex_ops |= to_gex_op[next_op];
   // Create the gasnet atomic domain for the world team.
   // QUERY: do we ever need to set any of the flags?
-  gex_AD_Create(reinterpret_cast<gex_AD_t*>(&gex_ad), gasnet::world_team, gex_dt<T>(), gex_ops, 0);
+  gex_AD_Create(reinterpret_cast<gex_AD_t*>(&gex_ad), gasnet::world_team, gex_dt<T>(), gex_ops, flags);
 }
 
 template<typename T>
@@ -53,7 +53,7 @@ atomic::domain<T>::~domain() {
 }
 
 template<typename T> 
-upcxx::future<T> atomic::domain<T>::op(atomic::AOP aop, upcxx::global_ptr<T> gptr, 
+upcxx::future<T> atomic::domain<T>::op(int aop, upcxx::global_ptr<T> gptr, 
                                        std::memory_order order, T val1, T val2) {
   gex_OP_t gex_op = to_gex_op[aop];
   // Fail if attempting to use an atomic operation not part of this domain.

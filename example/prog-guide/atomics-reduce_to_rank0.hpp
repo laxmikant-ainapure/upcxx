@@ -1,6 +1,6 @@
 int64_t reduce_to_rank0(int64_t my_hits)
 {
-  upcxx::atomic::domain<int64_t> ad_i64({upcxx::atomic::AOP::GET, upcxx::atomic::AOP::FADD});
+  upcxx::atomic::domain<int64_t> ad_i64({upcxx::atomic::GET, upcxx::atomic::FADD});
 
   // a global pointer to the atomic counter in rank 0's shared segment
   upcxx::global_ptr<int64_t> hits_ptr =
