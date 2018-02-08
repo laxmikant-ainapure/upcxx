@@ -13,7 +13,6 @@ using upcxx::rank_me;
 using upcxx::rank_n;
 using upcxx::barrier;
 using upcxx::global_ptr;
-using upcxx::atomic::AOP;
 
 namespace chrono = std::chrono;
 using std::memory_order_relaxed;
@@ -45,7 +44,8 @@ int main(int argc, char **argv)
 {
   upcxx::init();
   
-  upcxx::atomic::domain<int64_t> ad_i64({AOP::GET, AOP::SET, AOP::FADD});
+  upcxx::atomic::domain<int64_t> ad_i64({upcxx::atomic::GET, upcxx::atomic::SET, 
+          upcxx::atomic::FADD});
   
   print_test_header();
 
