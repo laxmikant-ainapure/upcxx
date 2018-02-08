@@ -4,6 +4,8 @@
 #include <vector>
 #include <upcxx/global_ptr.hpp>
 
+using std::memory_order;
+
 namespace upcxx {
   namespace atomic {
 
@@ -23,23 +25,44 @@ namespace upcxx {
         domain(std::vector<AOP> ops, int flags = 0);
         ~domain();
 
-      // Generic atomic operation. This can take 0, 1 or 2 operands.
-      future<T> operation(AOP aop, global_ptr<T> gptr, T op1=0, T op2=0);
+        // Generic atomic operation. This can take 0, 1 or 2 operands.
+        future<T> op(AOP aop, global_ptr<T> gptr, memory_order order, T val1=0, T val2=0);
 
-      // Convenience functions for all the operations.
-      future<> set(global_ptr<T> gptr, T op1) { return operation(SET, gptr, op1).then([](T op1){}); }
-      future<T> get(global_ptr<T> gptr) { return operation(GET, gptr); }
-      future<> inc(global_ptr<T> gptr) { return operation(INC, gptr).then([](T op1){}); }
-      future<> dec(global_ptr<T> gptr) { return operation(DEC, gptr).then([](T op1){}); }
-      future<T> finc(global_ptr<T> gptr) { return operation(FINC, gptr); }
-      future<T> fdec(global_ptr<T> gptr) { return operation(FDEC, gptr); }
-      future<> add(global_ptr<T> gptr, T op1) { return operation(ADD, gptr, op1).then([](T op1){}); }
-      future<> sub(global_ptr<T> gptr, T op1) { return operation(SUB, gptr, op1).then([](T op1){}); }
-      future<T> fadd(global_ptr<T> gptr, T op1) { return operation(FADD, gptr, op1); }
-      future<T> fsub(global_ptr<T> gptr, T op1) { return operation(FSUB, gptr, op1); }
-      future<T> cswap(global_ptr<T> gptr, T op1, T op2) { return operation(CSWAP, gptr, op1, op2); }
+        // Convenience functions for all the operations.
+        future<> set(global_ptr<T> gptr, memory_order order, T val1) {
+          return op(SET, gptr, order, val1).then([](T val1){});
+        }
+        future<T> get(global_ptr<T> gptr, memory_order order) {
+          return op(GET, gptr, order);
+        }
+        future<> inc(global_ptr<T> gptr, memory_order order) {
+          return op(INC, gptr, order).then([](T val1){});
+        }
+        future<> dec(global_ptr<T> gptr, memory_order order) {
+          return op(DEC, gptr, order).then([](T val1){});
+        }
+        future<T> finc(global_ptr<T> gptr, memory_order order) {
+          return op(FINC, gptr, order);
+        }
+        future<T> fdec(global_ptr<T> gptr, memory_order order) {
+          return op(FDEC, gptr, order);
+        }
+        future<> add(global_ptr<T> gptr, memory_order order, T val1) {
+          return op(ADD, gptr, order, val1).then([](T val1){});
+        }
+        future<> sub(global_ptr<T> gptr, memory_order order, T val1) {
+          return op(SUB, gptr, order, val1).then([](T val1){});
+        }
+        future<T> fadd(global_ptr<T> gptr, memory_order order, T val1) {
+          return op(FADD, gptr, order, val1);
+        }
+        future<T> fsub(global_ptr<T> gptr, memory_order order, T val1) {
+          return op(FSUB, gptr, order, val1);
+        }
+        future<T> cswap(global_ptr<T> gptr, memory_order order, T val1, T val2) {
+          return op(CSWAP, gptr, order, val1, val2);
+        }
     };
-
   } // namespace atomic
 } // namespace upcxx
 
