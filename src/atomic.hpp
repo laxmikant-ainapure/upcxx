@@ -8,7 +8,7 @@ namespace upcxx {
   namespace atomic {
 
     // All supported atomic operations.
-    enum { GET, SET, ADD, FADD, SUB, FSUB, INC, FINC, DEC, FDEC, CSWAP };
+    enum AOP: int { GET, SET, ADD, FADD, SUB, FSUB, INC, FINC, DEC, FDEC, CSWAP };
 
     // Atomic domain for an ?int*_t type.
     template<typename T>
@@ -24,7 +24,7 @@ namespace upcxx {
         ~domain();
 
         // Generic atomic operation. This can take 0, 1 or 2 operands.
-        future<T> op(int aop, global_ptr<T> gptr, std::memory_order order, T val1=0, T val2=0);
+        future<T> op(AOP aop, global_ptr<T> gptr, std::memory_order order, T val1=0, T val2=0);
 
         // Convenience functions for all the operations.
         future<> set(global_ptr<T> gptr, std::memory_order order, T val1) {

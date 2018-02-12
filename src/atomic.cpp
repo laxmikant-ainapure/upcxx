@@ -53,7 +53,7 @@ atomic::domain<T>::~domain() {
 }
 
 template<typename T> 
-upcxx::future<T> atomic::domain<T>::op(int aop, upcxx::global_ptr<T> gptr, 
+upcxx::future<T> atomic::domain<T>::op(upcxx::atomic::AOP aop, upcxx::global_ptr<T> gptr, 
                                        std::memory_order order, T val1, T val2) {
   gex_OP_t gex_op = to_gex_op[aop];
   // Fail if attempting to use an atomic operation not part of this domain.
