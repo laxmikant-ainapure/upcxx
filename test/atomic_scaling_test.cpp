@@ -37,7 +37,7 @@ double timer_elapsed(chrono::time_point<chrono::high_resolution_clock> t)
 global_ptr<int64_t> counter;
 global_ptr<int64_t> target_counter;
 
-const int iters = 250000;
+const int64_t iters = 2500000;
 const int warm_up_iters = 10000;
   
 int main(int argc, char **argv)
@@ -79,7 +79,8 @@ int main(int argc, char **argv)
   double t_max_used = upcxx::allreduce(t_used, max_op<double>()).wait();
   double t_av_used = upcxx::allreduce(t_used, std::plus<double>()).wait() / upcxx::rank_n();
   if (upcxx::rank_me() == 0) 
-    printf("Time taken: %.3f s (max), %.3f s (avg)\n", t_max_used, t_av_used);
+    printf("Ranks: %d time taken: %.3f s (max), %.3f s (avg), %.0f ops/s\n", 
+           upcxx::rank_n(), t_max_used, t_av_used, iters * upcxx::rank_n() / t_av_used);
   upcxx::barrier();  
   upcxx::finalize();
   return 0;
