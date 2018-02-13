@@ -79,10 +79,15 @@ upcxx::future<T> atomic::domain<T>::op(upcxx::atomic::AOP aop, upcxx::global_ptr
   };
   // Create the callback object..
   auto *cb = new op_cb();
+  // select the appropriate flags for the memory order
+  gex_Flags_t flags = 0;
+  if (order == std::memory_order_acquire) flags |= GEX_FLAG_AD_ACQ;
+  else if (order == std::memory_order_release) flags |= GEX_FLAG_AD_REL;
+  else if (order == std::memory_order_acq_rel) flags |= (GEX_FLAG_AD_ACQ | GEX_FLAG_AD_REL);
   // Get the handle for the gasnet function.
   // FIXME: flags will depend on the memory order
   cb->handle = gex_AD_OpNB<T>(reinterpret_cast<gex_AD_t>(gex_ad), &cb->result, gptr, gex_op, 
-                              val1, val2, 0);
+                              val1, val2, flags);
   // Get the future from the callback object.
   auto ans = cb->p.get_future();
   // Register the callback with gasnet.
