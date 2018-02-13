@@ -17,17 +17,20 @@
 namespace upcxx {
   //////////////////////////////////////////////////////////////////////
   // Internal PSHM functions.
-  // TODO: Rethink API, move to backend.hpp.  BVS moving to backend
+  // TODO: Rethink API, move to backend.hpp
   
-  // inline bool is_memory_shared_with(intrank_t r) {
-  //   return r == upcxx::rank_me();
-  // }
+  inline bool is_memory_shared_with(intrank_t r) {
+    return r == upcxx::rank_me();
+  }
   
-  // inline void *pshm_remote_addr2local(intrank_t r, void *addr) {
-  //   return addr;
-  // }
+  inline void *pshm_remote_addr2local(intrank_t r, void *addr) {
+    return addr;
+  }
   
-
+  inline void *pshm_local_addr2remote(void *addr, intrank_t &rank_out) {
+    rank_out = upcxx::rank_me();
+    return addr;
+  }
   
   //////////////////////////////////////////////////////////////////////
   
@@ -69,7 +72,7 @@ namespace upcxx {
     }
     
     bool is_local() const {
-      return backend::is_local(raw_ptr_);
+      return is_memory_shared_with(rank_);
     }
 
     bool is_null() const {
@@ -77,7 +80,7 @@ namespace upcxx {
     }
 
     T* local() const {
-      return static_cast<T*>(upcxx::backend::pshm_remote_addr2local(rank_, raw_ptr_));
+      return static_cast<T*>(pshm_remote_addr2local(rank_, raw_ptr_));
     }
 
     intrank_t where() const {
