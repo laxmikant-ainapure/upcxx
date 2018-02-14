@@ -17,14 +17,14 @@ using upcxx::rank_me;
 using upcxx::rank_n;
 using upcxx::barrier;
 using upcxx::global_ptr;
+using upcxx::atomic::domain;
 
 const int ITERS = 10;
 global_ptr<int64_t> counter;
 // let's all hit the same rank
-upcxx::intrank_t target_rank = 0;
-global_ptr<int64_t> target_counter;
+const upcxx::intrank_t TARGET_RANK = 0;
 
-void test_fetch_add(bool use_atomics, upcxx::atomic::domain<int64_t> &dom) {
+void test_fetch_add(global_ptr<int64_t> target_counter, bool use_atomics, domain<int64_t> &dom) {
   int expected_val = rank_n() * ITERS;
   if (rank_me() == 0) {
     if (!use_atomics) {
@@ -53,7 +53,7 @@ void test_fetch_add(bool use_atomics, upcxx::atomic::domain<int64_t> &dom) {
   
   barrier();
   
-  if (rank_me() == target_rank) {
+  if (rank_me() == TARGET_RANK) {
     cout << "Final value is " << *counter.local() << endl;
     if (use_atomics)
       UPCXX_ASSERT_ALWAYS(*counter.local() == expected_val, 
@@ -63,7 +63,7 @@ void test_fetch_add(bool use_atomics, upcxx::atomic::domain<int64_t> &dom) {
   barrier();
 }
 
-void test_put_get(upcxx::atomic::domain<int64_t> &dom) {
+void test_put_get(global_ptr<int64_t> target_counter, domain<int64_t> &dom) {
   if (rank_me() == 0) {
     cout << "Test puts and gets: expect a random rank number" << endl;
     // always use atomics to access or modify counter
@@ -79,7 +79,7 @@ void test_put_get(upcxx::atomic::domain<int64_t> &dom) {
   
   barrier();
   
-  if (rank_me() == target_rank) {
+  if (rank_me() == TARGET_RANK) {
     cout << "Final value is " << *counter.local() << endl;
     UPCXX_ASSERT_ALWAYS(*counter.local() >= 0 && *counter.local() < upcxx::rank_n(),
             "atomic put and get test result out of range");
@@ -91,22 +91,21 @@ void test_put_get(upcxx::atomic::domain<int64_t> &dom) {
 int main(int argc, char **argv) {
   upcxx::init();
   
-  upcxx::atomic::domain<int64_t> ad_i64({upcxx::atomic::GET, upcxx::atomic::SET, 
-          upcxx::atomic::FADD});
+  domain<int64_t> ad_i64({upcxx::atomic::GET, upcxx::atomic::SET, upcxx::atomic::FADD});
 
   print_test_header();
   
-  if (rank_me() == target_rank) counter = upcxx::allocate<int64_t>();
+  if (rank_me() == TARGET_RANK) counter = upcxx::allocate<int64_t>();
   
   barrier();
   
   // get the global pointer to the target counter
-  target_counter = upcxx::rpc(target_rank, []() { return counter; }).wait();
+  global_ptr<int64_t> target_counter = upcxx::rpc(TARGET_RANK, []() { return counter; }).wait();
   
-  test_fetch_add(false, ad_i64);
-  test_fetch_add(true, ad_i64);
-  test_put_get(ad_i64);
-  
+  test_fetch_add(target_counter, false, ad_i64);
+  test_fetch_add(target_counter, true, ad_i64);
+  test_put_get(target_counter, ad_i64);
+
   print_test_success();
   
   upcxx::finalize();

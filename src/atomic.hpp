@@ -9,10 +9,17 @@
 namespace upcxx {
   namespace detail {
     template<typename T>
-    void gex_AD_OpNB(uintptr_t, T*, upcxx::global_ptr<T>, int, T, T, int, backend::gasnet::handle_cb*);
-    template<>
-    void gex_AD_OpNB(uintptr_t ad, int64_t* p, upcxx::global_ptr<int64_t>, int opcode,
-                     int64_t val1, int64_t val2, int flags, backend::gasnet::handle_cb *cb);
+    void gex_AD_OpNB(uintptr_t, T*, upcxx::global_ptr<T>, int, T, T, int,
+                     backend::gasnet::handle_cb*);
+#define SET_GEX_OP_PROTOTYPE(T) \
+    template<> \
+    void gex_AD_OpNB(uintptr_t ad, T* p, upcxx::global_ptr<T>, int opcode, \
+                     T val1, T val2, int flags, backend::gasnet::handle_cb *cb);
+    SET_GEX_OP_PROTOTYPE(int32_t);
+    SET_GEX_OP_PROTOTYPE(int64_t);
+    SET_GEX_OP_PROTOTYPE(uint32_t);
+    SET_GEX_OP_PROTOTYPE(uint64_t);
+
     int get_gex_flags(std::memory_order order);
     int to_gex_op(int opcode);
 
