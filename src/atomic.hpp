@@ -2,17 +2,46 @@
 #define _4fd2caba_e406_4f0e_ab34_0e0224ec36a5
 
 #include <vector>
+#include <upcxx/backend.hpp>
+#include <upcxx/completion.hpp>
 #include <upcxx/global_ptr.hpp>
 
 namespace upcxx {
   namespace detail {
     template<typename T>
-    uintptr_t gex_AD_OpNB(uintptr_t, T*, upcxx::global_ptr<T>, int, T, T, int);
+    void gex_AD_OpNB(uintptr_t, T*, upcxx::global_ptr<T>, int, T, T, int, backend::gasnet::handle_cb*);
     template<>
-    uintptr_t gex_AD_OpNB(uintptr_t ad, int64_t* p, upcxx::global_ptr<int64_t>,
-                          int opcode, int64_t val1, int64_t val2, int flags);
+    void gex_AD_OpNB(uintptr_t ad, int64_t* p, upcxx::global_ptr<int64_t>, int opcode,
+                     int64_t val1, int64_t val2, int flags, backend::gasnet::handle_cb *cb);
     int get_gex_flags(std::memory_order order);
     int to_gex_op(int opcode);
+
+    template<typename T>
+    struct aop_event_values {
+      template<typename Event>
+      using tuple_t = typename std::conditional<
+          std::is_same<Event, operation_cx_event>::value,
+          std::tuple<T>,
+          std::tuple<>
+        >::type;
+    };
+
+    // The class that handles the gasnet event.
+    // Must be declared final for the 'delete this' call.
+    template<typename T, typename CxStateHere>
+    struct op_cb final: backend::gasnet::handle_cb {
+
+      CxStateHere state_here;
+      T result;
+
+      op_cb(CxStateHere state_here) : state_here{std::move(state_here)} {}
+
+      // The callback executed upon event completion.
+      void execute_and_delete(backend::gasnet::handle_cb_successor) {
+        this->state_here.template operator()<operation_cx_event>(std::move(result));
+        delete this;
+      }
+    };
   }
 
   namespace atomic {
@@ -35,44 +64,37 @@ namespace upcxx {
         ~domain();
 
         // Generic atomic operation. This can take 0, 1 or 2 operands.
-        future<T> op(AOP aop, global_ptr<T> gptr, std::memory_order order, T val1=0, T val2=0) {
+        template<typename Cxs = completions<future_cx<operation_cx_event> > >
+        typename detail::completions_returner<detail::event_is_here,
+            detail::aop_event_values<T>, Cxs>::return_t
+        op(AOP aop, global_ptr<T> gptr, std::memory_order order, T val1 = 0, T val2 = 0,
+           Cxs cxs = completions<future_cx<operation_cx_event> >{ {} }) {
+
+          UPCXX_ASSERT_ALWAYS((detail::completions_has_event<Cxs, operation_cx_event>::value));
+
+          // get our gasnet operation
           int gex_op = upcxx::detail::to_gex_op(aop);
           // Fail if attempting to use an atomic operation not part of this domain.
           UPCXX_ASSERT(gex_op & gex_ops,
                        "Atomic operation " << atomic_op_str[aop] << " not included in domain\n");
-          // The class that handles the gasnet event.
-          // Must be declared final for the 'delete this' call.
-          struct op_cb final: backend::gasnet::handle_cb {
-            // The promise to fulfill when the operation completes.
-            promise<T> p;
-            // The result of the operation - may be ignored.
-            T result;
-            // The callback executed upon event completion.
-            void execute_and_delete(backend::gasnet::handle_cb_successor) {
-              // Now we are running in internal progress - can't fulfill until user progress.
-              backend::during_user(
-                  [this]() {
-                    // The operation has completed - fulfill the result and delete callback object.
-                    p.fulfill_result(result);
-                    delete this;
-                  });
-            }
-          };
-          // Create the callback object..
-          auto *cb = new op_cb();
           // select the appropriate flags for the memory order
           int flags = upcxx::detail::get_gex_flags(order);
+
+          // we only have local completion, not remote
+          using cxs_here_t = detail::completions_state<detail::event_is_here,
+              detail::aop_event_values<T>, Cxs>;
+
+          // Create the callback object..
+          auto *cb = new detail::op_cb<T, cxs_here_t>{cxs_here_t{std::move(cxs)}};
+
+          auto returner = detail::completions_returner<detail::event_is_here,
+              detail::aop_event_values<T>, Cxs>{cb->state_here};
+
           // Get the handle for the gasnet function.
-          cb->handle = upcxx::detail::gex_AD_OpNB<T>(gex_ad, &cb->result, gptr, gex_op,
-              val1, val2, flags);
-          // Get the future from the callback object.
-          auto ans = cb->p.get_future();
-          // Register the callback with gasnet.
-          backend::gasnet::register_cb(cb);
-          // Make sure UPCXX does internal work after the gasnet call.
-          backend::gasnet::after_gasnet();
-          // Return the future of the callback object.
-          return ans;
+          upcxx::detail::gex_AD_OpNB<T>(gex_ad, &cb->result, gptr, gex_op,
+              val1, val2, flags, cb);
+
+          return returner();
         }
 
         // Convenience functions for all the operations.
