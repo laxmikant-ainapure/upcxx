@@ -1,6 +1,7 @@
 #include <cstdint>
 #include <vector>
 #include <cstdlib>
+#include <cstddef>
 
 #include <upcxx/diagnostic.hpp>
 #include <upcxx/allocate.hpp>
@@ -16,9 +17,11 @@ using namespace std;
 
 #define M 66
 #define N 128
+#define B 20
 
+typedef long long int lli;
 
-typedef double patch_t[M][N];
+typedef lli patch_t[M][N];
 
 template<typename ptr_t>
 class Iter
@@ -31,7 +34,8 @@ public:
   bool operator==(Iter rhs) const { return rhs.m_ptr==m_ptr;}
   Iter& operator++(){m_ptr+=m_stride; return *this;}
   Iter  operator++(int){Iter rtn(*this); m_ptr+=m_stride; return rtn;} 
-  
+
+  void operator+=(std::ptrdiff_t a_skip) {m_ptr = m_ptr+a_skip;}
 
 protected:
   ptr_t m_ptr=0;
@@ -70,35 +74,48 @@ int main() {
   intrank_t me = rank_me();
   intrank_t n =  rank_n();
   intrank_t nebrHi = (me + 1) % n;
-  intrank_t nebrLo = (me - 1) % n;
+  intrank_t nebrLo = (me + n - 1) % n;
+
   // Ring of ghost halos transfered between adjacent ranks using the three
   // different communication protocols
   patch_t* myPatchPtr = (patch_t*)allocate(sizeof(patch_t));
-  dist_object<global_ptr<double> > mesh(global_ptr<double>((double*)myPatchPtr));
+  dist_object<global_ptr<lli> > mesh(global_ptr<lli>((lli*)myPatchPtr));
 
-  double*  myPtr = (*mesh).local();
+  lli*  myPtr = (*mesh).local();
   patch_t& myPatch = *myPatchPtr;
 
-  future<global_ptr<double> >fneighbor_hi = mesh.fetch(nebrHi);
-  future<global_ptr<double> >fneighbor_lo = mesh.fetch(nebrLo);
+  future<global_ptr<lli>> fneighbor_hi = mesh.fetch(nebrHi);
+  future<global_ptr<lli>> fneighbor_lo = mesh.fetch(nebrLo);
 
-  patch_t source;
-  for(int i=0; i<M; i++)
+  for(int j=0; j<M; j++)
     {
-      for(int j=0; j<N; j++)
+      for(int i=0; i<N; i++)
         {
-          myPatch[i][j]= (double)me;
+          myPatch[j][i]=  me; // yeah, I still think in Fortran order.
         }
     }
- 
-  wait(when_all(fneighbor_hi, fneighbor_lo));
- 
-  global_ptr<double> hi=fneighbor_hi.result();
-  global_ptr<double> lo=fneighbor_lo.result();
 
-  auto s1 = IterF<double*>(myPtr, 20, N);
 
-  auto s2 = IterR<double*>(myPtr,N);
+  when_all(fneighbor_hi, fneighbor_lo).wait();
+ 
+  global_ptr<lli> hi=fneighbor_hi.result();
+  global_ptr<lli> lo=fneighbor_lo.result();
+
+  // fragmented
+  auto fs1 = IterF<lli*>(myPtr, B, N);
+  auto fs1_end = fs1; fs1_end+=M*N;
+  auto fd1 = IterF<global_ptr<lli>>(hi+N-B, B, N);
+  auto fd1_end = fd1; fd1_end+=M*N;
+
+  auto f1 = rput_fragmented(fs1, fs1_end, fd1, fd1_end);
+
+  // regular
+  auto rs1 = IterR<lli*>(myPtr,N);
+  auto rs1_end = rs1; rs1_end+=M*N/2;
+  auto rd1 = IterR<global_ptr<lli>>(hi+N-B,N);
+  auto rd1_end = rd1; rd1_end+=M*N/2;
+
+  auto r1 = rput_regular(rs1, rs1_end, B , rd1, rd1_end, B);
   
   //UPCXX_ASSERT_ALWAYS(ans2.ready(), "Answer is not ready");
  
