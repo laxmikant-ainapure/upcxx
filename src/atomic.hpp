@@ -97,7 +97,7 @@ namespace upcxx {
           auto returner = detail::completions_returner<detail::event_is_here,
               detail::aop_event_values<T>, Cxs>{cb->state_here};
 
-          // Get the handle for the gasnet function.
+          // execute the backend gasnet function
           upcxx::detail::gex_AD_OpNB<T>(gex_ad, &cb->result, gptr, gex_op,
               val1, val2, flags, cb);
 
