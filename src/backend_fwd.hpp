@@ -57,7 +57,14 @@ namespace backend {
   extern intrank_t rank_n;
   extern intrank_t rank_me;
 }}
-  
+
+namespace upcxx{
+  namespace backend{
+  typedef struct {
+    void  *gex_addr;  // TODO: When gasnet changes Memvec we need to track it
+    size_t gex_len;
+  } memvec_t;
+}}
 #if UPCXX_BACKEND_GASNET_PAR
   #include <upcxx/backend/gasnet/handle_cb.hpp>
   
