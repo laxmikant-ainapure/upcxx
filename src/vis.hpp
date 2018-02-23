@@ -120,7 +120,7 @@ namespace upcxx
         state_remote(std::move(remote))
       {
       }
-      static constexpr bool static_scope = true;
+      static constexpr bool static_scope = false;
       void initiate(intrank_t rd,
                     void* dst_addr, const std::ptrdiff_t* dststrides,
                     const void* src_addr, const std::ptrdiff_t* srcstrides,
@@ -147,7 +147,7 @@ namespace upcxx
     Cxs>::return_t  
   rput_fragmented(
                   SrcIter src_runs_begin, SrcIter src_runs_end,
-                  DestIter dest_runs_begin, DestIter dest_runs_end,
+                  DestIter dst_runs_begin, DestIter dst_runs_end,
                   Cxs cxs=completions<future_cx<operation_cx_event>>{{}})
   {
     UPCXX_ASSERT_ALWAYS((detail::completions_has_event<Cxs, operation_cx_event>::value));
@@ -162,8 +162,38 @@ namespace upcxx
       Cxs>;
 
     std::vector<upcxx::backend::memvec_t>  src, dest;
-    
-    intrank_t gpdrank = (std::get<0>(*dest_runs_begin)).rank_;
+    std::size_t srccount=0;
+    std::size_t srcsize=0;
+    std::size_t dstcount=0;
+    std::size_t dstsize=0;
+    for(SrcIter s=src_runs_begin; !(s==src_runs_end); ++s)
+      {
+        srccount++;
+        srcsize+=std::get<1>(*s)*sizeof(*std::get<0>(*s));
+      }
+    for(DestIter d=dst_runs_begin; !(d==dst_runs_end); ++d)
+      {
+        dstcount++;
+        dstsize+=std::get<1>(*d)*sizeof(*std::get<0>(*d).raw_ptr_);
+      }
+    UPCXX_ASSERT_ALWAYS(dstsize==srcsize);
+    src.resize(srccount);
+    dest.resize(dstcount);
+    auto sv=src.begin();
+    auto dv=dest.begin();
+    for(SrcIter s=src_runs_begin; !(s==src_runs_end); ++s,++sv)
+      {
+        sv->gex_addr=std::get<0>(*s);
+        sv->gex_len =std::get<1>(*s);
+      }
+    intrank_t gpdrank = (std::get<0>(*dst_runs_begin)).rank_;
+    for(DestIter d=dst_runs_begin; !(d==dst_runs_end); ++d,++dv)
+      {
+        UPCXX_ASSERT(gpdrank==std::get<0>(*d).rank_);
+        dv->gex_addr=(std::get<0>(*d)).raw_ptr_;
+        dv->gex_len =std::get<1>(*d);
+      }
+
     detail::rput_cbs_frag<cxs_here_t, cxs_remote_t> cbs_static{
       gpdrank,
         cxs_here_t(std::move(cxs)),
@@ -202,8 +232,8 @@ template<typename SrcIter, typename DestIter>
   rput_regular(
                SrcIter src_runs_begin, SrcIter src_runs_end,
                std::size_t src_run_length,
-               DestIter dest_runs_begin, DestIter dest_runs_end,
-               std::size_t dest_run_length,
+               DestIter dst_runs_begin, DestIter dst_runs_end,
+               std::size_t dst_run_length,
                Cxs cxs=completions<future_cx<operation_cx_event>>{{}})
   {
 
@@ -219,8 +249,31 @@ template<typename SrcIter, typename DestIter>
       Cxs>;
 
     std::vector<void*>  src, dest;
-    
-    intrank_t gpdrank = (*dest_runs_begin).rank_;
+    std::size_t srccount=0;
+    std::size_t dstcount=0;
+    for(SrcIter s=src_runs_begin; !(s==src_runs_end); ++s)
+      {
+        srccount++;
+      }
+    for(DestIter d=dst_runs_begin; !(d==dst_runs_end); ++d)
+      {
+        dstcount++;
+      }
+    UPCXX_ASSERT_ALWAYS(dstcount*dst_run_length==srccount*src_run_length);
+    src.resize(srccount);
+    dest.resize(dstcount);
+    auto sv=src.begin();
+    auto dv=dest.begin();
+    for(SrcIter s=src_runs_begin; !(s==src_runs_end); ++s,++sv)
+      {
+        *sv = *s;
+      }
+    intrank_t gpdrank = (*dst_runs_begin).rank_;
+    for(DestIter d=dst_runs_begin; !(d==dst_runs_end); ++d,++dv)
+      {
+        UPCXX_ASSERT((*d).rank_);
+        *dv=(*d).raw_ptr_;
+      }
     detail::rput_cbs_reg<cxs_here_t, cxs_remote_t> cbs_static{
       gpdrank,
         cxs_here_t(std::move(cxs)),
@@ -238,7 +291,7 @@ template<typename SrcIter, typename DestIter>
       Cxs
       >{cbs->state_here};
     
-    cbs->initiate(dest_run_length, src_run_length);
+    cbs->initiate(dst_run_length, src_run_length);
     
     return returner();
   }

@@ -22,10 +22,13 @@ void upcxx::detail::rma_put_frag_nb(
                                          reinterpret_cast<const gex_Memvec_t*>(_srclist),
                                          /* flags */ 0);
 
-  source_cb->handle = reinterpret_cast<uintptr_t>(op_h);
+  if(source_cb)
+    {
+      source_cb->handle = reinterpret_cast<uintptr_t>(op_h);
+      gasnet::register_cb(source_cb);
+    }
+  
   operation_cb->handle = reinterpret_cast<uintptr_t>(op_h);
-
-  gasnet::register_cb(source_cb);
   gasnet::register_cb(operation_cb);
 
   gasnet::after_gasnet();
@@ -43,13 +46,14 @@ void upcxx::detail::rma_put_reg_nb(
                                          _dstcount, _dstlist, _dstlen,
                                          _srccount, _srclist, _srclen,
                                          /* flags*/ 0);
-
-  source_cb->handle = reinterpret_cast<uintptr_t>(op_h);
+  if(source_cb)
+    {
+      source_cb->handle = reinterpret_cast<uintptr_t>(op_h);
+      gasnet::register_cb(source_cb);
+    }
   operation_cb->handle = reinterpret_cast<uintptr_t>(op_h);
 
-  gasnet::register_cb(source_cb);
   gasnet::register_cb(operation_cb);
-
   gasnet::after_gasnet();
 
 }
@@ -70,13 +74,15 @@ void upcxx::detail::rma_put_strided_nb(
                                           _elemsz,
                                           _count, _stridelevels,
                                           /*flag */ 0);
-  
-  source_cb->handle = reinterpret_cast<uintptr_t>(op_h);
+   if(source_cb)
+    {
+      source_cb->handle = reinterpret_cast<uintptr_t>(op_h);
+      gasnet::register_cb(source_cb);
+    }
+
   operation_cb->handle = reinterpret_cast<uintptr_t>(op_h);
 
-  gasnet::register_cb(source_cb);
   gasnet::register_cb(operation_cb);
-
   gasnet::after_gasnet();
 
 }

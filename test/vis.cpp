@@ -121,8 +121,9 @@ int main() {
   check(fr1, fr1_end, (lli)nebrLo);
   lli sm = sum(myPatch);
   lli correctAnswer = me*(N-B)*M+B*nebrLo;
-  UPCXX_ASSERT_ALWAYS(sm == correctAnswer, "expected "<<correctAnswer<<", got " << sm);
+  UPCXX_ASSERT_ALWAYS(sm == correctAnswer, "fragmented expected "<<correctAnswer<<", got " << sm);
 
+  
   reset(myPatch, me);
   
   // regular
@@ -140,19 +141,20 @@ int main() {
   check(rr1, rr1_end, B, (lli)nebrHi);
   sm = sum(myPatch);
   correctAnswer = me*(N-B)+B*nebrHi;
-  UPCXX_ASSERT_ALWAYS(sm == correctAnswer, "expected "<<correctAnswer<<", got " << sm);
+  UPCXX_ASSERT_ALWAYS(sm == correctAnswer, "regular expected "<<correctAnswer<<", got " << sm);
   
   reset(myPatch, me);
   
   // strided
-  auto s1 = rput_strided<2>(myPtr+N-B, {1,N}, hi, {1,N}, {B,M});
+  auto s1 = rput_strided<2>(myPtr+N-B, {sizeof(lli),N*sizeof(lli)},
+                            hi, {sizeof(lli),N*sizeof(lli)}, {B,M});
 
   s1.wait();
 
   check(fr1, fr1_end, (lli)nebrLo); // this is moving the same data as in the fragmented case
   sm = sum(myPatch);
   correctAnswer = me*(N-B)*M+B*nebrLo;
-  UPCXX_ASSERT_ALWAYS(sm == correctAnswer, "expected "<<correctAnswer<<", got " << sm);
+  UPCXX_ASSERT_ALWAYS(sm == correctAnswer, "strided expected "<<correctAnswer<<", got " << sm);
   
   //UPCXX_ASSERT_ALWAYS(ans2.ready(), "Answer is not ready");
  
@@ -205,7 +207,7 @@ bool check(Frag start, Frag end, value_t value)
         {
           if(*v != value)
             {
-              std::cout<<" expected value:"<<value<<" seeing:"<<*v;
+              std::cout<<"Frag expected value:"<<value<<" seeing:"<<*v;
               return false;
             }
         }
@@ -226,7 +228,7 @@ bool check(Reg start, Reg end, std::size_t count, value_t value)
         {
           if(*v != value)
             {
-              std::cout<<" expected value:"<<value<<" seeing:"<<*v;
+              std::cout<<"Regular expected value:"<<value<<" seeing:"<<*v;
               return false;
             }
         }
