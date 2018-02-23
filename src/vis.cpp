@@ -57,7 +57,7 @@ void upcxx::detail::rma_put_reg_nb(
 void upcxx::detail::rma_put_strided_nb(
                         intrank_t rank_d,
                         void *_dstaddr, const std::ptrdiff_t _dststrides[],
-                        void *_srcaddr, const std::ptrdiff_t _srcstrides[],
+                        const void *_srcaddr, const std::ptrdiff_t _srcstrides[],
                         std::size_t _elemsz,
                         const std::size_t _count[], std::size_t _stridelevels,
                         backend::gasnet::handle_cb *source_cb,
@@ -66,7 +66,7 @@ void upcxx::detail::rma_put_strided_nb(
   gex_Event_t op_h = gex_VIS_StridedPutNB(gasnet::world_team,
                                           rank_d,
                                           _dstaddr, _dststrides,
-                                          _srcaddr, _srcstrides,
+                                          const_cast<void*>(_srcaddr), _srcstrides,
                                           _elemsz,
                                           _count, _stridelevels,
                                           /*flag */ 0);
