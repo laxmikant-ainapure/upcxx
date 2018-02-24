@@ -139,7 +139,7 @@ int main() {
   auto fr1 = IterF<lli*>(myPtr, B, N);
   auto fr1_end = fr1; fr1_end+=M*N; 
 
-
+  barrier();
   auto f1 = rput_fragmented(fs1, fs1_end, fd1, fd1_end);
 
  
@@ -155,10 +155,8 @@ int main() {
       std::cout<<" Fragmented expected sum:"<<correctAnswer<<" actual sum: "<<sm<<"\n";
       success = false;
     }
-  
+
   reset(myPatch, me);
-  
-  // regular
   std::cout<<"\nRegular test 1\n";
   auto rs1 = IterR<lli*>(myPtr,N);
   auto rs1_end = rs1; rs1_end+=M*N;
@@ -166,10 +164,11 @@ int main() {
   auto rd1_end = rd1; rd1_end+=M*N;
   auto rr1 = IterR<lli*>(myPtr+N-B, N);
   auto rr1_end = rr1;  rr1_end+=M*N;
-
   lli token=-1;
   set(rr1, rr1_end, B, token);
   
+  barrier();  
+
   auto r1 = rput_regular(rs1, rs1_end, B , rd1, rd1_end, B);
 
  
@@ -187,6 +186,7 @@ int main() {
  
   
   reset(myPatch, me);
+  barrier();
   
   // strided
   auto s1 = rput_strided<2>(myPtr+N-B, {sizeof(lli),N*sizeof(lli)},
