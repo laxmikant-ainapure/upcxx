@@ -40,7 +40,7 @@ The current release is known to work on the following configurations:
 
 Miscellaneous software requirements:
 
-* Python version 2.7.5 or newer
+* Python2 version 2.7.5 or newer
 
 * Perl version 5.005 or newer
 
