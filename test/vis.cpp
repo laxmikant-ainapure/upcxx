@@ -70,6 +70,9 @@ bool check(Frag start, Frag end, value_t value);
 template<typename Reg, typename value_t>
 bool check(Reg start, Reg end, std::size_t count, value_t value);
 
+template<typename Reg, typename value_t>
+void set(Reg start, Reg end, std::size_t count, value_t value);
+
 void reset(patch_t& patch, lli value);
 
 lli sum(patch_t& patch);
@@ -158,11 +161,14 @@ int main() {
   // regular
   std::cout<<"\nRegular test 1\n";
   auto rs1 = IterR<lli*>(myPtr,N);
-  auto rs1_end = rs1; rs1_end+=M*N/2;
+  auto rs1_end = rs1; rs1_end+=M*N;
   auto rd1 = IterR<global_ptr<lli>>(lo+N-B,N);
-  auto rd1_end = rd1; rd1_end+=M*N/2;
+  auto rd1_end = rd1; rd1_end+=M*N;
   auto rr1 = IterR<lli*>(myPtr+N-B, N);
   auto rr1_end = rr1;  rr1_end+=M*N;
+
+  lli token=-1;
+  set(rr1, rr1_end, B, token);
   
   auto r1 = rput_regular(rs1, rs1_end, B , rd1, rd1_end, B);
 
@@ -172,7 +178,7 @@ int main() {
   
   success = success && check(rr1, rr1_end, B, (lli)nebrHi);
   sm = sum(myPatch);
-  correctAnswer = (me*(N-B)+B*nebrLo)*M;
+  correctAnswer = (me*(N-B)+B*nebrHi)*M;
   if(sm != correctAnswer)
     {
       std::cout<<" Regular expected sum:"<<correctAnswer<<" actual sum: "<<sm<<"\n";
@@ -278,5 +284,20 @@ bool check(Reg start, Reg end, std::size_t count, value_t value)
       ++start;
     }
   return true;
+}
+
+template<typename Reg, typename value_t>
+void set(Reg start, Reg end, std::size_t count, value_t value)
+{
+  while(!(start == end))
+    {
+      value_t* v = *start;
+      value_t* e = v+count;
+      for(;v!=e;++v)
+        {
+          *v=value;
+        }
+      ++start;
+    }
 }
         

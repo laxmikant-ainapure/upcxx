@@ -253,6 +253,8 @@ template<typename SrcIter, typename DestIter>
     std::vector<void*>  src, dest;
     std::size_t srccount=0;
     std::size_t dstcount=0;
+    constexpr std::size_t srcSize=sizeof(*src_runs_begin);
+    constexpr std::size_t dstSize=sizeof(*(*dst_runs_begin).raw_ptr_);
     for(SrcIter s=src_runs_begin; !(s==src_runs_end); ++s)
       {
         srccount++;
@@ -261,7 +263,7 @@ template<typename SrcIter, typename DestIter>
       {
         dstcount++;
       }
-    UPCXX_ASSERT_ALWAYS(dstcount*dst_run_length==srccount*src_run_length);
+    UPCXX_ASSERT_ALWAYS(dstcount*dst_run_length*dstSize==srccount*src_run_length*srcSize);
     src.resize(srccount);
     dest.resize(dstcount);
     auto sv=src.begin();
@@ -293,7 +295,7 @@ template<typename SrcIter, typename DestIter>
       Cxs
       >{cbs->state_here};
     
-    cbs->initiate(dst_run_length, src_run_length);
+    cbs->initiate(dst_run_length*dstSize, src_run_length*srcSize);
     
     return returner();
   }
