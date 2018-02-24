@@ -166,15 +166,17 @@ namespace upcxx
     std::size_t srcsize=0;
     std::size_t dstcount=0;
     std::size_t dstsize=0;
+    constexpr std::size_t srcSize=sizeof(*std::get<0>(*src_runs_begin));
+    constexpr std::size_t dstSize=sizeof(*std::get<0>(*dst_runs_begin).raw_ptr_);
     for(SrcIter s=src_runs_begin; !(s==src_runs_end); ++s)
       {
         srccount++;
-        srcsize+=std::get<1>(*s)*sizeof(*std::get<0>(*s));
+        srcsize+=std::get<1>(*s)*srcSize;
       }
     for(DestIter d=dst_runs_begin; !(d==dst_runs_end); ++d)
       {
         dstcount++;
-        dstsize+=std::get<1>(*d)*sizeof(*std::get<0>(*d).raw_ptr_);
+        dstsize+=std::get<1>(*d)*dstSize;
       }
     UPCXX_ASSERT_ALWAYS(dstsize==srcsize);
     src.resize(srccount);
@@ -184,14 +186,14 @@ namespace upcxx
     for(SrcIter s=src_runs_begin; !(s==src_runs_end); ++s,++sv)
       {
         sv->gex_addr=std::get<0>(*s);
-        sv->gex_len =std::get<1>(*s);
+        sv->gex_len =std::get<1>(*s)*srcSize;
       }
     intrank_t gpdrank = (std::get<0>(*dst_runs_begin)).rank_;
     for(DestIter d=dst_runs_begin; !(d==dst_runs_end); ++d,++dv)
       {
         UPCXX_ASSERT(gpdrank==std::get<0>(*d).rank_);
         dv->gex_addr=(std::get<0>(*d)).raw_ptr_;
-        dv->gex_len =std::get<1>(*d);
+        dv->gex_len =std::get<1>(*d)*dstSize;
       }
 
     detail::rput_cbs_frag<cxs_here_t, cxs_remote_t> cbs_static{

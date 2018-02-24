@@ -15,7 +15,7 @@
 using namespace upcxx;
 using namespace std;
 
-#define M 66
+#define M 68
 #define N 128
 #define B 20
 
@@ -80,6 +80,8 @@ int main() {
   
   print_test_header();
 
+  bool success=true;
+  
   intrank_t me = rank_me();
   intrank_t n =  rank_n();
   intrank_t nebrHi = (me + 1) % n;
@@ -105,28 +107,56 @@ int main() {
   global_ptr<lli> hi=fneighbor_hi.result();
   global_ptr<lli> lo=fneighbor_lo.result();
 
-  // fragmented
+  // fragmented test 1
+  lli srcTest[]= {me, me+1, me+2, me+3, me+4, me+5};
+  std::vector<std::pair<lli*,std::size_t> > svec(1,{srcTest, 6});
+  std::vector<std::pair<global_ptr<lli>, std::size_t> > dvec(1, {hi, 6});
+  std::cout<<"\nsending to "<<hi.where()<<": ";
+  for(int i=0; i<6; i++)
+    std::cout<<" "<<srcTest[i];
+  std::cout<<"\n";
+  auto f0 = rput_fragmented(svec.begin(), svec.end(), dvec.begin(), dvec.end());
+
+  f0.wait();
+  barrier();
+  
+  for(int i=0; i<6; i++)
+    {
+      if(myPtr[i] != nebrLo+i){
+        std::cout<<" simple sequence Fragmented expected "<< nebrLo+i<<" but got "<<myPtr[i]<<"\n";
+        success=false;
+      }
+    }
+  // fragmented test 2
+  std::cout<<"\nFragmented test 2 \n";
   auto fs1 = IterF<lli*>(myPtr+N-B, B, N);
   auto fs1_end = fs1; fs1_end+=M*N;
   auto fd1 = IterF<global_ptr<lli>>(hi, B, N);
   auto fd1_end = fd1; fd1_end+=M*N;
   auto fr1 = IterF<lli*>(myPtr, B, N);
-  auto fr1_end = fr1; fr1+=M*N; 
+  auto fr1_end = fr1; fr1_end+=M*N; 
 
 
   auto f1 = rput_fragmented(fs1, fs1_end, fd1, fd1_end);
 
+ 
   f1.wait();
-
-  check(fr1, fr1_end, (lli)nebrLo);
+  barrier();
+  
+  success = success && check(fr1, fr1_end, (lli)nebrLo);
   lli sm = sum(myPatch);
-  lli correctAnswer = me*(N-B)*M+B*nebrLo;
-  UPCXX_ASSERT_ALWAYS(sm == correctAnswer, "fragmented expected "<<correctAnswer<<", got " << sm);
-
+  lli correctAnswer = (me*(N-B)+B*nebrLo)*M;
+  
+  if(sm != correctAnswer)
+    {
+      std::cout<<" Fragmented expected sum:"<<correctAnswer<<" actual sum: "<<sm<<"\n";
+      success = false;
+    }
   
   reset(myPatch, me);
   
   // regular
+  std::cout<<"\nRegular test 1\n";
   auto rs1 = IterR<lli*>(myPtr,N);
   auto rs1_end = rs1; rs1_end+=M*N/2;
   auto rd1 = IterR<global_ptr<lli>>(lo+N-B,N);
@@ -136,12 +166,19 @@ int main() {
   
   auto r1 = rput_regular(rs1, rs1_end, B , rd1, rd1_end, B);
 
+ 
   r1.wait();
-
-  check(rr1, rr1_end, B, (lli)nebrHi);
+  barrier();
+  
+  success = success && check(rr1, rr1_end, B, (lli)nebrHi);
   sm = sum(myPatch);
-  correctAnswer = me*(N-B)+B*nebrHi;
-  UPCXX_ASSERT_ALWAYS(sm == correctAnswer, "regular expected "<<correctAnswer<<", got " << sm);
+  correctAnswer = (me*(N-B)+B*nebrLo)*M;
+  if(sm != correctAnswer)
+    {
+      std::cout<<" Regular expected sum:"<<correctAnswer<<" actual sum: "<<sm<<"\n";
+      success = false;
+    }
+ 
   
   reset(myPatch, me);
   
@@ -149,19 +186,25 @@ int main() {
   auto s1 = rput_strided<2>(myPtr+N-B, {sizeof(lli),N*sizeof(lli)},
                             hi, {sizeof(lli),N*sizeof(lli)}, {B,M});
 
+
   s1.wait();
-
-  check(fr1, fr1_end, (lli)nebrLo); // this is moving the same data as in the fragmented case
+  barrier();
+  
+  std::cout<<"\nStrided testing \n";
+  success = success && check(fr1, fr1_end, (lli)nebrLo); // this is moving the same data as in the fragmented case
   sm = sum(myPatch);
-  correctAnswer = me*(N-B)*M+B*nebrLo;
-  UPCXX_ASSERT_ALWAYS(sm == correctAnswer, "strided expected "<<correctAnswer<<", got " << sm);
-  
-  //UPCXX_ASSERT_ALWAYS(ans2.ready(), "Answer is not ready");
- 
-  //UPCXX_ASSERT_ALWAYS(ans2.result() == 987, "expected 987, got " << ans2.result());
-  
-  print_test_success();
+  correctAnswer = (me*(N-B)+B*nebrLo)*M;
+  if(sm != correctAnswer)
+    {
+      std::cout<<" Stride expected sum:"<<correctAnswer<<" actual sum: "<<sm<<"\n";
+      success = false;
+    }
 
+  
+
+  print_test_success(success);
+  
+    
   finalize();
   
   return 0;
