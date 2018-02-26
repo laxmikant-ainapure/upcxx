@@ -168,17 +168,9 @@ namespace upcxx
     std::size_t dstsize=0;
     constexpr std::size_t srcSize=sizeof(*std::get<0>(*src_runs_begin));
     constexpr std::size_t dstSize=sizeof(*std::get<0>(*dst_runs_begin).raw_ptr_);
-    for(SrcIter s=src_runs_begin; !(s==src_runs_end); ++s)
-      {
-        srccount++;
-        srcsize+=std::get<1>(*s)*srcSize;
-      }
-    for(DestIter d=dst_runs_begin; !(d==dst_runs_end); ++d)
-      {
-        dstcount++;
-        dstsize+=std::get<1>(*d)*dstSize;
-      }
-    UPCXX_ASSERT_ALWAYS(dstsize==srcsize);
+    srccount = std::distance(src_runs_begin, src_runs_end);
+    dstcount = std::distance(dst_runs_begin, dst_runs_end);
+ 
     src.resize(srccount);
     dest.resize(dstcount);
     auto sv=src.begin();
@@ -187,6 +179,7 @@ namespace upcxx
       {
         sv->gex_addr=std::get<0>(*s);
         sv->gex_len =std::get<1>(*s)*srcSize;
+        srcsize+=sv->gex_len;
       }
     intrank_t gpdrank = (std::get<0>(*dst_runs_begin)).rank_;
     for(DestIter d=dst_runs_begin; !(d==dst_runs_end); ++d,++dv)
@@ -194,8 +187,11 @@ namespace upcxx
         UPCXX_ASSERT(gpdrank==std::get<0>(*d).rank_);
         dv->gex_addr=(std::get<0>(*d)).raw_ptr_;
         dv->gex_len =std::get<1>(*d)*dstSize;
+        dstsize+=dv->gex_len;
       }
-
+    
+    UPCXX_ASSERT_ALWAYS(dstsize==srcsize);
+    
     detail::rput_cbs_frag<cxs_here_t, cxs_remote_t> cbs_static{
       gpdrank,
         cxs_here_t(std::move(cxs)),
@@ -255,15 +251,10 @@ template<typename SrcIter, typename DestIter>
     std::size_t dstcount=0;
     constexpr std::size_t srcSize=sizeof(*src_runs_begin);
     constexpr std::size_t dstSize=sizeof(*(*dst_runs_begin).raw_ptr_);
-    for(SrcIter s=src_runs_begin; !(s==src_runs_end); ++s)
-      {
-        srccount++;
-      }
-    for(DestIter d=dst_runs_begin; !(d==dst_runs_end); ++d)
-      {
-        dstcount++;
-      }
+    srccount = std::distance(src_runs_begin, src_runs_end);
+    dstcount = std::distance(dst_runs_begin, dst_runs_end);
     UPCXX_ASSERT_ALWAYS(dstcount*dst_run_length*dstSize==srccount*src_run_length*srcSize);
+    
     src.resize(srccount);
     dest.resize(dstcount);
     auto sv=src.begin();
@@ -275,7 +266,7 @@ template<typename SrcIter, typename DestIter>
     intrank_t gpdrank = (*dst_runs_begin).rank_;
     for(DestIter d=dst_runs_begin; !(d==dst_runs_end); ++d,++dv)
       {
-        UPCXX_ASSERT((*d).rank_);
+        UPCXX_ASSERT((*d).rank_==gpdrank);
         *dv=(*d).raw_ptr_;
       }
     detail::rput_cbs_reg<cxs_here_t, cxs_remote_t> cbs_static{

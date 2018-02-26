@@ -2,6 +2,7 @@
 #include <vector>
 #include <cstdlib>
 #include <cstddef>
+#include <iterator>
 
 #include <upcxx/diagnostic.hpp>
 #include <upcxx/allocate.hpp>
@@ -24,30 +25,40 @@ typedef long long int lli;
 typedef lli patch_t[M][N];
 
 template<typename ptr_t>
-class Iter
+class Iter : public std::iterator<std::forward_iterator_tag, ptr_t>
 {
 public:
   Iter() = default;
   Iter(ptr_t a_p,  std::size_t a_size, int a_stride)
     :m_ptr(a_p),m_size(a_size), m_stride(a_stride) {}
 
+  
   bool operator==(Iter rhs) const { return rhs.m_ptr==m_ptr;}
+  bool operator!=(Iter rhs) const { return rhs.m_ptr!=m_ptr;}
   Iter& operator++(){m_ptr+=m_stride; return *this;}
   Iter  operator++(int){Iter rtn(*this); m_ptr+=m_stride; return rtn;} 
 
   void operator+=(std::ptrdiff_t a_skip) {m_ptr = m_ptr+a_skip;}
 
-protected:
   ptr_t m_ptr=0;
   std::size_t m_size=0;
   int   m_stride=0;
 };
 
 template<typename ptr_t>
+typename std::iterator_traits<ptr_t>::difference_type
+std::distance( Iter<ptr_t> first, Iter<ptr_t> last )
+{
+  assert(first.m_stride==last.m_stride);
+  return (last.m_ptr - first.m_ptr)/first.m_stride;
+}
+
+template<typename ptr_t>
 class IterF: public Iter<ptr_t>
 {
 public:
   using Iter<ptr_t>::Iter;
+  typedef std::size_t difference_type;
   std::pair<ptr_t, std::size_t> operator*() const
   {return {Iter<ptr_t>::m_ptr,Iter<ptr_t>::m_size};}
 };
@@ -59,7 +70,8 @@ public:
   using Iter<ptr_t>::Iter;
   IterR(ptr_t a_ptr, int a_stride)
   { Iter<ptr_t>::m_ptr=a_ptr; Iter<ptr_t>::m_stride=a_stride;}
-  
+
+  typedef std::size_t difference_type;
   ptr_t operator*() const
   {return Iter<ptr_t>::m_ptr ;}
 };
