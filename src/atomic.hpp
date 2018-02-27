@@ -7,21 +7,23 @@
 #include <upcxx/global_ptr.hpp>
 
 namespace upcxx {
+  namespace atomic {
+    // All supported atomic operations.
+    enum AOP: int { GET, SET, ADD, FADD, SUB, FSUB, INC, FINC, DEC, FDEC, CSWAP };
+  }
+
   namespace detail {
     template<typename T>
-    void gex_AD_OpNB(uintptr_t, T*, upcxx::global_ptr<T>, int, T, T, int,
+    void gex_AD_OpNB(uintptr_t, T*, upcxx::global_ptr<T>, atomic::AOP, int, T, T, std::memory_order,
                      backend::gasnet::handle_cb*);
 #define SET_GEX_OP_PROTOTYPE(T) \
     template<> \
-    void gex_AD_OpNB(uintptr_t ad, T* p, upcxx::global_ptr<T>, int opcode, \
-                     T val1, T val2, int flags, backend::gasnet::handle_cb *cb);
+    void gex_AD_OpNB(uintptr_t ad, T* p, upcxx::global_ptr<T>, atomic::AOP opcode, int allowed_ops, \
+                     T val1, T val2, std::memory_order order, backend::gasnet::handle_cb *cb);
     SET_GEX_OP_PROTOTYPE(int32_t);
     SET_GEX_OP_PROTOTYPE(int64_t);
     SET_GEX_OP_PROTOTYPE(uint32_t);
     SET_GEX_OP_PROTOTYPE(uint64_t);
-
-    int get_gex_flags(std::memory_order order);
-    int to_gex_op(int opcode);
 
     // event values for non-fetching operations
     struct nofetch_aop_event_values {
@@ -69,13 +71,7 @@ namespace upcxx {
 
   }
 
-
   namespace atomic {
-    // All supported atomic operations.
-    enum AOP: int { GET, SET, ADD, FADD, SUB, FSUB, INC, FINC, DEC, FDEC, CSWAP };
-    static std::string atomic_op_str[] = {
-      "GET", "SET", "ADD", "FADD", "SUB", "FSUB", "INC", "FINC", "DEC", "FDEC", "CSWAP" };
-
     // convenience declarations
     template<typename T, typename Cxs>
     using FETCH_RTYPE = typename detail::completions_returner<detail::event_is_here,
@@ -99,13 +95,6 @@ namespace upcxx {
         NOFETCH_RTYPE<Cxs> _nofetch_op(global_ptr<T> gptr, std::memory_order order, T val1, T val2,
                                        Cxs cxs) {
           UPCXX_ASSERT_ALWAYS((detail::completions_has_event<Cxs, operation_cx_event>::value));
-          // get our gasnet operation
-          int gex_op = upcxx::detail::to_gex_op(aop);
-          // Fail if attempting to use an atomic operation not part of this domain.
-          UPCXX_ASSERT(gex_op & gex_ops,
-                       "Atomic operation " << atomic_op_str[aop] << " not included in domain\n");
-          // select the appropriate flags for the memory order
-          int flags = upcxx::detail::get_gex_flags(order);
           // we only have local completion, not remote
           using cxs_here_t = detail::completions_state<detail::event_is_here,
               detail::nofetch_aop_event_values, Cxs>;
@@ -113,9 +102,8 @@ namespace upcxx {
           auto *cb = new detail::nofetch_op_cb<cxs_here_t>{cxs_here_t{std::move(cxs)}};
           auto returner = detail::completions_returner<detail::event_is_here,
               detail::nofetch_aop_event_values, Cxs>{cb->state_here};
-          T tmp;
           // execute the backend gasnet function
-          upcxx::detail::gex_AD_OpNB<T>(gex_ad, &tmp, gptr, gex_op, val1, val2, flags, cb);
+          upcxx::detail::gex_AD_OpNB<T>(gex_ad, nullptr, gptr, aop, gex_ops, val1, val2, order, cb);
           return returner();
         }
 
@@ -124,13 +112,6 @@ namespace upcxx {
         FETCH_RTYPE<T, Cxs> _fetch_op(global_ptr<T> gptr, std::memory_order order, T val1, T val2,
                                       Cxs cxs) {
           UPCXX_ASSERT_ALWAYS((detail::completions_has_event<Cxs, operation_cx_event>::value));
-          // get our gasnet operation
-          int gex_op = upcxx::detail::to_gex_op(aop);
-          // Fail if attempting to use an atomic operation not part of this domain.
-          UPCXX_ASSERT(gex_op & gex_ops,
-                       "Atomic operation " << atomic_op_str[aop] << " not included in domain\n");
-          // select the appropriate flags for the memory order
-          int flags = upcxx::detail::get_gex_flags(order);
           // we only have local completion, not remote
           using cxs_here_t = detail::completions_state<detail::event_is_here,
               detail::fetch_aop_event_values<T>, Cxs>;
@@ -139,7 +120,8 @@ namespace upcxx {
           auto returner = detail::completions_returner<detail::event_is_here,
               detail::fetch_aop_event_values<T>, Cxs>{cb->state_here};
           // execute the backend gasnet function
-          upcxx::detail::gex_AD_OpNB<T>(gex_ad, &cb->result, gptr, gex_op, val1, val2, flags, cb);
+          upcxx::detail::gex_AD_OpNB<T>(gex_ad, &cb->result, gptr, aop, gex_ops, val1, val2,
+              order, cb);
           return returner();
         }
 

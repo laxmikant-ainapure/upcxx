@@ -12,11 +12,7 @@ static int gex_op_map[] = {
   GEX_OP_GET, GEX_OP_SET, GEX_OP_ADD, GEX_OP_FADD, GEX_OP_SUB, GEX_OP_FSUB, 
   GEX_OP_INC, GEX_OP_FINC, GEX_OP_DEC, GEX_OP_FDEC, GEX_OP_CSWAP };
 
-int upcxx::detail::to_gex_op(int opcode) {
-  return gex_op_map[opcode];
-}
-
-int upcxx::detail::get_gex_flags(std::memory_order order) {
+static int get_gex_flags(std::memory_order order) {
   int flags = 0;
   switch (order) {
     case std::memory_order_acquire: flags |= GEX_FLAG_AD_ACQ; break;
@@ -39,15 +35,23 @@ template<> gex_DT_t gex_dt<int64_t>() { return GEX_DT_I64; }
 template<> gex_DT_t gex_dt<uint32_t>() { return GEX_DT_U32; }
 template<> gex_DT_t gex_dt<uint64_t>() { return GEX_DT_U64; }
 
+static std::string atomic_op_str[] = {
+  "GET", "SET", "ADD", "FADD", "SUB", "FSUB", "INC", "FINC", "DEC", "FDEC", "CSWAP" };
+
+
 // wrapper around gasnet function
 // Specializers that wrap the gasnet integer type operations.
 #define SET_GEX_OP(T, GT) \
 template<> \
 void upcxx::detail::gex_AD_OpNB<T>(uintptr_t ad, T *p, \
-        upcxx::global_ptr<T> gp, int opcode, T val1, T val2, int flags, \
-        gasnet::handle_cb *cb) { \
+        upcxx::global_ptr<T> gp, atomic::AOP opcode, int allowed_ops, T val1, T val2, \
+        std::memory_order order, gasnet::handle_cb *cb) { \
+  int gex_op = gex_op_map[opcode]; \
+  UPCXX_ASSERT(gex_op & allowed_ops, \
+               "Atomic operation " << atomic_op_str[aop] << " not included in domain\n"); \
+  int flags = get_gex_flags(order); \
   gex_Event_t h = gex_AD_OpNB_##GT(reinterpret_cast<gex_AD_t>(ad), p, gp.rank_, gp.raw_ptr_, \
-                                   opcode, val1, val2, flags); \
+                                   gex_op, val1, val2, flags); \
   cb->handle = reinterpret_cast<uintptr_t>(h); \
   gasnet::register_cb(cb); \
   gasnet::after_gasnet(); \
