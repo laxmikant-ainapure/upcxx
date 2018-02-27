@@ -25,15 +25,19 @@ void upcxx::detail::rma_put_frag_nb(
                                          reinterpret_cast<const gex_Memvec_t*>(_srclist),
                                          /* flags */ 0);
 
-  if(source_cb!=NULL)
+
+  if(source_cb!=NULL) // user has asked for source completion
     {
       source_cb->handle = reinterpret_cast<uintptr_t>(op_h);
       gasnet::register_cb(source_cb);
-    }
-  
-  operation_cb->handle = reinterpret_cast<uintptr_t>(op_h);
-  gasnet::register_cb(operation_cb);
 
+      //  we rely on upcxx source completion pushing the operation completion into the queue, which will
+      //  be automatically triggered since EVENT INVALID is always ready..I think.  bvs
+      operation_cb->handle = reinterpret_cast<uintptr_t>(GEX_EVENT_INVALID);
+    } else {
+    operation_cb->handle = reinterpret_cast<uintptr_t>(op_h);
+    gasnet::register_cb(operation_cb);
+  }
   gasnet::after_gasnet();
 }
 
@@ -53,10 +57,11 @@ void upcxx::detail::rma_put_reg_nb(
     {
       source_cb->handle = reinterpret_cast<uintptr_t>(op_h);
       gasnet::register_cb(source_cb);
-    }
-  operation_cb->handle = reinterpret_cast<uintptr_t>(op_h);
-
-  gasnet::register_cb(operation_cb);
+      operation_cb->handle =  reinterpret_cast<uintptr_t>(GEX_EVENT_INVALID);
+    } else {
+    operation_cb->handle = reinterpret_cast<uintptr_t>(op_h);
+    gasnet::register_cb(operation_cb);
+  }
   gasnet::after_gasnet();
 
 }
@@ -81,11 +86,12 @@ void upcxx::detail::rma_put_strided_nb(
     {
       source_cb->handle = reinterpret_cast<uintptr_t>(op_h);
       gasnet::register_cb(source_cb);
-    }
+      operation_cb->handle =  reinterpret_cast<uintptr_t>(GEX_EVENT_INVALID);
+    } else {
 
-  operation_cb->handle = reinterpret_cast<uintptr_t>(op_h);
-
-  gasnet::register_cb(operation_cb);
+     operation_cb->handle = reinterpret_cast<uintptr_t>(op_h);
+     gasnet::register_cb(operation_cb);
+   }
   gasnet::after_gasnet();
 
 }
