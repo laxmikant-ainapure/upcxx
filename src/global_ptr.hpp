@@ -15,30 +15,15 @@
 #include <type_traits> // is_const, is_volatile
 
 namespace upcxx {
-  //////////////////////////////////////////////////////////////////////
-  // Internal PSHM functions.
-  // TODO: Rethink API, move to backend.hpp
-  
-  inline bool is_memory_shared_with(intrank_t r) {
-    return r == upcxx::rank_me();
-  }
-  
-  inline void *pshm_remote_addr2local(intrank_t r, void *addr) {
-    return addr;
-  }
-  
-  inline void *pshm_local_addr2remote(void *addr, intrank_t &rank_out) {
-    rank_out = upcxx::rank_me();
-    return addr;
-  }
-  
-  //////////////////////////////////////////////////////////////////////
+  //////////////////////////////////////////////////////////////////////////////
   
   namespace detail {
     struct global_ptr_ctor_internal{};
   }
   
-  // Definition of global_ptr
+  //////////////////////////////////////////////////////////////////////////////
+  // global_ptr
+  
   template<typename T>
   class global_ptr {
   public:
@@ -54,12 +39,18 @@ namespace upcxx {
     }
 
     explicit global_ptr(T *ptr) {
-      if (ptr == nullptr) {
+      if(ptr == nullptr) {
         raw_ptr_ = ptr;
         rank_ = 0; // null pointer represented with rank 0
-      } else {
-        raw_ptr_ = static_cast<T*>(pshm_local_addr2remote(ptr, rank_));
-        UPCXX_ASSERT(raw_ptr_ && "address must be in shared segment");
+      }
+      else {
+        intrank_t rank;
+        std::uintptr_t raw;
+        
+        std::tie(rank, raw) = backend::globalize_memory(ptr);
+
+        rank_ = rank;
+        raw_ptr_ = reinterpret_cast<T*>(raw);
       }
     }
     
@@ -72,7 +63,7 @@ namespace upcxx {
     }
     
     bool is_local() const {
-      return is_memory_shared_with(rank_);
+      return backend::rank_is_local(rank_);
     }
 
     bool is_null() const {
@@ -80,7 +71,12 @@ namespace upcxx {
     }
 
     T* local() const {
-      return static_cast<T*>(pshm_remote_addr2local(rank_, raw_ptr_));
+      return static_cast<T*>(
+        backend::localize_memory(
+          rank_,
+          reinterpret_cast<std::uintptr_t>(raw_ptr_)
+        )
+      );
     }
 
     intrank_t where() const {

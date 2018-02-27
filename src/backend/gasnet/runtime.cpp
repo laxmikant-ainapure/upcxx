@@ -4,7 +4,9 @@
 
 #include <upcxx/os_env.hpp>
 
+#include <algorithm>
 #include <cstring>
+#include <memory>
 
 #include <sched.h>
 #include <unistd.h>
@@ -61,6 +63,9 @@ intrank_t backend::rank_me; // leave undefined so valgrind can catch it.
 persona backend::master;
 persona_scope *backend::initial_master_scope = nullptr;
 
+intrank_t backend::local_peer_lb;
+intrank_t backend::local_peer_ub;
+
 ////////////////////////////////////////////////////////////////////////
 // from: upcxx/backend/gasnet/runtime.hpp
 
@@ -81,6 +86,21 @@ namespace {
   // master-owned
   rpc_inbox rpcs_internal_;
   rpc_inbox rpcs_user_;
+
+  // Given index in local_team:
+  //   local_minus_remote: Encodes virtual address translation which is added
+  //     to the raw encoding to get local virtual address.
+  //   vbase: Local virtual address mapping to beginning of peer's segment
+  //   size: Size of peer's segment in bytes.
+  unique_ptr<uintptr_t[/*local_team.size()*/]> local_mem_local_minus_remote;
+  unique_ptr<uintptr_t[/*local_team.size()*/]> local_mem_vbase;
+  unique_ptr<uintptr_t[/*local_team.size()*/]> local_mem_size;
+
+  // List of {vbase, peer} pairs (in seperate arrays) sorted by `vbase`, where
+  // `vbase` is the local virt-address base for peer segments and `peer` is the
+  // local peer index owning that segment.
+  unique_ptr<uintptr_t[/*local_team.size()*/]> local_mem_owner_vbase;
+  unique_ptr<intrank_t[/*local_team.size()*/]> local_mem_owner_peer;
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -138,19 +158,19 @@ void upcxx::init() {
   size_t segment_size = size_t(os_env<double>("UPCXX_SEGMENT_MB", 128)*(1<<20));
   // page size should always be a power of 2
   segment_size = (segment_size + GASNET_PAGESIZE-1) & -GASNET_PAGESIZE;
-  // Do this instead? segment_size = gasnet_getMaxLocalSegmentSize();
   
   backend::rank_n = gex_TM_QuerySize(gasnet::world_team);
   backend::rank_me = gex_TM_QueryRank(gasnet::world_team);
   
   // now adjust the segment size if it's less than the GASNET_MAX_SEGSIZE
   size_t gasnet_max_segsize = gasnet_getMaxLocalSegmentSize();
-  if (segment_size > gasnet_max_segsize) {
-      if (upcxx::rank_me() == 0) 
-          cerr << "WARNING: Requested UPCXX segment size (" << segment_size << ") "
+  if(segment_size > gasnet_max_segsize) {
+    if(upcxx::rank_me() == 0) {
+      cerr << "WARNING: Requested UPCXX segment size (" << segment_size << ") "
               "is larger than the GASNet segment size (" << gasnet_max_segsize << "). "
               "Adjusted segment size to " << (gasnet_max_segsize) << ".\n";
-      segment_size = gasnet_max_segsize;
+    }
+    segment_size = gasnet_max_segsize;
   }
   
   backend::initial_master_scope = new persona_scope{backend::master};
@@ -197,6 +217,59 @@ void upcxx::init() {
   
   segment_mspace_ = create_mspace_with_base(segment_base, segment_size, 1);
   mspace_set_footprint_limit(segment_mspace_, segment_size);
+
+  //////////////////////////////////////////////////////////////////////////////
+  // Setup the local-memory neighborhood tables.
+  
+  gex_NbrhdInfo_t *nbhd;
+  gex_Rank_t peer_n, peer_me;
+  gex_System_QueryNbrhdInfo(&nbhd, &peer_n, &peer_me);
+
+  backend::local_peer_lb = nbhd[0].gex_jobrank;
+  backend::local_peer_ub = nbhd[0].gex_jobrank + peer_n;
+  
+  local_mem_local_minus_remote.reset(new uintptr_t[peer_n]);
+  local_mem_vbase.reset(new uintptr_t[peer_n]);
+  local_mem_size.reset(new uintptr_t[peer_n]);
+  local_mem_owner_vbase.reset(new uintptr_t[peer_n]);
+  local_mem_owner_peer.reset(new intrank_t[peer_n]);
+  
+  for(gex_Rank_t p=0; p < peer_n; p++) {
+    if(p != 0) {
+      UPCXX_ASSERT_ALWAYS(
+        nbhd[p].gex_jobrank == 1 + nbhd[p-1].gex_jobrank,
+        "UPC++ internal error. GASNet reported a discontiguous set of job-ranks as local peers."
+      );
+    }
+    
+    void *owner_vbase, *local_vbase;
+    uintptr_t size;
+
+    gex_Segment_QueryBound(
+      /*team*/gasnet::world_team,
+      /*rank*/nbhd[0].gex_jobrank + p,
+      &owner_vbase, &local_vbase, &size
+    );
+    
+    local_mem_local_minus_remote[p] = reinterpret_cast<uintptr_t>(local_vbase) - reinterpret_cast<uintptr_t>(owner_vbase);
+    local_mem_vbase[p] = reinterpret_cast<uintptr_t>(local_vbase);
+    local_mem_size[p] = size;
+    
+    local_mem_owner_peer[p] = p; // initialize peer indices as identity permutation
+  }
+
+  // sort peer indices according to their vbase
+  std::sort(
+    /*first*/local_mem_owner_peer.get(),
+    /*last*/local_mem_owner_peer.get() + peer_n,
+    /*compare*/[](intrank_t a, intrank_t b)->bool {
+      return local_mem_vbase[a] < local_mem_vbase[b];
+    }
+  );
+
+  // permute vbase's into sorted order
+  for(gex_Rank_t i=0; i < peer_n; i++)
+    local_mem_owner_vbase[i] = local_mem_vbase[local_mem_owner_peer[i]];
 }
 
 void upcxx::finalize() {
@@ -249,6 +322,55 @@ void upcxx::deallocate(void *p) {
   #endif
   
   mspace_free(segment_mspace_, p);
+}
+
+//////////////////////////////////////////////////////////////////////
+// from: upcxx/backend.hpp
+
+void* backend::localize_memory(intrank_t rank, uintptr_t raw) {
+  UPCXX_ASSERT(
+    local_peer_lb <= rank && rank < local_peer_ub,
+    "Rank "<<rank<<" is not local with current rank ("<<upcxx::rank_me()<<")."
+  );
+
+  intrank_t peer = rank - local_peer_lb;
+  uintptr_t u = raw + local_mem_local_minus_remote[peer];
+
+  UPCXX_ASSERT(
+    u - local_mem_vbase[peer] < local_mem_size[peer], // unsigned arithmetic handles both sides of the interval test
+    "Memory address (raw="<<raw<<", local="<<reinterpret_cast<void*>(u)<<") is not within shared segment of rank "<<rank<<"."
+  );
+
+  return reinterpret_cast<void*>(u);
+}
+
+tuple<intrank_t/*rank*/, uintptr_t/*raw*/> backend::globalize_memory(void *addr) {
+  intrank_t peer_n = local_peer_ub - local_peer_lb;
+  uintptr_t uaddr = reinterpret_cast<uintptr_t>(addr);
+
+  // key a pointer to one-passed the vbase less-or-equal to addr
+  uintptr_t *key = std::upper_bound(
+    local_mem_owner_vbase.get(),
+    local_mem_owner_vbase.get() + peer_n,
+    uaddr
+  );
+
+  int key_ix = key - local_mem_owner_vbase.get();
+
+  #define bad_memory "Local memory "<<addr<<" is not in any local rank's shared segment."
+
+  UPCXX_ASSERT(key_ix > 0, bad_memory);
+  
+  intrank_t peer = local_mem_owner_peer[key_ix-1];
+
+  UPCXX_ASSERT(uaddr - local_mem_vbase[peer] <= local_mem_size[peer], bad_memory);
+  
+  return std::make_tuple(
+    local_peer_lb + peer,
+    uaddr - local_mem_local_minus_remote[peer]
+  );
+
+  #undef bad_memory
 }
 
 ////////////////////////////////////////////////////////////////////////

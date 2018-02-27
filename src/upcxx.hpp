@@ -16,5 +16,6 @@
 #include <upcxx/atomic.hpp>
 #include <upcxx/broadcast.hpp>
 #include <upcxx/allreduce.hpp>
+#include <upcxx/team.hpp>
 
 #endif

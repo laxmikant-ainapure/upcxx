@@ -165,7 +165,7 @@ namespace backend {
     else
       gasnet::send_am_rdzv<level>(recipient_rank, recipient_persona, buf, w.size(), w.alignment());
   }
-  
+
   //////////////////////////////////////////////////////////////////////
   // rma_[put/get]_cb:
   

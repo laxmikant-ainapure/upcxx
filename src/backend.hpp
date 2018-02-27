@@ -9,6 +9,8 @@
 #include <upcxx/future.hpp>
 #include <upcxx/persona.hpp>
 
+#include <tuple>
+
 ////////////////////////////////////////////////////////////////////////
 
 namespace upcxx {
@@ -42,6 +44,19 @@ namespace backend {
   
   template<progress_level level, typename Fn>
   void send_am_persona(intrank_t recipient_rank, persona *recipient_persona, Fn &&fn);
+
+  //////////////////////////////////////////////////////////////////////
+
+  // inclusive lower and exclusive upper bounds for local_team ranks
+  extern intrank_t local_peer_lb, local_peer_ub;
+  
+  inline bool rank_is_local(intrank_t r) {
+    return local_peer_lb <= r && r < local_peer_ub;
+  }
+  
+  void* localize_memory(intrank_t rank, std::uintptr_t raw);
+  
+  std::tuple<intrank_t/*rank*/, std::uintptr_t/*raw*/> globalize_memory(void *addr);
 }}
 
 ////////////////////////////////////////////////////////////////////////
