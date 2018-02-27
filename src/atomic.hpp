@@ -14,16 +14,17 @@ namespace upcxx {
 
   namespace detail {
     template<typename T>
-    void gex_AD_OpNB(uintptr_t, T*, upcxx::global_ptr<T>, atomic::AOP, int, T, T, std::memory_order,
-                     backend::gasnet::handle_cb*);
-#define SET_GEX_OP_PROTOTYPE(T) \
+    void gasnet_AD_OpNB(uintptr_t, T*, upcxx::global_ptr<T>, atomic::AOP, int, T, T,
+                        std::memory_order, backend::gasnet::handle_cb*);
+#define SET_GASNET_OP_PROTOTYPE(T) \
     template<> \
-    void gex_AD_OpNB(uintptr_t ad, T* p, upcxx::global_ptr<T>, atomic::AOP opcode, int allowed_ops, \
-                     T val1, T val2, std::memory_order order, backend::gasnet::handle_cb *cb);
-    SET_GEX_OP_PROTOTYPE(int32_t);
-    SET_GEX_OP_PROTOTYPE(int64_t);
-    SET_GEX_OP_PROTOTYPE(uint32_t);
-    SET_GEX_OP_PROTOTYPE(uint64_t);
+    void gasnet_AD_OpNB(uintptr_t ad, T* p, upcxx::global_ptr<T>, atomic::AOP opcode, \
+                        int allowed_ops, T val1, T val2, std::memory_order order, \
+                        backend::gasnet::handle_cb *cb);
+    SET_GASNET_OP_PROTOTYPE(int32_t);
+    SET_GASNET_OP_PROTOTYPE(int64_t);
+    SET_GASNET_OP_PROTOTYPE(uint32_t);
+    SET_GASNET_OP_PROTOTYPE(uint64_t);
 
     // event values for non-fetching operations
     struct nofetch_aop_event_values {
@@ -86,9 +87,9 @@ namespace upcxx {
     class domain {
       private:
         // The opaque gasnet atomic domain handle.
-        uintptr_t gex_ad;
+        uintptr_t gasnet_ad;
         // The or'd value for all the atomic operations.
-        int gex_ops;
+        int gasnet_aops;
 
         // non-fetching operations
         template<AOP aop, typename Cxs>
@@ -103,7 +104,8 @@ namespace upcxx {
           auto returner = detail::completions_returner<detail::event_is_here,
               detail::nofetch_aop_event_values, Cxs>{cb->state_here};
           // execute the backend gasnet function
-          upcxx::detail::gex_AD_OpNB<T>(gex_ad, nullptr, gptr, aop, gex_ops, val1, val2, order, cb);
+          upcxx::detail::gasnet_AD_OpNB<T>(gasnet_ad, nullptr, gptr, aop, gasnet_aops, val1, val2,
+              order, cb);
           return returner();
         }
 
@@ -120,8 +122,8 @@ namespace upcxx {
           auto returner = detail::completions_returner<detail::event_is_here,
               detail::fetch_aop_event_values<T>, Cxs>{cb->state_here};
           // execute the backend gasnet function
-          upcxx::detail::gex_AD_OpNB<T>(gex_ad, &cb->result, gptr, aop, gex_ops, val1, val2,
-              order, cb);
+          upcxx::detail::gasnet_AD_OpNB<T>(gasnet_ad, &cb->result, gptr, aop, gasnet_aops,
+              val1, val2, order, cb);
           return returner();
         }
 
