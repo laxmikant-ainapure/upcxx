@@ -41,13 +41,37 @@ namespace upcxx
                             backend::gasnet::handle_cb *source_cb,
                             backend::gasnet::handle_cb *operation_cb);
     
+   // rput_cb_operation: Case where backend gasnet code does not provide source completion so we
+    // execute both source and operation completion in the execute.
+    template<typename FinalType, typename CxStateHere, typename CxStateRemote>
+    struct rput_cb_src_and_operation :
+      rput_cb_source<FinalType, CxStateHere, CxStateRemote>,
+      rput_cb_operation<FinalType, CxStateHere, CxStateRemote>
+    {
 
+
+      void execute_and_delete(backend::gasnet::handle_cb_successor) {
+        auto *cbs = static_cast<FinalType*>(this);
+        
+        this->send_remote(); // may nop depending on rput_cb_remote case.
+
+        cbs->state_here.template operator()<source_cx_event>();
+        cbs->state_here.template operator()<operation_cx_event>();
+        
+        delete cbs; // cleanup object, no more events
+      }
+    };
+    
+    // template<typename CxStateHere, typename CxStateRemote>
+    // struct rput_cbs_frag final:
+    //   rput_cb_source</*FinalType=*/rput_cbs_frag<CxStateHere, CxStateRemote>,
+    //                                CxStateHere, CxStateRemote>,
+    //   rput_cb_operation</*FinalType=*/rput_cbs_frag<CxStateHere, CxStateRemote>,
+    //                                   CxStateHere, CxStateRemote>
     template<typename CxStateHere, typename CxStateRemote>
     struct rput_cbs_frag final:
-      rput_cb_source</*FinalType=*/rput_cbs_frag<CxStateHere, CxStateRemote>,
-                                   CxStateHere, CxStateRemote>,
-      rput_cb_operation</*FinalType=*/rput_cbs_frag<CxStateHere, CxStateRemote>,
-                                      CxStateHere, CxStateRemote>
+      rput_cb_src_and_operation</*FinalType=*/rput_cbs_frag<CxStateHere, CxStateRemote>,
+                                              CxStateHere, CxStateRemote>
     {
       intrank_t rank_d;
       CxStateHere state_here;
@@ -68,17 +92,19 @@ namespace upcxx
       {
         detail::rma_put_frag_nb(rank_d, dest.size(), &(dest[0]),
                                 src.size(), &(src[0]),
-                                this->source_cb(), this);
+                                NULL, this); // when gasnet gets source completion, the NULL gets replaced
       }
 
     };
 
     template<typename CxStateHere, typename CxStateRemote>
     struct rput_cbs_reg final:
-      rput_cb_source</*FinalType=*/rput_cbs_reg<CxStateHere, CxStateRemote>,
-                                   CxStateHere, CxStateRemote>,
-      rput_cb_operation</*FinalType=*/rput_cbs_reg<CxStateHere, CxStateRemote>,
-                                      CxStateHere, CxStateRemote>
+      // rput_cb_source</*FinalType=*/rput_cbs_reg<CxStateHere, CxStateRemote>,
+      //                              CxStateHere, CxStateRemote>,
+      // rput_cb_operation</*FinalType=*/rput_cbs_reg<CxStateHere, CxStateRemote>,
+      //                                 CxStateHere, CxStateRemote>
+      rput_cb_src_and_operation</*FinalType=*/rput_cbs_frag<CxStateHere, CxStateRemote>,
+                                              CxStateHere, CxStateRemote>
     {
       intrank_t rank_d;
       CxStateHere state_here;
@@ -99,17 +125,19 @@ namespace upcxx
       {
         detail::rma_put_reg_nb(rank_d, dest.size(), &(dest[0]), destlen,
                                src.size(), &(src[0]), srclen,
-                               this->source_cb(), this);
+                               NULL, this);// TODO: when gasnet_vis get source completion, this NULL changes
       }
 
     };
     
     template<typename CxStateHere, typename CxStateRemote>
     struct rput_cbs_stride final:
-      rput_cb_source</*FinalType=*/rput_cbs_stride<CxStateHere, CxStateRemote>,
-                                   CxStateHere, CxStateRemote>,
-      rput_cb_operation</*FinalType=*/rput_cbs_stride<CxStateHere, CxStateRemote>,
-                                      CxStateHere, CxStateRemote>
+      // rput_cb_source</*FinalType=*/rput_cbs_stride<CxStateHere, CxStateRemote>,
+      //                              CxStateHere, CxStateRemote>,
+      // rput_cb_operation</*FinalType=*/rput_cbs_stride<CxStateHere, CxStateRemote>,
+      //                                 CxStateHere, CxStateRemote>
+      rput_cb_src_and_operation</*FinalType=*/rput_cbs_frag<CxStateHere, CxStateRemote>,
+                                              CxStateHere, CxStateRemote>
     {
       intrank_t rank_d;
       CxStateHere state_here;
@@ -130,7 +158,7 @@ namespace upcxx
         detail::rma_put_strided_nb(rd, dst_addr, dststrides,
                                   src_addr, srcstrides,
                                   elemsize, count, stridelevels,
-                                  this->source_cb(), this);
+                                   NULL, this); //TODO: when gasnet gets source completion, this NULL changes
       }
 
     };

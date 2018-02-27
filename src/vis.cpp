@@ -1,6 +1,9 @@
 #include <upcxx/vis.hpp>
 #include <upcxx/backend/gasnet/runtime_internal.hpp>
-#include <gasnet_vis.h>
+#if UPCXX_BACKEND_GASNET 
+#include <gasnet_vis.h> //
+#endif
+
 namespace gasnet = upcxx::backend::gasnet;
 
 void upcxx::detail::rma_put_frag_nb(
@@ -22,7 +25,7 @@ void upcxx::detail::rma_put_frag_nb(
                                          reinterpret_cast<const gex_Memvec_t*>(_srclist),
                                          /* flags */ 0);
 
-  if(source_cb)
+  if(source_cb!=NULL)
     {
       source_cb->handle = reinterpret_cast<uintptr_t>(op_h);
       gasnet::register_cb(source_cb);
@@ -46,7 +49,7 @@ void upcxx::detail::rma_put_reg_nb(
                                          _dstcount, _dstlist, _dstlen,
                                          _srccount, _srclist, _srclen,
                                          /* flags*/ 0);
-  if(source_cb)
+  if(source_cb!=NULL)
     {
       source_cb->handle = reinterpret_cast<uintptr_t>(op_h);
       gasnet::register_cb(source_cb);
@@ -74,7 +77,7 @@ void upcxx::detail::rma_put_strided_nb(
                                           _elemsz,
                                           _count, _stridelevels,
                                           /*flag */ 0);
-   if(source_cb)
+   if(source_cb!=NULL)
     {
       source_cb->handle = reinterpret_cast<uintptr_t>(op_h);
       gasnet::register_cb(source_cb);
