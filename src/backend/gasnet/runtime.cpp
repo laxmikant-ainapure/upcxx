@@ -5,6 +5,7 @@
 #include <upcxx/os_env.hpp>
 
 #include <algorithm>
+#include <cstdlib>
 #include <cstring>
 #include <memory>
 
@@ -258,12 +259,21 @@ void upcxx::init() {
     local_mem_owner_peer[p] = p; // initialize peer indices as identity permutation
   }
 
-  // sort peer indices according to their vbase
-  std::sort(
+  // Sort peer indices according to their vbase. We use `std::qsort` instead of
+  // `std::sort` because performance is not critical and qsort *hopefully*
+  // generates a lot less code in the executable binary.
+  std::qsort(
     /*first*/local_mem_owner_peer.get(),
-    /*last*/local_mem_owner_peer.get() + peer_n,
-    /*compare*/[](intrank_t a, intrank_t b)->bool {
-      return local_mem_vbase[a] < local_mem_vbase[b];
+    /*count*/peer_n,
+    /*size*/sizeof(intrank_t),
+    /*compare*/[](void const *pa, void const *pb)->int {
+      intrank_t a = *static_cast<intrank_t const*>(pa);
+      intrank_t b = *static_cast<intrank_t const*>(pb);
+
+      uintptr_t va = local_mem_vbase[a];
+      uintptr_t vb = local_mem_vbase[b];
+      
+      return va < vb ? -1 : va == vb ? 0 : +1;
     }
   );
 
