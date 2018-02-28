@@ -139,7 +139,7 @@ int main() {
         success=false;
       }
     }
-  // fragmented test 2
+  // fragmented put test 2
   std::cout<<"\nFragmented test 2 \n";
   auto fs1 = IterF<lli*>(myPtr+N-B, B, N);
   auto fs1_end = fs1; fs1_end+=M*N;
@@ -166,7 +166,7 @@ int main() {
     }
 
   reset(myPatch, me);
-  std::cout<<"\nRegular test 1\n";
+  std::cout<<"\nRegular put test 1\n";
   auto rs1 = IterR<lli*>(myPtr,N);
   auto rs1_end = rs1; rs1_end+=M*N;
   auto rd1 = IterR<global_ptr<lli>>(lo+N-B,N);
@@ -197,7 +197,7 @@ int main() {
   reset(myPatch, me);
   barrier();
   
-  // strided
+  // strided put
   auto s1 = rput_strided<2>(myPtr+N-B, {{sizeof(lli),N*sizeof(lli)}},
                             hi, {{sizeof(lli),N*sizeof(lli)}}, {{B,M}});
 
@@ -205,7 +205,7 @@ int main() {
   s1.wait();
   barrier();
   
-  std::cout<<"\nStrided testing \n";
+  std::cout<<"\nStrided put testing \n";
   success = success && check(fr1, fr1_end, (lli)nebrLo); // this is moving the same data as in the fragmented case
   sm = sum(myPatch);
   correctAnswer = (me*(N-B)+B*nebrLo)*M;
