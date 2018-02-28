@@ -189,9 +189,6 @@ void upcxx::init() {
     /*flags*/0,
     3
   );
-  gasnet_barrier_notify(0, GASNET_BARRIERFLAG_ANONYMOUS);
-  ok = gasnet_barrier_wait(0, GASNET_BARRIERFLAG_ANONYMOUS);
-  UPCXX_ASSERT_ALWAYS(ok == GASNET_OK);
   
   /* TODO: I pulled this from thin air. We want to lean towards only
    * sending very small messages eagerly so as not to clog the landing
@@ -226,8 +223,21 @@ void upcxx::init() {
   gex_Rank_t peer_n, peer_me;
   gex_System_QueryNbrhdInfo(&nbhd, &peer_n, &peer_me);
 
-  backend::local_peer_lb = nbhd[0].gex_jobrank;
-  backend::local_peer_ub = nbhd[0].gex_jobrank + peer_n;
+  bool contiguous_nbhd = true;
+  for(gex_Rank_t p=1; p < peer_n; p++)
+    contiguous_nbhd &= (nbhd[p].gex_jobrank == 1 + nbhd[p-1].gex_jobrank);
+
+  if(!contiguous_nbhd) {
+    // Discontiguous rank-set is collapsed to singleton set of "me"
+    backend::local_peer_lb = backend::rank_me;
+    backend::local_peer_ub = backend::rank_me + 1;
+    peer_n = 1;
+    peer_me = 0;
+  }
+  else {
+    backend::local_peer_lb = nbhd[0].gex_jobrank;
+    backend::local_peer_ub = nbhd[0].gex_jobrank + peer_n;
+  }
   
   local_mem_local_minus_remote.reset(new uintptr_t[peer_n]);
   local_mem_vbase.reset(new uintptr_t[peer_n]);
@@ -236,19 +246,12 @@ void upcxx::init() {
   local_mem_owner_peer.reset(new intrank_t[peer_n]);
   
   for(gex_Rank_t p=0; p < peer_n; p++) {
-    if(p != 0) {
-      UPCXX_ASSERT_ALWAYS(
-        nbhd[p].gex_jobrank == 1 + nbhd[p-1].gex_jobrank,
-        "UPC++ internal error. GASNet reported a discontiguous set of job-ranks as local peers."
-      );
-    }
-    
     void *owner_vbase, *local_vbase;
     uintptr_t size;
 
     gex_Segment_QueryBound(
       /*team*/gasnet::world_team,
-      /*rank*/nbhd[0].gex_jobrank + p,
+      /*rank*/backend::local_peer_lb + p,
       &owner_vbase, &local_vbase, &size
     );
     
@@ -280,6 +283,13 @@ void upcxx::init() {
   // permute vbase's into sorted order
   for(gex_Rank_t i=0; i < peer_n; i++)
     local_mem_owner_vbase[i] = local_mem_vbase[local_mem_owner_peer[i]];
+
+  //////////////////////////////////////////////////////////////////////////////
+  // Exit barrier
+  
+  gasnet_barrier_notify(0, GASNET_BARRIERFLAG_ANONYMOUS);
+  ok = gasnet_barrier_wait(0, GASNET_BARRIERFLAG_ANONYMOUS);
+  UPCXX_ASSERT_ALWAYS(ok == GASNET_OK);
 }
 
 void upcxx::finalize() {
@@ -361,7 +371,7 @@ tuple<intrank_t/*rank*/, uintptr_t/*raw*/> backend::globalize_memory(void *addr)
   intrank_t peer_n = local_peer_ub - local_peer_lb;
   uintptr_t uaddr = reinterpret_cast<uintptr_t>(addr);
 
-  // key is a pointer to one past the first vbase less-or-equal to addr.
+  // key is a pointer to one past the last vbase less-or-equal to addr.
   uintptr_t *key = std::upper_bound(
     local_mem_owner_vbase.get(),
     local_mem_owner_vbase.get() + peer_n,
