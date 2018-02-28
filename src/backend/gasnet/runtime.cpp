@@ -338,6 +338,9 @@ void upcxx::deallocate(void *p) {
 // from: upcxx/backend.hpp
 
 void* backend::localize_memory(intrank_t rank, uintptr_t raw) {
+  if(raw == reinterpret_cast<uintptr_t>(nullptr))
+    return nullptr;
+  
   UPCXX_ASSERT(
     local_peer_lb <= rank && rank < local_peer_ub,
     "Rank "<<rank<<" is not local with current rank ("<<upcxx::rank_me()<<")."

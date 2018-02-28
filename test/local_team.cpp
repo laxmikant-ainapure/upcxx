@@ -21,6 +21,8 @@ int main() {
     std::cout<<"local_team.rank_n() = "<<locals.rank_n()<<'\n';
   upcxx::barrier();
 
+  UPCXX_ASSERT_ALWAYS(global_ptr<float>(nullptr).local() == nullptr);
+
   intrank_t peer_me = locals.rank_me();
   intrank_t peer_n = locals.rank_n();
   dist_object<global_ptr<int>> dp(upcxx::allocate<int>(peer_n));
