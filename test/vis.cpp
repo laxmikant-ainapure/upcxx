@@ -40,18 +40,15 @@ public:
 
   void operator+=(std::ptrdiff_t a_skip) {m_ptr = m_ptr+a_skip;}
 
+  std::ptrdiff_t operator-(const Iter& rhs) const {
+    assert(m_stride==rhs.m_stride);
+    return (m_ptr - rhs.m_ptr)/m_stride;
+  }
   ptr_t m_ptr=0;
   std::size_t m_size=0;
   int   m_stride=0;
 };
 
-template<typename ptr_t>
-typename std::iterator_traits<ptr_t>::difference_type
-std::distance( Iter<ptr_t> first, Iter<ptr_t> last )
-{
-  assert(first.m_stride==last.m_stride);
-  return (last.m_ptr - first.m_ptr)/first.m_stride;
-}
 
 template<typename ptr_t>
 class IterF: public Iter<ptr_t>
@@ -201,8 +198,8 @@ int main() {
   barrier();
   
   // strided
-  auto s1 = rput_strided<2>(myPtr+N-B, {sizeof(lli),N*sizeof(lli)},
-                            hi, {sizeof(lli),N*sizeof(lli)}, {B,M});
+  auto s1 = rput_strided<2>(myPtr+N-B, {{sizeof(lli),N*sizeof(lli)}},
+                            hi, {{sizeof(lli),N*sizeof(lli)}}, {{B,M}});
 
 
   s1.wait();
