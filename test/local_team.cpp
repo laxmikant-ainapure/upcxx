@@ -7,6 +7,8 @@
 
 #include "util.hpp"
 
+#include <unordered_set>
+
 using upcxx::intrank_t;
 using upcxx::global_ptr;
 using upcxx::dist_object;
@@ -25,6 +27,26 @@ int main() {
 
   intrank_t peer_me = locals.rank_me();
   intrank_t peer_n = locals.rank_n();
+
+  for(int i=0; i < peer_n; i++) {
+    UPCXX_ASSERT_ALWAYS(locals.from_world(locals[i]) == i);
+    UPCXX_ASSERT_ALWAYS(locals.from_world(locals[i], -0xbeef) == i);
+    UPCXX_ASSERT_ALWAYS(upcxx::local_team_contains(locals[i]));
+  }
+
+  { // Try and generate some non-local ranks, not entirely foolproof.
+    std::unordered_set<int> some_remotes;
+    for(int i=0; i < peer_n; i++)
+      some_remotes.insert((locals[i] + locals.rank_n()) % upcxx::rank_n());
+    for(int i=0; i < peer_n; i++)
+      some_remotes.erase(locals[i]);
+
+    for(int remote: some_remotes) {
+      UPCXX_ASSERT_ALWAYS(locals.from_world(remote, -0xbeef) == -0xbeef);
+      UPCXX_ASSERT_ALWAYS(!upcxx::local_team_contains(remote));
+    }
+  }
+  
   dist_object<global_ptr<int>> dp(upcxx::allocate<int>(peer_n));
 
   for(int i=0; i < peer_n; i++) {
