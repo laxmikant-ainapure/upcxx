@@ -29,11 +29,13 @@ int main() {
     global_ptr<int> p = upcxx::rpc(
         locals[(peer_me + i) % peer_n],
         [=](dist_object<global_ptr<int>> &dp) {
-          return *dp + i;
+          return global_ptr<int>(dp->local() + i);
         },
         dp
       ).wait();
 
+    UPCXX_ASSERT_ALWAYS(p == global_ptr<int>(p.local()));
+    
     *p.local() = upcxx::rank_me();
   }
 

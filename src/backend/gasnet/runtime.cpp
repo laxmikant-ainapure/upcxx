@@ -358,7 +358,7 @@ tuple<intrank_t/*rank*/, uintptr_t/*raw*/> backend::globalize_memory(void *addr)
   intrank_t peer_n = local_peer_ub - local_peer_lb;
   uintptr_t uaddr = reinterpret_cast<uintptr_t>(addr);
 
-  // key a pointer to one-passed the vbase less-or-equal to addr
+  // key is a pointer to one past the first vbase less-or-equal to addr.
   uintptr_t *key = std::upper_bound(
     local_mem_owner_vbase.get(),
     local_mem_owner_vbase.get() + peer_n,
