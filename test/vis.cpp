@@ -267,6 +267,43 @@ int main() {
       std::cout<<" Fragmented get expected sum:"<<correctAnswer<<" actual sum: "<<sm<<"\n";
       success = false;
     }
+
+  barrier();
+  reset(myPatch, me);
+  rr1 = IterR<lli*>(myPtr, N);
+  rr1_end = rr1; rr1_end+=M*N;
+  set(rr1, rr1_end, B, token);
+  barrier();
+  auto g1 = rget_regular(rd1, rd1_end, B, rs1, rs1_end, B);
+  g1.wait();
+  sm=sum(myPatch);
+  success = success && check(rr1, rr1_end, B, (lli)nebrLo);
+  correctAnswer = (me*(N-B)+B*nebrLo)*M;
+  if(sm != correctAnswer)
+    {
+      std::cout<<" Regular get expected sum:"<<correctAnswer<<" actual sum: "<<sm<<"\n";
+      success = false;
+    }
+
+  barrier();
+  std::cout<<"rget_strided test 1\n";
+  reset(myPatch, me);
+  set(rr1, rr1_end, B, token);
+  barrier();
+  //  a bit fancier than the rput,  this one gets every other row in the source patch buffer
+  //  and inserts it with a one row offset into myPatch
+  auto sg1 = rget_strided<2>(lo+N-B, {{sizeof(lli), 2*N*sizeof(lli)}},
+                             myPtr+N, {{sizeof(lli), 2*N*sizeof(lli)}}, {{B,M/2}});
+
+  sm=sum(myPatch);
+  correctAnswer = B*M/2*me + B*M/2*nebrLo + (N-B)*M*me;
+  
+  sg1.wait();
+  if(sm != correctAnswer)
+    {
+      std::cout<<" Strided get expected sum:"<<correctAnswer<<" actual sum: "<<sm<<"\n";
+      success = false;
+    }
   
   print_test_success(success);
   
