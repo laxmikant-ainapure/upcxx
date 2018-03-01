@@ -41,6 +41,32 @@ void upcxx::detail::rma_put_frag_nb(
   gasnet::after_gasnet();
 }
 
+
+
+void upcxx::detail::rma_get_frag_nb(                               
+                                    std::size_t _dstcount,
+                                    upcxx::backend::memvec_t const _dstlist[],
+                                    upcxx::intrank_t rank_s,
+                                    std::size_t _srccount,
+                                    upcxx::backend::memvec_t const _srclist[],
+                                    backend::gasnet::handle_cb *operation_cb)
+{
+
+  gex_Event_t op_h = gex_VIS_VectorGetNB(gasnet::world_team,
+                                         _dstcount,
+                                         reinterpret_cast<const gex_Memvec_t*>(_dstlist),
+                                         rank_s,
+                                         _srccount,
+                                         reinterpret_cast<const gex_Memvec_t*>(_srclist),
+                                         /* flags */ 0);
+
+  operation_cb->handle = reinterpret_cast<uintptr_t>(op_h);
+  gasnet::register_cb(operation_cb);
+  
+  gasnet::after_gasnet();
+}
+
+
 void upcxx::detail::rma_put_reg_nb(
                     intrank_t rank_d,
                     size_t _dstcount, void * const _dstlist[], size_t _dstlen,

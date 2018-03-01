@@ -4,6 +4,8 @@
 #include <upcxx/completion.hpp>
 #include <upcxx/global_ptr.hpp>
 #include <upcxx/rput.hpp>
+#include <upcxx/rget.hpp>
+#include <type_traits>
 
 //  I'm not sure we will have a Vector-Index-Strided interface that is
 //  not GASNet-based, so if an application wants to make use of the VIS
@@ -24,6 +26,14 @@ namespace upcxx
                          upcxx::backend::memvec_t const _srclist[],
                          backend::gasnet::handle_cb *source_cb,
                          backend::gasnet::handle_cb *operation_cb);
+    void rma_get_frag_nb(                               
+                         std::size_t _dstcount,
+                         upcxx::backend::memvec_t const _dstlist[],
+                         upcxx::intrank_t rank_s,
+                         std::size_t _srccount,
+                         upcxx::backend::memvec_t const _srclist[],
+                         backend::gasnet::handle_cb *operation_cb);
+    
     
     void rma_put_reg_nb(
                         intrank_t rank_d,
@@ -134,6 +144,29 @@ namespace upcxx
       }
 
     };
+    
+    template<typename CxStateHere, typename CxStateRemote>
+    struct rget_cb_frag final: rget_cb_remote<CxStateRemote>, backend::gasnet::handle_cb {
+      CxStateHere state_here;
+      std::vector<upcxx::backend::memvec_t> src;
+      std::vector<upcxx::backend::memvec_t> dest;
+      rget_cb_frag(intrank_t rank_s, CxStateHere here, CxStateRemote remote,
+                   std::vector<upcxx::backend::memvec_t>&& Src,
+                   std::vector<upcxx::backend::memvec_t>&& Dest)
+        : rget_cb_remote<CxStateRemote>{rank_s, std::move(remote)},
+        state_here{std::move(here)}, src(Src), dest(Dest) { }
+      void initiate(intrank_t rank_s)
+      {
+        detail::rma_get_frag_nb(dest.size(), &(dest[0]),
+                                rank_s  ,src.size(), &(src[0]),
+                                this);
+      }
+      void execute_and_delete(backend::gasnet::handle_cb_successor) {
+        this->send_remote();
+        this->state_here.template operator()<operation_cx_event>();
+        delete this;
+      }
+    };
   }
   /////////////////////////////////////////////////////////////////////
   //  Actual public API for rput_fragmented, rput_regular, rput_strided
@@ -151,7 +184,7 @@ namespace upcxx
                   Cxs cxs=completions<future_cx<operation_cx_event>>{{}})
   {
     UPCXX_ASSERT_ALWAYS((detail::completions_has_event<Cxs, operation_cx_event>::value));
-  
+    UPCXX_ASSERT(std::is_same<decltype(std::get<0>(*src_runs_begin)),decltype(std::get<0>(*dst_runs_begin).raw_ptr_)>);
     using cxs_here_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::rput_event_values,
@@ -166,8 +199,7 @@ namespace upcxx
     std::size_t srcsize=0;
     std::size_t dstcount=0;
     std::size_t dstsize=0;
-    constexpr std::size_t srcSize=sizeof(*std::get<0>(*src_runs_begin));
-    constexpr std::size_t dstSize=sizeof(*std::get<0>(*dst_runs_begin).raw_ptr_);
+    constexpr std::size_t tsize=sizeof(*std::get<0>(*src_runs_begin));
     srccount = std::distance(src_runs_begin, src_runs_end);
     dstcount = std::distance(dst_runs_begin, dst_runs_end);
  
@@ -178,7 +210,7 @@ namespace upcxx
     for(SrcIter s=src_runs_begin; !(s==src_runs_end); ++s,++sv)
       {
         sv->gex_addr=std::get<0>(*s);
-        sv->gex_len =std::get<1>(*s)*srcSize;
+        sv->gex_len =std::get<1>(*s)*tsize;
         srcsize+=sv->gex_len;
       }
     intrank_t gpdrank = (std::get<0>(*dst_runs_begin)).rank_;
@@ -186,7 +218,7 @@ namespace upcxx
       {
         UPCXX_ASSERT(gpdrank==std::get<0>(*d).rank_);
         dv->gex_addr=(std::get<0>(*d)).raw_ptr_;
-        dv->gex_len =std::get<1>(*d)*dstSize;
+        dv->gex_len =std::get<1>(*d)*tsize;
         dstsize+=dv->gex_len;
       }
     
@@ -214,13 +246,74 @@ namespace upcxx
     return returner();
   }
 
-template<typename SrcIter, typename DestIter>
-           //         typename Completions=decltype(operation_cx::as_future())>
-  future<>  rget_fragmented(
-       SrcIter src_runs_begin, SrcIter src_runs_end,
-         DestIter dest_runs_begin, DestIter dest_runs_end);
-//       Completions cxs=Completions{});
+  template<typename SrcIter, typename DestIter,
+  typename Cxs=decltype(operation_cx::as_future())>
+    typename detail::completions_returner<
+      /*EventPredicate=*/detail::event_is_here,
+      /*EventValues=*/detail::rget_byref_event_values,
+      Cxs
+    >::return_t
+    rget_fragmented(
+                            SrcIter src_runs_begin, SrcIter src_runs_end,
+                            DestIter dst_runs_begin, DestIter dst_runs_end,
+                            Cxs cxs=completions<future_cx<operation_cx_event>>{{}})
+  {
+    UPCXX_ASSERT(std::is_same<decltype(std::get<0>(*src_runs_begin).raw_ptr_),decltype(std::get<0>(*dst_runs_begin))>);
+    using cxs_here_t = detail::completions_state<
+      /*EventPredicate=*/detail::event_is_here,
+      /*EventValues=*/detail::rget_byref_event_values,
+      Cxs>;
+    using cxs_remote_t = detail::completions_state<
+      /*EventPredicate=*/detail::event_is_remote,
+      /*EventValues=*/detail::rget_byref_event_values,
+      Cxs>;
 
+    intrank_t rank_s = std::get<0>(*src_runs_begin).rank_;
+    std::size_t srccount=0;
+    std::size_t srcsize=0;
+    std::size_t dstcount=0;
+    std::size_t dstsize=0;
+    constexpr std::size_t tsize=sizeof(*std::get<0>(*dst_runs_begin));
+    srccount = std::distance(src_runs_begin, src_runs_end);
+    dstcount = std::distance(dst_runs_begin, dst_runs_end);
+    std::vector<upcxx::backend::memvec_t> src(srccount), dest(dstcount);
+    auto sv=src.begin();
+    auto dv=dest.begin();
+    for(SrcIter s=src_runs_begin; !(s==src_runs_end); ++s,++sv)
+      {
+        UPCXX_ASSERT(rank_s==std::get<0>(*s).rank_);
+        sv->gex_addr=std::get<0>(*s).raw_ptr_;
+        sv->gex_len =std::get<1>(*s)*tsize;
+        srcsize+=sv->gex_len;
+      }
+
+    for(DestIter d=dst_runs_begin; !(d==dst_runs_end); ++d,++dv)
+      {
+        dv->gex_addr=(std::get<0>(*d));
+        dv->gex_len =std::get<1>(*d)*tsize;
+        dstsize+=dv->gex_len;
+      }
+    
+    UPCXX_ASSERT_ALWAYS(dstsize==srcsize);
+    auto *cb = new detail::rget_cb_frag<cxs_here_t,cxs_remote_t>{
+      rank_s,
+      cxs_here_t{std::move(cxs)},
+      cxs_remote_t{std::move(cxs)},
+      std::move(src), std::move(dest)
+    };
+
+    auto returner = detail::completions_returner<
+        /*EventPredicate=*/detail::event_is_here,
+        /*EventValues=*/detail::rget_byref_event_values,
+        Cxs
+      >{cb->state_here};
+
+    cb->initiate(rank_s);
+
+    
+    return returner();
+  }
+  
   template<typename SrcIter, typename DestIter,
            typename Cxs=decltype(operation_cx::as_future())>
   typename detail::completions_returner<

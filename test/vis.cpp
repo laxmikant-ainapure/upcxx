@@ -120,25 +120,27 @@ int main() {
   global_ptr<lli> lo=fneighbor_lo.result();
 
   // fragmented test 1
-  lli srcTest[]= {me, me+1, me+2, me+3, me+4, me+5};
-  std::vector<std::pair<lli*,std::size_t> > svec(1,{srcTest, 6});
-  std::vector<std::pair<global_ptr<lli>, std::size_t> > dvec(1, {hi, 6});
-  std::cout<<"\nsending to "<<hi.where()<<": ";
-  for(int i=0; i<6; i++)
-    std::cout<<" "<<srcTest[i];
-  std::cout<<"\n";
-  auto f0 = rput_fragmented(svec.begin(), svec.end(), dvec.begin(), dvec.end());
+  {
+    lli srcTest[]= {me, me+1, me+2, me+3, me+4, me+5};
+    std::vector<std::pair<lli*,std::size_t> > svec(1,{srcTest, 6});
+    std::vector<std::pair<global_ptr<lli>, std::size_t> > dvec(1, {hi, 6});
+    std::cout<<"\nsending to "<<hi.where()<<": ";
+    for(int i=0; i<6; i++)
+      std::cout<<" "<<srcTest[i];
+    std::cout<<"\n";
+    auto f0 = rput_fragmented(svec.begin(), svec.end(), dvec.begin(), dvec.end());
 
-  f0.wait();
-  barrier();
+    f0.wait();
+    barrier();
   
-  for(int i=0; i<6; i++)
-    {
-      if(myPtr[i] != nebrLo+i){
-        std::cout<<" simple sequence Fragmented expected "<< nebrLo+i<<" but got "<<myPtr[i]<<"\n";
-        success=false;
+    for(int i=0; i<6; i++)
+      {
+        if(myPtr[i] != nebrLo+i){
+          std::cout<<" simple sequence Fragmented expected "<< nebrLo+i<<" but got "<<myPtr[i]<<"\n";
+          success=false;
+        }
       }
-    }
+  }
   // fragmented put test 2
   std::cout<<"\nFragmented test 2 \n";
   auto fs1 = IterF<lli*>(myPtr+N-B, B, N);
@@ -216,10 +218,36 @@ int main() {
     }
 
   
+  //   VIS rget tests
+  
+      // fragmented get test 1
+  lli m=me;
+  lli getTest[]= {-m, -m-1, -m-2, -m-3, -m-4, -m-5};
+  for(int i=0; i<6; i++)
+    {
+      myPtr[i]=m+i;
+    }
+  std::vector<std::pair<lli*,std::size_t> > dvec(1,{getTest, 6});
+  std::vector<std::pair<global_ptr<lli>, std::size_t> > svec(1, {hi, 6});
+  std::cout<<"\nleaving for "<<hi.where()<<": ";
+  for(int i=0; i<6; i++)
+    std::cout<<" "<<myPtr[i];
+  std::cout<<"\n";
+  barrier();
+  auto fg0 = rget_fragmented(svec.begin(), svec.end(), dvec.begin(), dvec.end());
+
+  fg0.wait();
+  
+  for(int i=0; i<6; i++)
+    {
+      if(getTest[i] != nebrHi+i){
+        std::cout<<" simple sequence Fragmented get expected "<< nebrHi+i<<" but got "<<getTest[i]<<"\n";
+        success=false;
+      }
+    }
 
   print_test_success(success);
   
-    
   finalize();
   
   return 0;
