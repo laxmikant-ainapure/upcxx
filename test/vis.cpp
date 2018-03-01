@@ -221,6 +221,7 @@ int main() {
   //   VIS rget tests
   
       // fragmented get test 1
+  std::cout<<"Fragmented rget test 1\n";
   lli m=me;
   lli getTest[]= {-m, -m-1, -m-2, -m-3, -m-4, -m-5};
   for(int i=0; i<6; i++)
@@ -246,6 +247,27 @@ int main() {
       }
     }
 
+  barrier();
+  reset(myPatch, me);
+  std::cout<<"Fragmented rget test 2\n";
+  barrier();
+  
+  auto fg2 = rget_fragmented(fd1, fd1_end, fs1, fs1_end);
+
+  fr1 = IterF<lli*>(myPtr+N-B, B, N);
+  fr1_end = fr1; fr1_end+=M*N;
+  
+  fg2.wait();
+
+  success = success && check(fr1, fr1_end, (lli)nebrHi);
+  sm = sum(myPatch);
+  correctAnswer = (me*(N-B)+B*nebrHi)*M;
+  if(sm != correctAnswer)
+    {
+      std::cout<<" Fragmented get expected sum:"<<correctAnswer<<" actual sum: "<<sm<<"\n";
+      success = false;
+    }
+  
   print_test_success(success);
   
   finalize();
