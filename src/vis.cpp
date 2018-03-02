@@ -62,7 +62,6 @@ void upcxx::detail::rma_get_frag_nb(
 
   operation_cb->handle = reinterpret_cast<uintptr_t>(op_h);
   gasnet::register_cb(operation_cb);
-  
   gasnet::after_gasnet();
 }
 
@@ -88,6 +87,24 @@ void upcxx::detail::rma_put_reg_nb(
     operation_cb->handle = reinterpret_cast<uintptr_t>(op_h);
     gasnet::register_cb(operation_cb);
   }
+  gasnet::after_gasnet();
+
+}
+
+void upcxx::detail::rma_get_reg_nb(
+                    size_t _dstcount, void * const _dstlist[], size_t _dstlen,
+                    intrank_t rank_s,
+                    size_t _srccount, void * const _srclist[], size_t _srclen,
+                    backend::gasnet::handle_cb *operation_cb)
+{
+  gex_Event_t op_h = gex_VIS_IndexedGetNB(gasnet::world_team,
+                                         _dstcount, _dstlist, _dstlen,
+                                          rank_s,
+                                         _srccount, _srclist, _srclen,
+                                         /* flags*/ 0);
+
+  operation_cb->handle = reinterpret_cast<uintptr_t>(op_h);
+  gasnet::register_cb(operation_cb);
   gasnet::after_gasnet();
 
 }
@@ -121,3 +138,27 @@ void upcxx::detail::rma_put_strided_nb(
   gasnet::after_gasnet();
 
 }
+
+void upcxx::detail::rma_get_strided_nb(
+                        void *_dstaddr, const std::ptrdiff_t _dststrides[],
+                        intrank_t _rank_s,
+                        const void *_srcaddr, const std::ptrdiff_t _srcstrides[],
+                        std::size_t _elemsz,
+                        const std::size_t _count[], std::size_t _stridelevels,
+                        backend::gasnet::handle_cb *operation_cb)
+{
+  gex_Event_t op_h = gex_VIS_StridedGetNB(gasnet::world_team,
+                                          _dstaddr, _dststrides,
+                                          _rank_s,
+                                          const_cast<void*>(_srcaddr), _srcstrides,
+                                          _elemsz,
+                                          _count, _stridelevels,
+                                          /*flag */ 0);
+ 
+
+  operation_cb->handle = reinterpret_cast<uintptr_t>(op_h);
+  gasnet::register_cb(operation_cb);
+  gasnet::after_gasnet();
+
+}
+

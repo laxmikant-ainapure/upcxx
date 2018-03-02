@@ -42,6 +42,12 @@ namespace upcxx
                         backend::gasnet::handle_cb *source_cb,
                         backend::gasnet::handle_cb *operation_cb);
     
+    void rma_get_reg_nb(
+                        size_t _dstcount, void * const _dstlist[], size_t _dstlen,
+                        intrank_t ranks,
+                        size_t _srccount, void * const _srclist[], size_t _srclen,
+                        backend::gasnet::handle_cb *operation_cb);
+    
     void rma_put_strided_nb(
                             intrank_t rank_d,
                             void *_dstaddr, const std::ptrdiff_t _dststrides[],
@@ -49,6 +55,13 @@ namespace upcxx
                             std::size_t _elemsz,
                             const std::size_t _count[], std::size_t _stridelevels,
                             backend::gasnet::handle_cb *source_cb,
+                            backend::gasnet::handle_cb *operation_cb);
+    void rma_get_strided_nb(
+                            void *_dstaddr, const std::ptrdiff_t _dststrides[],
+                            intrank_t _rank_s,
+                            const void *_srcaddr, const std::ptrdiff_t _srcstrides[],
+                            std::size_t _elemsz,
+                            const std::size_t _count[], std::size_t _stridelevels,
                             backend::gasnet::handle_cb *operation_cb);
     
 
@@ -167,6 +180,56 @@ namespace upcxx
         delete this;
       }
     };
+
+    template<typename CxStateHere, typename CxStateRemote>
+    struct rget_cb_reg final: rget_cb_remote<CxStateRemote>, backend::gasnet::handle_cb {
+      CxStateHere state_here;
+      std::vector<void*> src;
+      std::vector<void*> dest;
+      rget_cb_reg(intrank_t rank_s, CxStateHere here, CxStateRemote remote,
+                   std::vector<void*>&& Src,
+                   std::vector<void*>&& Dest)
+        : rget_cb_remote<CxStateRemote>{rank_s, std::move(remote)},
+        state_here{std::move(here)}, src(Src), dest(Dest) { }
+      void initiate(intrank_t rank_s, std::size_t srclength, std::size_t dstlength)
+      {
+        detail::rma_get_reg_nb(dest.size(), &(dest[0]), dstlength, 
+                               rank_s  ,src.size(), &(src[0]), srclength,
+                               this);
+      }
+      void execute_and_delete(backend::gasnet::handle_cb_successor) {
+        this->send_remote();
+        this->state_here.template operator()<operation_cx_event>();
+        delete this;
+      }
+    };
+
+    template<typename CxStateHere, typename CxStateRemote>
+    struct rget_cbs_strided final: rget_cb_remote<CxStateRemote>, backend::gasnet::handle_cb {
+      CxStateHere state_here;
+      
+      rget_cbs_strided(intrank_t rank_s, CxStateHere here, CxStateRemote remote)
+        : rget_cb_remote<CxStateRemote>{rank_s, std::move(remote)},
+        state_here{std::move(here)} { }
+      void initiate(
+                    void* dst_addr, const std::ptrdiff_t* dststrides,
+                    intrank_t rank_s,
+                    const void* src_addr, const std::ptrdiff_t* srcstrides,
+                    std::size_t elemsize,
+                    const std::size_t* count, std::size_t stridelevels)
+      {
+        detail::rma_get_strided_nb(dst_addr, dststrides,
+                                   rank_s, src_addr, srcstrides,
+                                   elemsize, count, stridelevels,
+                                   this); 
+      }
+
+      void execute_and_delete(backend::gasnet::handle_cb_successor) {
+        this->send_remote();
+        this->state_here.template operator()<operation_cx_event>();
+        delete this;
+      }
+    };
   }
   /////////////////////////////////////////////////////////////////////
   //  Actual public API for rput_fragmented, rput_regular, rput_strided
@@ -184,7 +247,9 @@ namespace upcxx
                   Cxs cxs=completions<future_cx<operation_cx_event>>{{}})
   {
     UPCXX_ASSERT_ALWAYS((detail::completions_has_event<Cxs, operation_cx_event>::value));
-    UPCXX_ASSERT(std::is_same<decltype(std::get<0>(*src_runs_begin)),decltype(std::get<0>(*dst_runs_begin).raw_ptr_)>);
+    // can't seem to get this assert to work right.
+    //static_assert(std::is_same<decltype(std::get<0>(*src_runs_begin)), decltype(std::get<0>(*dst_runs_begin).raw_ptr_)>::value, "SrcIter and DestIter need to be over same base T type");
+    
     using cxs_here_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::rput_event_values,
@@ -383,15 +448,72 @@ namespace upcxx
     
     return returner();
   }
+  
+  template<typename SrcIter, typename DestIter,
+           typename Cxs=decltype(operation_cx::as_future())>
+  typename detail::completions_returner<
+    /*EventPredicate=*/detail::event_is_here,
+    /*EventValues=*/detail::rget_byref_event_values,
+    Cxs
+    >::return_t
+  rget_regular(
+                  SrcIter src_runs_begin, SrcIter src_runs_end,
+                  std::size_t src_run_length,
+                  DestIter dst_runs_begin, DestIter dst_runs_end,
+                  std::size_t dst_run_length,
+                  Cxs cxs=completions<future_cx<operation_cx_event>>{{}})
+  {
+    UPCXX_ASSERT(std::is_same<decltype((*src_runs_begin).raw_ptr_),decltype((*dst_runs_begin))>);
+    using cxs_here_t = detail::completions_state<
+      /*EventPredicate=*/detail::event_is_here,
+      /*EventValues=*/detail::rget_byref_event_values,
+      Cxs>;
+    using cxs_remote_t = detail::completions_state<
+      /*EventPredicate=*/detail::event_is_remote,
+      /*EventValues=*/detail::rget_byref_event_values,
+      Cxs>;
 
-template<typename SrcIter, typename DestIter>
-           //         typename Completions=decltype(operation_cx::as_future())>
-  future<> rget_regular(
-       SrcIter src_runs_begin, SrcIter src_runs_end,
-       std::size_t src_run_length,
-       DestIter dest_runs_begin, DestIter dest_runs_end,
-         std::size_t dest_run_length);
-       //       Completions cxs=Completions{});
+    intrank_t rank_s = (*src_runs_begin).rank_;
+    std::size_t srccount=0;
+    std::size_t dstcount=0;
+    constexpr std::size_t tsize=sizeof(*dst_runs_begin);
+    srccount = std::distance(src_runs_begin, src_runs_end);
+    dstcount = std::distance(dst_runs_begin, dst_runs_end);
+    UPCXX_ASSERT(srccount*src_run_length==dstcount*dst_run_length);
+    
+    std::vector<void*> src(srccount), dest(dstcount);
+    auto sv=src.begin();
+    auto dv=dest.begin();
+    for(SrcIter s=src_runs_begin; !(s==src_runs_end); ++s,++sv)
+      {
+        UPCXX_ASSERT((*s).rank_);
+        *sv = (*s).raw_ptr_;
+      }
+
+    for(DestIter d=dst_runs_begin; !(d==dst_runs_end); ++d,++dv)
+      {
+        *dv= *d;
+      }
+    
+    auto *cb = new detail::rget_cb_reg<cxs_here_t,cxs_remote_t>{
+      rank_s,
+      cxs_here_t{std::move(cxs)},
+      cxs_remote_t{std::move(cxs)},
+      std::move(src), std::move(dest)
+    };
+
+    auto returner = detail::completions_returner<
+        /*EventPredicate=*/detail::event_is_here,
+        /*EventValues=*/detail::rget_byref_event_values,
+        Cxs
+      >{cb->state_here};
+
+    cb->initiate(rank_s, src_run_length*tsize, dst_run_length*tsize);
+
+    
+    return returner();
+  }
+
   
   template<std::size_t Dim, typename T,
            typename Cxs=decltype(operation_cx::as_future())>
@@ -458,26 +580,69 @@ template<typename SrcIter, typename DestIter>
                                      &extents.front(), cxs);
   }
 
-template<std::size_t Dim, typename T>
-           //         typename Completions=decltype(operation_cx::as_future())>
-  future<> rget_strided(
-       global_ptr<T> src_base,
-       std::ptrdiff_t const *src_strides,
-       T *dest_base,
-       std::ptrdiff_t const *dest_strides,
-         std::size_t const *extents);
-       //       Completions cxs=Completions{});
+  template<std::size_t Dim, typename T,
+           typename Cxs=decltype(operation_cx::as_future())>
+  typename detail::completions_returner<
+    /*EventPredicate=*/detail::event_is_here,
+    /*EventValues=*/detail::rput_event_values,
+    Cxs>::return_t  
+  rget_strided(
+               global_ptr<T> src_base,
+               std::ptrdiff_t const *src_strides,
+               T* dest_base,
+               std::ptrdiff_t const *dest_strides,
+               std::size_t const *extents,
+               Cxs cxs=completions<future_cx<operation_cx_event>>{{}})
+  {
+    UPCXX_ASSERT_ALWAYS((detail::completions_has_event<Cxs, operation_cx_event>::value));
+    
+    using cxs_here_t = detail::completions_state<
+      /*EventPredicate=*/detail::event_is_here,
+      /*EventValues=*/detail::rput_event_values,
+      Cxs>;
+    using cxs_remote_t = detail::completions_state<
+      /*EventPredicate=*/detail::event_is_remote,
+      /*EventValues=*/detail::rput_event_values,
+      Cxs>;
 
-template<std::size_t Dim, typename T>
-           //         typename Completions=decltype(operation_cx::as_future())>
-  future<>  rget_strided(
-       global_ptr<T> src_base,
-       std::array<std::ptrdiff_t,Dim> const &src_strides,
-       T *dest_base,
-       std::array<std::ptrdiff_t,Dim> const &dest_strides,
-         std::array<std::size_t,Dim> const &extents);
-       //       Completions cxs=Completions{});
+    auto *cbs = new detail::rget_cbs_strided<cxs_here_t, cxs_remote_t>{
+      src_base.rank_,
+      cxs_here_t{std::move(cxs)},
+      cxs_remote_t{std::move(cxs)}
+    };
+    
+    auto returner = detail::completions_returner<
+      /*EventPredicate=*/detail::event_is_here,
+      /*EventValues=*/detail::rput_event_values,
+      Cxs
+      >{cbs->state_here};
+    
+    cbs->initiate(dest_base, dest_strides,
+                  src_base.rank_, src_base.raw_ptr_, src_strides, sizeof(T), extents, Dim);
+    
+    return returner();
+  }
+  
 
+
+  template<std::size_t Dim, typename T,
+           typename Cxs=decltype(operation_cx::as_future())>
+  typename detail::completions_returner<
+    /*EventPredicate=*/detail::event_is_here,
+    /*EventValues=*/detail::rput_event_values,
+    Cxs>::return_t  
+  rget_strided(
+               global_ptr<T> src_base,
+               std::array<std::ptrdiff_t,Dim> const &src_strides,
+               T *dest_base,
+               std::array<std::ptrdiff_t,Dim> const &dest_strides,
+               std::array<std::size_t,Dim> const &extents,
+               Cxs cxs=completions<future_cx<operation_cx_event>>{{}})
+  {
+    return rget_strided<Dim, T, Cxs>(src_base,&src_strides.front(),
+                              dest_base, &dest_strides.front(),
+                              &extents.front(), cxs);
+  }
  
 }
 

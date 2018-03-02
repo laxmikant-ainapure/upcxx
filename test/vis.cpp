@@ -288,12 +288,13 @@ int main() {
   barrier();
   std::cout<<"rget_strided test 1\n";
   reset(myPatch, me);
-  set(rr1, rr1_end, B, token);
+
   barrier();
   //  a bit fancier than the rput,  this one gets every other row in the source patch buffer
   //  and inserts it with a one row offset into myPatch
   auto sg1 = rget_strided<2>(lo+N-B, {{sizeof(lli), 2*N*sizeof(lli)}},
                              myPtr+N, {{sizeof(lli), 2*N*sizeof(lli)}}, {{B,M/2}});
+ 
 
   sm=sum(myPatch);
   correctAnswer = B*M/2*me + B*M/2*nebrLo + (N-B)*M*me;
