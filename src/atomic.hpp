@@ -91,28 +91,15 @@ namespace upcxx {
         // The or'd value for all the atomic operations.
         int aops_gex;
 
-        // non-fetching operations
-        template<AOP aop, typename Cxs>
-        NOFETCH_RTYPE<Cxs> _nofetch_op(global_ptr<T> gptr, std::memory_order order, T val1, T val2,
-                                       Cxs cxs) {
-          UPCXX_ASSERT_ALWAYS((detail::completions_has_event<Cxs, operation_cx_event>::value));
-          // we only have local completion, not remote
-          using cxs_here_t = detail::completions_state<detail::event_is_here,
-              detail::nofetch_aop_event_values, Cxs>;
-          // Create the callback object..
-          auto *cb = new detail::nofetch_op_cb<cxs_here_t>{cxs_here_t{std::move(cxs)}};
-          auto returner = detail::completions_returner<detail::event_is_here,
-              detail::nofetch_aop_event_values, Cxs>{cb->state_here};
-          // execute the backend gasnet function
-          upcxx::detail::call_gex_AD_OpNB<T>(ad_gex, nullptr, gptr, aop, aops_gex, val1, val2,
-              order, cb);
-          return returner();
-        }
+      public:
+        // The constructor takes a vector of operations. Currently, flags is unsupported.
+        domain(std::vector<int> ops, int flags = 0);
+        ~domain();
 
         // fetching operations
-        template<AOP aop, typename Cxs>
-        FETCH_RTYPE<T, Cxs> _fetch_op(global_ptr<T> gptr, std::memory_order order, T val1, T val2,
-                                      Cxs cxs) {
+        template<AOP aop, typename Cxs = FUTURE_CX>
+        FETCH_RTYPE<T, Cxs> fop(global_ptr<T> gptr, std::memory_order order, T val1 = 0, T val2 = 0,
+                                Cxs cxs = FUTURE_CX{{}}) {
           UPCXX_ASSERT_ALWAYS((detail::completions_has_event<Cxs, operation_cx_event>::value));
           // we only have local completion, not remote
           using cxs_here_t = detail::completions_state<detail::event_is_here,
@@ -127,23 +114,22 @@ namespace upcxx {
           return returner();
         }
 
-      public:
-        // The constructor takes a vector of operations. Currently, flags is unsupported.
-        domain(std::vector<int> ops, int flags = 0);
-        ~domain();
-
-        // Generic fetching atomic operation. This can take 0, 1 or 2 operands.
-        template<AOP aop, typename Cxs = FUTURE_CX>
-        FETCH_RTYPE<T, Cxs> fop(global_ptr<T> gptr, std::memory_order order, T val1 = 0, T val2 = 0,
-                                Cxs cxs = FUTURE_CX{{}}) {
-          return _fetch_op<aop, Cxs>(gptr, order, val1, val2, cxs);
-        }
-
         // Generic non-fetching atomic operation. This can take 0, 1 or 2 operands.
         template<AOP aop, typename Cxs = FUTURE_CX>
         NOFETCH_RTYPE<Cxs> op(global_ptr<T> gptr, std::memory_order order, T val1 = 0, T val2 = 0,
                               Cxs cxs = FUTURE_CX{{}}) {
-          return _nofetch_op<aop, Cxs>(gptr, order, val1, val2, cxs);
+          UPCXX_ASSERT_ALWAYS((detail::completions_has_event<Cxs, operation_cx_event>::value));
+          // we only have local completion, not remote
+          using cxs_here_t = detail::completions_state<detail::event_is_here,
+              detail::nofetch_aop_event_values, Cxs>;
+          // Create the callback object..
+          auto *cb = new detail::nofetch_op_cb<cxs_here_t>{cxs_here_t{std::move(cxs)}};
+          auto returner = detail::completions_returner<detail::event_is_here,
+              detail::nofetch_aop_event_values, Cxs>{cb->state_here};
+          // execute the backend gasnet function
+          upcxx::detail::call_gex_AD_OpNB<T>(ad_gex, nullptr, gptr, aop, aops_gex, val1, val2,
+              order, cb);
+          return returner();
         }
 
         // Convenience functions for all the operations.
@@ -151,67 +137,67 @@ namespace upcxx {
         NOFETCH_RTYPE<Cxs> set(global_ptr<T> gptr, T val,
                                std::memory_order order = std::memory_order_relaxed,
                                Cxs cxs = FUTURE_CX{{}}) {
-          return _nofetch_op<SET, Cxs>(gptr, order, val, (T)0, cxs);
+          return op<SET, Cxs>(gptr, order, val, (T)0, cxs);
         }
         template<typename Cxs = FUTURE_CX>
         FETCH_RTYPE<T, Cxs> get(global_ptr<T> gptr,
                                 std::memory_order order = std::memory_order_relaxed,
                                 Cxs cxs = FUTURE_CX{{}}) {
-          return _fetch_op<GET>(gptr, order, (T)0, (T)0, cxs);
+          return fop<GET>(gptr, order, (T)0, (T)0, cxs);
         }
         template<typename Cxs = FUTURE_CX>
         NOFETCH_RTYPE<Cxs> inc(global_ptr<T> gptr,
                                std::memory_order order = std::memory_order_relaxed,
                                Cxs cxs = FUTURE_CX{{}}) {
-          return _nofetch_op<INC>(gptr, order, (T)0, (T)0, cxs);
+          return op<INC>(gptr, order, (T)0, (T)0, cxs);
         }
         template<typename Cxs = FUTURE_CX>
         NOFETCH_RTYPE<Cxs> dec(global_ptr<T> gptr,
                                std::memory_order order = std::memory_order_relaxed,
                                Cxs cxs = FUTURE_CX{{}}) {
-          return _nofetch_op<DEC>(gptr, order, (T)0, (T)0, cxs);
+          return op<DEC>(gptr, order, (T)0, (T)0, cxs);
         }
         template<typename Cxs = FUTURE_CX>
         FETCH_RTYPE<T, Cxs> finc(global_ptr<T> gptr,
                                  std::memory_order order = std::memory_order_relaxed,
                                  Cxs cxs = FUTURE_CX{{}}) {
-          return _fetch_op<FINC>(gptr, order, (T)0, (T)0, cxs);
+          return fop<FINC>(gptr, order, (T)0, (T)0, cxs);
         }
         template<typename Cxs = FUTURE_CX>
         FETCH_RTYPE<T, Cxs> fdec(global_ptr<T> gptr,
                                  std::memory_order order = std::memory_order_relaxed,
                                  Cxs cxs = FUTURE_CX{{}}) {
-          return _fetch_op<FDEC>(gptr, order, (T)0, (T)0, cxs);
+          return fop<FDEC>(gptr, order, (T)0, (T)0, cxs);
         }
         template<typename Cxs = FUTURE_CX>
         NOFETCH_RTYPE<Cxs> add(global_ptr<T> gptr, T val1,
                                std::memory_order order = std::memory_order_relaxed,
                                Cxs cxs = FUTURE_CX{{}}) {
-          return _nofetch_op<ADD>(gptr, order, val1, (T)0, cxs);
+          return op<ADD>(gptr, order, val1, (T)0, cxs);
         }
         template<typename Cxs = FUTURE_CX>
         NOFETCH_RTYPE<Cxs> sub(global_ptr<T> gptr, T val1,
                                std::memory_order order = std::memory_order_relaxed,
                                Cxs cxs = FUTURE_CX{{}}) {
-          return _nofetch_op<SUB>(gptr, order, val1, (T)0, cxs);
+          return op<SUB>(gptr, order, val1, (T)0, cxs);
         }
         template<typename Cxs = FUTURE_CX>
         FETCH_RTYPE<T, Cxs> fadd(global_ptr<T> gptr, T val,
                                  std::memory_order order = std::memory_order_relaxed,
                                  Cxs cxs = FUTURE_CX{{}}) {
-          return _fetch_op<FADD>(gptr, order, val, (T)0, cxs);
+          return fop<FADD>(gptr, order, val, (T)0, cxs);
         }
         template<typename Cxs = FUTURE_CX>
         FETCH_RTYPE<T, Cxs> fsub(global_ptr<T> gptr, T val,
                                  std::memory_order order = std::memory_order_relaxed,
                                  Cxs cxs = FUTURE_CX{{}}) {
-          return _fetch_op<FSUB>(gptr, order, val, (T)0, cxs);
+          return fop<FSUB>(gptr, order, val, (T)0, cxs);
         }
         template<typename Cxs = FUTURE_CX>
         FETCH_RTYPE<T, Cxs> cswap(global_ptr<T> gptr, T val1, T val2,
                                   std::memory_order order = std::memory_order_relaxed,
                                   Cxs cxs = FUTURE_CX{{}}) {
-          return _fetch_op<CSWAP>(gptr, order, val1, val2, cxs);
+          return fop<CSWAP>(gptr, order, val1, val2, cxs);
         }
     };
   } // namespace atomic
