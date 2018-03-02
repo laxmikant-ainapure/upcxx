@@ -249,7 +249,8 @@ namespace upcxx
     UPCXX_ASSERT_ALWAYS((detail::completions_has_event<Cxs, operation_cx_event>::value));
     // can't seem to get this assert to work right.
     //static_assert(std::is_same<decltype(std::get<0>(*src_runs_begin)), decltype(std::get<0>(*dst_runs_begin).raw_ptr_)>::value, "SrcIter and DestIter need to be over same base T type");
-    
+ 
+                 
     using cxs_here_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::rput_event_values,
@@ -323,7 +324,8 @@ namespace upcxx
                             DestIter dst_runs_begin, DestIter dst_runs_end,
                             Cxs cxs=completions<future_cx<operation_cx_event>>{{}})
   {
-    UPCXX_ASSERT(std::is_same<decltype(std::get<0>(*src_runs_begin).raw_ptr_),decltype(std::get<0>(*dst_runs_begin))>);
+    UPCXX_ASSERT_ALWAYS((detail::completions_has_event<Cxs, operation_cx_event>::value));
+    //static_assert(std::is_same<decltype((std::get<0>(*src_runs_begin)).raw_ptr_),decltype(std::get<0>(*dst_runs_begin))>::value, "type mismatch");
     using cxs_here_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::rget_byref_event_values,
@@ -394,7 +396,7 @@ namespace upcxx
   {
 
     UPCXX_ASSERT_ALWAYS((detail::completions_has_event<Cxs, operation_cx_event>::value));
-  
+    static_assert(std::is_same<decltype(*src_runs_begin),decltype((*dst_runs_begin).raw_ptr_)>::value, "type mismatch");
     using cxs_here_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::rput_event_values,
@@ -463,7 +465,8 @@ namespace upcxx
                   std::size_t dst_run_length,
                   Cxs cxs=completions<future_cx<operation_cx_event>>{{}})
   {
-    UPCXX_ASSERT(std::is_same<decltype((*src_runs_begin).raw_ptr_),decltype((*dst_runs_begin))>);
+    UPCXX_ASSERT_ALWAYS((detail::completions_has_event<Cxs, operation_cx_event>::value));
+    static_assert(std::is_same<decltype((*src_runs_begin).raw_ptr_),decltype((*dst_runs_begin))>::value, "type mismatch");
     using cxs_here_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::rget_byref_event_values,
@@ -530,7 +533,6 @@ namespace upcxx
        Cxs cxs=completions<future_cx<operation_cx_event>>{{}})
   {
     UPCXX_ASSERT_ALWAYS((detail::completions_has_event<Cxs, operation_cx_event>::value));
-    
     using cxs_here_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::rput_event_values,
@@ -579,7 +581,7 @@ namespace upcxx
                                      dest_base, &dest_strides.front(),
                                      &extents.front(), cxs);
   }
-
+  
   template<std::size_t Dim, typename T,
            typename Cxs=decltype(operation_cx::as_future())>
   typename detail::completions_returner<
@@ -595,7 +597,6 @@ namespace upcxx
                Cxs cxs=completions<future_cx<operation_cx_event>>{{}})
   {
     UPCXX_ASSERT_ALWAYS((detail::completions_has_event<Cxs, operation_cx_event>::value));
-    
     using cxs_here_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::rput_event_values,
