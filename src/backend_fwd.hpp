@@ -32,6 +32,13 @@ namespace upcxx {
     internal,
     user
   };
+
+  namespace detail {
+    // internal_only: Type used to mark member functions of public types for
+    // internal use only. To do so, just make one of the function's arguments
+    // of this type. The caller can just pass a default constructed dummy value.
+    struct internal_only {};
+  }
   
   void init();
   void finalize();

@@ -3,6 +3,7 @@
 #include <upcxx/backend/gasnet/rpc_inbox.hpp>
 
 #include <upcxx/os_env.hpp>
+#include <upcxx/team.hpp>
 
 #include <algorithm>
 #include <cstdlib>
@@ -162,6 +163,12 @@ void upcxx::init() {
   
   backend::rank_n = gex_TM_QuerySize(gasnet::world_team);
   backend::rank_me = gex_TM_QueryRank(gasnet::world_team);
+
+  // Build team upcxx::world()
+  new(&detail::the_world_team.raw) upcxx::team(
+    detail::internal_only(),
+    0, backend::rank_n
+  );
   
   // now adjust the segment size if it's less than the GASNET_MAX_SEGSIZE
   size_t gasnet_max_segsize = gasnet_getMaxLocalSegmentSize();
@@ -238,6 +245,13 @@ void upcxx::init() {
     backend::local_peer_lb = nbhd[0].gex_jobrank;
     backend::local_peer_ub = nbhd[0].gex_jobrank + peer_n;
   }
+
+  // Build upcxx::local_team()
+  new(&detail::the_local_team.raw) upcxx::team(
+    detail::internal_only(),
+    backend::local_peer_lb,
+    backend::local_peer_ub
+  );
   
   local_mem_local_minus_remote.reset(new uintptr_t[peer_n]);
   local_mem_vbase.reset(new uintptr_t[peer_n]);
@@ -299,6 +313,9 @@ void upcxx::finalize() {
     return;
   
   upcxx::barrier();
+
+  detail::the_world_team.destruct();
+  detail::the_local_team.destruct();
   
   if(backend::initial_master_scope != nullptr)
     delete backend::initial_master_scope;

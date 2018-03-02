@@ -16,12 +16,6 @@
 
 namespace upcxx {
   //////////////////////////////////////////////////////////////////////////////
-  
-  namespace detail {
-    struct global_ptr_ctor_internal{};
-  }
-  
-  //////////////////////////////////////////////////////////////////////////////
   // global_ptr
   
   template<typename T>
@@ -54,10 +48,7 @@ namespace upcxx {
       }
     }
     
-    explicit global_ptr(
-        detail::global_ptr_ctor_internal,
-        intrank_t rank, T *raw
-      ):
+    explicit global_ptr(detail::internal_only, intrank_t rank, T *raw):
       rank_{rank},
       raw_ptr_{raw} {
     }

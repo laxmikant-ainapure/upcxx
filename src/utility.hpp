@@ -109,6 +109,42 @@ namespace upcxx {
   };
   
   //////////////////////////////////////////////////////////////////////
+  // raw_storage<T>: Like std::aligned_storage, except more convenient to work
+  // with. The typed value exists in the `value` member, but isnt implicitly
+  // constructed. Construction should be done by user with placement new like:
+  //   `new(&raw.value) T{...}`.
+  // Also, the value won't be implicilty destructed either. That too is the user's
+  // responsibility.
+  
+  template<typename T>
+  union raw_storage {
+    typename std::aligned_storage<sizeof(T), alignof(T)>::type raw;
+    T value;
+    
+    raw_storage() {};
+    ~raw_storage() {};
+    
+    // Copy/assignment happen on the flat bytes of T.
+    raw_storage(raw_storage const &that): raw{that.raw} {}
+    raw_storage& operator=(raw_storage const &that) {
+      this->raw = that.raw;
+      return *this;
+    }
+
+    // Invoke value's destructor.
+    void destruct() {
+      value.~T();
+    }
+
+    // Move value out into a temporary and destruct it.
+    T value_and_destruct() {
+      T ans{std::move(value)};
+      value.~T();
+      return ans;
+    }
+  };
+
+  //////////////////////////////////////////////////////////////////////
   // trait_forall: logical conjunction of one trait applied to
   // variadically-many argument types.
   

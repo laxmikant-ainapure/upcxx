@@ -2,4 +2,8 @@
 
 namespace detail = upcxx::detail;
 
-detail::local_team detail::the_local_team{detail::local_team_internal_ctor()};
+using upcxx::team;
+using upcxx::raw_storage;
+
+raw_storage<team> detail::the_world_team;
+raw_storage<team> detail::the_local_team;

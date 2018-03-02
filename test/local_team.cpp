@@ -23,6 +23,9 @@ int main() {
     std::cout<<"local_team.rank_n() = "<<locals.rank_n()<<'\n';
   upcxx::barrier();
 
+  UPCXX_ASSERT_ALWAYS(upcxx::world().rank_n() == upcxx::rank_n());
+  UPCXX_ASSERT_ALWAYS(upcxx::world().rank_me() == upcxx::rank_me());
+  
   UPCXX_ASSERT_ALWAYS(global_ptr<float>(nullptr).local() == nullptr);
 
   intrank_t peer_me = locals.rank_me();
@@ -44,6 +47,8 @@ int main() {
     for(int remote: some_remotes) {
       UPCXX_ASSERT_ALWAYS(locals.from_world(remote, -0xbeef) == -0xbeef);
       UPCXX_ASSERT_ALWAYS(!upcxx::local_team_contains(remote));
+
+      UPCXX_ASSERT_ALWAYS(upcxx::world().from_world(remote, -0xdad) == remote);
     }
   }
   

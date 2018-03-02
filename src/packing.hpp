@@ -49,20 +49,6 @@
 #endif
 
 namespace upcxx {
-  template<typename T>
-  union raw_storage {
-    typename std::aligned_storage<sizeof(T), alignof(T)>::type raw;
-    T value;
-    
-    raw_storage() {}
-    raw_storage(raw_storage const &that): raw{that.raw} {}
-    raw_storage& operator=(raw_storage const &that) {
-      this->raw = that.raw;
-      return *this;
-    }
-    ~raw_storage() {}
-  };
-  
   //////////////////////////////////////////////////////////////////////
   // parcel_layout: Used for accumulating the size and alignment of
   // packed data as well as determining the position of packed items.
