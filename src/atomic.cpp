@@ -44,7 +44,7 @@ static std::string atomic_op_str[] = {
 #define SET_GEX_OP(T, GT) \
 template<> \
 void upcxx::detail::call_gex_AD_OpNB<T>(uintptr_t ad, T *p, \
-        upcxx::global_ptr<T> gp, atomic::AOP opcode, int allowed_ops, T val1, T val2, \
+        upcxx::global_ptr<T> gp, atomic::aop_type opcode, int allowed_ops, T val1, T val2, \
         std::memory_order order, gasnet::handle_cb *cb) { \
   int aop_gex = to_gex_op_map[opcode]; \
   UPCXX_ASSERT(aop_gex & allowed_ops, \

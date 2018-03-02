@@ -46,7 +46,7 @@ void test_fetch_add(global_ptr<int64_t> target_counter, bool use_atomics, domain
     } else {
       // This should cause an assert failure
       //auto prev = dom.fsub(target_counter, (int64_t)1).wait();
-      auto prev = dom.fadd(target_counter, (int64_t)1).wait();
+      auto prev = dom.fetch_add(target_counter, (int64_t)1).wait();
       UPCXX_ASSERT_ALWAYS(prev >= 0 && prev < rank_n() * ITERS, 
               "atomic::fetch_add result out of range");
     }
@@ -97,23 +97,20 @@ void test_all_ops(global_ptr<int64_t> target_counter, domain<int64_t> &dom) {
     int64_t v = dom.get(target_counter).wait();
     CHECK_ATOMIC_VAL(v, 42);
     dom.inc(target_counter).wait();
-    // alternative api
-    dom.op<upcxx::atomic::INC>(target_counter, memory_order_relaxed).wait();
-    dom.op<upcxx::atomic::DEC>(target_counter, memory_order_relaxed).wait();
-    v = dom.finc(target_counter).wait();
+    v = dom.fetch_inc(target_counter).wait();
     CHECK_ATOMIC_VAL(v, 43);
     dom.dec(target_counter).wait();
-    v = dom.fdec(target_counter).wait();
+    v = dom.fetch_dec(target_counter).wait();
     CHECK_ATOMIC_VAL(v, 43);
     dom.add(target_counter, 7).wait();
-    v = dom.fadd(target_counter, 5).wait();
+    v = dom.fetch_add(target_counter, 5).wait();
     CHECK_ATOMIC_VAL(v, 49);
     dom.sub(target_counter, 3).wait();
-    v = dom.fsub(target_counter, 2).wait();
+    v = dom.fetch_sub(target_counter, 2).wait();
     CHECK_ATOMIC_VAL(v, 51);
-    v = dom.cswap(target_counter, 49, 42).wait();
+    v = dom.exchange(target_counter, 49, 42).wait();
     CHECK_ATOMIC_VAL(v, 49);
-    v = dom.cswap(target_counter, 0, 3).wait();
+    v = dom.exchange(target_counter, 0, 3).wait();
     CHECK_ATOMIC_VAL(v, 42);
   }
   upcxx::barrier();
@@ -122,13 +119,12 @@ void test_all_ops(global_ptr<int64_t> target_counter, domain<int64_t> &dom) {
 int main(int argc, char **argv) {
   upcxx::init();
   
-//  domain<int64_t> ad_i64({upcxx::atomic::GET, upcxx::atomic::SET, upcxx::atomic::FADD});
-  domain<int64_t> ad_i64({upcxx::atomic::GET, upcxx::atomic::SET, 
-          upcxx::atomic::ADD, upcxx::atomic::FADD,
-          upcxx::atomic::SUB, upcxx::atomic::FSUB,          
-          upcxx::atomic::INC, upcxx::atomic::FINC,
-          upcxx::atomic::DEC, upcxx::atomic::FDEC,
-          upcxx::atomic::CSWAP});
+  domain<int64_t> ad_i64({upcxx::atomic::get, upcxx::atomic::set, 
+          upcxx::atomic::add, upcxx::atomic::fetch_add,
+          upcxx::atomic::sub, upcxx::atomic::fetch_sub,          
+          upcxx::atomic::inc, upcxx::atomic::fetch_inc,
+          upcxx::atomic::dec, upcxx::atomic::fetch_dec,
+          upcxx::atomic::exchange});
 
   print_test_header();
   
