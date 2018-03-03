@@ -73,8 +73,8 @@ public:
   {return Iter<ptr_t>::m_ptr ;}
 };
 
-template<typename Frag, typename value_t>
-bool check(Frag start, Frag end, value_t value);
+template<typename Irreg, typename value_t>
+bool check(Irreg start, Irreg end, value_t value);
 
 template<typename Reg, typename value_t>
 bool check(Reg start, Reg end, std::size_t count, value_t value);
@@ -119,7 +119,7 @@ int main() {
   global_ptr<lli> hi=fneighbor_hi.result();
   global_ptr<lli> lo=fneighbor_lo.result();
 
-  // fragmented test 1
+  // irregular test 1
   {
     lli srcTest[]= {me, me+1, me+2, me+3, me+4, me+5};
     std::vector<std::pair<lli*,std::size_t> > svec(1,{srcTest, 6});
@@ -128,7 +128,7 @@ int main() {
     for(int i=0; i<6; i++)
       std::cout<<" "<<srcTest[i];
     std::cout<<"\n";
-    auto f0 = rput_fragmented(svec.begin(), svec.end(), dvec.begin(), dvec.end());
+    auto f0 = rput_irregular(svec.begin(), svec.end(), dvec.begin(), dvec.end());
 
     f0.wait();
     barrier();
@@ -136,13 +136,13 @@ int main() {
     for(int i=0; i<6; i++)
       {
         if(myPtr[i] != nebrLo+i){
-          std::cout<<" simple sequence Fragmented expected "<< nebrLo+i<<" but got "<<myPtr[i]<<"\n";
+          std::cout<<" simple sequence Irregular expected "<< nebrLo+i<<" but got "<<myPtr[i]<<"\n";
           success=false;
         }
       }
   }
-  // fragmented put test 2
-  std::cout<<"\nFragmented test 2 \n";
+  // irregular put test 2
+  std::cout<<"\nIrregular test 2 \n";
   auto fs1 = IterF<lli*>(myPtr+N-B, B, N);
   auto fs1_end = fs1; fs1_end+=M*N;
   auto fd1 = IterF<global_ptr<lli>>(hi, B, N);
@@ -151,7 +151,7 @@ int main() {
   auto fr1_end = fr1; fr1_end+=M*N; 
 
   barrier();
-  auto f1 = rput_fragmented(fs1, fs1_end, fd1, fd1_end);
+  auto f1 = rput_irregular(fs1, fs1_end, fd1, fd1_end);
 
  
   f1.wait();
@@ -163,7 +163,7 @@ int main() {
   
   if(sm != correctAnswer)
     {
-      std::cout<<" Fragmented expected sum:"<<correctAnswer<<" actual sum: "<<sm<<"\n";
+      std::cout<<" Irregular expected sum:"<<correctAnswer<<" actual sum: "<<sm<<"\n";
       success = false;
     }
 
@@ -208,7 +208,7 @@ int main() {
   barrier();
   
   std::cout<<"\nStrided put testing \n";
-  success = success && check(fr1, fr1_end, (lli)nebrLo); // this is moving the same data as in the fragmented case
+  success = success && check(fr1, fr1_end, (lli)nebrLo); // this is moving the same data as in the irregular case
   sm = sum(myPatch);
   correctAnswer = (me*(N-B)+B*nebrLo)*M;
   if(sm != correctAnswer)
@@ -220,8 +220,8 @@ int main() {
   
   //   VIS rget tests
   
-      // fragmented get test 1
-  std::cout<<"Fragmented rget test 1\n";
+      // irregular get test 1
+  std::cout<<"Irregular rget test 1\n";
   lli m=me;
   lli getTest[]= {-m, -m-1, -m-2, -m-3, -m-4, -m-5};
   for(int i=0; i<6; i++)
@@ -235,24 +235,24 @@ int main() {
     std::cout<<" "<<myPtr[i];
   std::cout<<"\n";
   barrier();
-  auto fg0 = rget_fragmented(svec.begin(), svec.end(), dvec.begin(), dvec.end());
+  auto fg0 = rget_irregular(svec.begin(), svec.end(), dvec.begin(), dvec.end());
 
   fg0.wait();
   
   for(int i=0; i<6; i++)
     {
       if(getTest[i] != nebrHi+i){
-        std::cout<<" simple sequence Fragmented get expected "<< nebrHi+i<<" but got "<<getTest[i]<<"\n";
+        std::cout<<" simple sequence Irregular get expected "<< nebrHi+i<<" but got "<<getTest[i]<<"\n";
         success=false;
       }
     }
 
   barrier();
   reset(myPatch, me);
-  std::cout<<"Fragmented rget test 2\n";
+  std::cout<<"Irregular rget test 2\n";
   barrier();
   
-  auto fg2 = rget_fragmented(fd1, fd1_end, fs1, fs1_end);
+  auto fg2 = rget_irregular(fd1, fd1_end, fs1, fs1_end);
 
   fr1 = IterF<lli*>(myPtr+N-B, B, N);
   fr1_end = fr1; fr1_end+=M*N;
@@ -264,7 +264,7 @@ int main() {
   correctAnswer = (me*(N-B)+B*nebrHi)*M;
   if(sm != correctAnswer)
     {
-      std::cout<<" Fragmented get expected sum:"<<correctAnswer<<" actual sum: "<<sm<<"\n";
+      std::cout<<" Irregular get expected sum:"<<correctAnswer<<" actual sum: "<<sm<<"\n";
       success = false;
     }
 
@@ -342,8 +342,8 @@ lli sum(patch_t& patch)
 }
 
 
-template<typename Frag, typename value_t>
-bool check(Frag start, Frag end, value_t value)
+template<typename Irreg, typename value_t>
+bool check(Irreg start, Irreg end, value_t value)
 {
   while(!(start == end))
     {

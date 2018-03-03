@@ -6,7 +6,7 @@
 
 namespace gasnet = upcxx::backend::gasnet;
 
-void upcxx::detail::rma_put_frag_nb(
+void upcxx::detail::rma_put_irreg_nb(
                                     upcxx::intrank_t rank_d,
                                     std::size_t _dstcount,
                                     upcxx::backend::memvec_t const _dstlist[],
@@ -43,7 +43,7 @@ void upcxx::detail::rma_put_frag_nb(
 
 
 
-void upcxx::detail::rma_get_frag_nb(                               
+void upcxx::detail::rma_get_irreg_nb(                               
                                     std::size_t _dstcount,
                                     upcxx::backend::memvec_t const _dstlist[],
                                     upcxx::intrank_t rank_s,

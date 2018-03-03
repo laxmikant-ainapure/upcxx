@@ -18,7 +18,7 @@ namespace upcxx
   namespace detail {
 
       
-    void rma_put_frag_nb(
+    void rma_put_irreg_nb(
                          intrank_t rank_d,
                          std::size_t _dstcount,
                          upcxx::backend::memvec_t const _dstlist[],
@@ -26,7 +26,7 @@ namespace upcxx
                          upcxx::backend::memvec_t const _srclist[],
                          backend::gasnet::handle_cb *source_cb,
                          backend::gasnet::handle_cb *operation_cb);
-    void rma_get_frag_nb(                               
+    void rma_get_irreg_nb(                               
                          std::size_t _dstcount,
                          upcxx::backend::memvec_t const _dstlist[],
                          upcxx::intrank_t rank_s,
@@ -66,10 +66,10 @@ namespace upcxx
     
 
     template<typename CxStateHere, typename CxStateRemote>
-    struct rput_cbs_frag final:
-      rput_cb_source</*FinalType=*/rput_cbs_frag<CxStateHere, CxStateRemote>,
+    struct rput_cbs_irreg final:
+      rput_cb_source</*FinalType=*/rput_cbs_irreg<CxStateHere, CxStateRemote>,
                                    CxStateHere, CxStateRemote>,
-      rput_cb_operation</*FinalType=*/rput_cbs_frag<CxStateHere, CxStateRemote>,
+      rput_cb_operation</*FinalType=*/rput_cbs_irreg<CxStateHere, CxStateRemote>,
                                       CxStateHere, CxStateRemote>
     {
       intrank_t rank_d;
@@ -77,7 +77,7 @@ namespace upcxx
       CxStateRemote state_remote;
       std::vector<upcxx::backend::memvec_t> src;
       std::vector<upcxx::backend::memvec_t> dest;
-      rput_cbs_frag(intrank_t rank_d, CxStateHere here, CxStateRemote remote,
+      rput_cbs_irreg(intrank_t rank_d, CxStateHere here, CxStateRemote remote,
                     std::vector<upcxx::backend::memvec_t>&& src,
                     std::vector<upcxx::backend::memvec_t>&& dest):
         rank_d(rank_d),
@@ -89,7 +89,7 @@ namespace upcxx
       static constexpr bool static_scope = false;
       void initiate()
       {
-        detail::rma_put_frag_nb(rank_d, dest.size(), &(dest[0]),
+        detail::rma_put_irreg_nb(rank_d, dest.size(), &(dest[0]),
                                 src.size(), &(src[0]),
                                 this->source_cb(), this->operation_cb()); 
       }
@@ -128,16 +128,16 @@ namespace upcxx
     };
     
     template<typename CxStateHere, typename CxStateRemote>
-    struct rput_cbs_stride final:
-      rput_cb_source</*FinalType=*/rput_cbs_stride<CxStateHere, CxStateRemote>,
+    struct rput_cbs_strided final:
+      rput_cb_source</*FinalType=*/rput_cbs_strided<CxStateHere, CxStateRemote>,
                                    CxStateHere, CxStateRemote>,
-      rput_cb_operation</*FinalType=*/rput_cbs_stride<CxStateHere, CxStateRemote>,
+      rput_cb_operation</*FinalType=*/rput_cbs_strided<CxStateHere, CxStateRemote>,
                                       CxStateHere, CxStateRemote>
     {
       intrank_t rank_d;
       CxStateHere state_here;
       CxStateRemote state_remote;
-      rput_cbs_stride(intrank_t rank_d, CxStateHere here, CxStateRemote remote):
+      rput_cbs_strided(intrank_t rank_d, CxStateHere here, CxStateRemote remote):
         rank_d(rank_d),
         state_here(std::move(here)),
         state_remote(std::move(remote))
@@ -159,18 +159,18 @@ namespace upcxx
     };
     
     template<typename CxStateHere, typename CxStateRemote>
-    struct rget_cb_frag final: rget_cb_remote<CxStateRemote>, backend::gasnet::handle_cb {
+    struct rget_cb_irreg final: rget_cb_remote<CxStateRemote>, backend::gasnet::handle_cb {
       CxStateHere state_here;
       std::vector<upcxx::backend::memvec_t> src;
       std::vector<upcxx::backend::memvec_t> dest;
-      rget_cb_frag(intrank_t rank_s, CxStateHere here, CxStateRemote remote,
+      rget_cb_irreg(intrank_t rank_s, CxStateHere here, CxStateRemote remote,
                    std::vector<upcxx::backend::memvec_t>&& Src,
                    std::vector<upcxx::backend::memvec_t>&& Dest)
         : rget_cb_remote<CxStateRemote>{rank_s, std::move(remote)},
         state_here{std::move(here)}, src(Src), dest(Dest) { }
       void initiate(intrank_t rank_s)
       {
-        detail::rma_get_frag_nb(dest.size(), &(dest[0]),
+        detail::rma_get_irreg_nb(dest.size(), &(dest[0]),
                                 rank_s  ,src.size(), &(src[0]),
                                 this);
       }
@@ -241,7 +241,7 @@ namespace upcxx
     /*EventPredicate=*/detail::event_is_here,
     /*EventValues=*/detail::rput_event_values,
     Cxs>::return_t  
-  rput_fragmented(
+  rput_irregular(
                   SrcIter src_runs_begin, SrcIter src_runs_end,
                   DestIter dst_runs_begin, DestIter dst_runs_end,
                   Cxs cxs=completions<future_cx<operation_cx_event>>{{}})
@@ -290,7 +290,7 @@ namespace upcxx
     
     UPCXX_ASSERT_ALWAYS(dstsize==srcsize);
     
-    detail::rput_cbs_frag<cxs_here_t, cxs_remote_t> cbs_static{
+    detail::rput_cbs_irreg<cxs_here_t, cxs_remote_t> cbs_static{
       gpdrank,
         cxs_here_t(std::move(cxs)),
         cxs_remote_t(std::move(cxs)),
@@ -319,10 +319,10 @@ namespace upcxx
       /*EventValues=*/detail::rget_byref_event_values,
       Cxs
     >::return_t
-    rget_fragmented(
-                            SrcIter src_runs_begin, SrcIter src_runs_end,
-                            DestIter dst_runs_begin, DestIter dst_runs_end,
-                            Cxs cxs=completions<future_cx<operation_cx_event>>{{}})
+    rget_irregular(
+                   SrcIter src_runs_begin, SrcIter src_runs_end,
+                   DestIter dst_runs_begin, DestIter dst_runs_end,
+                   Cxs cxs=completions<future_cx<operation_cx_event>>{{}})
   {
     UPCXX_ASSERT_ALWAYS((detail::completions_has_event<Cxs, operation_cx_event>::value));
     //static_assert(std::is_same<decltype((std::get<0>(*src_runs_begin)).raw_ptr_),decltype(std::get<0>(*dst_runs_begin))>::value, "type mismatch");
@@ -362,7 +362,7 @@ namespace upcxx
       }
     
     UPCXX_ASSERT_ALWAYS(dstsize==srcsize);
-    auto *cb = new detail::rget_cb_frag<cxs_here_t,cxs_remote_t>{
+    auto *cb = new detail::rget_cb_irreg<cxs_here_t,cxs_remote_t>{
       rank_s,
       cxs_here_t{std::move(cxs)},
       cxs_remote_t{std::move(cxs)},
@@ -512,8 +512,6 @@ namespace upcxx
       >{cb->state_here};
 
     cb->initiate(rank_s, src_run_length*tsize, dst_run_length*tsize);
-
-    
     return returner();
   }
 
@@ -542,7 +540,7 @@ namespace upcxx
       /*EventValues=*/detail::rput_event_values,
       Cxs>;
 
-    detail::rput_cbs_stride<cxs_here_t, cxs_remote_t> cbs_static{
+    detail::rput_cbs_strided<cxs_here_t, cxs_remote_t> cbs_static{
       dest_base.rank_,
       cxs_here_t{std::move(cxs)},
       cxs_remote_t{std::move(cxs)}
