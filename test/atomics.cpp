@@ -125,7 +125,10 @@ int main(int argc, char **argv) {
           upcxx::atomic::inc, upcxx::atomic::fetch_inc,
           upcxx::atomic::dec, upcxx::atomic::fetch_dec,
           upcxx::atomic::exchange});
-
+   
+  // uncomment to evaluate compile-time error checking
+//  domain<const int> ad_cint({upcxx::atomic::get});
+//  domain<short> ad_short({upcxx::atomic::get});
   print_test_header();
   
   if (rank_me() == TARGET_RANK) counter = upcxx::allocate<int64_t>();
