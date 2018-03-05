@@ -2,6 +2,8 @@
 #define _4fd2caba_e406_4f0e_ab34_0e0224ec36a5
 
 #include <vector>
+#include <climits>
+#include <type_traits>
 #include <upcxx/backend.hpp>
 #include <upcxx/completion.hpp>
 #include <upcxx/global_ptr.hpp>
@@ -83,9 +85,17 @@ namespace upcxx {
         detail::nofetch_aop_event_values, Cxs>::return_t;
     using FUTURE_CX = completions<future_cx<operation_cx_event> >;
 
+    // for checking type is 32 or 64-bit non-const integral type
+    template<typename T>
+    struct is_atomic : std::integral_constant<bool,
+        (std::is_integral<T>::value && !std::is_const<T>::value &&
+        (sizeof(T) * CHAR_BIT == 32 || sizeof(T) * CHAR_BIT == 64))> {};
+
     // Atomic domain for an ?int*_t type.
     template<typename T>
     class domain {
+      static_assert(is_atomic<T>::value,
+          "Atomic domains only supported on non-const 32- and 64-bit integral types");
       private:
         // The opaque gasnet atomic domain handle.
         uintptr_t ad_gex;
