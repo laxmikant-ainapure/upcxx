@@ -17,15 +17,6 @@ namespace upcxx {
                                dec, fetch_dec,
                                compare_exchange };
 
-  namespace detail {
-
-    void init_atomic_domain(std::vector<atomic_op> ops, int flags, uintptr_t *ad_gex_handle,
-                            int *atomic_gex_ops, size_t isize, bool isigned);
-
-    void destroy_atomic_domain(uintptr_t &ad_gex_handle);
-
-  }
-
   // Atomic domain for an ?int*_t type.
   template<typename T>
   class atomic_domain {
@@ -96,7 +87,7 @@ namespace upcxx {
           nofetch_aop_event_values, Cxs>::return_t;
       using FUTURE_CX = completions<future_cx<operation_cx_event> >;
 
-      // fetching operations
+      // generic fetching atomic operation
       template<atomic_op aop, typename Cxs = FUTURE_CX>
       FETCH_RTYPE<Cxs> fop(global_ptr<T> gptr, std::memory_order order, T val1 = 0, T val2 = 0,
                               Cxs cxs = FUTURE_CX{{}}) {
@@ -113,7 +104,7 @@ namespace upcxx {
         return returner();
       }
 
-      // Generic non-fetching atomic operation. This can take 0, 1 or 2 operands.
+      // generic non-fetching atomic operation
       template<atomic_op aop, typename Cxs = FUTURE_CX>
       NOFETCH_RTYPE<Cxs> op(global_ptr<T> gptr, std::memory_order order, T val1 = 0, T val2 = 0,
                             Cxs cxs = FUTURE_CX{{}}) {
@@ -131,17 +122,10 @@ namespace upcxx {
       }
 
     public:
-      // The constructor takes a vector of operations. Currently, flags is unsupported.
-      atomic_domain(std::vector<atomic_op> ops, int flags = 0) {
-        UPCXX_ASSERT_ALWAYS(!ops.empty(),
-                            "Need to specify at least one atomic_op for the atomic_domain");
-        detail::init_atomic_domain(ops, flags, &ad_gex_handle, &atomic_gex_ops, sizeof(T),
-                                   std::is_signed<T>::value);
-      }
+      // The constructor takes a vector of operations. Currently, flags is currently unsupported.
+      atomic_domain(std::vector<atomic_op> ops, int flags = 0);
 
-      ~atomic_domain() {
-        detail::destroy_atomic_domain(ad_gex_handle);
-      }
+      ~atomic_domain();
 
       template<typename Cxs = FUTURE_CX>
       NOFETCH_RTYPE<Cxs> store(global_ptr<T> gptr, T val,
