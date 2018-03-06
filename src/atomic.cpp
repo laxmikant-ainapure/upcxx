@@ -7,26 +7,31 @@ namespace gasnet = upcxx::backend::gasnet;
 namespace backend = upcxx::backend;
 
 
-// enum class atomic_op : int
-// { load, store, add, fetch_add, sub, fetch_sub, inc, fetch_inc, dec, fetch_dec, compare_exchange };
-static int to_gex_op_map[] = { 
-  GEX_OP_GET, GEX_OP_SET, GEX_OP_ADD, GEX_OP_FADD, GEX_OP_SUB, GEX_OP_FSUB, 
-  GEX_OP_INC, GEX_OP_FINC, GEX_OP_DEC, GEX_OP_FDEC, GEX_OP_CSWAP };
+namespace {
+  // load, store, add, fetch_add, sub, fetch_sub, inc, fetch_inc, dec, fetch_dec, compare_exchange
+  int to_gex_op_map[] = { 
+    GEX_OP_GET, GEX_OP_SET, GEX_OP_ADD, GEX_OP_FADD, GEX_OP_SUB, GEX_OP_FSUB, 
+    GEX_OP_INC, GEX_OP_FINC, GEX_OP_DEC, GEX_OP_FDEC, GEX_OP_CSWAP };
 
-static int get_gex_flags(std::memory_order order) {
-  int flags = 0;
-  switch (order) {
-    case std::memory_order_acquire: flags |= GEX_FLAG_AD_ACQ; break;
-    case std::memory_order_release: flags |= GEX_FLAG_AD_REL; break;
-    case std::memory_order_acq_rel: flags |= (GEX_FLAG_AD_ACQ | GEX_FLAG_AD_REL); break;
-    case std::memory_order_relaxed: break;
-    case std::memory_order_seq_cst:
-      UPCXX_ASSERT(0, "Unsupported memory order: std::memory_order_seq_cst");
-    case std::memory_order_consume:
-      UPCXX_ASSERT(0, "Unsupported memory order: std::memory_order_consume");
-      break;
+  int get_gex_flags(std::memory_order order) {
+    int flags = 0;
+    switch (order) {
+      case std::memory_order_acquire: flags |= GEX_FLAG_AD_ACQ; break;
+      case std::memory_order_release: flags |= GEX_FLAG_AD_REL; break;
+      case std::memory_order_acq_rel: flags |= (GEX_FLAG_AD_ACQ | GEX_FLAG_AD_REL); break;
+      case std::memory_order_relaxed: break;
+      case std::memory_order_seq_cst:
+        UPCXX_ASSERT(0, "Unsupported memory order: std::memory_order_seq_cst");
+      case std::memory_order_consume:
+        UPCXX_ASSERT(0, "Unsupported memory order: std::memory_order_consume");
+        break;
+    }
+    return flags;
   }
-  return flags;
+
+  std::string atomic_op_str[] = {
+    "LOAD", "STORE", "ADD", "FETCH_ADD", "SUB", "FETCH_SUB", "INC", "FETCH_INC", 
+    "DEC", "FETCH_DEC", "COCMPARE_EXCHANGE" };
 }
 
 gex_DT_t get_gex_dt(size_t isize, bool isigned) {
@@ -38,8 +43,6 @@ gex_DT_t get_gex_dt(size_t isize, bool isigned) {
   return 0;
 }
 
-static std::string atomic_op_str[] = {
-  "GET", "SET", "ADD", "FADD", "SUB", "FSUB", "INC", "FINC", "DEC", "FDEC", "CSWAP" };
 
 // wrapper around gasnet function
 // Specializers that wrap the gasnet integer type operations.
@@ -58,12 +61,16 @@ void upcxx::detail::call_gex_AD_OpNB<T>(uintptr_t ad, T *p, \
   gasnet::register_cb(cb); \
   gasnet::after_gasnet(); \
 }
-
 SET_GEX_OP(int32_t, I32);
 SET_GEX_OP(int64_t, I64);
 SET_GEX_OP(uint32_t, U32);
 SET_GEX_OP(uint64_t, U64);
+//SET_GEX_OP(long long, I64);
 
+// this nested call is defined here to encapsulate gasnet backend calls and keep them out of the 
+// .hpp file. The constructor is kept in the .hpp file to avoid explicit template instantiation
+// of specific integral types in the .cpp file.
+// Note that this function is not templated.
 void upcxx::detail::init_atomic_domain(std::vector<atomic_op> ops, int flags,
         uintptr_t *ad_gex, int *aops_gex, size_t isize, bool isigned) {
   (*aops_gex) = 0;
