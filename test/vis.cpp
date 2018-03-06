@@ -86,6 +86,8 @@ void reset(patch_t& patch, lli value);
 
 lli sum(patch_t& patch);
 
+typedef std::array<int,2> count_t;
+
 int main() {
 
   init();
@@ -103,7 +105,9 @@ int main() {
   // different communication protocols
   patch_t* myPatchPtr = (patch_t*)allocate(sizeof(patch_t));
   dist_object<global_ptr<lli> > mesh(global_ptr<lli>((lli*)myPatchPtr));
+  dist_object<count_t>  counters(count_t({{0,0}}));
 
+  count_t& mycount = *counters;// read from me, write to me
   lli*  myPtr = (*mesh).local();
   patch_t& myPatch = *myPatchPtr;
 
@@ -128,11 +132,23 @@ int main() {
     for(int i=0; i<6; i++)
       std::cout<<" "<<srcTest[i];
     std::cout<<"\n";
-    auto f0 = rput_irregular(svec.begin(), svec.end(), dvec.begin(), dvec.end());
+    auto f0 = rput_irregular(svec.begin(), svec.end(),
+                             dvec.begin(), dvec.end(),
+                             // remote_cx::as_rpc([](dist_object<count_t>& c) {
+                             //     std::cout<<"here I am on rank "<< rank_me()<<"\n";}) |
+                             operation_cx::as_future()
+                             );
 
+    mycount[0]++;  //reading from myself
     f0.wait();
     barrier();
-  
+
+    //   if(mycount[1] != 1)
+    //     {
+    //       std::cout<<"missed remote write count on rput_irregular\n";
+    //      success=false;
+    //    }
+   
     for(int i=0; i<6; i++)
       {
         if(myPtr[i] != nebrLo+i){
