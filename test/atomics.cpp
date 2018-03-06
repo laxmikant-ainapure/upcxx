@@ -128,15 +128,22 @@ int main(int argc, char **argv) {
           upcxx::atomic_op::compare_exchange});
    
   // uncomment to evaluate compile-time error checking
-//  domain<const int> ad_cint({upcxx::atomic::get});
-/*
-  if (rank_me() == 0) cout << "long long: ";
-  domain<long long> ad_ll({upcxx::atomic::get});
-  if (rank_me() == 0) cout << "long: ";
-  domain<long> ad_l({upcxx::atomic::get});
-  if (rank_me() == 0) cout << "unsigned int: ";
-  domain<unsigned int> ad_ui({upcxx::atomic::get});
-*/  
+  //upcxx::atomic_domain<const int> ad_cint({upcxx::atomic_op::get});
+  // test non-fixed-width domains
+
+
+//  upcxx::atomic_domain<unsigned> ad_ui({upcxx::atomic_op::store});
+//  global_ptr<unsigned> y;
+//  ad_ui.store(y, (unsigned)0);
+          
+//  upcxx::atomic_domain<long long> ad_ll({upcxx::atomic_op::store});
+//  global_ptr<long long> x = upcxx::allocate<long long>();
+//}  ad_ll.store(x, (long long)0);
+
+  upcxx::atomic_domain<long> ad_l({upcxx::atomic_op::store});
+  global_ptr<long> z = upcxx::allocate<long>();
+  ad_l.store(z, (long)0).wait();
+
   print_test_header();
   
   if (rank_me() == TARGET_RANK) counter = upcxx::allocate<int64_t>();
