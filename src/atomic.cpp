@@ -33,14 +33,16 @@ namespace {
     return flags;
   }
 
-  gex_DT_t get_gex_dt(size_t isize, bool isigned) {
-    if (isize * CHAR_BIT == 32 && isigned) return GEX_DT_I32;
-    if (isize * CHAR_BIT == 64 && isigned) return GEX_DT_I64;
-    if (isize * CHAR_BIT == 32 && !isigned) return GEX_DT_U32;
-    if (isize * CHAR_BIT == 64 && !isigned) return GEX_DT_U64;
-    UPCXX_ASSERT_ALWAYS(0, "Unsupported atomic type");
-    return 0;
-  }
+  template<typename T>
+  gex_DT_t get_gex_dt();
+  template<>
+  gex_DT_t get_gex_dt<int32_t>() { return GEX_DT_I32; }
+  template<>
+  gex_DT_t get_gex_dt<uint32_t>() { return GEX_DT_U32; }
+  template<>
+  gex_DT_t get_gex_dt<int64_t>() { return GEX_DT_I64; }
+  template<>
+  gex_DT_t get_gex_dt<uint64_t>() { return GEX_DT_U64; }
 }
 
 
@@ -74,7 +76,7 @@ upcxx::atomic_domain<T>::atomic_domain(std::vector<atomic_op> ops, int flags) {
   for (auto next_op : ops) atomic_gex_ops |= to_gex_op_map[static_cast<int>(next_op)];
   // Create the gasnet atomic domain for the world team.
   gex_AD_Create(reinterpret_cast<gex_AD_t*>(&ad_gex_handle), gasnet::world_team, 
-                get_gex_dt(sizeof(T), std::is_signed<T>::value), atomic_gex_ops, flags);
+                get_gex_dt<T>(), atomic_gex_ops, flags);
 }
 
 template<typename T>
