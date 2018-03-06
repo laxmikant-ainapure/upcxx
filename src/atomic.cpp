@@ -62,26 +62,30 @@ void upcxx::atomic_domain<T>::call_gex_AD_OpNB(T *p, upcxx::global_ptr<T> gp, \
 }
 
 SET_GEX_OP(int32_t, I32);
-SET_GEX_OP(int64_t, I64);
 SET_GEX_OP(uint32_t, U32);
+SET_GEX_OP(int64_t, I64);
 SET_GEX_OP(uint64_t, U64);
 
-// this nested call is defined here to encapsulate gasnet backend calls and keep them out of the 
-// .hpp file. The constructor is kept in the .hpp file to avoid explicit template instantiation
-// of specific integral types in the .cpp file.
-// Note that this function is not templated.
-void upcxx::detail::init_atomic_domain(std::vector<atomic_op> ops, int flags,
-        uintptr_t *ad_gex_handle, int *atomic_gex_ops, size_t isize, bool isigned) {
-  (*atomic_gex_ops) = 0;
-  for (auto next_op : ops) (*atomic_gex_ops) |= to_gex_op_map[static_cast<int>(next_op)];
+template<typename T>
+upcxx::atomic_domain<T>::atomic_domain(std::vector<atomic_op> ops, int flags) {
+  UPCXX_ASSERT_ALWAYS(!ops.empty(),
+                      "Need to specify at least one atomic_op for the atomic_domain");
+  atomic_gex_ops = 0;
+  for (auto next_op : ops) atomic_gex_ops |= to_gex_op_map[static_cast<int>(next_op)];
   // Create the gasnet atomic domain for the world team.
-  gex_AD_Create(reinterpret_cast<gex_AD_t*>(ad_gex_handle), gasnet::world_team, 
-                get_gex_dt(isize, isigned), *atomic_gex_ops, flags);
+  gex_AD_Create(reinterpret_cast<gex_AD_t*>(&ad_gex_handle), gasnet::world_team, 
+                get_gex_dt(sizeof(T), std::is_signed<T>::value), atomic_gex_ops, flags);
 }
 
-void upcxx::detail::destroy_atomic_domain(uintptr_t &ad_gex_handle) {
+template<typename T>
+upcxx::atomic_domain<T>::~atomic_domain() {
   // Destroy the gasnet atomic domain
   gex_AD_Destroy(reinterpret_cast<gex_AD_t>(ad_gex_handle));
 }
+
+template class upcxx::atomic_domain<int32_t>;
+template class upcxx::atomic_domain<uint32_t>;
+template class upcxx::atomic_domain<int64_t>;
+template class upcxx::atomic_domain<uint64_t>;
 
 

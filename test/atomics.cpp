@@ -129,20 +129,33 @@ int main(int argc, char **argv) {
    
   // uncomment to evaluate compile-time error checking
   //upcxx::atomic_domain<const int> ad_cint({upcxx::atomic_op::get});
-  // test non-fixed-width domains
 
-
-//  upcxx::atomic_domain<unsigned> ad_ui({upcxx::atomic_op::store});
-//  global_ptr<unsigned> y;
-//  ad_ui.store(y, (unsigned)0);
+  // check non-fixed-width supported integer types
+  upcxx::atomic_domain<int> ad_i({upcxx::atomic_op::store});
+  global_ptr<int> xi = upcxx::allocate<int>();
+  ad_i.store(xi, (int)0);
+  
+  upcxx::atomic_domain<unsigned int> ad_ui({upcxx::atomic_op::store});
+  global_ptr<unsigned int> xui = upcxx::allocate<unsigned int>();
+  ad_ui.store(xui, (unsigned)0);
           
-//  upcxx::atomic_domain<long long> ad_ll({upcxx::atomic_op::store});
-//  global_ptr<long long> x = upcxx::allocate<long long>();
-//}  ad_ll.store(x, (long long)0);
-
   upcxx::atomic_domain<long> ad_l({upcxx::atomic_op::store});
-  global_ptr<long> z = upcxx::allocate<long>();
-  ad_l.store(z, (long)0).wait();
+  global_ptr<long> xl = upcxx::allocate<long>();
+  ad_l.store(xl, (long)0);
+  
+  upcxx::atomic_domain<unsigned long> ad_ul({upcxx::atomic_op::store});
+  global_ptr<unsigned long> xul = upcxx::allocate<unsigned long>();
+  ad_ul.store(xul, (unsigned long)0);
+          
+  /* long long doesn't work - it requires casts 
+  upcxx::atomic_domain<long long> ad_ll({upcxx::atomic_op::store});
+  global_ptr<long long> xll;
+  ad_ll.store(xll, (long long)0);
+  
+  upcxx::atomic_domain<unsigned long long> ad_ull({upcxx::atomic_op::store});
+  global_ptr<unsigned long long> xull;
+  ad_ul.store(xul, (unsigned long long)0);
+  */
 
   print_test_header();
   
