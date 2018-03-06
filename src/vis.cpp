@@ -9,9 +9,9 @@ namespace gasnet = upcxx::backend::gasnet;
 void upcxx::detail::rma_put_irreg_nb(
                                     upcxx::intrank_t rank_d,
                                     std::size_t _dstcount,
-                                    upcxx::backend::memvec_t const _dstlist[],
+                                    upcxx::detail::memvec_t const _dstlist[],
                                     std::size_t _srccount,
-                                    upcxx::backend::memvec_t const _srclist[],
+                                    upcxx::detail::memvec_t const _srclist[],
                                     backend::gasnet::handle_cb *source_cb,
                                     backend::gasnet::handle_cb *operation_cb)
 {
@@ -45,10 +45,10 @@ void upcxx::detail::rma_put_irreg_nb(
 
 void upcxx::detail::rma_get_irreg_nb(                               
                                     std::size_t _dstcount,
-                                    upcxx::backend::memvec_t const _dstlist[],
+                                    upcxx::detail::memvec_t const _dstlist[],
                                     upcxx::intrank_t rank_s,
                                     std::size_t _srccount,
-                                    upcxx::backend::memvec_t const _srclist[],
+                                    upcxx::detail::memvec_t const _srclist[],
                                     backend::gasnet::handle_cb *operation_cb)
 {
 

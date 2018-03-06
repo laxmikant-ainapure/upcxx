@@ -14,24 +14,28 @@
 
 namespace upcxx
 {
-
+  
   namespace detail {
 
-      
+    typedef struct {
+      void  *gex_addr;  // TODO: When gasnet changes Memvec we need to track it
+      size_t gex_len;
+    } memvec_t;
+    
     void rma_put_irreg_nb(
                          intrank_t rank_d,
                          std::size_t _dstcount,
-                         upcxx::backend::memvec_t const _dstlist[],
+                         upcxx::detail::memvec_t const _dstlist[],
                          std::size_t _srcount,
-                         upcxx::backend::memvec_t const _srclist[],
+                         upcxx::detail::memvec_t const _srclist[],
                          backend::gasnet::handle_cb *source_cb,
                          backend::gasnet::handle_cb *operation_cb);
     void rma_get_irreg_nb(                               
                          std::size_t _dstcount,
-                         upcxx::backend::memvec_t const _dstlist[],
+                         upcxx::detail::memvec_t const _dstlist[],
                          upcxx::intrank_t rank_s,
                          std::size_t _srccount,
-                         upcxx::backend::memvec_t const _srclist[],
+                         upcxx::detail::memvec_t const _srclist[],
                          backend::gasnet::handle_cb *operation_cb);
     
     
@@ -75,11 +79,11 @@ namespace upcxx
       intrank_t rank_d;
       CxStateHere state_here;
       CxStateRemote state_remote;
-      std::vector<upcxx::backend::memvec_t> src;
-      std::vector<upcxx::backend::memvec_t> dest;
+      std::vector<upcxx::detail::memvec_t> src;
+      std::vector<upcxx::detail::memvec_t> dest;
       rput_cbs_irreg(intrank_t rank_d, CxStateHere here, CxStateRemote remote,
-                    std::vector<upcxx::backend::memvec_t>&& src,
-                    std::vector<upcxx::backend::memvec_t>&& dest):
+                     std::vector<upcxx::detail::memvec_t>&& src,
+                     std::vector<upcxx::detail::memvec_t>&& dest):
         rank_d(rank_d),
         state_here(std::move(here)),
         state_remote(std::move(remote)),
@@ -161,11 +165,11 @@ namespace upcxx
     template<typename CxStateHere, typename CxStateRemote>
     struct rget_cb_irreg final: rget_cb_remote<CxStateRemote>, backend::gasnet::handle_cb {
       CxStateHere state_here;
-      std::vector<upcxx::backend::memvec_t> src;
-      std::vector<upcxx::backend::memvec_t> dest;
+      std::vector<upcxx::detail::memvec_t> src;
+      std::vector<upcxx::detail::memvec_t> dest;
       rget_cb_irreg(intrank_t rank_s, CxStateHere here, CxStateRemote remote,
-                   std::vector<upcxx::backend::memvec_t>&& Src,
-                   std::vector<upcxx::backend::memvec_t>&& Dest)
+                   std::vector<upcxx::detail::memvec_t>&& Src,
+                   std::vector<upcxx::detail::memvec_t>&& Dest)
         : rget_cb_remote<CxStateRemote>{rank_s, std::move(remote)},
         state_here{std::move(here)}, src(Src), dest(Dest) { }
       void initiate(intrank_t rank_s)
@@ -260,7 +264,7 @@ namespace upcxx
       /*EventValues=*/detail::rput_event_values,
       Cxs>;
 
-    std::vector<upcxx::backend::memvec_t>  src, dest;
+    std::vector<upcxx::detail::memvec_t>  src, dest;
     std::size_t srccount=0;
     std::size_t srcsize=0;
     std::size_t dstcount=0;
@@ -343,7 +347,7 @@ namespace upcxx
     constexpr std::size_t tsize=sizeof(*std::get<0>(*dst_runs_begin));
     srccount = std::distance(src_runs_begin, src_runs_end);
     dstcount = std::distance(dst_runs_begin, dst_runs_end);
-    std::vector<upcxx::backend::memvec_t> src(srccount), dest(dstcount);
+    std::vector<upcxx::detail::memvec_t> src(srccount), dest(dstcount);
     auto sv=src.begin();
     auto dv=dest.begin();
     for(SrcIter s=src_runs_begin; !(s==src_runs_end); ++s,++sv)
