@@ -17,14 +17,15 @@ using upcxx::rank_me;
 using upcxx::rank_n;
 using upcxx::barrier;
 using upcxx::global_ptr;
-using upcxx::atomic::domain;
+
 
 const int ITERS = 10;
 global_ptr<int64_t> counter;
 // let's all hit the same rank
 const upcxx::intrank_t TARGET_RANK = 0;
 
-void test_fetch_add(global_ptr<int64_t> target_counter, bool use_atomics, domain<int64_t> &dom) {
+void test_fetch_add(global_ptr<int64_t> target_counter, bool use_atomics, 
+                    upcxx::atomic_domain<int64_t> &dom) {
   int expected_val = rank_n() * ITERS;
   if (rank_me() == 0) {
     if (!use_atomics) {
@@ -35,7 +36,7 @@ void test_fetch_add(global_ptr<int64_t> target_counter, bool use_atomics, domain
     }
     
     // always use atomics to access or modify counter - alternative API
-    dom.set(target_counter, (int64_t)0).wait();
+    dom.store(target_counter, (int64_t)0).wait();
   }
   barrier();
   for (int i = 0; i < ITERS; i++) {
@@ -64,18 +65,18 @@ void test_fetch_add(global_ptr<int64_t> target_counter, bool use_atomics, domain
   barrier();
 }
 
-void test_put_get(global_ptr<int64_t> target_counter, domain<int64_t> &dom) {
+void test_put_get(global_ptr<int64_t> target_counter, upcxx::atomic_domain<int64_t> &dom) {
   if (rank_me() == 0) {
     cout << "Test puts and gets: expect a random rank number" << endl;
     // always use atomics to access or modify counter
-    dom.set(target_counter, (int64_t)0).wait();
+    dom.store(target_counter, (int64_t)0).wait();
   }
   barrier();
   
   for (int i = 0; i < ITERS * 10; i++) {
-    auto v = dom.get(target_counter).wait();    
+    auto v = dom.load(target_counter).wait();    
     UPCXX_ASSERT_ALWAYS(v >=0 && v < rank_n(), "atomic_get out of range: " << v);
-    dom.set(target_counter, (int64_t)rank_me()).wait();
+    dom.store(target_counter, (int64_t)rank_me()).wait();
   }
   
   barrier();
@@ -91,10 +92,10 @@ void test_put_get(global_ptr<int64_t> target_counter, domain<int64_t> &dom) {
 
 #define CHECK_ATOMIC_VAL(v, V) UPCXX_ASSERT_ALWAYS(v == V, "expected " << V << ", got " << v);
 
-void test_all_ops(global_ptr<int64_t> target_counter, domain<int64_t> &dom) {
+void test_all_ops(global_ptr<int64_t> target_counter, upcxx::atomic_domain<int64_t> &dom) {
   if (upcxx::rank_me() == 0) {
-    dom.set(target_counter, (int64_t)42).wait();
-    int64_t v = dom.get(target_counter).wait();
+    dom.store(target_counter, (int64_t)42).wait();
+    int64_t v = dom.load(target_counter).wait();
     CHECK_ATOMIC_VAL(v, 42);
     dom.inc(target_counter).wait();
     v = dom.fetch_inc(target_counter).wait();
@@ -108,9 +109,9 @@ void test_all_ops(global_ptr<int64_t> target_counter, domain<int64_t> &dom) {
     dom.sub(target_counter, 3).wait();
     v = dom.fetch_sub(target_counter, 2).wait();
     CHECK_ATOMIC_VAL(v, 51);
-    v = dom.exchange(target_counter, 49, 42).wait();
+    v = dom.compare_exchange(target_counter, 49, 42).wait();
     CHECK_ATOMIC_VAL(v, 49);
-    v = dom.exchange(target_counter, 0, 3).wait();
+    v = dom.compare_exchange(target_counter, 0, 3).wait();
     CHECK_ATOMIC_VAL(v, 42);
   }
   upcxx::barrier();
@@ -119,16 +120,23 @@ void test_all_ops(global_ptr<int64_t> target_counter, domain<int64_t> &dom) {
 int main(int argc, char **argv) {
   upcxx::init();
   
-  domain<int64_t> ad_i64({upcxx::atomic::get, upcxx::atomic::set, 
-          upcxx::atomic::add, upcxx::atomic::fetch_add,
-          upcxx::atomic::sub, upcxx::atomic::fetch_sub,          
-          upcxx::atomic::inc, upcxx::atomic::fetch_inc,
-          upcxx::atomic::dec, upcxx::atomic::fetch_dec,
-          upcxx::atomic::exchange});
+  upcxx::atomic_domain<int64_t> ad_i64({upcxx::atomic_op::load, upcxx::atomic_op::store, 
+          upcxx::atomic_op::add, upcxx::atomic_op::fetch_add,
+          upcxx::atomic_op::sub, upcxx::atomic_op::fetch_sub,          
+          upcxx::atomic_op::inc, upcxx::atomic_op::fetch_inc,
+          upcxx::atomic_op::dec, upcxx::atomic_op::fetch_dec,
+          upcxx::atomic_op::compare_exchange});
    
   // uncomment to evaluate compile-time error checking
 //  domain<const int> ad_cint({upcxx::atomic::get});
-//  domain<short> ad_short({upcxx::atomic::get});
+/*
+  if (rank_me() == 0) cout << "long long: ";
+  domain<long long> ad_ll({upcxx::atomic::get});
+  if (rank_me() == 0) cout << "long: ";
+  domain<long> ad_l({upcxx::atomic::get});
+  if (rank_me() == 0) cout << "unsigned int: ";
+  domain<unsigned int> ad_ui({upcxx::atomic::get});
+*/  
   print_test_header();
   
   if (rank_me() == TARGET_RANK) counter = upcxx::allocate<int64_t>();

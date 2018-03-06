@@ -5,9 +5,10 @@
 
 namespace gasnet = upcxx::backend::gasnet;
 namespace backend = upcxx::backend;
-namespace atomic = upcxx::atomic;
 
-//enum AOP : char { GET, SET, ADD, FADD, SUB, FSUB, INC, FINC, DEC, FDEC, CSWAP };
+
+// enum class atomic_op : int
+// { load, store, add, fetch_add, sub, fetch_sub, inc, fetch_inc, dec, fetch_dec, compare_exchange };
 static int to_gex_op_map[] = { 
   GEX_OP_GET, GEX_OP_SET, GEX_OP_ADD, GEX_OP_FADD, GEX_OP_SUB, GEX_OP_FSUB, 
   GEX_OP_INC, GEX_OP_FINC, GEX_OP_DEC, GEX_OP_FDEC, GEX_OP_CSWAP };
@@ -28,25 +29,26 @@ static int get_gex_flags(std::memory_order order) {
   return flags;
 }
 
-// Specializers for conversion of standard integer types to gasnet types.
-template<typename T> gex_DT_t get_gex_dt();
-template<> gex_DT_t get_gex_dt<int32_t>() { return GEX_DT_I32; }
-template<> gex_DT_t get_gex_dt<int64_t>() { return GEX_DT_I64; }
-template<> gex_DT_t get_gex_dt<uint32_t>() { return GEX_DT_U32; }
-template<> gex_DT_t get_gex_dt<uint64_t>() { return GEX_DT_U64; }
+gex_DT_t get_gex_dt(size_t isize, bool isigned) {
+  if (isize * CHAR_BIT == 32 && isigned) return GEX_DT_I32;
+  if (isize * CHAR_BIT == 64 && isigned) return GEX_DT_I64;
+  if (isize * CHAR_BIT == 32 && !isigned) return GEX_DT_U32;
+  if (isize * CHAR_BIT == 64 && !isigned) return GEX_DT_U64;
+  UPCXX_ASSERT_ALWAYS(0, "Unsupported atomic type");
+  return 0;
+}
 
 static std::string atomic_op_str[] = {
   "GET", "SET", "ADD", "FADD", "SUB", "FSUB", "INC", "FINC", "DEC", "FDEC", "CSWAP" };
-
 
 // wrapper around gasnet function
 // Specializers that wrap the gasnet integer type operations.
 #define SET_GEX_OP(T, GT) \
 template<> \
 void upcxx::detail::call_gex_AD_OpNB<T>(uintptr_t ad, T *p, \
-        upcxx::global_ptr<T> gp, atomic::aop_type opcode, int allowed_ops, T val1, T val2, \
+        upcxx::global_ptr<T> gp, upcxx::atomic_op opcode, int allowed_ops, T val1, T val2, \
         std::memory_order order, gasnet::handle_cb *cb) { \
-  int aop_gex = to_gex_op_map[opcode]; \
+  int aop_gex = to_gex_op_map[static_cast<int>(opcode)]; \
   UPCXX_ASSERT(aop_gex & allowed_ops, \
                "Atomic operation " << atomic_op_str[aop_gex] << " not included in domain\n"); \
   int flags = get_gex_flags(order); \
@@ -62,26 +64,18 @@ SET_GEX_OP(int64_t, I64);
 SET_GEX_OP(uint32_t, U32);
 SET_GEX_OP(uint64_t, U64);
 
-template<typename T>
-atomic::domain<T>::domain(std::vector<int> ops, int flags) {
-  aops_gex = 0;
-  for (auto next_op : ops) aops_gex |= to_gex_op_map[next_op];
+void upcxx::detail::init_atomic_domain(std::vector<atomic_op> ops, int flags,
+        uintptr_t *ad_gex, int *aops_gex, size_t isize, bool isigned) {
+  (*aops_gex) = 0;
+  for (auto next_op : ops) (*aops_gex) |= to_gex_op_map[static_cast<int>(next_op)];
   // Create the gasnet atomic domain for the world team.
-  // QUERY: do we ever need to set any of the flags?
-  gex_AD_Create(reinterpret_cast<gex_AD_t*>(&ad_gex), gasnet::world_team, get_gex_dt<T>(), 
-                aops_gex, flags);
+  gex_AD_Create(reinterpret_cast<gex_AD_t*>(ad_gex), gasnet::world_team, get_gex_dt(isize, isigned), 
+                *aops_gex, flags);
 }
 
-template<typename T>
-atomic::domain<T>::~domain() {
+void upcxx::detail::destroy_atomic_domain(uintptr_t &ad_gex) {
   // Destroy the gasnet atomic domain
   gex_AD_Destroy(reinterpret_cast<gex_AD_t>(ad_gex));
 }
-
-// ensure classes are defined for these types
-template class atomic::domain<int32_t>;
-template class atomic::domain<int64_t>;
-template class atomic::domain<uint32_t>;
-template class atomic::domain<uint64_t>;
 
 
