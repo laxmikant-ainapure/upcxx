@@ -10,19 +10,20 @@
 
 namespace upcxx {
   // All supported atomic operations.
-  enum class atomic_op : int
-  { load, store, add, fetch_add, sub, fetch_sub, inc, fetch_inc, dec, fetch_dec, compare_exchange };
+  enum class atomic_op : int { load, store,
+                               add, fetch_add,
+                               sub, fetch_sub,
+                               inc, fetch_inc,
+                               dec, fetch_dec,
+                               compare_exchange };
 
   namespace detail {
 
-    void init_atomic_domain(std::vector<atomic_op> ops, int flags, uintptr_t *ad_gex,
-                            int *aops_gex, size_t isize, bool isigned);
+    void init_atomic_domain(std::vector<atomic_op> ops, int flags, uintptr_t *ad_gex_handle,
+                            int *atomic_gex_ops, size_t isize, bool isigned);
 
-    void destroy_atomic_domain(uintptr_t &ad_gex);
+    void destroy_atomic_domain(uintptr_t &ad_gex_handle);
 
-    template<typename T>
-    void call_gex_AD_OpNB(uintptr_t, T*, upcxx::global_ptr<T>, atomic_op, int, T, T,
-                          std::memory_order, backend::gasnet::handle_cb*);
   }
 
   // Atomic domain for an ?int*_t type.
@@ -37,9 +38,13 @@ namespace upcxx {
           "Atomic domains only supported on non-const 32- and 64-bit integral types");
 
       // The opaque gasnet atomic domain handle.
-      uintptr_t ad_gex;
+      uintptr_t ad_gex_handle;
       // The or'd value for all the atomic operations.
-      int aops_gex;
+      int atomic_gex_ops;
+
+      // call to backend gasnet function
+      void call_gex_AD_OpNB(T*, upcxx::global_ptr<T>, atomic_op, T, T,
+                            std::memory_order, backend::gasnet::handle_cb*);
 
       // event values for non-fetching operations
       struct nofetch_aop_event_values {
@@ -104,8 +109,7 @@ namespace upcxx {
         auto returner = detail::completions_returner<detail::event_is_here,
             fetch_aop_event_values, Cxs>{cb->state_here};
         // execute the backend gasnet function
-        upcxx::detail::call_gex_AD_OpNB<T>(ad_gex, &cb->result, gptr, aop, aops_gex, val1, val2,
-            order, cb);
+        call_gex_AD_OpNB(&cb->result, gptr, aop, val1, val2, order, cb);
         return returner();
       }
 
@@ -122,8 +126,7 @@ namespace upcxx {
         auto returner = detail::completions_returner<detail::event_is_here,
             nofetch_aop_event_values, Cxs>{cb->state_here};
         // execute the backend gasnet function
-        upcxx::detail::call_gex_AD_OpNB<T>(ad_gex, nullptr, gptr, aop, aops_gex, val1, val2,
-            order, cb);
+        call_gex_AD_OpNB(nullptr, gptr, aop, val1, val2, order, cb);
         return returner();
       }
 
@@ -132,12 +135,12 @@ namespace upcxx {
       atomic_domain(std::vector<atomic_op> ops, int flags = 0) {
         UPCXX_ASSERT_ALWAYS(!ops.empty(),
                             "Need to specify at least one atomic_op for the atomic_domain");
-        detail::init_atomic_domain(ops, flags, &ad_gex, &aops_gex, sizeof(T),
+        detail::init_atomic_domain(ops, flags, &ad_gex_handle, &atomic_gex_ops, sizeof(T),
                                    std::is_signed<T>::value);
       }
 
       ~atomic_domain() {
-        detail::destroy_atomic_domain(ad_gex);
+        detail::destroy_atomic_domain(ad_gex_handle);
       }
 
       template<typename Cxs = FUTURE_CX>
