@@ -6,6 +6,11 @@
 
 namespace gasnet = upcxx::backend::gasnet;
 
+static_assert(offsetof(gex_Memvec_t, gex_addr) == offsetof(upcxx::detail::memvec_t, gex_addr) &&
+              offsetof(gex_Memvec_t, gex_len) == offsetof(upcxx::detail::memvec_t, gex_len) &&
+              sizeof(gex_Memvec_t) == sizeof(upcxx::detail::memvec_t),
+              "UPC++ internal issue: unsupported gasnet version");
+
 void upcxx::detail::rma_put_irreg_nb(
                                     upcxx::intrank_t rank_d,
                                     std::size_t _dstcount,

@@ -21,6 +21,7 @@ namespace upcxx
       void  *gex_addr;  // TODO: When gasnet changes Memvec we need to track it
       size_t gex_len;
     } memvec_t;
+
     
     void rma_put_irreg_nb(
                          intrank_t rank_d,
