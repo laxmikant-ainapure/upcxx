@@ -147,6 +147,9 @@ int main(int argc, char **argv) {
   global_ptr<unsigned long> xul = upcxx::allocate<unsigned long>();
   ad_ul.store(xul, (unsigned long)0);
   
+  upcxx::atomic_domain<int> ad;
+  ad.store(xi, (int)0);
+  
   // this will fail with an error message about an unsupported domain
   //ad_ul.load(xul).wait();
   // this will fail with a null ptr message

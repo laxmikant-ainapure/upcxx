@@ -91,6 +91,7 @@ namespace upcxx {
       template<typename Cxs = FUTURE_CX>
       FETCH_RTYPE<Cxs> fop(atomic_op aop, global_ptr<T> gptr, std::memory_order order,
                            T val1 = 0, T val2 = 0, Cxs cxs = Cxs{{}}) {
+        UPCXX_ASSERT(atomic_gex_ops != 0, "Atomic domain is not constructed");
         UPCXX_ASSERT((detail::completions_has_event<Cxs, operation_cx_event>::value));
         UPCXX_ASSERT(gptr != nullptr, "Global pointer for atomic operation is null");
         // we only have local completion, not remote
@@ -109,6 +110,7 @@ namespace upcxx {
       template<typename Cxs = FUTURE_CX>
       NOFETCH_RTYPE<Cxs> op(atomic_op aop, global_ptr<T> gptr, std::memory_order order,
                             T val1 = 0, T val2 = 0, Cxs cxs = Cxs{{}}) {
+        UPCXX_ASSERT(atomic_gex_ops != 0, "Atomic domain is not constructed");
         UPCXX_ASSERT((detail::completions_has_event<Cxs, operation_cx_event>::value));
         UPCXX_ASSERT(gptr != nullptr, "Global pointer for atomic operation is null");
         // we only have local completion, not remote
@@ -124,6 +126,8 @@ namespace upcxx {
       }
 
     public:
+      // default constructor doesn't do anything
+      atomic_domain() { atomic_gex_ops = 0; }
       // The constructor takes a vector of operations. Currently, flags is currently unsupported.
       atomic_domain(std::vector<atomic_op> const &ops, int flags = 0);
 
