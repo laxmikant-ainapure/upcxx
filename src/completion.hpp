@@ -68,11 +68,11 @@ namespace upcxx {
     using event_t = Event;
     
     persona *target_;
-    Fn func_;
+    Fn fn_;
 
-    lpc_cx(persona &target, Fn func):
+    lpc_cx(persona &target, Fn fn):
       target_{&target},
-      func_{std::move(func)} {
+      fn_{std::move(fn)} {
     }
   };
 
