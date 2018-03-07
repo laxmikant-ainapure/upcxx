@@ -49,8 +49,7 @@ std::string test_name(const char *file) {
           upcxx::barrier();
       }
       
-      if(0 == upcxx::rank_me())
-          std::cout << std::flush<< KLGREEN << "Test result: "<<(success?"SUCCESS":"FAILURE") << KNORM << std::endl;
+      std::cout << std::flush<< KLGREEN << "Test result: "<<(success?"SUCCESS":"ERROR") << KNORM << std::endl;
   }
 #else
   template<typename=void>
@@ -60,7 +59,7 @@ std::string test_name(const char *file) {
 
   template<typename=void>
   void print_test_success(bool success=true) {
-      std::cout << std::flush<< KLGREEN << "Test result: "<<(success?"SUCCESS":"FAILURE") << KNORM << std::endl;
+      std::cout << std::flush<< KLGREEN << "Test result: "<<(success?"SUCCESS":"ERROR") << KNORM << std::endl;
   }
 #endif
 
