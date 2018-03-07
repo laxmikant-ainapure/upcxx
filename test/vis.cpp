@@ -225,6 +225,11 @@ int main() {
 
 
   s1.wait();
+  if(mycount[0] != 2)
+    {
+      std::cout<<"as_lpc did not update on rput_strided \n";
+      success=false;
+    }
   barrier();
   if(mycount[1] != 2)
     {
@@ -260,9 +265,20 @@ int main() {
     std::cout<<" "<<myPtr[i];
   std::cout<<"\n";
   barrier();
-  auto fg0 = rget_irregular(svec.begin(), svec.end(), dvec.begin(), dvec.end());
+  auto fg0 = rget_irregular(svec.begin(), svec.end(), dvec.begin(), dvec.end(),
+                            operation_cx::as_lpc(default_persona(),[&](){ mycount[0]++;}) |
+                            operation_cx::as_future() |
+                            remote_cx::as_rpc([](dist_object<count_t>& c){
+                                (*c)[1]++;},counters)
+                            );
 
   fg0.wait();
+  if(mycount[0] != 3)
+    {
+      std::cout<<"as_lpc did not update on rget_irregular \n";
+      success=false;
+    }
+
   
   for(int i=0; i<6; i++)
     {
@@ -273,6 +289,13 @@ int main() {
     }
 
   barrier();
+  
+  if(mycount[1] != 3)
+    {
+      std::cout<<"missed remote rpc count on rget_irregular\n";
+      success=false;
+    }
+  
   reset(myPatch, me);
   std::cout<<"Irregular rget test 2\n";
   barrier();
