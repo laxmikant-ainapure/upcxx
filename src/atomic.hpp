@@ -91,8 +91,8 @@ namespace upcxx {
       template<typename Cxs = FUTURE_CX>
       FETCH_RTYPE<Cxs> fop(atomic_op aop, global_ptr<T> gptr, std::memory_order order,
                            T val1 = 0, T val2 = 0, Cxs cxs = Cxs{{}}) {
-        UPCXX_ASSERT_ALWAYS((detail::completions_has_event<Cxs, operation_cx_event>::value));
-        UPCXX_ASSERT_ALWAYS(gptr != nullptr, "Global pointer for atomic operation is null");
+        UPCXX_ASSERT((detail::completions_has_event<Cxs, operation_cx_event>::value));
+        UPCXX_ASSERT(gptr != nullptr, "Global pointer for atomic operation is null");
         // we only have local completion, not remote
         using cxs_here_t = detail::completions_state<detail::event_is_here,
             fetch_aop_event_values, Cxs>;
@@ -109,8 +109,8 @@ namespace upcxx {
       template<typename Cxs = FUTURE_CX>
       NOFETCH_RTYPE<Cxs> op(atomic_op aop, global_ptr<T> gptr, std::memory_order order,
                             T val1 = 0, T val2 = 0, Cxs cxs = Cxs{{}}) {
-        UPCXX_ASSERT_ALWAYS((detail::completions_has_event<Cxs, operation_cx_event>::value));
-        UPCXX_ASSERT_ALWAYS(gptr != nullptr, "Global pointer for atomic operation is null");
+        UPCXX_ASSERT((detail::completions_has_event<Cxs, operation_cx_event>::value));
+        UPCXX_ASSERT(gptr != nullptr, "Global pointer for atomic operation is null");
         // we only have local completion, not remote
         using cxs_here_t = detail::completions_state<detail::event_is_here,
             nofetch_aop_event_values, Cxs>;
