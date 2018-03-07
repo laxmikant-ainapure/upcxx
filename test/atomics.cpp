@@ -151,19 +151,18 @@ int main(int argc, char **argv) {
   ad.store(xi, (int)0, memory_order_relaxed);
   
   // this will fail with an error message about an unsupported domain
-  //ad_ul.load(xul).wait();
+  //ad_ul.load(xul, memory_order_relaxed).wait();
   // this will fail with a null ptr message
-  //ad_ul.store(nullptr, (unsigned long)0);
+  //ad_ul.store(nullptr, (unsigned long)0, memory_order_relaxed);
           
-  /* long long doesn't work - it requires casts 
-  upcxx::atomic_domain<long long> ad_ll({upcxx::atomic_op::store});
-  global_ptr<long long> xll;
-  ad_ll.store(xll, (long long)0);
+  // long long doesn't work - it requires casts 
+  //upcxx::atomic_domain<long long> ad_ll({upcxx::atomic_op::store});
+  //global_ptr<long long> xll;
+  //ad_ll.store(xll, (long long)0, memory_order_relaxed);
   
-  upcxx::atomic_domain<unsigned long long> ad_ull({upcxx::atomic_op::store});
-  global_ptr<unsigned long long> xull;
-  ad_ul.store(xul, (unsigned long long)0);
-  */
+  //upcxx::atomic_domain<unsigned long long> ad_ull({upcxx::atomic_op::store});
+  //global_ptr<unsigned long long> xull;
+  //ad_ul.store(xul, (unsigned long long)0, memory_order_relaxed);
 
   print_test_header();
   
