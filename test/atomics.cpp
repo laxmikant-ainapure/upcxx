@@ -36,7 +36,7 @@ void test_fetch_add(global_ptr<int64_t> target_counter, bool use_atomics,
     }
     
     // always use atomics to access or modify counter - alternative API
-    dom.store(target_counter, (int64_t)0).wait();
+    dom.store(target_counter, (int64_t)0, memory_order_relaxed).wait();
   }
   barrier();
   for (int i = 0; i < ITERS; i++) {
@@ -47,7 +47,7 @@ void test_fetch_add(global_ptr<int64_t> target_counter, bool use_atomics,
     } else {
       // This should cause an assert failure
       //auto prev = dom.fsub(target_counter, (int64_t)1).wait();
-      auto prev = dom.fetch_add(target_counter, (int64_t)1).wait();
+      auto prev = dom.fetch_add(target_counter, (int64_t)1, memory_order_relaxed).wait();
       UPCXX_ASSERT_ALWAYS(prev >= 0 && prev < rank_n() * ITERS, 
               "atomic::fetch_add result out of range");
     }
@@ -69,14 +69,14 @@ void test_put_get(global_ptr<int64_t> target_counter, upcxx::atomic_domain<int64
   if (rank_me() == 0) {
     cout << "Test puts and gets: expect a random rank number" << endl;
     // always use atomics to access or modify counter
-    dom.store(target_counter, (int64_t)0).wait();
+    dom.store(target_counter, (int64_t)0, memory_order_relaxed).wait();
   }
   barrier();
   
   for (int i = 0; i < ITERS * 10; i++) {
-    auto v = dom.load(target_counter).wait();    
+    auto v = dom.load(target_counter, memory_order_relaxed).wait();
     UPCXX_ASSERT_ALWAYS(v >=0 && v < rank_n(), "atomic_get out of range: " << v);
-    dom.store(target_counter, (int64_t)rank_me()).wait();
+    dom.store(target_counter, (int64_t)rank_me(), memory_order_relaxed).wait();
   }
   
   barrier();
@@ -94,24 +94,24 @@ void test_put_get(global_ptr<int64_t> target_counter, upcxx::atomic_domain<int64
 
 void test_all_ops(global_ptr<int64_t> target_counter, upcxx::atomic_domain<int64_t> &dom) {
   if (upcxx::rank_me() == 0) {
-    dom.store(target_counter, (int64_t)42).wait();
-    int64_t v = dom.load(target_counter).wait();
+    dom.store(target_counter, (int64_t)42, memory_order_relaxed).wait();
+    int64_t v = dom.load(target_counter, memory_order_relaxed).wait();
     CHECK_ATOMIC_VAL(v, 42);
-    dom.inc(target_counter).wait();
-    v = dom.fetch_inc(target_counter).wait();
+    dom.inc(target_counter, memory_order_relaxed).wait();
+    v = dom.fetch_inc(target_counter, memory_order_relaxed).wait();
     CHECK_ATOMIC_VAL(v, 43);
-    dom.dec(target_counter).wait();
-    v = dom.fetch_dec(target_counter).wait();
+    dom.dec(target_counter, memory_order_relaxed).wait();
+    v = dom.fetch_dec(target_counter, memory_order_relaxed).wait();
     CHECK_ATOMIC_VAL(v, 43);
-    dom.add(target_counter, 7).wait();
-    v = dom.fetch_add(target_counter, 5).wait();
+    dom.add(target_counter, 7, memory_order_relaxed).wait();
+    v = dom.fetch_add(target_counter, 5, memory_order_relaxed).wait();
     CHECK_ATOMIC_VAL(v, 49);
-    dom.sub(target_counter, 3).wait();
-    v = dom.fetch_sub(target_counter, 2).wait();
+    dom.sub(target_counter, 3, memory_order_relaxed).wait();
+    v = dom.fetch_sub(target_counter, 2, memory_order_relaxed).wait();
     CHECK_ATOMIC_VAL(v, 51);
-    v = dom.compare_exchange(target_counter, 49, 42).wait();
+    v = dom.compare_exchange(target_counter, 49, 42, memory_order_relaxed).wait();
     CHECK_ATOMIC_VAL(v, 49);
-    v = dom.compare_exchange(target_counter, 0, 3).wait();
+    v = dom.compare_exchange(target_counter, 0, 3, memory_order_relaxed).wait();
     CHECK_ATOMIC_VAL(v, 42);
   }
   upcxx::barrier();
@@ -133,22 +133,22 @@ int main(int argc, char **argv) {
   // check non-fixed-width supported integer types
   upcxx::atomic_domain<int> ad_i({upcxx::atomic_op::store});
   global_ptr<int> xi = upcxx::allocate<int>();
-  ad_i.store(xi, (int)0);
+  ad_i.store(xi, (int)0, memory_order_relaxed);
   
   upcxx::atomic_domain<unsigned int> ad_ui({upcxx::atomic_op::store});
   global_ptr<unsigned int> xui = upcxx::allocate<unsigned int>();
-  ad_ui.store(xui, (unsigned)0);
+  ad_ui.store(xui, (unsigned)0, memory_order_relaxed);
 
   upcxx::atomic_domain<long> ad_l({upcxx::atomic_op::store});
   global_ptr<long> xl = upcxx::allocate<long>();
-  ad_l.store(xl, (long)0);
+  ad_l.store(xl, (long)0, memory_order_relaxed);
   
   upcxx::atomic_domain<unsigned long> ad_ul({upcxx::atomic_op::store});
   global_ptr<unsigned long> xul = upcxx::allocate<unsigned long>();
-  ad_ul.store(xul, (unsigned long)0);
+  ad_ul.store(xul, (unsigned long)0, memory_order_relaxed);
   
-  upcxx::atomic_domain<int> ad;
-  ad.store(xi, (int)0);
+  upcxx::atomic_domain<int> ad = std::move(ad_i);
+  ad.store(xi, (int)0, memory_order_relaxed);
   
   // this will fail with an error message about an unsupported domain
   //ad_ul.load(xul).wait();
