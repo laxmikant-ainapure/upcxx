@@ -90,7 +90,7 @@ namespace upcxx {
       // generic fetching atomic operation
       template<atomic_op aop, typename Cxs = FUTURE_CX>
       FETCH_RTYPE<Cxs> fop(global_ptr<T> gptr, std::memory_order order, T val1 = 0, T val2 = 0,
-                              Cxs cxs = FUTURE_CX{{}}) {
+                           Cxs cxs = Cxs{{}}) {
         UPCXX_ASSERT_ALWAYS((detail::completions_has_event<Cxs, operation_cx_event>::value));
         // we only have local completion, not remote
         using cxs_here_t = detail::completions_state<detail::event_is_here,
@@ -107,7 +107,7 @@ namespace upcxx {
       // generic non-fetching atomic operation
       template<atomic_op aop, typename Cxs = FUTURE_CX>
       NOFETCH_RTYPE<Cxs> op(global_ptr<T> gptr, std::memory_order order, T val1 = 0, T val2 = 0,
-                            Cxs cxs = FUTURE_CX{{}}) {
+                            Cxs cxs = Cxs{{}}) {
         UPCXX_ASSERT_ALWAYS((detail::completions_has_event<Cxs, operation_cx_event>::value));
         // we only have local completion, not remote
         using cxs_here_t = detail::completions_state<detail::event_is_here,
@@ -130,67 +130,67 @@ namespace upcxx {
       template<typename Cxs = FUTURE_CX>
       NOFETCH_RTYPE<Cxs> store(global_ptr<T> gptr, T val,
                                std::memory_order order = std::memory_order_relaxed,
-                               Cxs cxs = FUTURE_CX{{}}) {
+                               Cxs cxs = Cxs{{}}) {
         return op<atomic_op::store, Cxs>(gptr, order, val, (T)0, cxs);
       }
       template<typename Cxs = FUTURE_CX>
       FETCH_RTYPE<Cxs> load(global_ptr<T> gptr,
-                               std::memory_order order = std::memory_order_relaxed,
-                               Cxs cxs = FUTURE_CX{{}}) {
+                            std::memory_order order = std::memory_order_relaxed,
+                            Cxs cxs = Cxs{{}}) {
         return fop<atomic_op::load>(gptr, order, (T)0, (T)0, cxs);
       }
       template<typename Cxs = FUTURE_CX>
       NOFETCH_RTYPE<Cxs> inc(global_ptr<T> gptr,
                              std::memory_order order = std::memory_order_relaxed,
-                             Cxs cxs = FUTURE_CX{{}}) {
+                             Cxs cxs = Cxs{{}}) {
         return op<atomic_op::inc>(gptr, order, (T)0, (T)0, cxs);
       }
       template<typename Cxs = FUTURE_CX>
       NOFETCH_RTYPE<Cxs> dec(global_ptr<T> gptr,
                              std::memory_order order = std::memory_order_relaxed,
-                             Cxs cxs = FUTURE_CX{{}}) {
+                             Cxs cxs = Cxs{{}}) {
         return op<atomic_op::dec>(gptr, order, (T)0, (T)0, cxs);
       }
       template<typename Cxs = FUTURE_CX>
       FETCH_RTYPE<Cxs> fetch_inc(global_ptr<T> gptr,
-                                    std::memory_order order = std::memory_order_relaxed,
-                                    Cxs cxs = FUTURE_CX{{}}) {
+                                 std::memory_order order = std::memory_order_relaxed,
+                                 Cxs cxs = Cxs{{}}) {
         return fop<atomic_op::fetch_inc>(gptr, order, (T)0, (T)0, cxs);
       }
       template<typename Cxs = FUTURE_CX>
       FETCH_RTYPE<Cxs> fetch_dec(global_ptr<T> gptr,
-                                    std::memory_order order = std::memory_order_relaxed,
-                                    Cxs cxs = FUTURE_CX{{}}) {
+                                 std::memory_order order = std::memory_order_relaxed,
+                                 Cxs cxs = Cxs{{}}) {
         return fop<atomic_op::fetch_dec>(gptr, order, (T)0, (T)0, cxs);
       }
       template<typename Cxs = FUTURE_CX>
       NOFETCH_RTYPE<Cxs> add(global_ptr<T> gptr, T val1,
                              std::memory_order order = std::memory_order_relaxed,
-                             Cxs cxs = FUTURE_CX{{}}) {
+                             Cxs cxs = Cxs{{}}) {
         return op<atomic_op::add>(gptr, order, val1, (T)0, cxs);
       }
       template<typename Cxs = FUTURE_CX>
       NOFETCH_RTYPE<Cxs> sub(global_ptr<T> gptr, T val1,
                              std::memory_order order = std::memory_order_relaxed,
-                             Cxs cxs = FUTURE_CX{{}}) {
+                             Cxs cxs = Cxs{{}}) {
         return op<atomic_op::sub>(gptr, order, val1, (T)0, cxs);
       }
       template<typename Cxs = FUTURE_CX>
       FETCH_RTYPE<Cxs> fetch_add(global_ptr<T> gptr, T val,
-                                    std::memory_order order = std::memory_order_relaxed,
-                                    Cxs cxs = FUTURE_CX{{}}) {
+                                 std::memory_order order = std::memory_order_relaxed,
+                                 Cxs cxs = Cxs{{}}) {
         return fop<atomic_op::fetch_add>(gptr, order, val, (T)0, cxs);
       }
       template<typename Cxs = FUTURE_CX>
       FETCH_RTYPE<Cxs> fetch_sub(global_ptr<T> gptr, T val,
-                                    std::memory_order order = std::memory_order_relaxed,
-                                    Cxs cxs = FUTURE_CX{{}}) {
+                                 std::memory_order order = std::memory_order_relaxed,
+                                 Cxs cxs = Cxs{{}}) {
         return fop<atomic_op::fetch_sub>(gptr, order, val, (T)0, cxs);
       }
       template<typename Cxs = FUTURE_CX>
       FETCH_RTYPE<Cxs> compare_exchange(global_ptr<T> gptr, T val1, T val2,
-                                           std::memory_order order = std::memory_order_relaxed,
-                                           Cxs cxs = FUTURE_CX{{}}) {
+                                        std::memory_order order = std::memory_order_relaxed,
+                                        Cxs cxs = Cxs{{}}) {
         return fop<atomic_op::compare_exchange>(gptr, order, val1, val2, cxs);
       }
   };
