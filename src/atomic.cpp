@@ -25,9 +25,9 @@ namespace {
       case std::memory_order_acq_rel: flags |= (GEX_FLAG_AD_ACQ | GEX_FLAG_AD_REL); break;
       case std::memory_order_relaxed: break;
       case std::memory_order_seq_cst:
-        UPCXX_ASSERT_ALWAYS(0, "Unsupported memory order: std::memory_order_seq_cst");
+        UPCXX_ASSERT(0, "Unsupported memory order: std::memory_order_seq_cst");
       case std::memory_order_consume:
-        UPCXX_ASSERT_ALWAYS(0, "Unsupported memory order: std::memory_order_consume");
+        UPCXX_ASSERT(0, "Unsupported memory order: std::memory_order_consume");
         break;
     }
     return flags;
@@ -53,7 +53,7 @@ template<> \
 void upcxx::atomic_domain<T>::call_gex_AD_OpNB(T *p, upcxx::global_ptr<T> gp, \
     upcxx::atomic_op opcode, T val1, T val2, std::memory_order order, gasnet::handle_cb *cb) { \
   int atomic_gex_op = to_gex_op_map[static_cast<int>(opcode)]; \
-  UPCXX_ASSERT_ALWAYS(atomic_gex_op & atomic_gex_ops, \
+  UPCXX_ASSERT(atomic_gex_op & atomic_gex_ops, \
       "Atomic operation " << atomic_op_str[static_cast<int>(opcode)] << " not in domain\n"); \
   int flags = get_gex_flags(order); \
   gex_Event_t h = gex_AD_OpNB_##GT(reinterpret_cast<gex_AD_t>(ad_gex_handle), p, \
@@ -70,8 +70,7 @@ SET_GEX_OP(uint64_t, U64);
 
 template<typename T>
 upcxx::atomic_domain<T>::atomic_domain(std::vector<atomic_op> const &ops, int flags) {
-  UPCXX_ASSERT_ALWAYS(!ops.empty(),
-                      "Need to specify at least one atomic_op for the atomic_domain");
+  UPCXX_ASSERT(!ops.empty(), "Need to specify at least one atomic_op for the atomic_domain");
   atomic_gex_ops = 0;
   for (auto next_op : ops) atomic_gex_ops |= to_gex_op_map[static_cast<int>(next_op)];
   // Create the gasnet atomic domain for the world team.
