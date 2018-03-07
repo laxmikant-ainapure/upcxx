@@ -128,7 +128,7 @@ int main(int argc, char **argv) {
           upcxx::atomic_op::compare_exchange});
    
   // uncomment to evaluate compile-time error checking
-  //upcxx::atomic_domain<const int> ad_cint({upcxx::atomic_op::get});
+  //upcxx::atomic_domain<const int> ad_cint({upcxx::atomic_op::load});
 
   // check non-fixed-width supported integer types
   upcxx::atomic_domain<int> ad_i({upcxx::atomic_op::store});
@@ -138,7 +138,7 @@ int main(int argc, char **argv) {
   upcxx::atomic_domain<unsigned int> ad_ui({upcxx::atomic_op::store});
   global_ptr<unsigned int> xui = upcxx::allocate<unsigned int>();
   ad_ui.store(xui, (unsigned)0);
-          
+
   upcxx::atomic_domain<long> ad_l({upcxx::atomic_op::store});
   global_ptr<long> xl = upcxx::allocate<long>();
   ad_l.store(xl, (long)0);
@@ -146,6 +146,11 @@ int main(int argc, char **argv) {
   upcxx::atomic_domain<unsigned long> ad_ul({upcxx::atomic_op::store});
   global_ptr<unsigned long> xul = upcxx::allocate<unsigned long>();
   ad_ul.store(xul, (unsigned long)0);
+  
+  // this will fail with an error message about an unsupported domain
+  //ad_ul.load(xul).wait();
+  // this will fail with a null ptr message
+  //ad_ul.store(nullptr, (unsigned long)0);
           
   /* long long doesn't work - it requires casts 
   upcxx::atomic_domain<long long> ad_ll({upcxx::atomic_op::store});

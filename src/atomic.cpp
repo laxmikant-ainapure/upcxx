@@ -54,7 +54,7 @@ void upcxx::atomic_domain<T>::call_gex_AD_OpNB(T *p, upcxx::global_ptr<T> gp, \
     upcxx::atomic_op opcode, T val1, T val2, std::memory_order order, gasnet::handle_cb *cb) { \
   int atomic_gex_op = to_gex_op_map[static_cast<int>(opcode)]; \
   UPCXX_ASSERT_ALWAYS(atomic_gex_op & atomic_gex_ops, \
-      "Atomic operation " << atomic_op_str[atomic_gex_op] << " not included in domain\n"); \
+      "Atomic operation " << atomic_op_str[static_cast<int>(opcode)] << " not in domain\n"); \
   int flags = get_gex_flags(order); \
   gex_Event_t h = gex_AD_OpNB_##GT(reinterpret_cast<gex_AD_t>(ad_gex_handle), p, \
                                    gp.rank_, gp.raw_ptr_, atomic_gex_op, val1, val2, flags); \
@@ -69,7 +69,7 @@ SET_GEX_OP(int64_t, I64);
 SET_GEX_OP(uint64_t, U64);
 
 template<typename T>
-upcxx::atomic_domain<T>::atomic_domain(std::vector<atomic_op> ops, int flags) {
+upcxx::atomic_domain<T>::atomic_domain(std::vector<atomic_op> const &ops, int flags) {
   UPCXX_ASSERT_ALWAYS(!ops.empty(),
                       "Need to specify at least one atomic_op for the atomic_domain");
   atomic_gex_ops = 0;
