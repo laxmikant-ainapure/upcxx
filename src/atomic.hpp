@@ -23,10 +23,12 @@ namespace upcxx {
     private:
       // for checking type is 32 or 64-bit non-const integral type
       struct is_atomic : std::integral_constant<bool,
-          (std::is_integral<T>::value && !std::is_const<T>::value &&
-          (sizeof(T) * CHAR_BIT == 32 || sizeof(T) * CHAR_BIT == 64))> {};
+          ((std::is_integral<T>::value || std::is_floating_point<T>::value) &&
+           !std::is_const<T>::value &&
+           (sizeof(T) * CHAR_BIT == 32 || sizeof(T) * CHAR_BIT == 64))> {};
       static_assert(is_atomic::value,
-          "Atomic domains only supported on non-const 32- and 64-bit integral types");
+          "Atomic domains only supported on non-const 32- and 64-bit integral and "
+          "floating point types");
 
       // The opaque gasnet atomic domain handle.
       uintptr_t ad_gex_handle;

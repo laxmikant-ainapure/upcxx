@@ -129,23 +129,33 @@ int main(int argc, char **argv) {
    
   // uncomment to evaluate compile-time error checking
   //upcxx::atomic_domain<const int> ad_cint({upcxx::atomic_op::load});
-
+  //upcxx::atomic_domain<const float> ad_cft({upcxx::atomic_op::load});
+  //upcxx::atomic_domain<short> ad_short({upcxx::atomic_op::load});
+  
   // check non-fixed-width supported integer types
   upcxx::atomic_domain<int> ad_i({upcxx::atomic_op::store});
-  global_ptr<int> xi = upcxx::allocate<int>();
+  auto xi = upcxx::allocate<int>();
   ad_i.store(xi, (int)0, memory_order_relaxed);
   
   upcxx::atomic_domain<unsigned int> ad_ui({upcxx::atomic_op::store});
-  global_ptr<unsigned int> xui = upcxx::allocate<unsigned int>();
+  auto xui = upcxx::allocate<unsigned int>();
   ad_ui.store(xui, (unsigned)0, memory_order_relaxed);
 
   upcxx::atomic_domain<long> ad_l({upcxx::atomic_op::store});
-  global_ptr<long> xl = upcxx::allocate<long>();
+  auto xl = upcxx::allocate<long>();
   ad_l.store(xl, (long)0, memory_order_relaxed);
   
   upcxx::atomic_domain<unsigned long> ad_ul({upcxx::atomic_op::store});
-  global_ptr<unsigned long> xul = upcxx::allocate<unsigned long>();
+  auto xul = upcxx::allocate<unsigned long>();
   ad_ul.store(xul, (unsigned long)0, memory_order_relaxed);
+  
+  upcxx::atomic_domain<float> ad_ft({upcxx::atomic_op::store});
+  auto xft = upcxx::allocate<float>();
+  ad_ft.store(xft, (float)0, memory_order_relaxed);
+
+  upcxx::atomic_domain<double> ad_dbl({upcxx::atomic_op::store});
+  auto xdbl = upcxx::allocate<double>();
+  ad_dbl.store(xdbl, (double)0, memory_order_relaxed);
   
   upcxx::atomic_domain<int> ad = std::move(ad_i);
   ad.store(xi, (int)0, memory_order_relaxed);

@@ -43,6 +43,10 @@ namespace {
   gex_DT_t get_gex_dt<int64_t>() { return GEX_DT_I64; }
   template<>
   gex_DT_t get_gex_dt<uint64_t>() { return GEX_DT_U64; }
+  template<>
+  gex_DT_t get_gex_dt<float>() { return GEX_DT_FLT; }
+  template<>
+  gex_DT_t get_gex_dt<double>() { return GEX_DT_DBL; }
 }
 
 
@@ -67,6 +71,8 @@ SET_GEX_OP(int32_t, I32);
 SET_GEX_OP(uint32_t, U32);
 SET_GEX_OP(int64_t, I64);
 SET_GEX_OP(uint64_t, U64);
+SET_GEX_OP(float, FLT);
+SET_GEX_OP(double, DBL);
 
 template<typename T>
 upcxx::atomic_domain<T>::atomic_domain(std::vector<atomic_op> const &ops, int flags) {
@@ -88,5 +94,6 @@ template class upcxx::atomic_domain<int32_t>;
 template class upcxx::atomic_domain<uint32_t>;
 template class upcxx::atomic_domain<int64_t>;
 template class upcxx::atomic_domain<uint64_t>;
-
+template class upcxx::atomic_domain<float>;
+template class upcxx::atomic_domain<double>;
 
