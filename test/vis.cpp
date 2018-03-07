@@ -134,8 +134,8 @@ int main() {
     std::cout<<"\n";
     auto f0 = rput_irregular(svec.begin(), svec.end(),
                              dvec.begin(), dvec.end(),
-                             // remote_cx::as_rpc([](dist_object<count_t>& c) {
-                             //     std::cout<<"here I am on rank "<< rank_me()<<"\n";}) |
+                             remote_cx::as_rpc([](dist_object<count_t>& c) {
+                                 (*c)[1]++;}, counters) |
                              operation_cx::as_future()
                              );
 
@@ -143,11 +143,11 @@ int main() {
     f0.wait();
     barrier();
 
-    //   if(mycount[1] != 1)
-    //     {
-    //       std::cout<<"missed remote write count on rput_irregular\n";
-    //      success=false;
-    //    }
+    if(mycount[1] != 1)
+      {
+        std::cout<<"missed remote write count on rput_irregular\n";
+        success=false;
+      }
    
     for(int i=0; i<6; i++)
       {
@@ -217,11 +217,20 @@ int main() {
   
   // strided put
   auto s1 = rput_strided<2>(myPtr+N-B, {{sizeof(lli),N*sizeof(lli)}},
-                            hi, {{sizeof(lli),N*sizeof(lli)}}, {{B,M}});
+                            hi, {{sizeof(lli),N*sizeof(lli)}}, {{B,M}},
+                            operation_cx::as_lpc(default_persona(),[&](){ mycount[0]++;}) |
+                            operation_cx::as_future() |
+                            remote_cx::as_rpc([](dist_object<count_t>& c){
+                                (*c)[1]++;},counters));
 
 
   s1.wait();
   barrier();
+  if(mycount[1] != 2)
+    {
+      std::cout<<"missed remote write count on rput_strided\n";
+      success=false;
+    }
   
   std::cout<<"\nStrided put testing \n";
   success = success && check(fr1, fr1_end, (lli)nebrLo); // this is moving the same data as in the irregular case
