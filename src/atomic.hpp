@@ -132,7 +132,7 @@ namespace upcxx {
       atomic_domain(atomic_domain &&ad) : ad_gex_handle(ad.ad_gex_handle),
           atomic_gex_ops(ad.atomic_gex_ops) {
         // make sure the copied object does not call the destructor
-        ad.ad_gex_handle = 0;
+        ad.atomic_gex_ops = 0;
       }
 
       // The constructor takes a vector of operations. Currently, flags is currently unsupported.

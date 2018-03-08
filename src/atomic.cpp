@@ -83,7 +83,7 @@ upcxx::atomic_domain<T>::atomic_domain(std::vector<atomic_op> const &ops, int fl
 template<typename T>
 upcxx::atomic_domain<T>::~atomic_domain() {
   // Destroy the gasnet atomic domain
-  if (ad_gex_handle) gex_AD_Destroy(reinterpret_cast<gex_AD_t>(ad_gex_handle));
+  if (atomic_gex_ops) gex_AD_Destroy(reinterpret_cast<gex_AD_t>(ad_gex_handle));
 }
 
 template class upcxx::atomic_domain<int32_t>;
