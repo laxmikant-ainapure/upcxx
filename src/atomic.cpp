@@ -70,6 +70,8 @@ SET_GEX_OP(uint64_t, U64);
 
 template<typename T>
 upcxx::atomic_domain<T>::atomic_domain(std::vector<atomic_op> const &ops, int flags) {
+  UPCXX_ASSERT(sizeof(gex_AD_t) == sizeof(uintptr_t), 
+               "Mismatch between underying gasnet handle size and UPC++ implementation");
   UPCXX_ASSERT(!ops.empty(), "Need to specify at least one atomic_op for the atomic_domain");
   atomic_gex_ops = 0;
   for (auto next_op : ops) atomic_gex_ops |= to_gex_op_map[static_cast<int>(next_op)];
