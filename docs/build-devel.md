@@ -2,10 +2,12 @@
 
 These instructions are for UPC++ developers only.
 
+THIS INTERNAL DOCUMENTATION IS NOT CAREFULLY MAINTAINED AND MAY BE OUT OF DATE.
+
 Requirements:
 
   - Bash
-  - Python 2.x >= 2.6
+  - Python 2.x >= 2.7.5
   - C++11 compiler: (gcc >= 4.9) or (clang >= ???) or (icc >= ???)
 
 ## Immediate Deficiencies ##
@@ -67,25 +69,28 @@ compilers (defaulting to gcc/g++ otherwise).
 
 ```
 export DBGSYM=1
+export ASSERT=1
 export OPTLEV=0
 echo $(nobs exe test/hello_gasnet.cpp)
 # prints: <upcxx>/.nobs/art/6c2d0a503e095800dfac643fd169e5f95a1260de.x
 
 export DBGSYM=0
+export ASSERT=0
 export OPTLEV=2
 echo $(nobs exe test/hello_gasnet.cpp)
 # prints: <upcxx>/.nobs/art/833cfeddce3c6fa1b266ff9429f1202933639346.x
 
 export DBGSYM=0
+export ASSERT=0
 export OPTLEV=3
 echo $(nobs exe test/hello_gasnet.cpp)
 # prints: <upcxx>/.nobs/art/58af363d4b6bcfa05e4768bf4c1f1e64d4e1e2ba.x
 
 # Equivalently, thanks to succinct bash syntax:
 
-DBGSYM=1 OPTLEV=0 echo $(nobs test/hello_gasnet.cpp)
-DBGSYM=0 OPTLEV=2 echo $(nobs test/hello_gasnet.cpp)
-DBGSYM=0 OPTLEV=3 echo $(nobs test/hello_gasnet.cpp)
+DBGSYM=1 ASSERT=1 OPTLEV=0 echo $(nobs test/hello_gasnet.cpp)
+DBGSYM=0 ASSERT=0 OPTLEV=2 echo $(nobs test/hello_gasnet.cpp)
+DBGSYM=0 ASSERT=0 OPTLEV=3 echo $(nobs test/hello_gasnet.cpp)
 ```
 
 Each of these will rebuild GASNet and the source file the first time they are
