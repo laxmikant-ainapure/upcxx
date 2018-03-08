@@ -1,4 +1,6 @@
+#if !NOBS_DISCOVERY
 #include <gasnet_ratomic.h>
+#endif
 #include <upcxx/diagnostic.hpp>
 #include <upcxx/atomic.hpp>
 #include <upcxx/backend/gasnet/runtime_internal.hpp>
