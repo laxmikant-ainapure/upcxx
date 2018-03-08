@@ -68,11 +68,11 @@ namespace upcxx {
     using event_t = Event;
     
     persona *target_;
-    Fn func_;
+    Fn fn_;
 
-    lpc_cx(persona &target, Fn func):
+    lpc_cx(persona &target, Fn fn):
       target_{&target},
-      func_{std::move(func)} {
+      fn_{std::move(fn)} {
     }
   };
 
@@ -179,7 +179,7 @@ namespace upcxx {
     template<typename CxH, typename ...CxT, typename Event>
     struct completions_is_event_sync<completions<CxH,CxT...>, Event> {
       static constexpr bool value =
-        completions_has_event<completions<CxT...>, Event>::value;
+        completions_is_event_sync<completions<CxT...>, Event>::value;
     };
   }
   

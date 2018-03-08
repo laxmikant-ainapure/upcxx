@@ -179,6 +179,9 @@ namespace upcxx {
 
       static constexpr bool static_scope = false;
       
+      backend::gasnet::handle_cb* operation_cb() {
+        return this;
+      }
       void initiate(
           intrank_t rank, void *buf_d, const void *buf_s, std::size_t size
         ) {

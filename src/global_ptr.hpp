@@ -111,6 +111,11 @@ namespace upcxx {
       return old;
     }
 
+    global_ptr operator+=(std::ptrdiff_t diff){
+      raw_ptr_+=diff;
+      return *this;
+    }
+    
     global_ptr& operator--() {
       return *this = *this - 1;
     }

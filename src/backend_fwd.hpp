@@ -57,7 +57,8 @@ namespace backend {
   extern intrank_t rank_n;
   extern intrank_t rank_me;
 }}
-  
+
+
 #if UPCXX_BACKEND_GASNET_PAR
   #include <upcxx/backend/gasnet/handle_cb.hpp>
   
