@@ -74,17 +74,28 @@ namespace upcxx {
       return rank_;
     }
 
-    global_ptr operator+(std::ptrdiff_t diff) const {
-      return global_ptr(rank_, raw_ptr_ + diff);
+    global_ptr operator+=(std::ptrdiff_t diff) {
+      raw_ptr_ += diff;
+      return *this;
     }
-
+    global_ptr operator+(std::ptrdiff_t diff) const {
+      global_ptr y = *this;
+      y += diff;
+      return y;
+    }
+    
+    global_ptr operator-=(std::ptrdiff_t diff) {
+      raw_ptr_ -= diff;
+      return *this;
+    }
     global_ptr operator-(std::ptrdiff_t diff) const {
-      return global_ptr(rank_, raw_ptr_ - diff);
+      global_ptr y = *this;
+      y -= diff;
+      return y;
     }
 
     std::ptrdiff_t operator-(global_ptr rhs) const {
-      assert(rank_ == rhs.rank_ &&
-             "operator- requires pointers to the same rank");
+      UPCXX_ASSERT(rank_ == rhs.rank_, "operator-(global_ptr,global_ptr): requires pointers to the same rank.");
       return raw_ptr_ - rhs.raw_ptr_;
     }
 
@@ -98,11 +109,6 @@ namespace upcxx {
       return old;
     }
 
-    global_ptr operator+=(std::ptrdiff_t diff){
-      raw_ptr_+=diff;
-      return *this;
-    }
-    
     global_ptr& operator--() {
       return *this = *this - 1;
     }

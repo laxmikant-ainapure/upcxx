@@ -6,16 +6,19 @@
 #define UPCXX_VERSION 20180101
 
 #include <upcxx/allocate.hpp>
+#include <upcxx/allreduce.hpp>
+#include <upcxx/atomic.hpp>
 #include <upcxx/backend.hpp>
+#include <upcxx/broadcast.hpp>
 #include <upcxx/dist_object.hpp>
 #include <upcxx/future.hpp>
 #include <upcxx/global_ptr.hpp>
+#include <upcxx/persona.hpp>
 #include <upcxx/rget.hpp>
 #include <upcxx/rput.hpp>
-//#include <upcxx/wait.hpp>
-#include <upcxx/atomic.hpp>
-#include <upcxx/broadcast.hpp>
-#include <upcxx/allreduce.hpp>
+#include <upcxx/rpc.hpp>
 #include <upcxx/team.hpp>
+#include <upcxx/vis.hpp>
+//#include <upcxx/wait.hpp>
 
 #endif
