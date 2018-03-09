@@ -169,9 +169,9 @@ void atomic_domain<T>::call_gex_AD_OpNB(
   gasnet::after_gasnet();
 }
 
-template class atomic_domain<int32_t>;
-template class atomic_domain<uint32_t>;
-template class atomic_domain<int64_t>;
-template class atomic_domain<uint64_t>;
+template class upcxx::atomic_domain<int32_t>;
+template class upcxx::atomic_domain<uint32_t>;
+template class upcxx::atomic_domain<int64_t>;
+template class upcxx::atomic_domain<uint64_t>;
 
 
