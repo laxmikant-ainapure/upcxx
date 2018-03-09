@@ -320,7 +320,8 @@ def main():
         print('')
 
     if not args.show:
-        subprocess.call(cmd)
+        sys.stdout.flush()
+        os.execvp(cmd[0], cmd)
 
 
         
