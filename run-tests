@@ -41,10 +41,11 @@ fi
 echo "Running tests on $RANKS ranks"
 
 check_result() {
+    RESULT=$1
     if test -n "$UPCXX_VERBOSE" ; then
       cat .run-tests.err
     fi
-    if [ $1 -ne 0 ]; then
+    if test $RESULT -ne 0 || grep "ERROR" .run-tests.err ; then
         echo -e "\e[91m$2 failed, the trace can be found in test/run-tests.err\e[0m"
         # force a flush
         cat .run-tests.err > run-tests.err
@@ -55,7 +56,7 @@ check_result() {
 }
 
 export GASNET_CONDUIT=$CONDUIT
-export GASNET_BACKTRACE=1
+export GASNET_BACKTRACE=${GASNET_BACKTRACE:=1}
 # default to debugging mode
 export ASSERT=${ASSERT:=1}
 export DBGSYM=${DBGSYM:=1}

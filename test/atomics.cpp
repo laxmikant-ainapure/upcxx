@@ -130,40 +130,31 @@ int main(int argc, char **argv) {
   // uncomment to evaluate compile-time error checking
   //upcxx::atomic_domain<const int> ad_cint({upcxx::atomic_op::load});
 
-  // check non-fixed-width supported integer types
-  upcxx::atomic_domain<int> ad_i({upcxx::atomic_op::store});
-  global_ptr<int> xi = upcxx::allocate<int>();
-  ad_i.store(xi, (int)0, memory_order_relaxed);
+  // check fixed-width supported integer types
+  upcxx::atomic_domain<int32_t> ad_i({upcxx::atomic_op::store});
+  auto xi = upcxx::allocate<int32_t>();
+  ad_i.store(xi, (int32_t)0, memory_order_relaxed);
   
-  upcxx::atomic_domain<unsigned int> ad_ui({upcxx::atomic_op::store});
-  global_ptr<unsigned int> xui = upcxx::allocate<unsigned int>();
-  ad_ui.store(xui, (unsigned)0, memory_order_relaxed);
+  upcxx::atomic_domain<uint32_t> ad_ui({upcxx::atomic_op::store});
+  auto xui = upcxx::allocate<uint32_t>();
+  ad_ui.store(xui, (uint32_t)0, memory_order_relaxed);
 
-  upcxx::atomic_domain<long> ad_l({upcxx::atomic_op::store});
-  global_ptr<long> xl = upcxx::allocate<long>();
-  ad_l.store(xl, (long)0, memory_order_relaxed);
+  upcxx::atomic_domain<int64_t> ad_l({upcxx::atomic_op::store});
+  auto xl = upcxx::allocate<int64_t>();
+  ad_l.store(xl, (int64_t)0, memory_order_relaxed);
   
-  upcxx::atomic_domain<unsigned long> ad_ul({upcxx::atomic_op::store});
-  global_ptr<unsigned long> xul = upcxx::allocate<unsigned long>();
-  ad_ul.store(xul, (unsigned long)0, memory_order_relaxed);
+  upcxx::atomic_domain<uint64_t> ad_ul({upcxx::atomic_op::store});
+  auto xul = upcxx::allocate<uint64_t>();
+  ad_ul.store(xul, (uint64_t)0, memory_order_relaxed);
   
-  upcxx::atomic_domain<int> ad = std::move(ad_i);
-  ad.store(xi, (int)0, memory_order_relaxed);
+  upcxx::atomic_domain<int32_t> ad = std::move(ad_i);
+  ad.store(xi, (int32_t)0, memory_order_relaxed);
   
   // this will fail with an error message about an unsupported domain
   //ad_ul.load(xul, memory_order_relaxed).wait();
   // this will fail with a null ptr message
   //ad_ul.store(nullptr, (unsigned long)0, memory_order_relaxed);
           
-  // long long doesn't work - it requires casts 
-  //upcxx::atomic_domain<long long> ad_ll({upcxx::atomic_op::store});
-  //global_ptr<long long> xll;
-  //ad_ll.store(xll, (long long)0, memory_order_relaxed);
-  
-  //upcxx::atomic_domain<unsigned long long> ad_ull({upcxx::atomic_op::store});
-  //global_ptr<unsigned long long> xull;
-  //ad_ul.store(xul, (unsigned long long)0, memory_order_relaxed);
-
   print_test_header();
   
   if (rank_me() == TARGET_RANK) counter = upcxx::allocate<int64_t>();

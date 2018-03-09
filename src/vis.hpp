@@ -528,7 +528,7 @@ namespace upcxx
     auto dv=dest.begin();
     for(SrcIter s=src_runs_begin; !(s==src_runs_end); ++s,++sv)
       {
-        UPCXX_ASSERT((*s).rank_);
+        UPCXX_ASSERT((*s).rank_==rank_s);
         *sv = (*s).raw_ptr_;
       }
 

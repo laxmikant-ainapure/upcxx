@@ -29,9 +29,9 @@ namespace upcxx {
           "Atomic domains only supported on non-const 32- and 64-bit integral types");
 
       // The opaque gasnet atomic domain handle.
-      uintptr_t ad_gex_handle;
+      uintptr_t ad_gex_handle = 0;
       // The or'd value for all the atomic operations.
-      int atomic_gex_ops;
+      int atomic_gex_ops = 0;
 
       // call to backend gasnet function
       void call_gex_AD_OpNB(T*, upcxx::global_ptr<T>, atomic_op, T, T,
@@ -127,12 +127,15 @@ namespace upcxx {
 
     public:
       // default constructor doesn't do anything
-      atomic_domain() { atomic_gex_ops = 0; }
+      atomic_domain() {}
 
-      atomic_domain(atomic_domain &&ad) : ad_gex_handle(ad.ad_gex_handle),
-          atomic_gex_ops(ad.atomic_gex_ops) {
+      atomic_domain(atomic_domain &&ad) {
+        // only allow moves onto a "dead' object
+        UPCXX_ASSERT(atomic_gex_ops == 0);
+        ad_gex_handle = ad.ad_gex_handle;
+        atomic_gex_ops = ad.atomic_gex_ops;
         // make sure the copied object does not call the destructor
-        ad.ad_gex_handle = 0;
+        ad.atomic_gex_ops = 0;
       }
 
       // The constructor takes a vector of operations. Currently, flags is currently unsupported.
