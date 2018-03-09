@@ -40,7 +40,7 @@ namespace upcxx {
       int atomic_gex_ops = 0;
       // The opaque gasnet atomic domain handle.
       std::uintptr_t ad_gex_handle = 0;
-      
+
       // call to backend gasnet function
       void call_gex_AD_OpNB(T*, upcxx::global_ptr<T>, atomic_op, T, T,
                             std::memory_order, backend::gasnet::handle_cb*);
@@ -150,6 +150,18 @@ namespace upcxx {
       atomic_domain(std::vector<atomic_op> const &ops, int flags = 0);
 
       ~atomic_domain();
+
+      atomic_domain &operator=(atomic_domain &&that) {
+        // only allow assignment moves onto "dead" object
+        UPCXX_ASSERT(atomic_gex_ops == 0,
+                     "Move assignment is only allowed on a default-constructed atomic_domain");
+        this->ad_gex_handle = that.ad_gex_handle;
+        this->atomic_gex_ops = that.atomic_gex_ops;
+        // revert `that` to non-constructed state
+        that.atomic_gex_ops = 0;
+        that.ad_gex_handle = 0;
+        return *this;
+      }
 
       template<typename Cxs = FUTURE_CX>
       NOFETCH_RTYPE<Cxs> store(global_ptr<T> gptr, T val, std::memory_order order,

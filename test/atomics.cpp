@@ -149,6 +149,9 @@ int main(int argc, char **argv) {
   
   upcxx::atomic_domain<int32_t> ad = std::move(ad_i);
   ad.store(xi, (int32_t)0, memory_order_relaxed);
+
+  // will fail with an error message about no move assignment on a non-default constructed domain
+  //ad = std::move(ad_i);
   
   // this will fail with an error message about an unsupported domain
   //ad_ul.load(xul, memory_order_relaxed).wait();
