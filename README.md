@@ -68,6 +68,14 @@ To run a test script, see [docs/testing.md](docs/testing.md)
 
 ### PENDING: to eventually become Release 2018.3.0
 
+New features/enhancements:
+
+ * Implementation of local memory translation (achieved with
+   `global_ptr::local()` / `global_ptr(T*)`). This encompasses a limited
+   implementation of teams to support `upcxx::world` and `upcxx::local_team`
+   so clients may query their local nieghborhood of ranks.
+    * Not supported: `team::split`, `team_id`, collectives over teams, passing
+      `team&` arguments to rpcs, constructing `dist_object` over teams. 
 
 ### 2018.01.31: Release 2018.1.0 BETA
 
