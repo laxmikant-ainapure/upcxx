@@ -873,7 +873,16 @@ class gasnet_source:
         @async.launched
         def download():
           import urllib
-          urllib.urlretrieve(url, tgz)
+          try:
+            urllib.urlretrieve(url, tgz)
+          except IOError as e:
+            if e.args[0] == 'socket error':
+              raise errorlog.LoggedError(
+'Internet troubles.',
+'Socket error "%s" when attempting to download "%s".\n'%(e.args[1].strerror, url)
+              )
+            else:
+              raise
         
         print>>sys.stderr, 'Downloading %s' % url
         yield download()
