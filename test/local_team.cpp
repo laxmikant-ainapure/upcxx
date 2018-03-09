@@ -64,6 +64,8 @@ int main() {
       ).wait();
 
     UPCXX_ASSERT_ALWAYS(p == global_ptr<int>(p.local()));
+    UPCXX_ASSERT_ALWAYS(p.is_local());
+    UPCXX_ASSERT_ALWAYS(p.where() == locals[(peer_me + i) % peer_n]);
     
     *p.local() = upcxx::rank_me();
   }
