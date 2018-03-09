@@ -1,12 +1,14 @@
 #ifndef _4fd2caba_e406_4f0e_ab34_0e0224ec36a5
 #define _4fd2caba_e406_4f0e_ab34_0e0224ec36a5
 
-#include <vector>
-#include <climits>
-#include <type_traits>
 #include <upcxx/backend.hpp>
 #include <upcxx/completion.hpp>
 #include <upcxx/global_ptr.hpp>
+
+#include <climits>
+#include <cstdint>
+#include <vector>
+#include <type_traits>
 
 namespace upcxx {
   // All supported atomic operations.
@@ -28,11 +30,17 @@ namespace upcxx {
       static_assert(is_atomic::value,
           "Atomic domains only supported on non-const 32- and 64-bit integral types");
 
-      // The opaque gasnet atomic domain handle.
-      uintptr_t ad_gex_handle = 0;
-      // The or'd value for all the atomic operations.
-      int atomic_gex_ops = 0;
+      // Our encoding is that if both fields are zero than this is a
+      // non-constructed object. Otherwise, if atomic_gex_ops is zero then
+      // this is a constructed but empty domain which was not registered with
+      // gasnet (hence ad_gex_handle was not produced by gasnet). Otherwise,
+      // this domain was built by gasnet.
 
+      // The or'd values for the atomic operations.
+      int atomic_gex_ops = 0;
+      // The opaque gasnet atomic domain handle.
+      std::uintptr_t ad_gex_handle = 0;
+      
       // call to backend gasnet function
       void call_gex_AD_OpNB(T*, upcxx::global_ptr<T>, atomic_op, T, T,
                             std::memory_order, backend::gasnet::handle_cb*);
@@ -91,7 +99,7 @@ namespace upcxx {
       template<typename Cxs = FUTURE_CX>
       FETCH_RTYPE<Cxs> fop(atomic_op aop, global_ptr<T> gptr, std::memory_order order,
                            T val1 = 0, T val2 = 0, Cxs cxs = Cxs{{}}) {
-        UPCXX_ASSERT(atomic_gex_ops != 0, "Atomic domain is not constructed");
+        UPCXX_ASSERT(atomic_gex_ops != 0 || ad_gex_handle != 0, "Atomic domain is not constructed");
         UPCXX_ASSERT((detail::completions_has_event<Cxs, operation_cx_event>::value));
         UPCXX_ASSERT(gptr != nullptr, "Global pointer for atomic operation is null");
         // we only have local completion, not remote
@@ -110,7 +118,7 @@ namespace upcxx {
       template<typename Cxs = FUTURE_CX>
       NOFETCH_RTYPE<Cxs> op(atomic_op aop, global_ptr<T> gptr, std::memory_order order,
                             T val1 = 0, T val2 = 0, Cxs cxs = Cxs{{}}) {
-        UPCXX_ASSERT(atomic_gex_ops != 0, "Atomic domain is not constructed");
+        UPCXX_ASSERT(atomic_gex_ops != 0 || ad_gex_handle != 0, "Atomic domain is not constructed");
         UPCXX_ASSERT((detail::completions_has_event<Cxs, operation_cx_event>::value));
         UPCXX_ASSERT(gptr != nullptr, "Global pointer for atomic operation is null");
         // we only have local completion, not remote
@@ -126,16 +134,16 @@ namespace upcxx {
       }
 
     public:
-      // default constructor doesn't do anything
+      // default constructor doesn't do anything besides initializing both:
+      //   atomic_gex_ops = 0, ad_gex_handle = 0
       atomic_domain() {}
 
-      atomic_domain(atomic_domain &&ad) {
-        // only allow moves onto a "dead' object
-        UPCXX_ASSERT(atomic_gex_ops == 0);
-        ad_gex_handle = ad.ad_gex_handle;
-        atomic_gex_ops = ad.atomic_gex_ops;
-        // make sure the copied object does not call the destructor
-        ad.atomic_gex_ops = 0;
+      atomic_domain(atomic_domain &&that) {
+        this->ad_gex_handle = that.ad_gex_handle;
+        this->atomic_gex_ops = that.atomic_gex_ops;
+        // revert `that` to non-constructed state
+        that.atomic_gex_ops = 0;
+        that.ad_gex_handle = 0;
       }
 
       // The constructor takes a vector of operations. Currently, flags is currently unsupported.
