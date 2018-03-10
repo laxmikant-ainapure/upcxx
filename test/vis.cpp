@@ -259,7 +259,6 @@ int main() {
                             );
 
   fg0.wait();
-
   
   for(int i=0; i<6; i++)
     {
