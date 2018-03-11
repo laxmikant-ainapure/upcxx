@@ -141,14 +141,8 @@ int main() {
 
     mycount[0]++;  //reading from myself
     f0.wait();
-    barrier();
-
-    if(mycount[1] != 1)
-      {
-        std::cout<<"missed remote write count on rput_irregular\n";
-        success=false;
-      }
-   
+    while(mycount[1]!=1)  progress(); // wait to see my lo neighbor has modified my count
+ 
     for(int i=0; i<6; i++)
       {
         if(myPtr[i] != nebrLo+i){
@@ -166,7 +160,7 @@ int main() {
   auto fr1 = IterF<lli*>(myPtr, B, N);
   auto fr1_end = fr1; fr1_end+=M*N; 
 
-  barrier();
+  barrier(); // need to see the reset done above
   auto f1 = rput_irregular(fs1, fs1_end, fd1, fd1_end);
 
  
@@ -225,17 +219,9 @@ int main() {
 
 
   s1.wait();
-  if(mycount[0] != 2)
-    {
-      std::cout<<"as_lpc did not update on rput_strided \n";
-      success=false;
-    }
-  barrier();
-  if(mycount[1] != 2)
-    {
-      std::cout<<"missed remote write count on rput_strided\n";
-      success=false;
-    }
+  while(mycount[0] !=2 || mycount[1] != 2) progress();
+  // mycount[1] == 2 means that the rput to me should be completed
+  // seeing mycount[0] == 2 means that the operation_cx::as_lpc has fired
   
   std::cout<<"\nStrided put testing \n";
   success = success && check(fr1, fr1_end, (lli)nebrLo); // this is moving the same data as in the irregular case
@@ -273,12 +259,6 @@ int main() {
                             );
 
   fg0.wait();
-  if(mycount[0] != 3)
-    {
-      std::cout<<"as_lpc did not update on rget_irregular \n";
-      success=false;
-    }
-
   
   for(int i=0; i<6; i++)
     {
@@ -288,13 +268,9 @@ int main() {
       }
     }
 
+  while(mycount[0] != 3 || mycount[1] != 3) progress(); // ensure that every executes lpc and rpc completions
   barrier();
-  
-  if(mycount[1] != 3)
-    {
-      std::cout<<"missed remote rpc count on rget_irregular\n";
-      success=false;
-    }
+ 
   
   reset(myPatch, me);
   std::cout<<"Irregular rget test 2\n";
@@ -343,11 +319,10 @@ int main() {
   auto sg1 = rget_strided<2>(lo+N-B, {{sizeof(lli), 2*N*sizeof(lli)}},
                              myPtr+N, {{sizeof(lli), 2*N*sizeof(lli)}}, {{B,M/2}});
  
-
+  sg1.wait();
   sm=sum(myPatch);
   correctAnswer = B*M/2*me + B*M/2*nebrLo + (N-B)*M*me;
-  
-  sg1.wait();
+
   if(sm != correctAnswer)
     {
       std::cout<<" Strided get expected sum:"<<correctAnswer<<" actual sum: "<<sm<<"\n";
