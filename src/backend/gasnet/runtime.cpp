@@ -17,7 +17,7 @@ namespace backend = upcxx::backend;
 namespace detail  = upcxx::detail;
 namespace gasnet  = upcxx::backend::gasnet;
 
-using upcxx::future;
+using upcxx::command;
 using upcxx::intrank_t;
 using upcxx::parcel_reader;
 using upcxx::parcel_writer;
@@ -103,6 +103,15 @@ namespace {
   // local peer index owning that segment.
   unique_ptr<uintptr_t[/*local_team.size()*/]> local_mem_owner_vbase;
   unique_ptr<intrank_t[/*local_team.size()*/]> local_mem_owner_peer;
+
+  #if UPCXX_BACKEND_GASNET_SEQ
+    // Set by the thread which initiates gasnet since in SEQ only that thread
+    // may invoke gasnet.
+    void *gasnet_seq_thread_id = nullptr;
+  #else
+    // unused
+    constexpr void *gasnet_seq_thread_id = nullptr;
+  #endif
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -146,6 +155,10 @@ void upcxx::init() {
     return;
   
   int ok;
+
+  #if UPCXX_BACKEND_GASNET_SEQ
+    gasnet_seq_thread_id = upcxx::detail::thread_id();
+  #endif
 
   gex_Client_t client;
   gex_EP_t endpoint;
@@ -210,6 +223,7 @@ void upcxx::init() {
     am_medium_size < 1<<10 ? 256 :
     am_medium_size < 8<<10 ? 512 :
                              1024;
+  UPCXX_ASSERT(gasnet::am_size_rdzv_cutover_min <= gasnet::am_size_rdzv_cutover);
   
   // setup shared segment allocator
   void *segment_base;
@@ -543,9 +557,7 @@ void gasnet::send_am_rdzv(
           backend::during_level<level>([=]() {
             // Execute buffer.
             parcel_reader r{buf_d};
-            command_execute(r) >> [=]() {
-              upcxx::deallocate(buf_d);
-            };
+            command<bool,void*>::execute(r, /*use_free=*/false, buf_d);
           });
         }
       );
@@ -605,7 +617,8 @@ void upcxx::progress(progress_level level) {
   int total_exec_n = 0;
   int exec_n;
   
-  gasnet_AMPoll();
+  if(!UPCXX_BACKEND_GASNET_SEQ || gasnet_seq_thread_id == upcxx::detail::thread_id())
+    gasnet_AMPoll();
   
   do {
     exec_n = 0;
@@ -666,11 +679,9 @@ namespace {
       gex_AM_Arg_t buf_align
     ) {
     
-    future<> buf_done;
-    
     if(0 == (reinterpret_cast<uintptr_t>(buf) & (buf_align-1))) {
       parcel_reader r{buf};
-      buf_done = command_execute(r);
+      command<>::execute(r);
     }
     else {
       void *tmp;
@@ -680,12 +691,10 @@ namespace {
       std::memcpy((void**)tmp, (void**)buf, buf_size);
       
       parcel_reader r{tmp};
-      buf_done = command_execute(r);
+      command<>::execute(r);
       
       std::free(tmp);
     }
-    
-    UPCXX_ASSERT(buf_done.ready());
   }
   
   void am_eager_master(

@@ -251,11 +251,20 @@ namespace upcxx
                   DestIter dst_runs_begin, DestIter dst_runs_end,
                   Cxs cxs=completions<future_cx<operation_cx_event>>{{}})
   {
+    using T = typename std::remove_pointer<
+        typename std::decay<decltype(std::get<0>(*src_runs_begin))>::type
+      >::type;
+    
+    static_assert(
+      is_definitely_trivially_serializable<T>::value,
+      "RMA operations only work on DefinitelyTriviallySerializable types."
+    );
+    
     static_assert(std::is_same<
                   typename std::decay<decltype(std::get<0>(*src_runs_begin))>::type,
                   typename std::decay<decltype(std::get<0>(*dst_runs_begin).raw_ptr_)>::type
                   >::value, "SrcIter and DestIter need to be over same base T type");
-    
+
     UPCXX_ASSERT_ALWAYS((
       detail::completions_has_event<Cxs, operation_cx_event>::value |
       detail::completions_has_event<Cxs, remote_cx_event>::value),
@@ -337,6 +346,15 @@ namespace upcxx
                    DestIter dst_runs_begin, DestIter dst_runs_end,
                    Cxs cxs=completions<future_cx<operation_cx_event>>{{}})
   {
+    using T = typename std::remove_pointer<
+        typename std::decay<decltype(std::get<0>(*dst_runs_begin))>::type
+      >::type;
+    
+    static_assert(
+      is_definitely_trivially_serializable<T>::value,
+      "RMA operations only work on DefinitelyTriviallySerializable types."
+    );
+    
     static_assert(std::is_same<
         typename std::decay<decltype(std::get<0>(*dst_runs_begin))>::type,
         typename std::decay<decltype(std::get<0>(*src_runs_begin).raw_ptr_)>::type
@@ -419,6 +437,15 @@ namespace upcxx
                Cxs cxs=completions<future_cx<operation_cx_event>>{{}})
   {
 
+    using T = typename std::remove_pointer<
+        typename std::decay<decltype(*src_runs_begin)>::type
+      >::type;
+    
+    static_assert(
+      is_definitely_trivially_serializable<T>::value,
+      "RMA operations only work on DefinitelyTriviallySerializable types."
+    );
+    
     UPCXX_ASSERT_ALWAYS((
       detail::completions_has_event<Cxs, operation_cx_event>::value |
       detail::completions_has_event<Cxs, remote_cx_event>::value),
@@ -497,6 +524,15 @@ namespace upcxx
                   Cxs cxs=completions<future_cx<operation_cx_event>>{{}})
   {
 
+    using T = typename std::remove_pointer<
+        typename std::decay<decltype(*dst_runs_begin)>::type
+      >::type;
+    
+    static_assert(
+      is_definitely_trivially_serializable<T>::value,
+      "RMA operations only work on DefinitelyTriviallySerializable types."
+    );
+    
     UPCXX_ASSERT_ALWAYS((
       detail::completions_has_event<Cxs, operation_cx_event>::value |
       detail::completions_has_event<Cxs, remote_cx_event>::value),
@@ -569,7 +605,11 @@ namespace upcxx
        std::size_t const *extents,
        Cxs cxs=completions<future_cx<operation_cx_event>>{{}})
   {
- 
+    static_assert(
+      is_definitely_trivially_serializable<T>::value,
+      "RMA operations only work on DefinitelyTriviallySerializable types."
+    );
+    
     UPCXX_ASSERT_ALWAYS((
       detail::completions_has_event<Cxs, operation_cx_event>::value |
       detail::completions_has_event<Cxs, remote_cx_event>::value),
@@ -641,6 +681,11 @@ namespace upcxx
                std::size_t const *extents,
                Cxs cxs=completions<future_cx<operation_cx_event>>{{}})
   {
+    static_assert(
+      is_definitely_trivially_serializable<T>::value,
+      "RMA operations only work on DefinitelyTriviallySerializable types."
+    );
+    
     UPCXX_ASSERT_ALWAYS((
       detail::completions_has_event<Cxs, operation_cx_event>::value |
       detail::completions_has_event<Cxs, remote_cx_event>::value),

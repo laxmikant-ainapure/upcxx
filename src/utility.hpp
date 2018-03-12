@@ -55,58 +55,60 @@ namespace upcxx {
   inline constant_function<T> constant(T value) {
     return constant_function<T>{std::move(value)};
   }
-  
-  //////////////////////////////////////////////////////////////////////
-  // function_ref: reference to a function. Useful when you want to pass
-  // a lambda into a subroutine knowing the lambda won't be used after
-  // the subroutine exits. A regular std::function could be used in this
-  // case but this has the advantage of doing no heap allocations and
-  // no virtual call for the destructor.
-  //
-  // void my_foreach(int n, function_ref<void(int)> fn) {
-  //   for(int i=0; i < n; i++)
-  //     fn(i);
-  // }
-  //
-  // my_foreach(10, [=](int i) { cout << "i="<<i<<'\n'; });
-  
-  template<typename Sig>
-  class function_ref;
-  
-  template<typename Ret, typename ...Arg>
-  class function_ref<Ret(Arg...)> {
-    Ret(*invoker_)(Arg...);
-    void *fn_;
+
+  #if 0 // broken code
+    //////////////////////////////////////////////////////////////////////
+    // function_ref: reference to a function. Useful when you want to pass
+    // a lambda into a subroutine knowing the lambda won't be used after
+    // the subroutine exits. A regular std::function could be used in this
+    // case but this has the advantage of doing no heap allocations and
+    // no virtual call for the destructor.
+    //
+    // void my_foreach(int n, function_ref<void(int)> fn) {
+    //   for(int i=0; i < n; i++)
+    //     fn(i);
+    // }
+    //
+    // my_foreach(10, [=](int i) { cout << "i="<<i<<'\n'; });
     
-  private:
-    template<typename Fn>
-    static Ret the_invoker(void *fn, Arg ...arg) {
-      return reinterpret_cast<Fn*>(fn)->operator()(static_cast<Arg>(arg)...);
-    }
+    template<typename Sig>
+    class function_ref;
     
-    static Ret the_nop_invoker(void *fn, Arg ...arg) {
-      return nop_function<Ret(Arg...)>{}();
-    }
-    
-  public:
-    function_ref():
-      invoker_{the_nop_invoker},
-      fn_{nullptr} {
-    }
-    template<typename Fn>
-    function_ref(Fn &&fn):
-      invoker_{the_invoker<typename std::remove_reference<Fn>::type>},
-      fn_{reinterpret_cast<void*>(const_cast<Fn*>(&fn))} {
-    }
-    function_ref(const function_ref&) = default;
-    function_ref& operator=(const function_ref&) = default;
-    function_ref(function_ref&&) = default;
-    function_ref& operator=(function_ref&&) = default;
-    
-    Ret operator()(Arg ...arg) const {
-      return invoker_(fn_, static_cast<Arg>(arg)...);
-    }
-  };
+    template<typename Ret, typename ...Arg>
+    class function_ref<Ret(Arg...)> {
+      Ret(*invoker_)(Arg...);
+      void *fn_;
+      
+    private:
+      template<typename Fn>
+      static Ret the_invoker(void *fn, Arg ...arg) {
+        return reinterpret_cast<Fn*>(fn)->operator()(static_cast<Arg>(arg)...);
+      }
+      
+      static Ret the_nop_invoker(void *fn, Arg ...arg) {
+        return nop_function<Ret(Arg...)>{}();
+      }
+      
+    public:
+      function_ref():
+        invoker_{the_nop_invoker},
+        fn_{nullptr} {
+      }
+      template<typename Fn>
+      function_ref(Fn &&fn):
+        invoker_{the_invoker<typename std::remove_reference<Fn>::type>},
+        fn_{reinterpret_cast<void*>(const_cast<Fn*>(&fn))} {
+      }
+      function_ref(const function_ref&) = default;
+      function_ref& operator=(const function_ref&) = default;
+      function_ref(function_ref&&) = default;
+      function_ref& operator=(function_ref&&) = default;
+      
+      Ret operator()(Arg ...arg) const {
+        return invoker_(fn_, static_cast<Arg>(arg)...);
+      }
+    };
+  #endif
   
   //////////////////////////////////////////////////////////////////////
   // raw_storage<T>: Like std::aligned_storage, except more convenient to work

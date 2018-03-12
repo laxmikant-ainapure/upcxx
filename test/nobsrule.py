@@ -13,6 +13,7 @@ REQUIRES_PTHREAD = [
   'lpc_barrier.cpp',
   'uts/uts_threads.cpp',
   'uts/uts_hybrid.cpp',
+  'view.cpp',
 ]
 
 REQUIRES_OPENMP = [

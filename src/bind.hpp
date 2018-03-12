@@ -3,6 +3,7 @@
 
 #include <upcxx/future.hpp>
 #include <upcxx/packing.hpp>
+#include <upcxx/global_fnptr.hpp>
 #include <upcxx/utility.hpp>
 
 #include <tuple>
@@ -10,12 +11,16 @@
 #include <utility>
 
 namespace upcxx {
-  //////////////////////////////////////////////////////////////////////
+  //////////////////////////////////////////////////////////////////////////////
   // binding<T>: Specialization for how to bind a T argument within a
   // call to `upcxx::bind`.
   
   template<typename T>
   struct binding/*{
+    // these must satisfy the type equality:
+    //   unpacked_of_t<binding<T>::on_wire_type>
+    //    ==
+    //   binding<binding<T>::off_wire_type>::on_wire_type
     typedef on_wire_type;
     typedef off_wire_type;
     
@@ -23,61 +28,63 @@ namespace upcxx {
     static on_wire_type on_wire(T);
     
     // off_wire: Given a lvalue-reference to deserialized wire value,
-    // produce a future of the off-wire type as a value or future-of-value.
-    static off_wire_type off_wire(on_wire_type&);
-    // -- or --
+    // produce the off-wire value or future of it.
+    static off_wire_type off_wire(on_wire_type);
+    // ** OR **
     static future<off_wire_type> off_wire(on_wire_type&);
   }*/;
-  
+
   template<typename T>
   struct binding_trivial {
+    using stripped_type = T;
     using on_wire_type = T;
-    using off_wire_type = T;
-    
-    static T on_wire(T x) { return std::move(x); }
-    static T off_wire(T &&x) { return std::move(x); }
-    static T& off_wire(T &x) { return x; }
+    using off_wire_type = unpacked_of_t<T>;
+
+    template<typename T1>
+    static T1&& on_wire(T1 &&x) {
+      return static_cast<T1&&>(x);
+    }
+    template<typename T1>
+    static T1&& off_wire(T1 &&x) {
+      return static_cast<T1&&>(x);
+    }
   };
 
   // binding defaults to trivial
   template<typename T>
   struct binding: binding_trivial<T> {};
 
-  // binding of reference-to-function is handled on the wire as a
-  // pointer-to-function.
-  template<typename Ret, typename ...Arg>
-  struct binding<Ret(&)(Arg...)> {
-    typedef Ret(*on_wire_type)(Arg...);
-    typedef Ret(&off_wire_type)(Arg...);
-    
-    static on_wire_type on_wire(off_wire_type x) { return &x; }
-    static off_wire_type off_wire(on_wire_type x) { return *x; }
-  };
-  
-  // binding implicitly decays (except references-to-functions handled above).
+  // binding implicitly drops const and refs
   template<typename T>
   struct binding<T&>: binding<T> {};
   template<typename T>
-  struct binding<T&&>: binding<T&> {};
+  struct binding<T&&>: binding<T> {};
   template<typename T>
-  struct binding<T const>: binding<T> {};
+  struct binding<const T>: binding<T> {};
   template<typename T>
-  struct binding<T volatile>: binding<T> {};
+  struct binding<volatile T>: binding<T> {};
+
+  // binding does not drop reference to function
+  template<typename R, typename ...A>
+  struct binding<R(&)(A...)>: binding_trivial<R(&)(A...)> {};
   
-  //////////////////////////////////////////////////////////////////////
+  //////////////////////////////////////////////////////////////////////////////
   // binding_is_immediate: immediate bindings are those that don't return
   // futures from off_wire()
   
   template<typename T,
            typename Offed = decltype(
-             binding<T>::off_wire(std::declval<typename binding<T>::on_wire_type&>())
+             binding<typename binding<T>::off_wire_type>
+              ::off_wire(
+                std::declval<unpacked_of_t<typename binding<T>::on_wire_type>&>()
+              )
            )>
   struct binding_is_immediate: std::true_type {};
 
   template<typename T, typename Kind, typename ...U>
   struct binding_is_immediate<T, /*Offed=*/future1<Kind,U...>>: std::false_type {};
   
-  //////////////////////////////////////////////////////////////////////
+  //////////////////////////////////////////////////////////////////////////////
   // bound_function: Packable callable wrapping an internal callable
   // and bound leading arguments. The "on-wire" type of each thing is
   // stored in this object. Calling the object invokes "off-wire"
@@ -93,6 +100,8 @@ namespace upcxx {
   namespace detail {
     template<
       typename Fn, typename BndTup/*std::tuple<B...>*/,
+
+      typename BndIxs = upcxx::make_index_sequence<std::tuple_size<BndTup>::value>,
       
       // whether all of Fn and B... immediately available off-wire?
       bool all_immediate = binding_is_immediate<Fn>::value
@@ -100,9 +109,10 @@ namespace upcxx {
       >
     struct bound_function_base;
     
-    template<typename Fn, typename ...B>
+    template<typename Fn, typename ...B, int ...bi>
     struct bound_function_base<
-        Fn, std::tuple<B...>, /*all_immediate=*/true
+        Fn, std::tuple<B...>, upcxx::index_sequence<bi...>,
+        /*all_immediate=*/true
       > {
       
       typename binding<Fn>::on_wire_type fn_;
@@ -111,12 +121,8 @@ namespace upcxx {
       template<typename T>
       static T& as_lref(T &&rref) { return rref; }
       
-      template<typename Me, int ...bi, typename ...Arg>
-      static auto apply_(
-          Me &&me,
-          upcxx::index_sequence<bi...> b_seq,
-          Arg &&...a
-        )
+      template<typename Me, typename ...Arg>
+      static auto apply_(Me &&me, Arg &&...a)
         -> decltype(
           binding<Fn>::off_wire(me.fn_)(
             std::declval<typename binding<B>::off_wire_type&>()...,
@@ -135,70 +141,80 @@ namespace upcxx {
         );
       }
     };
+
+    template<typename Fn, typename BndTup, typename ArgTup,
+             typename ArgIxs = upcxx::make_index_sequence<std::tuple_size<ArgTup>::value>>
+    struct bound_function_applicator;
+
+    template<typename Fn, typename ...B, typename ...Arg, int ...ai>
+    struct bound_function_applicator<
+        Fn, std::tuple<B...>, std::tuple<Arg...>, upcxx::index_sequence<ai...>
+      > {
+
+      std::tuple<Arg...> a;
+      
+      auto operator()(
+          typename binding<Fn>::off_wire_type &fn,
+          typename binding<B>::off_wire_type &...b
+        ) ->
+        decltype(fn(b..., std::get<ai>(a)...)) {
+        return fn(b..., std::get<ai>(a)...);
+      }
+    };
     
-    template<typename Fn, typename ...B>
+    template<typename Fn, typename ...B, int ...bi>
     struct bound_function_base<
-        Fn, std::tuple<B...>, /*all_immediate=*/false
+        Fn, std::tuple<B...>, upcxx::index_sequence<bi...>,
+        /*all_immediate=*/false
       > {
       
       typename binding<Fn>::on_wire_type fn_;
       std::tuple<typename binding<B>::on_wire_type...> b_;
       
-      template<typename ...Arg>
-      struct applicator {
-        std::tuple<Arg...> a;
-        
-        template<int ...ai>
-        auto apply_(
-            upcxx::index_sequence<ai...>,
-            typename binding<Fn>::off_wire_type &fn,
-            typename binding<B>::off_wire_type &...b
-          )
-          -> decltype(fn(b..., std::get<ai>(a)...)) {
-          return fn(b..., std::get<ai>(a)...);
-        }
-        
-        auto operator()(
-            typename binding<Fn>::off_wire_type &fn,
-            typename binding<B>::off_wire_type &...b
-          )
-          -> decltype(
-            apply_(upcxx::make_index_sequence<sizeof...(Arg)>{}, fn, b...)
-          ) {
-          return apply_(upcxx::make_index_sequence<sizeof...(Arg)>{}, fn, b...);
-        };
-      };
-      
-      template<typename Me, int ...bi, typename ...Arg>
-      static auto apply_(
-          Me &&me,
-          upcxx::index_sequence<bi...> b_seq,
-          Arg &&...a
-        )
+      template<typename Me, typename ...Arg>
+      static auto apply_(Me &&me, Arg &&...a)
         -> decltype(
           upcxx::when_all(
-            to_future(
-              binding<Fn>::off_wire(std::declval<typename binding<Fn>::on_wire_type&&>())
+            upcxx::to_future(
+              binding<Fn>::off_wire(
+                std::declval<typename binding<Fn>::on_wire_type&&>()
+              )
             ),
-            to_future(
-              binding<B>::off_wire(std::declval<typename binding<B>::on_wire_type&&>())
+            upcxx::to_future(
+              binding<B>::off_wire(
+                std::declval<typename binding<B>::on_wire_type&&>()
+              )
             )...
-          ) >> std::declval<applicator<Arg&&...>>()
+          ).then(
+            std::declval<bound_function_applicator<
+                Fn, std::tuple<B...>,
+                std::tuple<typename binding<Arg&&>::stripped_type...>
+              >>()
+          )
         ) {
         return upcxx::when_all(
-            to_future(
+            upcxx::to_future(
               binding<Fn>::off_wire(std::move(me.fn_))
             ),
-            to_future(
+            upcxx::to_future(
               binding<B>::off_wire(
                 static_cast<typename binding<B>::on_wire_type&&>(
-                  const_cast<typename binding<B>::on_wire_type&>(std::get<bi>(me.b_))
+                  const_cast<typename binding<B>::on_wire_type&>(
+                    std::get<bi>(me.b_)
+                  )
                 )
               )
             )...
-          ) >> applicator<Arg&&...>{
-            std::tuple<Arg&&...>{std::forward<Arg>(a)...}
-          };
+          ).then(
+            bound_function_applicator<
+                Fn, std::tuple<B...>,
+                std::tuple<typename binding<Arg&&>::stripped_type...>
+              >{
+              std::tuple<typename binding<Arg&&>::stripped_type...>{
+                std::forward<Arg>(a)...
+              }
+            }
+          );
       }
     };
   }
@@ -217,96 +233,158 @@ namespace upcxx {
     }
     
     template<typename ...Arg>
-    auto operator()(Arg &&...a) const
-      -> decltype(
-        base_type::apply_(*this,
-          upcxx::make_index_sequence<sizeof...(B)>(),
-          std::forward<Arg>(a)...
-        )
-      ) {
-      return base_type::apply_(*this,
-        upcxx::make_index_sequence<sizeof...(B)>(),
-        std::forward<Arg>(a)...
-      );
+    auto operator()(Arg &&...a) const ->
+      decltype(base_type::apply_(*this, std::forward<Arg>(a)...)) {
+      return base_type::apply_(*this, std::forward<Arg>(a)...);
     }
     
     template<typename ...Arg>
-    auto operator()(Arg &&...a)
-      -> decltype(
-        base_type::apply_(*this,
-          upcxx::make_index_sequence<sizeof...(B)>(),
-          std::forward<Arg>(a)...
-        )
-      ) {
-      return base_type::apply_(*this,
-        upcxx::make_index_sequence<sizeof...(B)>(),
-        std::forward<Arg>(a)...
-      );
-    } 
+    auto operator()(Arg &&...a) ->
+      decltype(base_type::apply_(*this, std::forward<Arg>(a)...)) {
+      return base_type::apply_(*this, std::forward<Arg>(a)... );
+    }
   };
+
+  template<typename Fn, typename ...B>
+  using bound_function_of = bound_function<
+      typename binding<Fn>::stripped_type,
+      typename binding<B>::stripped_type...
+    >;
   
   // make `bound_function` packable
-  template<typename Fn, typename ...B>
-  struct packing<bound_function<Fn,B...>> {
-    static void size_ubound(parcel_layout &ub, const bound_function<Fn,B...> &fn) {
-      packing<typename binding<Fn>::on_wire_type>::size_ubound(ub, fn.fn_);
-      packing<std::tuple<typename binding<B>::on_wire_type...>>::size_ubound(ub, fn.b_);
-    }
-    
-    static void pack(parcel_writer &w, const bound_function<Fn,B...> &fn) {
-      packing<typename binding<Fn>::on_wire_type>::pack(w, fn.fn_);
-      packing<std::tuple<typename binding<B>::on_wire_type...>>::pack(w, fn.b_);
-    }
-    
-    static bound_function<Fn,B...> unpack(parcel_reader &r) {
-      auto fn = packing<typename binding<Fn>::on_wire_type>::unpack(r);
-      auto b = packing<std::tuple<typename binding<B>::on_wire_type...>>::unpack(r);
+  namespace detail {
+    template<typename Fn, typename ...B>
+    struct packing_skippable_dumb<bound_function<Fn,B...>> {
+      static constexpr bool is_definitely_supported =
+        packing_is_definitely_supported<Fn>::value &&
+        packing_is_definitely_supported<std::tuple<B...>>::value;
+
+      static constexpr bool is_owning = 
+        packing_is_owning<Fn>::value &&
+        packing_is_owning<std::tuple<B...>>::value;
+
+      static constexpr bool is_ubound_tight = 
+        packing_is_ubound_tight<Fn>::value &&
+        packing_is_ubound_tight<std::tuple<B...>>::value;
       
-      return bound_function<Fn,B...>{std::move(fn), std::move(b)};
-    }
+      template<typename Ub, bool skippable>
+      static auto ubound(Ub ub, const bound_function<Fn,B...> &fn, std::integral_constant<bool,skippable>)
+        -> decltype(
+          packing<std::tuple<typename binding<B>::on_wire_type...>>::ubound(
+            packing<typename binding<Fn>::on_wire_type>::ubound(
+              ub, fn.fn_, std::false_type()
+            ),
+            fn.b_, std::false_type()
+          )
+        ) {
+        return packing<std::tuple<typename binding<B>::on_wire_type...>>::ubound(
+          packing<typename binding<Fn>::on_wire_type>::ubound(
+            ub, fn.fn_, /*skippable=*/std::false_type()
+          ),
+          fn.b_, /*skippable=*/std::false_type()
+        );
+      }
+      
+      template<bool skippable>
+      static void pack(parcel_writer &w, const bound_function<Fn,B...> &fn, std::integral_constant<bool,skippable>) {
+        packing<typename binding<Fn>::on_wire_type>::pack(w, fn.fn_, std::false_type());
+        packing<std::tuple<typename binding<B>::on_wire_type...>>::pack(w, fn.b_, std::false_type());
+      }
+
+      static void skip(parcel_reader &r) {
+        packing<typename binding<Fn>::on_wire_type>::skip(r);
+        packing<std::tuple<typename binding<B>::on_wire_type...>>::skip(r);
+      }
+
+      using unpacked_t = bound_function<
+          typename binding<Fn>::off_wire_type,
+          typename binding<B>::off_wire_type...
+        >;
+      
+      template<bool skippable>
+      static void unpack(parcel_reader &r, void *into, std::integral_constant<bool,skippable>) {
+        raw_storage<typename binding<Fn>::on_wire_type> fn;
+        packing<typename binding<Fn>::on_wire_type>::unpack(r, &fn, /*skippable=*/std::false_type());
+
+        raw_storage<std::tuple<typename binding<B>::on_wire_type...>> b;
+        packing<std::tuple<typename binding<B>::on_wire_type...>>::unpack(r, &b, /*skippable=*/std::false_type());
+        
+        ::new(into) bound_function<Fn,B...>(
+          fn.value_and_destruct(),
+          b.value_and_destruct()
+        );
+      }
+    };
+  }
+
+  template<typename Fn, typename ...B>
+  struct packing_screen_trivial<bound_function<Fn,B...>>:
+    upcxx::trait_forall<packing_is_trivial, Fn, B...> {
+  };
+  
+  template<typename Fn, typename ...B>
+  struct is_definitely_trivially_serializable<bound_function<Fn,B...>>:
+    upcxx::trait_forall<is_definitely_trivially_serializable, Fn, B...> {
+  };
+
+  template<typename Fn, typename ...B>
+  struct packing_is_definitely_supported<bound_function<Fn,B...>>:
+    upcxx::trait_forall<packing_is_definitely_supported, Fn, B...> {
+  };
+  
+  template<typename Fn, typename ...B>
+  struct packing_screened<bound_function<Fn,B...>>:
+    detail::packing_skippable_smart<bound_function<Fn,B...>> {
   };
 }
 
 
-////////////////////////////////////////////////////////////////////////
-// upcxx::bind: Similar to std::bind, but can be packed and the `binding`
-// typeclass is used for producing the on-wire and off-wire
-// representations. If the wrapped callable and all bound arguments have
-// trivial binding traits, then the returned callable has a return
-// type equal to that of the wrapped callable. Otherwise, the returned
-// callable will have a future return type.
+////////////////////////////////////////////////////////////////////////////////
+// upcxx::bind: Similar to std::bind but doesn't support placeholders. Most
+// importantly, these can be packed. The `binding` typeclass is used for
+// producing the on-wire and off-wire representations. If the wrapped callable
+// and all bound arguments have trivial binding traits, then the returned
+// callable has a return type equal to that of the wrapped callable. Otherwise,
+// the returned callable will have a future return type.
 
 namespace upcxx {
   namespace detail {
     // `upcxx::bind` defers to `upcxx::detail::bind` class which specializes
-    // on `std::decay<Fn>::type` to detect the case of
+    // on `binding<Fn>::type` to detect the case of
     // `bind(bind(f, a...), b...)` and flattens it to `bind(f,a...,b...)`.
     // This optimization results in fewer chained futures for non-trivial
     // bindings.
     
     // general case
-    template<typename FnDecayed>
+    template<typename FnStripped>
     struct bind {
       template<typename Fn, typename ...B>
-      bound_function<Fn&&, B&&...> operator()(Fn &&fn, B &&...b) const {
-        return bound_function<Fn&&, B&&...>{
-          binding<Fn&&>::on_wire(std::forward<Fn>(fn)),
+      bound_function_of<
+          decltype(detail::globalize_fnptr(std::declval<Fn&&>())),
+          B&&...
+        >
+      operator()(Fn &&fn, B &&...b) const {
+        decltype(detail::globalize_fnptr(std::forward<Fn>(fn)))
+          ufn = detail::globalize_fnptr(std::forward<Fn>(fn));
+        return bound_function_of<Fn&&, B&&...>{
+          binding<decltype(ufn)>::on_wire(static_cast<decltype(ufn)>(ufn)),
           std::tuple<typename binding<B&&>::on_wire_type...>{
             binding<B&&>::on_wire(std::forward<B>(b))...
           }
         };
       }
     };
-    
+
     // nested bind(bind(...),...) case.
     template<typename Fn0, typename ...B0>
     struct bind<bound_function<Fn0, B0...>> {
       template<typename Bf, typename ...B1>
-      bound_function<Fn0, B0..., B1&&...> operator()(Bf &&bf, B1 &&...b1) const {
-        return bound_function<Fn0, B0..., B1&&...>{
-          std::move(bf.fn_),
+      bound_function_of<Fn0, B0..., B1&&...>
+      operator()(Bf &&bf, B1 &&...b1) const {
+        return bound_function_of<Fn0, B0..., B1&&...>{
+          std::forward<Bf>(bf).fn_,
           std::tuple_cat(
-            std::move(bf.b_), 
+            std::forward<Bf>(bf).b_, 
             std::tuple<typename binding<B1&&>::on_wire_type...>{
               binding<B1&&>::on_wire(std::forward<B1>(b1))...
             }
@@ -319,11 +397,11 @@ namespace upcxx {
   template<typename Fn, typename ...B>
   auto bind(Fn &&fn, B &&...b)
     -> decltype(
-      detail::bind<typename std::decay<Fn>::type>()(
+      detail::bind<typename binding<Fn&&>::stripped_type>()(
         std::forward<Fn>(fn), std::forward<B>(b)...
       )
     ) {
-    return detail::bind<typename std::decay<Fn>::type>()(
+    return detail::bind<typename binding<Fn&&>::stripped_type>()(
       std::forward<Fn>(fn), std::forward<B>(b)...
     );
   }
@@ -342,12 +420,12 @@ namespace upcxx {
         std::integral_constant<int,tail>
       )
       -> decltype(
-        detail::bind<typename std::decay<typename std::tuple_element<tail, std::tuple<P...>>::type>::type>()(
+        detail::bind<typename binding<typename std::tuple_element<tail, std::tuple<P...>>::type>::type>()(
           std::move(std::get<tail>(parms)),
           std::move(std::get<heads>(parms))...
         )
       ) {
-      return detail::bind<typename std::decay<typename std::tuple_element<tail, std::tuple<P...>>::type>::type>()(
+      return detail::bind<typename binding<typename std::tuple_element<tail, std::tuple<P...>>::type>::type>()(
         std::move(std::get<tail>(parms)),
         std::move(std::get<heads>(parms))...
       );

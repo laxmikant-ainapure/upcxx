@@ -307,7 +307,7 @@ namespace upcxx {
       cx_state(future_cx<Event>) {}
       
       void operator()(T ...vals) {
-        backend::during_user(std::move(pro_), std::move(vals)...);
+        backend::during_user(std::move(pro_), std::forward<T>(vals)...);
       }
     };
 
@@ -322,7 +322,7 @@ namespace upcxx {
       }
       
       void operator()(T ...vals) {
-        backend::during_user(pro_, std::move(vals)...);
+        backend::during_user(pro_, std::forward<T>(vals)...);
       }
     };
     // event is empty
@@ -368,7 +368,7 @@ namespace upcxx {
       
       void operator()(T ...vals) {
         target_->lpc_ff(
-          std::bind(std::move(fn_), std::move(vals)...)
+          std::bind(std::move(fn_), std::forward<T>(vals)...)
         );
       }
     };
@@ -376,8 +376,14 @@ namespace upcxx {
     template<typename Event, typename Fn, typename ...T>
     struct cx_state<rpc_cx<Event,Fn>, std::tuple<T...>> {
       Fn fn_;
+      
       cx_state(rpc_cx<Event,Fn> cx):
         fn_{std::move(cx.fn_)} {
+      }
+      
+      auto operator()(T ...vals) ->
+        decltype(fn_(std::forward<T>(vals)...)) {
+        return fn_(std::forward<T>(vals)...);
       }
     };
   }
@@ -523,84 +529,130 @@ namespace upcxx {
   }
 
   //////////////////////////////////////////////////////////////////////
-  // Producing a packed command from a completions_state of rpc_cx's
-  
+  // Packing a completions_state of rpc_cx's
+
+  namespace detail {
+    template<typename EventValues, typename Event, typename Fn>
+    struct packing_skippable_dumb<
+        detail::completions_state_head<
+          /*event_enabled=*/true, EventValues, rpc_cx<Event,Fn>
+        >
+      > {
+      using type = detail::completions_state_head<true, EventValues, rpc_cx<Event,Fn>>;
+
+      template<typename Ub, bool skippable>
+      static auto ubound(Ub ub, type const &s, std::integral_constant<bool,skippable>) ->
+        decltype(packing<Fn>::ubound(ub, s.state_.fn_, std::false_type())) {
+        return packing<Fn>::ubound(ub, s.state_.fn_, std::false_type());
+      }
+      
+      template<bool skippable>
+      static void pack(parcel_writer &w, type const &s, std::integral_constant<bool,skippable>) {
+        packing<Fn>::pack(w, s.state_.fn_, std::false_type());
+      }
+
+      using unpacked_t = detail::completions_state_head<true, EventValues, rpc_cx<Event,unpacked_of_t<Fn>>>;
+      
+      static void skip(parcel_reader &r) {
+        packing<Fn>::skip(r);
+      }
+      
+      template<bool skippable>
+      static void unpack(parcel_reader &r, void *into, std::integral_constant<bool,skippable>) {
+        return packing<Fn>::unpack(r, into, std::false_type());
+      }
+    };
+  }
+
   template<typename EventValues, typename Event, typename Fn>
-  struct commanding<
+  struct packing<
+      detail::completions_state_head<
+        /*event_enabled=*/true, EventValues, rpc_cx<Event,Fn>
+      >
+    >: detail::packing_skippable_smart<
       detail::completions_state_head<
         /*event_enabled=*/true, EventValues, rpc_cx<Event,Fn>
       >
     > {
-    using type = detail::completions_state_head<true, EventValues, rpc_cx<Event,Fn>>;
-    
-    static void size_ubound(parcel_layout &lay, type const &s) {
-      commanding<Fn>::size_ubound(lay, s.state_.fn_);
-    }
-    static void pack(parcel_writer &w, type const &s) {
-      commanding<Fn>::pack(w, s.state_.fn_);
-    }
-    static auto execute(parcel_reader &r)
-      -> decltype(commanding<Fn>::execute(r)) {
-      return commanding<Fn>::execute(r);
-    }
   };
 
   template<typename EventValues, typename Cx>
-  struct commanding<
+  struct packing<
+      detail::completions_state_head</*event_enabled=*/false, EventValues, Cx>
+    >:
+    packing_empty<
       detail::completions_state_head</*event_enabled=*/false, EventValues, Cx>
     > {
-    using type = detail::completions_state_head<false, EventValues, Cx>;
-    
-    static void size_ubound(parcel_layout &lay, type const &s) {}
-    static void pack(parcel_writer &w, type const &cxs) {}
-    static auto execute(parcel_reader &r)
-      -> decltype(make_future()) {
-      return make_future();
-    }
   };
   
   template<template<typename> class EventPredicate,
            typename EventValues>
-  struct commanding<
+  struct packing<
+      detail::completions_state<EventPredicate, EventValues, completions<>>
+    >:
+    packing_empty<
       detail::completions_state<EventPredicate, EventValues, completions<>>
     > {
-    using type = detail::completions_state<EventPredicate, EventValues,
-                                           completions<>>;
-    
-    static void size_ubound(parcel_layout &lay, type const &x) {}
-    static void pack(parcel_writer &w, type const &x) {}
-    static auto execute(parcel_reader &r)
-      -> decltype(make_future()) {
-      return make_future();
-    }
   };
+
+  namespace detail {
+    template<template<typename> class EventPredicate,
+             typename EventValues, typename CxH, typename ...CxT>
+    struct packing_skippable_dumb<
+        detail::completions_state<EventPredicate, EventValues, completions<CxH,CxT...>>
+      > {
+      using type = detail::completions_state<EventPredicate, EventValues, completions<CxH,CxT...>>;
+
+      template<typename Ub, bool skippable>
+      static auto ubound(Ub ub, type const &cxs, std::integral_constant<bool,skippable>)
+        -> decltype(packing<typename type::tail_t>::ubound(
+          packing<typename type::head_t>::ubound(
+            ub, cxs.head(), std::false_type()
+          ),
+          cxs.tail(), std::false_type()
+        )) {
+        return packing<typename type::tail_t>::ubound(
+          packing<typename type::head_t>::ubound(
+            ub, cxs.head(), std::false_type()
+          ),
+          cxs.tail(), std::false_type()
+        );
+      }
+
+      template<bool skippable>
+      static void pack(parcel_writer &w, type const &cxs, std::integral_constant<bool,skippable>) {
+        packing<typename type::head_t>::pack(w, cxs.head(), std::false_type());
+        packing<typename type::tail_t>::pack(w, cxs.tail(), std::false_type());
+      }
+
+      using unpacked_t = detail::completions_state<
+          EventPredicate, EventValues,
+          completions<unpacked_of_t<CxH>, unpacked_of_t<CxT>...>
+        >;
+      
+      static void skip(parcel_reader &r) {
+        packing<typename type::head_t>::skip(r);
+        packing<typename type::tail_t>::skip(r);
+      }
+
+      template<bool skippable>
+      static void unpack(parcel_reader &r, void *into, std::integral_constant<bool,skippable>) {
+        // DANGER: we never actually call any completions_state constructors, only
+        // the completions_state_head constructors in our inheritance chain.
+        packing<typename type::head_t>::unpack(r, (typename type::head_t*)(type*)into, std::false_type());
+        packing<typename type::tail_t>::unpack(r, (typename type::tail_t*)(type*)into, std::false_type());
+      }
+    };
+  }
 
   template<template<typename> class EventPredicate,
            typename EventValues, typename CxH, typename ...CxT>
-  struct commanding<
-      detail::completions_state<EventPredicate, EventValues,
-                                completions<CxH,CxT...>>
+  struct packing<
+      detail::completions_state<EventPredicate, EventValues, completions<CxH,CxT...>>
+    >:
+    detail::packing_skippable_smart<
+      detail::completions_state<EventPredicate, EventValues, completions<CxH,CxT...>>
     > {
-    using type = detail::completions_state<EventPredicate, EventValues,
-                                           completions<CxH,CxT...>>;
-
-    static void size_ubound(parcel_layout &lay, type const &cxs) {
-      commanding<typename type::head_t>::size_ubound(lay, cxs.head());
-      commanding<typename type::tail_t>::size_ubound(lay, cxs.tail());
-    }
-    static void pack(parcel_writer &w, type const &cxs) {
-      commanding<typename type::head_t>::pack(w, cxs.head());
-      commanding<typename type::tail_t>::pack(w, cxs.tail());
-    }
-    static auto execute(parcel_reader &r)
-      -> decltype(
-        when_all(commanding<typename type::head_t>::execute(r),
-                 commanding<typename type::tail_t>::execute(r))
-      ) {
-      auto a = commanding<typename type::head_t>::execute(r);
-      auto b = commanding<typename type::tail_t>::execute(r);
-      return when_all(a, b);
-    }
   };
   
   //////////////////////////////////////////////////////////////////////

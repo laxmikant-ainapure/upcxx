@@ -1,5 +1,7 @@
 #include <fstream>
 #include <cstdint>
+#include <deque>
+
 #include <upcxx/rpc.hpp>
 
 #include "util.hpp"
@@ -13,48 +15,29 @@ uint64_t state_bits[2] = {0, 0};
 struct barrier_action {
   int epoch;
   intrank_t round;
+  std::deque<std::deque<char>> extra;
+
+  UPCXX_REFLECTED(epoch, round, extra);
+  
+  barrier_action(int epoch, intrank_t round):
+    epoch{epoch},
+    round{round},
+    extra(
+      backend::gasnet::am_size_rdzv_cutover - 128 +
+        (0x9e3779b9u*uint32_t(100*epoch + round) >> (32-8)),
+      std::deque<char>(1,'x')
+    ) {
+  }
   
   void operator()() {
+    for(auto x: extra)
+      UPCXX_ASSERT_ALWAYS(x[0] == 'x');
+    
     uint64_t bit = uint64_t(1)<<round;
     UPCXX_ASSERT_ALWAYS(0 == (state_bits[epoch & 1] & bit));
     state_bits[epoch & 1] |= bit;
   }
-  
-  // number of empty bytes to add to messages
-  size_t extra() const {
-    constexpr uint32_t knuth = 0x9e3779b9u;
-    // random number in [-128, 128)
-    int perturb = -128 + (knuth*uint32_t(100*epoch + round) >> (32-8));
-    // about half the time we'll do a rendezvous
-    return backend::gasnet::am_size_rdzv_cutover + perturb - sizeof(barrier_action);
-  }
 };
-
-namespace upcxx {
-  // Specialize packing for barrier_action's to make random length
-  // messages.
-  template<>
-  struct packing<barrier_action> {
-    static void size_ubound(parcel_layout &ub, barrier_action x) {
-      ub.add_bytes(
-        sizeof(barrier_action),
-        alignof(barrier_action)
-      );
-      ub.add_bytes(x.extra(), 1); // empty bytes
-    }
-    
-    static void pack(parcel_writer &w, barrier_action x) {
-      w.put_trivial_aligned(x);
-      w.put(x.extra(), 1); // empty bytes
-    }
-    
-    static barrier_action unpack(parcel_reader &r) {
-      barrier_action x = r.pop_trivial_aligned<barrier_action>();
-      r.pop(x.extra(), 1); // empty bytes
-      return x;
-    }
-  };
-}
 
 void rpc_barrier() {
   intrank_t rank_n = upcxx::rank_n();

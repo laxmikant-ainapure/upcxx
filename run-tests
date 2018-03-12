@@ -90,6 +90,7 @@ run_test "rput.cpp" "par"
 run_test "vis.cpp"
 run_test "uts/uts_ranks.cpp"
 THREADS="$RANKS" run_test "uts/uts_threads.cpp"
+run_test "view.cpp"
 
 UPCXX_BACKEND=gasnet_par run_test "uts/uts_hybrid.cpp"
 

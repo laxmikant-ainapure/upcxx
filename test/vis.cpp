@@ -186,7 +186,7 @@ int main() {
   auto rr1 = IterR<lli*>(myPtr+N-B, N);
   auto rr1_end = rr1;  rr1_end+=M*N;
   lli token=-1;
-  set(rr1, rr1_end, B, token);
+  ::set(rr1, rr1_end, B, token);
   
   barrier();  
 
@@ -296,7 +296,7 @@ int main() {
   reset(myPatch, me);
   rr1 = IterR<lli*>(myPtr, N);
   rr1_end = rr1; rr1_end+=M*N;
-  set(rr1, rr1_end, B, token);
+  ::set(rr1, rr1_end, B, token);
   barrier();
   auto g1 = rget_regular(rd1, rd1_end, B, rs1, rs1_end, B);
   g1.wait();
