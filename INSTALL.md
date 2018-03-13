@@ -16,6 +16,12 @@ GASNet communication library, so an Internet connection is needed. Depending on
 the platform, additional configuration may be necessary before invoking
 `install`. See below.
 
+Note: The install script requires Python 2.7 and does its best to automatically
+invoke that version even if it isn't the current default on the system. If
+installation fails and you suspect it has to do with the Python version, try
+setting the `UPCXX_PYTHON` environment variable to refer to your system's name
+for Python 2.7 (e.g. `python2.7`, or `python2`).
+
 **Installation: Linux**
 
 The installation command above will work as is. The default compilers used will
