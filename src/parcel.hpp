@@ -11,8 +11,9 @@ namespace upcxx {
   // alignment of a memory block, but we use templates to track whether
   // the size and/or alignment are known at compiler time.
 
+  /*
   template<std::size_t static_size, std::size_t static_align>
-  struct parcel_size /*{
+  struct parcel_size {
     // The two fields.
     const size_t size, align;
     
@@ -34,185 +35,288 @@ namespace upcxx {
     
     // Repeat `this` `n` times contiguously, for runtime known `n`.
     parcel_size<?,?> arrayed(size_t n);
-  }*/;
+  };*/
+
+  #if 1 // Enable static tracking by parcel_size of size and alignment.
   
-  // parcel_size helpers...
-  namespace detail {
-    template<std::size_t static_size>
-    struct parcel_size_size;
-    template<std::size_t static_align>
-    struct parcel_size_align;
+    template<std::size_t static_size, std::size_t static_align>
+    struct parcel_size;
     
-    template<>
-    struct parcel_size_size<std::size_t(-1)> {
-      static constexpr bool is_size_static = false;
-      static constexpr std::size_t static_size = std::size_t(-1);
+    // parcel_size helpers...
+    namespace detail {
+      template<std::size_t static_size>
+      struct parcel_size_size;
+      template<std::size_t static_align>
+      struct parcel_size_align;
       
-      std::size_t size;
-              
-      constexpr parcel_size_size(std::size_t size = 0)
-        : size{size} {}
-      constexpr parcel_size_size(std::nullptr_t, std::size_t size)
-        : size{size} {}
-    };
-    template<std::size_t static_size1>
-    struct parcel_size_size {
-      static constexpr bool is_size_static = true;
-      static constexpr std::size_t static_size = static_size1;
-      static constexpr std::size_t size = static_size1;
+      template<>
+      struct parcel_size_size<std::size_t(-1)> {
+        static constexpr bool is_size_static = false;
+        static constexpr std::size_t static_size = std::size_t(-1);
+        
+        std::size_t size;
+                
+        constexpr parcel_size_size(std::size_t size = 0)
+          : size{size} {}
+        constexpr parcel_size_size(std::nullptr_t, std::size_t size)
+          : size{size} {}
+      };
+      template<std::size_t static_size1>
+      struct parcel_size_size {
+        static constexpr bool is_size_static = true;
+        static constexpr std::size_t static_size = static_size1;
+        static constexpr std::size_t size = static_size1;
+        
+        constexpr parcel_size_size() = default;
+        constexpr parcel_size_size(std::nullptr_t, std::size_t) {}
+      };
       
-      constexpr parcel_size_size() = default;
-      constexpr parcel_size_size(std::nullptr_t, std::size_t) {}
-    };
-    
-    template<>
-    struct parcel_size_align<0> {
-      static constexpr bool is_align_static = false;
-      static constexpr std::size_t static_align = 0;
-      
-      std::size_t align;
-      
-      constexpr parcel_size_align(std::size_t align = 1)
-        : align{align} {}
-      constexpr parcel_size_align(std::nullptr_t, std::size_t align)
-        : align{align} {}
-    };
-    template<std::size_t static_align1>
-    struct parcel_size_align {
-      static constexpr bool is_align_static = true;
-      static constexpr std::size_t static_align = static_align1;
-      static constexpr std::size_t align = static_align1;
+      template<>
+      struct parcel_size_align<0> {
+        static constexpr bool is_align_static = false;
+        static constexpr std::size_t static_align = 0;
+        
+        std::size_t align;
+        
+        constexpr parcel_size_align(std::size_t align = 1)
+          : align{align} {}
+        constexpr parcel_size_align(std::nullptr_t, std::size_t align)
+          : align{align} {}
+      };
+      template<std::size_t static_align1>
+      struct parcel_size_align {
+        static constexpr bool is_align_static = true;
+        static constexpr std::size_t static_align = static_align1;
+        static constexpr std::size_t align = static_align1;
 
-      constexpr parcel_size_align() = default;
-      constexpr parcel_size_align(std::nullptr_t, std::size_t) {}
-    };
-  }
-
-  // parcel_size implementation
-  
-  template<// -1 = dynamic value
-           std::size_t static_size = std::size_t(-1),
-           // 0 = dynamic value
-           std::size_t static_align = 0>
-  struct parcel_size:
-    detail::parcel_size_size<static_size>,
-    detail::parcel_size_align<static_align> {
-
-    static constexpr bool all_static =
-      detail::parcel_size_size<static_size>::is_size_static &&
-      detail::parcel_size_align<static_align>::is_align_static;
-    
-    constexpr parcel_size() = default;
-    constexpr parcel_size(std::size_t size):
-      detail::parcel_size_size<static_size>{size} {
-    }
-    constexpr parcel_size(std::size_t size, std::size_t align):
-      detail::parcel_size_size<static_size>{size},
-      detail::parcel_size_align<static_align>{align} {
-    }
-
-    // "Internal" constructor which accepts runtime values but ignores them
-    // if we track that value statically.
-    constexpr parcel_size(std::nullptr_t, std::size_t size, std::size_t align):
-      detail::parcel_size_size<static_size>{nullptr, size},
-      detail::parcel_size_align<static_align>{nullptr, align} {
-    }
-
-    // Constructor where static information may be weakened but not strengthened.
-    template<std::size_t s, std::size_t a,
-             typename = typename std::enable_if<
-                 (static_size == std::size_t(-1) || static_size >= s) &&
-                 (static_align == 0 || static_align >= a)
-               >::type>
-    constexpr parcel_size(parcel_size<s,a> that):
-      detail::parcel_size_size<static_size>{nullptr, that.size},
-      detail::parcel_size_align<static_align>{nullptr, that.align} {
-    }
-
-    // Weaken static size to dynamic if not already.
-    constexpr auto type_size_weakened() const
-      -> parcel_size<std::size_t(-1), static_align> {
-      return {nullptr, this->size, this->align};
-    }
-    
-    // Weaken static alignment to `align` if necessary.
-    template<std::size_t align>
-    constexpr auto type_align_weakened() const ->
-      parcel_size<
-        static_size,
-        static_align == 0 || align == 0
-          ? 0
-          : (static_align > align) ? static_align : align
-      > {
-      return {nullptr, this->size, this->align > align ? this->align : align};
-    }
-    
-    constexpr std::size_t size_aligned() const {
-      return (this->size + this->align-1) & -this->align;
-    }
-
-    // a.added(b): Returns the parcel_size of `a` followed by `b`.
-    template<std::size_t that_ss, std::size_t that_sa>
-    constexpr auto added(parcel_size<that_ss, that_sa> that) const
-      -> parcel_size<
-        parcel_size::all_static && decltype(that)::all_static
-          ? ((static_size + that_sa-1) & -that_sa) + that_ss
-          : std::size_t(-1),
-        parcel_size::is_align_static && decltype(that)::is_align_static
-          ? (static_align > that_sa) ? static_align : that_sa
-          : 0
-      > {
-      return {nullptr,
-        ((this->size + that.align-1) & -that.align) + that.size,
-        this->align > that.align ? this->align : that.align
+        constexpr parcel_size_align() = default;
+        constexpr parcel_size_align(std::nullptr_t, std::size_t) {}
       };
     }
 
-    // a.arrayed<n>(): Returns `this` repearted `n` times contiguously, for static `n`.
-    template<std::size_t n>
-    constexpr auto arrayed() const
-      -> parcel_size<
-        parcel_size::is_size_static ? n*static_size : std::size_t(-1),
-        static_align
-      > {
-      return {nullptr, n*this->size, this->align};
+    // parcel_size implementation
+    
+    template<// -1 = dynamic value
+             std::size_t static_size = std::size_t(-1),
+             // 0 = dynamic value
+             std::size_t static_align = 0>
+    struct parcel_size:
+      detail::parcel_size_size<static_size>,
+      detail::parcel_size_align<static_align> {
+
+      static constexpr bool all_static =
+        detail::parcel_size_size<static_size>::is_size_static &&
+        detail::parcel_size_align<static_align>::is_align_static;
+      
+      constexpr parcel_size() = default;
+      constexpr parcel_size(std::size_t size):
+        detail::parcel_size_size<static_size>{size} {
+      }
+      constexpr parcel_size(std::size_t size, std::size_t align):
+        detail::parcel_size_size<static_size>{size},
+        detail::parcel_size_align<static_align>{align} {
+      }
+
+      // "Internal" constructor which accepts runtime values but ignores them
+      // if we track that value statically.
+      constexpr parcel_size(std::nullptr_t, std::size_t size, std::size_t align):
+        detail::parcel_size_size<static_size>{nullptr, size},
+        detail::parcel_size_align<static_align>{nullptr, align} {
+      }
+
+      // Constructor where static information may be weakened but not strengthened.
+      template<std::size_t s, std::size_t a,
+               typename = typename std::enable_if<
+                   (static_size == std::size_t(-1) || static_size >= s) &&
+                   (static_align == 0 || static_align >= a)
+                 >::type>
+      constexpr parcel_size(parcel_size<s,a> that):
+        detail::parcel_size_size<static_size>{nullptr, that.size},
+        detail::parcel_size_align<static_align>{nullptr, that.align} {
+      }
+
+      // Weaken static size to dynamic if not already.
+      constexpr auto type_size_weakened() const
+        -> parcel_size<std::size_t(-1), static_align> {
+        return {nullptr, this->size, this->align};
+      }
+      
+      // Weaken static alignment to `align` if necessary.
+      template<std::size_t align>
+      constexpr auto type_align_weakened() const ->
+        parcel_size<
+          static_size,
+          static_align == 0 || align == 0
+            ? 0
+            : (static_align > align) ? static_align : align
+        > {
+        return {nullptr, this->size, this->align > align ? this->align : align};
+      }
+      
+      constexpr std::size_t size_aligned() const {
+        return (this->size + this->align-1) & -this->align;
+      }
+
+      // a.added(b): Returns the parcel_size of `a` followed by `b`.
+      template<std::size_t that_ss, std::size_t that_sa>
+      constexpr auto added(parcel_size<that_ss, that_sa> that) const
+        -> parcel_size<
+          parcel_size::all_static && decltype(that)::all_static
+            ? ((static_size + that_sa-1) & -that_sa) + that_ss
+            : std::size_t(-1),
+          parcel_size::is_align_static && decltype(that)::is_align_static
+            ? (static_align > that_sa) ? static_align : that_sa
+            : 0
+        > {
+        return {nullptr,
+          ((this->size + that.align-1) & -that.align) + that.size,
+          this->align > that.align ? this->align : that.align
+        };
+      }
+
+      // a.arrayed<n>(): Returns `this` repearted `n` times contiguously, for static `n`.
+      template<std::size_t n>
+      constexpr auto arrayed() const
+        -> parcel_size<
+          parcel_size::is_size_static ? n*static_size : std::size_t(-1),
+          static_align
+        > {
+        return {nullptr, n*this->size, this->align};
+      }
+
+      // a.arrayed(n): Returns `this` repearted `n` times contiguously, for dynamic `n`.
+      constexpr auto arrayed(std::size_t n) const
+        -> parcel_size<std::size_t(-1), static_align> {
+        return {nullptr, n*this->size, this->align};
+      }
+      
+      template<typename T>
+      constexpr auto trivial_added() const ->
+        decltype(this->added(parcel_size<sizeof(T),alignof(T)>{})) {
+        return this->added(parcel_size<sizeof(T),alignof(T)>{});
+      }
+
+      template<typename T>
+      constexpr auto trivial_added_if(std::true_type) const ->
+        decltype(this->added(parcel_size<sizeof(T),alignof(T)>{})) {
+        return this->added(parcel_size<sizeof(T),alignof(T)>{});
+      }
+      template<typename T>
+      constexpr auto trivial_added_if(std::false_type) const ->
+        decltype(*this) {
+        return *this;
+      }
+      
+      template<typename T, std::size_t n>
+      constexpr auto trivial_array_added() const ->
+        decltype(this->added(parcel_size<n*sizeof(T), alignof(T)>{})) {
+        return this->added(parcel_size<n*sizeof(T), alignof(T)>{});
+      }
+      template<typename T>
+      constexpr auto trivial_array_added(std::size_t n) const ->
+        decltype(this->added(parcel_size<std::size_t(-1), alignof(T)>{})) {
+        return this->added(parcel_size<std::size_t(-1), alignof(T)>{nullptr, n*sizeof(T), alignof(T)});
+      }
+    };
+
+    template<std::size_t sz, std::size_t al>
+    using parcel_size_t = parcel_size<sz,al>;
+
+    // Construct a parcel_size give size and alignment as compile-time values.
+    template<std::size_t sz, std::size_t al>
+    constexpr parcel_size<sz,al> parcel_size_of() {
+      return {};
     }
 
-    // a.arrayed(n): Returns `this` repearted `n` times contiguously, for dynamic `n`.
-    constexpr auto arrayed(std::size_t n) const
-      -> parcel_size<std::size_t(-1), static_align> {
-      return {nullptr, n*this->size, this->align};
+    // Construct the empty parcel_size (0 bytes)
+    constexpr parcel_size<0,1> parcel_size_empty() {
+      return {};
     }
     
-    template<typename T>
-    constexpr auto trivial_added() const ->
-      decltype(this->added(parcel_size<sizeof(T),alignof(T)>{})) {
-      return this->added(parcel_size<sizeof(T),alignof(T)>{});
-    }
-
-    template<typename T>
-    constexpr auto trivial_added_if(std::true_type) const ->
-      decltype(this->added(parcel_size<sizeof(T),alignof(T)>{})) {
-      return this->added(parcel_size<sizeof(T),alignof(T)>{});
-    }
-    template<typename T>
-    constexpr auto trivial_added_if(std::false_type) const ->
-      decltype(*this) {
-      return *this;
-    }
+  #else // This version does no static tracking
     
-    template<typename T, std::size_t n>
-    constexpr auto trivial_array_added() const ->
-      decltype(this->added(parcel_size<n*sizeof(T), alignof(T)>{})) {
-      return this->added(parcel_size<n*sizeof(T), alignof(T)>{});
-    }
-    template<typename T>
-    constexpr auto trivial_array_added(std::size_t n) const ->
-      decltype(this->added(parcel_size<std::size_t(-1), alignof(T)>{})) {
-      return this->added(parcel_size<std::size_t(-1), alignof(T)>{nullptr, n*sizeof(T), alignof(T)});
-    }
-  };
+    struct parcel_size {
+      static constexpr bool all_static = false;
+      static constexpr bool is_align_static = false;
+      static constexpr std::size_t static_align = 0;
+      static constexpr bool is_size_static = false;
+      static constexpr std::size_t static_size = -1;
+      
+      // The two fields.
+      size_t size, align;
 
+      // The size padded upto the alignment.
+      constexpr size_t size_aligned() const {
+        return (size + align-1) & -align;
+      }
+
+      parcel_size type_size_weakened() const { return *this; }
+      template<std::size_t al>
+      parcel_size type_align_weakened() const { return *this; }
+      
+      // Return the new size with the flat representation of T appended after `this`
+      template<typename T>
+      parcel_size trivial_added() const {
+        return {
+          ((size + alignof(T)-1) & -alignof(T)) + sizeof(T),
+          align > alignof(T) ? align : alignof(T)
+        };
+      }
+      
+      // Return the new size with the flat representation of T appended after `this`,
+      // if `ok` is true, otherwise returns `this` unaltered.
+      template<typename T>
+      parcel_size trivial_added_if(std::true_type ok) const {
+        return this->template trivial_added<T>();
+      }
+      template<typename T>
+      parcel_size trivial_added_if(std::false_type ok) const {
+        return *this;
+      }
+      
+      // Return the new size of `that` appended after `this`.
+      parcel_size added(parcel_size that) const {
+        return {
+          ((size + that.align-1) & -that.align) + that.size,
+          align > that.align ? align : that.align
+        };
+      }
+      
+      // Repeat `this` `n` times contiguously, for compile time known `n`.
+      template<std::size_t n>
+      parcel_size arrayed() const {
+        return {n*size, align};
+      }
+      
+      // Repeat `this` `n` times contiguously, for runtime known `n`.
+      parcel_size arrayed(size_t n) const {
+        return {n*size, align};
+      }
+
+      template<typename T, std::size_t n>
+      parcel_size trivial_array_added() const {
+        return this->added({n*sizeof(T), alignof(T)});
+      }
+      template<typename T>
+      parcel_size trivial_array_added(std::size_t n) const {
+        return this->added({n*sizeof(T), alignof(T)});
+      }
+    };
+
+    template<std::size_t sz, std::size_t al>
+    using parcel_size_t = parcel_size;
+    
+    // Construct a parcel_size give size and alignment as compile-time values.
+    template<std::size_t sz, std::size_t al>
+    constexpr parcel_size parcel_size_of() {
+      return {sz, al};
+    }
+
+    // Construct the empty parcel_size (0 bytes)
+    constexpr parcel_size parcel_size_empty() {
+      return {0, 1};
+    }
+  #endif
   
   //////////////////////////////////////////////////////////////////////
   // parcel_writer: Writes trivial data into a contiguous buffer. Each 

@@ -63,7 +63,7 @@ namespace upcxx {
       ); // blame packing<Fn>::ubound()
     }
   };
-
+  
   // command<Args...>: Non-empty args list specialization. The API is different
   // from the empty-args case. Now pack takes a `cleanup` template parameter
   // function which will be called with the executor-provided args after any
@@ -72,7 +72,7 @@ namespace upcxx {
   class command {
     using executor_t = global_fnptr<void(parcel_reader&, Arg...)>;
 
-    template<void(&cleanup)(Arg...)>
+    template<void(*cleanup)(Arg...)>
     struct after_execute {
       std::tuple<Arg...> a;
       template<typename ...T>
@@ -81,14 +81,14 @@ namespace upcxx {
       }
     };
     
-    template<typename Fn, void(&cleanup)(Arg...)>
+    template<typename Fn, void(*cleanup)(Arg...)>
     static void the_executor(parcel_reader &r, Arg ...a) {
       raw_storage<unpacked_of_t<Fn>> fn;
 
       unpacking<Fn>::unpack(r, &fn, std::false_type());
-
+      
       upcxx::apply_as_future(fn.value_and_destruct())
-        .then(after_execute<cleanup>{std::tuple<Arg...>{a...}});
+        .then(after_execute<cleanup>{std::tuple<Arg...>(a...)});
     }
 
   public:
@@ -114,7 +114,7 @@ namespace upcxx {
     }
 
     // Pack the given callable and cleanup action onto the writer.
-    template<void(&cleanup)(Arg...), typename Fn1,
+    template<void(*cleanup)(Arg...), typename Fn1,
              typename Fn = typename std::decay<Fn1>::type>
     static void pack(parcel_writer &w, std::size_t size_ub, Fn1 &&fn) {
       w.template put_trivial_aligned<executor_t>(executor_t(&the_executor<Fn,cleanup>));

@@ -6,22 +6,30 @@
 #include <upcxx/reflection.hpp>
 #include <upcxx/utility.hpp>
 
-#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <deque>
-#include <forward_list>
-#include <list>
-#include <map>
-#include <set>
-#include <string>
+
 #include <tuple>
 #include <type_traits>
-#include <unordered_map>
-#include <unordered_set>
 #include <utility>
-#include <vector>
+
+// Define this to disable packing support for the std:: containers since this
+// bloats the translation unit and bogs down the tool `creduce`.
+//#define CREDUCING
+
+#ifndef CREDUCING
+  #include <array>
+  #include <deque>
+  #include <forward_list>
+  #include <list>
+  #include <map>
+  #include <set>
+  #include <string>
+  #include <unordered_map>
+  #include <unordered_set>
+  #include <vector>
+#endif
 
 /* "Packing" is what I'm calling serialization for now so as not to
  * collide with boost::serialization. Since we'll support both
@@ -273,8 +281,8 @@ namespace upcxx {
     static constexpr bool is_trivial = false;
     static constexpr bool is_ubound_tight = true;
     
-    template<typename ParcelSize, bool skippable>
-    static ParcelSize ubound(ParcelSize ub, T const&, std::integral_constant<bool,skippable>) {
+    template<typename Ub, bool skippable>
+    static Ub ubound(Ub ub, T const&, std::integral_constant<bool,skippable>) {
       return ub;
     }
 
@@ -409,13 +417,13 @@ namespace upcxx {
       static constexpr bool is_definitely_supported = packing_is_definitely_supported<T,Dumb>::value;
       static constexpr bool is_owning = packing_is_owning<T,Dumb>::value;
       static constexpr bool is_ubound_tight = false;
-      
+
       template<typename Ub>
       static constexpr auto ubound(Ub ub, T const &x, std::false_type skippable) ->
         decltype(Dumb::ubound(ub, x, std::false_type())) {
         return Dumb::ubound(ub, x, std::false_type());
       }
-
+      
       template<typename Ub>
       static constexpr auto ubound(Ub ub, T const &x, std::true_type skippable) ->
         decltype(Dumb::ubound(ub.template trivial_added<std::size_t>(), x, std::false_type())) {
@@ -836,6 +844,8 @@ namespace upcxx {
   template<typename ...T>
   struct packing_screened<std::tuple<T...>>:
     detail::packing_skippable_smart<std::tuple<T...>> {};
+
+  #ifndef CREDUCING
   
   //////////////////////////////////////////////////////////////////////////////
   // packing<std::pair>
@@ -911,13 +921,14 @@ namespace upcxx {
 
   namespace detail {
     template<typename T,
-             typename T_Ub = decltype(packing<T>::ubound(parcel_size<0,1>{}, std::declval<T&>(), std::false_type())),
+             typename T_Ub = decltype(packing<T>::ubound(parcel_size_empty(), std::declval<T&>(), std::false_type())),
              bool T_Ub_static = T_Ub::all_static>
     struct packing_sequence_base;
 
-    template<typename T, std::size_t t_size, std::size_t t_align>
-    struct packing_sequence_base<T, /*T_Ub*/parcel_size<t_size, t_align>, /*T_Ub_static=*/true> {
-      using T_Ub = parcel_size<t_size, t_align>;
+    template<typename T, typename T_Ub>
+    struct packing_sequence_base<T, T_Ub, /*T_Ub_static=*/true> {
+      //static constexpr std::size_t t_size = T_Ub::static_size;
+      //static constexpr std::size_t t_align = T_Ub::static_align;
 
       template<typename Ub, typename Iter, bool elt_skippable>
       static auto ubound_elts(Ub ub, Iter begin, std::size_t n, std::integral_constant<bool,elt_skippable>) ->
@@ -939,9 +950,10 @@ namespace upcxx {
       }
     };
 
-    template<typename T, std::size_t t_size, std::size_t t_align>
-    struct packing_sequence_base<T, /*T_Ub*/parcel_size<t_size, t_align>, /*T_Ub_static=*/false> {
-      using T_Ub = parcel_size<t_size, t_align>;
+    template<typename T, typename T_Ub>
+    struct packing_sequence_base<T, T_Ub, /*T_Ub_static=*/false> {
+      static constexpr std::size_t t_size = T_Ub::static_size;
+      static constexpr std::size_t t_align = T_Ub::static_align;
 
       template<typename Ub, typename Iter, bool elt_skippable>
       static auto ubound_elts(Ub ub, Iter begin, std::size_t n, std::integral_constant<bool,elt_skippable> elt_skippable1) ->
@@ -1017,14 +1029,12 @@ namespace upcxx {
     };
 
     template<typename T, typename Arr,
-             typename T_Ub = decltype(packing<T>::ubound(parcel_size<0,1>{}, std::declval<T>())),
+             typename T_Ub = decltype(packing<T>::ubound(parcel_size_empty(), std::declval<T>())),
              bool T_Ub_static = T_Ub::all_static>
     struct packing_array_base;
       
-    template<typename T, typename Arr, std::size_t t_size, std::size_t t_align>
-    struct packing_array_base<T, Arr, /*T_Ub*/parcel_size<t_size, t_align>, /*T_Ub_static=*/true> {
-      using T_Ub = parcel_size<t_size, t_align>;
-
+    template<typename T, typename Arr, typename T_Ub>
+    struct packing_array_base<T, Arr, T_Ub, /*T_Ub_static=*/true> {
       template<typename Ub, bool skippable>
       static auto ubound(Ub ub, Arr const &x, std::integral_constant<bool,skippable>) ->
         decltype(ub.added(T_Ub{}.template arrayed<sizeof(Arr)/sizeof(T)>())) {
@@ -1032,8 +1042,11 @@ namespace upcxx {
       }
     };
     
-    template<typename T, typename Arr, std::size_t t_size, std::size_t t_align>
-    struct packing_array_base<T, Arr, /*T_Ub*/parcel_size<t_size, t_align>, /*T_Ub_static=*/false> {
+    template<typename T, typename Arr, typename T_Ub>
+    struct packing_array_base<T, Arr, T_Ub, /*T_Ub_static=*/false> {
+      static constexpr std::size_t t_size = T_Ub::static_size;
+      static constexpr std::size_t t_align = T_Ub::static_align;
+      
       template<typename Ub, bool skippable>
       static auto ubound(Ub ub, Arr const &x, std::integral_constant<bool,skippable>)
         -> decltype(ub.type_size_weakened().template type_align_weakened<t_align>()) {
@@ -1131,8 +1144,10 @@ namespace upcxx {
     
     template<typename Ub0, bool skippable>
     static auto ubound(Ub0 ub0, const string &x, std::integral_constant<bool,skippable>) ->
-      decltype(ub0.template trivial_added<std::size_t>()
-                  .template trivial_array_added<CharT>(x.size())) {
+      decltype(
+        ub0.template trivial_added<std::size_t>()
+           .template trivial_array_added<CharT>(x.size())
+      ) {
       return ub0.template trivial_added<std::size_t>()
                 .template trivial_array_added<CharT>(x.size());
     }
@@ -1426,5 +1441,7 @@ namespace upcxx {
     detail::packing_container<std::unordered_multimap<K,V,Hash,Eq,Alloc>> {
     using unpacked_t = std::unordered_multimap<unpacked_of_t<K>, unpacked_of_t<V>, Hash, Eq, Alloc>;
   };
+
+  #endif // #ifndef CREDUCING
 }
 #endif

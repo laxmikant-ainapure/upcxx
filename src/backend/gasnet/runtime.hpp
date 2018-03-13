@@ -160,7 +160,7 @@ namespace backend {
 
     using Fn = typename std::decay<Fn1>::type;
     
-    auto ub = command<bool,void*>::ubound(parcel_size<0,1>{}, fn);
+    auto ub = command<bool,void*>::ubound(parcel_size_empty(), fn);
     
     bool rdzv = ub.size > gasnet::am_size_rdzv_cutover_min &&
                 ub.size > gasnet::am_size_rdzv_cutover;
@@ -190,7 +190,7 @@ namespace backend {
     ) {
     UPCXX_ASSERT(!UPCXX_BACKEND_GASNET_SEQ || backend::master.active_with_caller());
     
-    auto ub = command<bool,void*>::ubound(parcel_size<0,1>{}, fn);
+    auto ub = command<bool,void*>::ubound(parcel_size_empty(), fn);
     
     bool eager = ub.size <= gasnet::am_size_rdzv_cutover_min ||
                  ub.size <= gasnet::am_size_rdzv_cutover;
@@ -239,7 +239,7 @@ namespace gasnet {
   void send_am_restricted(intrank_t recipient, Fn &&fn) {
     UPCXX_ASSERT(!UPCXX_BACKEND_GASNET_SEQ || backend::master.active_with_caller());
     
-    auto ub = command<>::ubound(parcel_size<0,1>{}, fn);
+    auto ub = command<>::ubound(parcel_size_empty(), fn);
     
     bool rdzv = ub.size > gasnet::am_size_rdzv_cutover_min &&
                 ub.size > gasnet::am_size_rdzv_cutover;
