@@ -25,7 +25,7 @@ typedef long long int lli;
 typedef lli patch_t[M][N];
 
 template<typename ptr_t>
-class Iter : public std::iterator<std::forward_iterator_tag, ptr_t>
+class Iter 
 {
 public:
   Iter() = default;
@@ -51,7 +51,7 @@ public:
 
 
 template<typename ptr_t>
-class IterF: public Iter<ptr_t>
+class IterF: public Iter<ptr_t>, public std::iterator<std::forward_iterator_tag, std::pair<ptr_t,std::size_t>>
 {
 public:
   using Iter<ptr_t>::Iter;
@@ -61,7 +61,7 @@ public:
 };
 
 template<typename ptr_t>
-class IterR: public Iter<ptr_t>
+class IterR: public Iter<ptr_t>, public std::iterator<std::forward_iterator_tag, ptr_t>
 {
 public:
   using Iter<ptr_t>::Iter;

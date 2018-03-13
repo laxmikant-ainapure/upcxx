@@ -18,7 +18,7 @@ namespace upcxx
   namespace detail {
 
     typedef struct {
-      void  *gex_addr;  // TODO: When gasnet changes Memvec we need to track it
+      const void  *gex_addr;  // TODO: When gasnet changes Memvec we need to track it
       size_t gex_len;
     } memvec_t;
 
@@ -251,27 +251,20 @@ namespace upcxx
                   DestIter dst_runs_begin, DestIter dst_runs_end,
                   Cxs cxs=completions<future_cx<operation_cx_event>>{{}})
   {
-    using T = typename std::remove_pointer<
-        typename std::decay<decltype(std::get<0>(*src_runs_begin))>::type
-      >::type;
-    
-    static_assert(
-      is_definitely_trivially_serializable<T>::value,
-      "RMA operations only work on DefinitelyTriviallySerializable types."
-    );
-    
-    static_assert(std::is_same<
-                  typename std::decay<decltype(std::get<0>(*src_runs_begin))>::type,
-                  typename std::decay<decltype(std::get<0>(*dst_runs_begin).raw_ptr_)>::type
-                  >::value, "SrcIter and DestIter need to be over same base T type");
 
-    UPCXX_ASSERT_ALWAYS((
-      detail::completions_has_event<Cxs, operation_cx_event>::value |
-      detail::completions_has_event<Cxs, remote_cx_event>::value),
-      "Not requesting either operation or remote completion is surely an "
-      "error. You'll have know way of ever knowing when the target memory is "
-      "safe to read or write again."
-                         );
+    using T = typename std::tuple_element<0,typename std::iterator_traits<DestIter>::value_type>::type::element_type;
+    using S = typename std::tuple_element<0,typename std::iterator_traits<SrcIter>::value_type>::type;
+    static_assert(is_definitely_trivially_serializable<T>::value,
+      "RMA operations only work on DefinitelyTriviallySerializable types.");
+    
+    static_assert(std::is_convertible<S, const T*>::value,
+                  "SrcIter and DestIter need to be over same base T type");
+
+    UPCXX_ASSERT((detail::completions_has_event<Cxs, operation_cx_event>::value |
+                  detail::completions_has_event<Cxs, remote_cx_event>::value),
+                 "Not requesting either operation or remote completion is surely an "
+                 "error. You'll have know way of ever knowing when the target memory is "
+                 "safe to read or write again.");
                  
     using cxs_here_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_here,
@@ -287,7 +280,7 @@ namespace upcxx
     std::size_t srcsize=0;
     std::size_t dstcount=0;
     std::size_t dstsize=0;
-    constexpr std::size_t tsize=sizeof(*std::get<0>(*src_runs_begin));
+    constexpr std::size_t tsize=sizeof(T);
     srccount = std::distance(src_runs_begin, src_runs_end);
     dstcount = std::distance(dst_runs_begin, dst_runs_end);
  
@@ -301,16 +294,21 @@ namespace upcxx
         sv->gex_len =std::get<1>(*s)*tsize;
         srcsize+=sv->gex_len;
       }
-    intrank_t gpdrank = (std::get<0>(*dst_runs_begin)).rank_;
+    intrank_t gpdrank = -1;
     for(DestIter d=dst_runs_begin; !(d==dst_runs_end); ++d,++dv)
       {
-        UPCXX_ASSERT(gpdrank==std::get<0>(*d).rank_);
+        UPCXX_ASSERT(gpdrank == -1 || gpdrank==std::get<0>(*d).rank_);
+        gpdrank = gpdrank=(std::get<0>(*d)).rank_;
         dv->gex_addr=(std::get<0>(*d)).raw_ptr_;
         dv->gex_len =std::get<1>(*d)*tsize;
         dstsize+=dv->gex_len;
       }
+
+    UPCXX_ASSERT( !(gpdrank < 0 && detail::completions_has_event<Cxs, remote_cx_event>::value),
+                  "Cannot request remote completion without providing at least one global_ptr "
+                  "in the destination sequence." );
     
-    UPCXX_ASSERT_ALWAYS(dstsize==srcsize);
+    UPCXX_ASSERT(dstsize==srcsize);
     
     detail::rput_cbs_irreg<cxs_here_t, cxs_remote_t> cbs_static{
       gpdrank,
@@ -346,27 +344,21 @@ namespace upcxx
                    DestIter dst_runs_begin, DestIter dst_runs_end,
                    Cxs cxs=completions<future_cx<operation_cx_event>>{{}})
   {
-    using T = typename std::remove_pointer<
-        typename std::decay<decltype(std::get<0>(*dst_runs_begin))>::type
-      >::type;
+    using T = typename std::tuple_element<0,typename std::iterator_traits<SrcIter>::value_type>::type::element_type;
+    using D = typename std::tuple_element<0,typename std::iterator_traits<DestIter>::value_type>::type;
+
+    static_assert(is_definitely_trivially_serializable<T>::value,
+      "RMA operations only work on DefinitelyTriviallySerializable types.");
     
-    static_assert(
-      is_definitely_trivially_serializable<T>::value,
-      "RMA operations only work on DefinitelyTriviallySerializable types."
-    );
+    static_assert(std::is_convertible<D, const T*>::value,
+                  "SrcIter and DestIter need to be over same base T type");
+ 
     
-    static_assert(std::is_same<
-        typename std::decay<decltype(std::get<0>(*dst_runs_begin))>::type,
-        typename std::decay<decltype(std::get<0>(*src_runs_begin).raw_ptr_)>::type
-      >::value, "SrcIter and DestIter need to be over same base T type");
-    
-    UPCXX_ASSERT_ALWAYS((
-      detail::completions_has_event<Cxs, operation_cx_event>::value |
-      detail::completions_has_event<Cxs, remote_cx_event>::value),
-      "Not requesting either operation or remote completion is surely an "
-      "error. You'll have know way of ever knowing when the target memory is "
-      "safe to read or write again."
-                         );
+    UPCXX_ASSERT((detail::completions_has_event<Cxs, operation_cx_event>::value |
+                  detail::completions_has_event<Cxs, remote_cx_event>::value),
+                 "Not requesting either operation or remote completion is surely an "
+                 "error. You'll have know way of ever knowing when the target memory is "
+                 "safe to read or write again.");
     
     using cxs_here_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_here,
@@ -377,20 +369,22 @@ namespace upcxx
       /*EventValues=*/detail::rget_byref_event_values,
       Cxs>;
 
-    intrank_t rank_s = std::get<0>(*src_runs_begin).rank_;
+
     std::size_t srccount=0;
     std::size_t srcsize=0;
     std::size_t dstcount=0;
     std::size_t dstsize=0;
-    constexpr std::size_t tsize=sizeof(*std::get<0>(*dst_runs_begin));
+    constexpr std::size_t tsize=sizeof(T);
     srccount = std::distance(src_runs_begin, src_runs_end);
     dstcount = std::distance(dst_runs_begin, dst_runs_end);
     std::vector<upcxx::detail::memvec_t> src(srccount), dest(dstcount);
     auto sv=src.begin();
     auto dv=dest.begin();
+    intrank_t rank_s = -1;
     for(SrcIter s=src_runs_begin; !(s==src_runs_end); ++s,++sv)
       {
-        UPCXX_ASSERT(rank_s==std::get<0>(*s).rank_);
+        UPCXX_ASSERT(rank_s == -1 || rank_s==std::get<0>(*s).rank_);
+        rank_s = std::get<0>(*s).rank_;
         sv->gex_addr=std::get<0>(*s).raw_ptr_;
         sv->gex_len =std::get<1>(*s)*tsize;
         srcsize+=sv->gex_len;
@@ -436,25 +430,28 @@ namespace upcxx
                std::size_t dst_run_length,
                Cxs cxs=completions<future_cx<operation_cx_event>>{{}})
   {
-
-    using T = typename std::remove_pointer<
-        typename std::decay<decltype(*src_runs_begin)>::type
-      >::type;
+   // This computes T by pulling it out of global_ptr<T>.
+    using T = typename std::iterator_traits<DestIter>::value_type::element_type;
     
     static_assert(
-      is_definitely_trivially_serializable<T>::value,
-      "RMA operations only work on DefinitelyTriviallySerializable types."
-    );
+                  is_definitely_trivially_serializable<T>::value,
+                  "RMA operations only work on DefinitelyTriviallySerializable types."
+                  );
     
-    UPCXX_ASSERT_ALWAYS((
-      detail::completions_has_event<Cxs, operation_cx_event>::value |
-      detail::completions_has_event<Cxs, remote_cx_event>::value),
-      "Not requesting either operation or remote completion is surely an "
-      "error. You'll have know way of ever knowing when the target memory is "
-      "safe to read or write again."
-                         );
+    UPCXX_ASSERT((
+                  detail::completions_has_event<Cxs, operation_cx_event>::value |
+                  detail::completions_has_event<Cxs, remote_cx_event>::value),
+                 "Not requesting either operation or remote completion is surely an "
+                 "error. You'll have know way of ever knowing when the target memory is "
+                 "safe to read or write again.");
+ 
+    static_assert(std::is_convertible<
+                  /*from*/typename std::iterator_traits<SrcIter>::value_type,
+                  /*to*/T const*
+                  >::value,
+                  "Source iterator's value type not convertible to T const*." );
+
     
-    static_assert(std::is_same<decltype(*src_runs_begin),decltype((*dst_runs_begin).raw_ptr_)>::value, "type mismatch");
     using cxs_here_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::rput_event_values,
@@ -464,35 +461,48 @@ namespace upcxx
       /*EventValues=*/detail::rput_event_values,
       Cxs>;
 
-    std::vector<void*>  src, dest;
-    std::size_t srccount=0;
-    std::size_t dstcount=0;
-    constexpr std::size_t srcSize=sizeof(*src_runs_begin);
-    constexpr std::size_t dstSize=sizeof(*(*dst_runs_begin).raw_ptr_);
-    srccount = std::distance(src_runs_begin, src_runs_end);
-    dstcount = std::distance(dst_runs_begin, dst_runs_end);
-    UPCXX_ASSERT_ALWAYS(dstcount*dst_run_length*dstSize==srccount*src_run_length*srcSize);
+    // Construct list of src run pointers. The old code called `resize` followed
+    // by setting elements, which incurred an unnecessary zeroing of the elements
+    // during the resize. This new way is to do a `reserve` followed by `push_back's`.
+    std::vector<void*> src_ptrs;
+
+    src_ptrs.reserve(std::distance(src_runs_begin, src_runs_end));
+  
+
+    for(SrcIter s=src_runs_begin; !(s == src_runs_end); ++s)
+      src_ptrs.push_back(const_cast<void*>((void const*)*s));
+
+    // Construct list of dest run pointers
+    std::vector<void*> dst_ptrs;
     
-    src.resize(srccount);
-    dest.resize(dstcount);
-    auto sv=src.begin();
-    auto dv=dest.begin();
-    for(SrcIter s=src_runs_begin; !(s==src_runs_end); ++s,++sv)
-      {
-        *sv = *s;
-      }
-    intrank_t gpdrank = (*dst_runs_begin).rank_;
-    for(DestIter d=dst_runs_begin; !(d==dst_runs_end); ++d,++dv)
-      {
-        UPCXX_ASSERT((*d).rank_==gpdrank);
-        *dv=(*d).raw_ptr_;
-      }
+    dst_ptrs.reserve(std::distance(dst_runs_begin, dst_runs_end));
+ 
+
+    intrank_t dst_rank = -1; // negative rank indicates empty pointer sequence
+    
+    for(DestIter d=dst_runs_begin; !(d == dst_runs_end); ++d) {
+      UPCXX_ASSERT(
+        dst_rank == -1 || dst_rank == (*d).rank_,
+        "All global_ptr's in destination must reference memory from the same rank."
+      );
+      dst_rank = (*d).rank_;
+      dst_ptrs.push_back((*d).raw_ptr_);
+    }
+
+    UPCXX_ASSERT(
+      !(dst_rank < 0 && detail::completions_has_event<Cxs, remote_cx_event>::value),
+      "Cannot request remote completion without providing at least one global_ptr "
+      "in the destination sequence." );
+    
+    UPCXX_ASSERT(src_ptrs.size()*src_run_length == dst_ptrs.size()*dst_run_length,
+                 "Source and destination must contain same number of elements.");
+
     detail::rput_cbs_reg<cxs_here_t, cxs_remote_t> cbs_static{
-      gpdrank,
-        cxs_here_t(std::move(cxs)),
-        cxs_remote_t(std::move(cxs)),
-        std::move(src), std::move(dest)
-        };
+      dst_rank,
+      cxs_here_t(std::move(cxs)),
+      cxs_remote_t(std::move(cxs)),
+      std::move(src_ptrs), std::move(dst_ptrs)
+    };
 
     auto *cbs = decltype(cbs_static)::static_scope
       ? &cbs_static
@@ -504,7 +514,7 @@ namespace upcxx
       Cxs
       >{cbs->state_here};
     
-    cbs->initiate(dst_run_length*dstSize, src_run_length*srcSize);
+    cbs->initiate(dst_run_length*sizeof(T), src_run_length*sizeof(T));
     
     return returner();
   }
@@ -524,24 +534,26 @@ namespace upcxx
                   Cxs cxs=completions<future_cx<operation_cx_event>>{{}})
   {
 
-    using T = typename std::remove_pointer<
-        typename std::decay<decltype(*dst_runs_begin)>::type
-      >::type;
+    // Pull T out of global_ptr<T> from SrcIter
+    using T = typename std::iterator_traits<SrcIter>::value_type::element_type;
+    using D = typename std::iterator_traits<DestIter>::value_type;
     
-    static_assert(
-      is_definitely_trivially_serializable<T>::value,
-      "RMA operations only work on DefinitelyTriviallySerializable types."
-    );
+    static_assert(std::is_convertible</*from*/D, /*to*/const T*>::value,
+                  "Destination iterator's value type not convertible to T*." );
+
+    static_assert(is_definitely_trivially_serializable<T>::value,
+                  "RMA operations only work on DefinitelyTriviallySerializable types.");
     
-    UPCXX_ASSERT_ALWAYS((
-      detail::completions_has_event<Cxs, operation_cx_event>::value |
-      detail::completions_has_event<Cxs, remote_cx_event>::value),
-      "Not requesting either operation or remote completion is surely an "
-      "error. You'll have know way of ever knowing when the target memory is "
-      "safe to read or write again."
-                         );
+    UPCXX_ASSERT((detail::completions_has_event<Cxs, operation_cx_event>::value |
+                  detail::completions_has_event<Cxs, remote_cx_event>::value),
+                 "Not requesting either operation or remote completion is surely an "
+                 "error. You'll have know way of ever knowing when the target memory is "
+                 "safe to read or write again.");
     
-    static_assert(std::is_same<decltype((*src_runs_begin).raw_ptr_),decltype((*dst_runs_begin))>::value, "type mismatch");
+
+    static_assert( is_definitely_trivially_serializable<T>::value,
+                   "RMA operations only work on DefinitelyTriviallySerializable types.");
+    
     using cxs_here_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::rget_byref_event_values,
@@ -551,33 +563,46 @@ namespace upcxx
       /*EventValues=*/detail::rget_byref_event_values,
       Cxs>;
 
-    intrank_t rank_s = (*src_runs_begin).rank_;
-    std::size_t srccount=0;
-    std::size_t dstcount=0;
-    constexpr std::size_t tsize=sizeof(*dst_runs_begin);
-    srccount = std::distance(src_runs_begin, src_runs_end);
-    dstcount = std::distance(dst_runs_begin, dst_runs_end);
-    UPCXX_ASSERT(srccount*src_run_length==dstcount*dst_run_length);
-    
-    std::vector<void*> src(srccount), dest(dstcount);
-    auto sv=src.begin();
-    auto dv=dest.begin();
-    for(SrcIter s=src_runs_begin; !(s==src_runs_end); ++s,++sv)
-      {
-        UPCXX_ASSERT((*s).rank_==rank_s);
-        *sv = (*s).raw_ptr_;
-      }
+    // Construct list of src run pointers. The old code called `resize` followed
+    // by setting elements, which incurred an unnecessary zeroing of the elements
+    // during the resize. This new way is to do a `reserve` followed by `push_back's`.
+    std::vector<void*> src_ptrs;
 
-    for(DestIter d=dst_runs_begin; !(d==dst_runs_end); ++d,++dv)
-      {
-        *dv= *d;
-      }
+ 
+    src_ptrs.reserve(std::distance(src_runs_begin, src_runs_end));
+   
+    intrank_t src_rank = -1; // negative rank encodes empty memory set
+
+    for(SrcIter s=src_runs_begin; !(s == src_runs_end); ++s) {
+      UPCXX_ASSERT(
+        src_rank == -1 || src_rank == (*s).rank_,
+        "All global_ptr's in source runs must reference memory on the same rank."
+      );
+      src_ptrs.push_back((*s).raw_ptr_);
+      src_rank = (*s).rank_;
+    }
+
+    // Construct list of dest run pointers
+    std::vector<void*> dst_ptrs;
+    
+    // Support potential for InputIterators by only calling distance on forward-or-better
+    // iterators.
+
+    dst_ptrs.reserve(std::distance(dst_runs_begin, dst_runs_end));
+ 
+    for(DestIter d=dst_runs_begin; !(d == dst_runs_end); ++d)
+      dst_ptrs.push_back((void*)*d);
+    
+    UPCXX_ASSERT(
+      src_ptrs.size()*src_run_length == dst_ptrs.size()*dst_run_length,
+      "Source and destination runs must contain the same number of elements."
+    );
     
     auto *cb = new detail::rget_cb_reg<cxs_here_t,cxs_remote_t>{
-      rank_s,
+      src_rank,
       cxs_here_t{std::move(cxs)},
       cxs_remote_t{std::move(cxs)},
-      std::move(src), std::move(dest)
+      std::move(src_ptrs), std::move(dst_ptrs)
     };
 
     auto returner = detail::completions_returner<
@@ -586,7 +611,8 @@ namespace upcxx
         Cxs
       >{cb->state_here};
 
-    cb->initiate(rank_s, src_run_length*tsize, dst_run_length*tsize);
+    cb->initiate(src_rank, src_run_length*sizeof(T), dst_run_length*sizeof(T));
+    
     return returner();
   }
 
@@ -681,18 +707,14 @@ namespace upcxx
                std::size_t const *extents,
                Cxs cxs=completions<future_cx<operation_cx_event>>{{}})
   {
-    static_assert(
-      is_definitely_trivially_serializable<T>::value,
-      "RMA operations only work on DefinitelyTriviallySerializable types."
-    );
+    static_assert(is_definitely_trivially_serializable<T>::value,
+      "RMA operations only work on DefinitelyTriviallySerializable types.");
     
-    UPCXX_ASSERT_ALWAYS((
-      detail::completions_has_event<Cxs, operation_cx_event>::value |
-      detail::completions_has_event<Cxs, remote_cx_event>::value),
-      "Not requesting either operation or remote completion is surely an "
-      "error. You'll have know way of ever knowing when the target memory is "
-      "safe to read or write again."
-                         );
+    UPCXX_ASSERT((detail::completions_has_event<Cxs, operation_cx_event>::value |
+                  detail::completions_has_event<Cxs, remote_cx_event>::value),
+                 "Not requesting either operation or remote completion is surely an "
+                 "error. You'll have know way of ever knowing when the target memory is "
+                 "safe to read or write again.");
  
     using cxs_here_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_here,

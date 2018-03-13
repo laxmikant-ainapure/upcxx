@@ -78,11 +78,18 @@ void upcxx::detail::rma_put_reg_nb(
                     backend::gasnet::handle_cb *source_cb,
                     backend::gasnet::handle_cb *operation_cb)
 {
-  gex_Event_t op_h = gex_VIS_IndexedPutNB(gasnet::world_team,
-                                         rank_d,
-                                         _dstcount, _dstlist, _dstlen,
-                                         _srccount, _srclist, _srclen,
-                                         /* flags*/ 0);
+  gex_Event_t op_h;
+
+  if(rank_d >= 0) { // negative ranks imply empty memory set
+    op_h = gex_VIS_IndexedPutNB(gasnet::world_team,
+                                rank_d,
+                                _dstcount, _dstlist, _dstlen,
+                                _srccount, _srclist, _srclen,
+                                /*flags*/ 0);
+  }
+  else
+    op_h = GEX_EVENT_INVALID;
+  
   if(source_cb!=NULL)
     {
       source_cb->handle = reinterpret_cast<uintptr_t>(op_h);
@@ -93,7 +100,6 @@ void upcxx::detail::rma_put_reg_nb(
     gasnet::register_cb(operation_cb);
   }
   gasnet::after_gasnet();
-
 }
 
 void upcxx::detail::rma_get_reg_nb(
@@ -102,16 +108,21 @@ void upcxx::detail::rma_get_reg_nb(
                     size_t _srccount, void * const _srclist[], size_t _srclen,
                     backend::gasnet::handle_cb *operation_cb)
 {
-  gex_Event_t op_h = gex_VIS_IndexedGetNB(gasnet::world_team,
-                                         _dstcount, _dstlist, _dstlen,
-                                          rank_s,
-                                         _srccount, _srclist, _srclen,
-                                         /* flags*/ 0);
+  gex_Event_t op_h;
 
+  if(rank_s >= 0) { // negative ranks imply empty memory set
+    op_h = gex_VIS_IndexedGetNB(gasnet::world_team,
+                                _dstcount, _dstlist, _dstlen,
+                                rank_s,
+                                _srccount, _srclist, _srclen,
+                                /*flags*/ 0);
+  }
+  else
+    op_h = GEX_EVENT_INVALID;
+  
   operation_cb->handle = reinterpret_cast<uintptr_t>(op_h);
   gasnet::register_cb(operation_cb);
   gasnet::after_gasnet();
-
 }
 
 void upcxx::detail::rma_put_strided_nb(
