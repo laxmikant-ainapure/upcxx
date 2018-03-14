@@ -126,10 +126,6 @@ namespace upcxx {
       return std::forward<Fn>(fn);
     }
     template<typename Ret, typename ...Arg>
-    global_fnptr<Ret(Arg...)> globalize_fnptr(Ret(&fn)(Arg...)) {
-      return global_fnptr<Ret(Arg...)>(fn);
-    }
-    template<typename Ret, typename ...Arg>
     global_fnptr<Ret(Arg...)> globalize_fnptr(Ret(*fn)(Arg...)) {
       return global_fnptr<Ret(Arg...)>(fn);
     }

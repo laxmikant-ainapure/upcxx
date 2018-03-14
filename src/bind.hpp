@@ -364,10 +364,11 @@ namespace upcxx {
           B&&...
         >
       operator()(Fn &&fn, B &&...b) const {
-        decltype(detail::globalize_fnptr(std::forward<Fn>(fn)))
-          ufn = detail::globalize_fnptr(std::forward<Fn>(fn));
-        return bound_function_of<Fn&&, B&&...>{
-          binding<decltype(ufn)>::on_wire(static_cast<decltype(ufn)>(ufn)),
+        decltype(detail::globalize_fnptr(std::declval<Fn&&>())) gfn
+          = detail::globalize_fnptr(std::forward<Fn>(fn));
+
+        return bound_function_of<decltype(gfn), B&&...>{
+          binding<decltype(gfn)>::on_wire(static_cast<decltype(gfn)>(gfn)),
           std::tuple<typename binding<B&&>::on_wire_type...>{
             binding<B&&>::on_wire(std::forward<B>(b))...
           }
