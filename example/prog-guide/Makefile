@@ -17,7 +17,7 @@ LDFLAGS=$(shell $(UPCXX_INSTALL)/bin/upcxx-meta LDFLAGS)
 LIBFLAGS=$(shell $(UPCXX_INSTALL)/bin/upcxx-meta LIBFLAGS)
 
 # Programs to build, assuming each has a corresponding *.cpp file
-EXAMPLES = hello-world compute-pi compute-pi-multi-examples persona-example
+EXAMPLES = hello-world compute-pi compute-pi-multi-examples non-contig-example persona-example
 
 all: $(EXAMPLES)
 
