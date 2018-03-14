@@ -113,7 +113,8 @@ int main() {
   };
 
   dist_object<int> dobj{rank_me()};
-    
+  dist_object<int> rpc_ff_balance{0};
+  
   for(int iter=0; iter < 10; iter++) {
     constexpr int hunk1_n = 4, hunk2_n = 100;
 
@@ -130,7 +131,7 @@ int main() {
       hunk2.push_back(i*i);
 
     // send those hunks
-    auto rpc_done = upcxx::rpc(
+    auto rpc_done1 = upcxx::rpc(
       /*target*/(rank_me() + 1)%rank_n(),
       
       [](dist_object<int> &dobj,
@@ -198,7 +199,33 @@ int main() {
     );
 
     // wait til hunks are processed by remote worker thread
-    rpc_done.wait();
+    rpc_done1.wait();
+
+    // verify that network buffer lifetime extends to returned future in rpc_ff.
+    int origin = rank_me();
+    int target[1] = {(rank_me() + 1)%rank_n()};
+    upcxx::promise<> *rpc_done2 = new upcxx::promise<>;
+    upcxx::rpc_ff(
+      target[0],
+      [=](upcxx::view<int> v) {
+        // kick it off to worker thread
+        return worker.lpc([=]() {
+          // worker kicks it back to master
+          return upcxx::master_persona().lpc(
+            [=]() {
+              // master validates buffer contents
+              UPCXX_ASSERT_ALWAYS(v[0] == upcxx::rank_me());
+              // tell sender the work is complete
+              upcxx::rpc_ff(origin, [=]() { rpc_done2->finalize(); });
+            }
+          );
+        });
+      },
+      upcxx::make_view(target)
+    );
+
+    rpc_done2->get_future().wait();
+    delete rpc_done2;
   }
 
   // quiesce the world

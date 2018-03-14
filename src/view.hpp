@@ -249,6 +249,11 @@ namespace upcxx {
     return {bag.cbegin(), bag.cend(), bag.size()};
   }
 
+  template<typename T, std::size_t n>
+  constexpr view<T, T const*> make_view(T const(&bag)[n]) {
+    return {(T const*)bag, (T const*)bag + n, n};
+  }
+
   template<typename Iter,
            typename T = typename std::iterator_traits<Iter>::value_type,
            typename = decltype(std::distance(std::declval<Iter>(), std::declval<Iter>()))>
