@@ -26,10 +26,9 @@
 
 template<typename=void>
 std::string test_name(const char *file) {
-    const char test_dir[] = "upcxx/test/";
-    int pos = std::string{file}.rfind(test_dir);
-    pos += sizeof(test_dir)-1; // skip over test_dir substring
-    return std::string{file + pos};
+    size_t pos = std::string{file}.rfind("/");
+    if (pos == std::string::npos) return std::string(file);
+    return std::string{file + pos + 1};
 }
 
 #ifdef UPCXX_BACKEND
