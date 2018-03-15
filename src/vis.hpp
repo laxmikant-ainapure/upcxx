@@ -304,7 +304,7 @@ namespace upcxx
     for(DestIter d=dst_runs_begin; !(d==dst_runs_end); ++d,++dv)
       {
         UPCXX_ASSERT(gpdrank == -1 || gpdrank==std::get<0>(*d).rank_);
-        gpdrank = gpdrank=(std::get<0>(*d)).rank_;
+        gpdrank =(std::get<0>(*d)).rank_;
         dv->gex_addr=(std::get<0>(*d)).raw_ptr_;
         dv->gex_len =std::get<1>(*d)*tsize;
         dstsize+=dv->gex_len;
