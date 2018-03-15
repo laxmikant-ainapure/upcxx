@@ -279,28 +279,23 @@ namespace upcxx
       /*EventValues=*/detail::rput_event_values,
       Cxs>;
 
-    std::vector<upcxx::detail::memvec_t>  src, dest;
-    std::size_t srccount=0;
+ 
     std::size_t srcsize=0;
-    std::size_t dstcount=0;
-    std::size_t dstsize=0;
-
     constexpr std::size_t tsize=sizeof(T);
 
-    srccount = std::distance(src_runs_begin, src_runs_end);
-    dstcount = std::distance(dst_runs_begin, dst_runs_end);
- 
-    src.resize(srccount);
-    dest.resize(dstcount);
+    std::vector<upcxx::detail::memvec_t> src(std::distance(src_runs_begin, src_runs_end));
     auto sv=src.begin();
-    auto dv=dest.begin();
     for(SrcIter s=src_runs_begin; !(s==src_runs_end); ++s,++sv)
       {
         sv->gex_addr=std::get<0>(*s);
         sv->gex_len =std::get<1>(*s)*tsize;
         srcsize+=sv->gex_len;
       }
+    
     intrank_t gpdrank = -1;
+    std::vector<upcxx::detail::memvec_t>  dest(std::distance(dst_runs_begin, dst_runs_end));
+    auto dv=dest.begin();
+    std::size_t dstsize=0;
     for(DestIter d=dst_runs_begin; !(d==dst_runs_end); ++d,++dv)
       {
         UPCXX_ASSERT(gpdrank == -1 || gpdrank==std::get<0>(*d).rank_);
@@ -377,18 +372,12 @@ namespace upcxx
       /*EventValues=*/detail::rget_byref_event_values,
       Cxs>;
 
-    std::size_t srccount=0;
-    std::size_t srcsize=0;
-    std::size_t dstcount=0;
-    std::size_t dstsize=0;
 
     constexpr std::size_t tsize=sizeof(T);
 
-    srccount = std::distance(src_runs_begin, src_runs_end);
-    dstcount = std::distance(dst_runs_begin, dst_runs_end);
-    std::vector<upcxx::detail::memvec_t> src(srccount), dest(dstcount);
+    std::vector<upcxx::detail::memvec_t> src(std::distance(src_runs_begin, src_runs_end));
     auto sv=src.begin();
-    auto dv=dest.begin();
+    std::size_t srcsize=0;
     intrank_t rank_s = -1;
     for(SrcIter s=src_runs_begin; !(s==src_runs_end); ++s,++sv)
       {
@@ -403,6 +392,9 @@ namespace upcxx
                  "Cannot request remote completion without providing at least one global_ptr "
                  "in the source sequence.");
     
+    std::vector<upcxx::detail::memvec_t> dest(std::distance(dst_runs_begin, dst_runs_end));
+    auto dv=dest.begin();
+    std::size_t dstsize=0;
     for(DestIter d=dst_runs_begin; !(d==dst_runs_end); ++d,++dv)
       {
         dv->gex_addr=(std::get<0>(*d));
@@ -410,7 +402,7 @@ namespace upcxx
         dstsize+=dv->gex_len;
       }
     
-    UPCXX_ASSERT_ALWAYS(dstsize==srcsize);
+    UPCXX_ASSERT(dstsize==srcsize);
     auto *cb = new detail::rget_cb_irreg<cxs_here_t,cxs_remote_t>{
       rank_s,
       cxs_here_t{std::move(cxs)},
