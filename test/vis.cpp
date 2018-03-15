@@ -51,11 +51,11 @@ public:
 
 
 template<typename ptr_t>
+
 class IterF: public Iter<ptr_t>, public std::iterator<std::forward_iterator_tag, std::pair<ptr_t,std::size_t>>
 {
 public:
   using Iter<ptr_t>::Iter;
-  typedef std::size_t difference_type;
   std::pair<ptr_t, std::size_t> operator*() const
   {return {Iter<ptr_t>::m_ptr,Iter<ptr_t>::m_size};}
 };
@@ -67,8 +67,6 @@ public:
   using Iter<ptr_t>::Iter;
   IterR(ptr_t a_ptr, int a_stride)
   { Iter<ptr_t>::m_ptr=a_ptr; Iter<ptr_t>::m_stride=a_stride;}
-
-  typedef std::size_t difference_type;
   ptr_t operator*() const
   {return Iter<ptr_t>::m_ptr ;}
 };

@@ -5,7 +5,9 @@
 #include <upcxx/global_ptr.hpp>
 #include <upcxx/rput.hpp>
 #include <upcxx/rget.hpp>
+#include <tuple>
 #include <type_traits>
+#include <typeinfo>
 
 //  I'm not sure we will have a Vector-Index-Strided interface that is
 //  not GASNet-based, so if an application wants to make use of the VIS
@@ -252,6 +254,7 @@ namespace upcxx
                   Cxs cxs=completions<future_cx<operation_cx_event>>{{}})
   {
 
+
     using T = typename std::tuple_element<0,typename std::iterator_traits<DestIter>::value_type>::type::element_type;
     using S = typename std::tuple_element<0,typename std::iterator_traits<SrcIter>::value_type>::type;
     static_assert(is_definitely_trivially_serializable<T>::value,
@@ -265,6 +268,7 @@ namespace upcxx
                  "Not requesting either operation or remote completion is surely an "
                  "error. You'll have know way of ever knowing when the target memory is "
                  "safe to read or write again.");
+
                  
     using cxs_here_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_here,
@@ -280,7 +284,9 @@ namespace upcxx
     std::size_t srcsize=0;
     std::size_t dstcount=0;
     std::size_t dstsize=0;
+
     constexpr std::size_t tsize=sizeof(T);
+
     srccount = std::distance(src_runs_begin, src_runs_end);
     dstcount = std::distance(dst_runs_begin, dst_runs_end);
  
@@ -344,6 +350,7 @@ namespace upcxx
                    DestIter dst_runs_begin, DestIter dst_runs_end,
                    Cxs cxs=completions<future_cx<operation_cx_event>>{{}})
   {
+
     using T = typename std::tuple_element<0,typename std::iterator_traits<SrcIter>::value_type>::type::element_type;
     using D = typename std::tuple_element<0,typename std::iterator_traits<DestIter>::value_type>::type;
 
@@ -359,6 +366,7 @@ namespace upcxx
                  "Not requesting either operation or remote completion is surely an "
                  "error. You'll have know way of ever knowing when the target memory is "
                  "safe to read or write again.");
+
     
     using cxs_here_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_here,
@@ -369,12 +377,13 @@ namespace upcxx
       /*EventValues=*/detail::rget_byref_event_values,
       Cxs>;
 
-
     std::size_t srccount=0;
     std::size_t srcsize=0;
     std::size_t dstcount=0;
     std::size_t dstsize=0;
+
     constexpr std::size_t tsize=sizeof(T);
+
     srccount = std::distance(src_runs_begin, src_runs_end);
     dstcount = std::distance(dst_runs_begin, dst_runs_end);
     std::vector<upcxx::detail::memvec_t> src(srccount), dest(dstcount);
@@ -383,13 +392,17 @@ namespace upcxx
     intrank_t rank_s = -1;
     for(SrcIter s=src_runs_begin; !(s==src_runs_end); ++s,++sv)
       {
-        UPCXX_ASSERT(rank_s == -1 || rank_s==std::get<0>(*s).rank_);
+        UPCXX_ASSERT(rank_s==-1 || rank_s==std::get<0>(*s).rank_,
+                     "All ranks in rput need to target the same rank");
         rank_s = std::get<0>(*s).rank_;
         sv->gex_addr=std::get<0>(*s).raw_ptr_;
         sv->gex_len =std::get<1>(*s)*tsize;
         srcsize+=sv->gex_len;
       }
-
+    UPCXX_ASSERT(!(rank_s < 0 && detail::completions_has_event<Cxs, remote_cx_event>::value),
+                 "Cannot request remote completion without providing at least one global_ptr "
+                 "in the source sequence.");
+    
     for(DestIter d=dst_runs_begin; !(d==dst_runs_end); ++d,++dv)
       {
         dv->gex_addr=(std::get<0>(*d));
