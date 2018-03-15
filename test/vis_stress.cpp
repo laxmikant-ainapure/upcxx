@@ -9,9 +9,8 @@ using upcxx::global_ptr;
 struct ops_as_regular {
   template<typename T, int len>
   void put(T const *src, global_ptr<T> dest) {
-    // allocate arrays of len+1 in case len==0, extra element never used
-    global_ptr<T> dest_ptrs[len+1];
-    T const *src_ptrs[len+1];
+    auto dest_ptrs = new global_ptr<T>[len];
+    auto src_ptrs = new T const*[len];
 
     for(int i=0; i < len; i++) {
       dest_ptrs[i] = dest + i;
@@ -20,13 +19,15 @@ struct ops_as_regular {
     
     auto done = upcxx::rput_regular(src_ptrs, src_ptrs + len, 1, dest_ptrs, dest_ptrs + len, 1);
     done.wait();
+
+    delete[] dest_ptrs;
+    delete[] src_ptrs;
   }
 
   template<typename T, int len>
   void get(global_ptr<T> src, T *dest) {
-    // allocate arrays of len+1 in case len==0, extra element never used
-    global_ptr<T> src_ptrs[len+1];
-    T* dest_ptrs[len+1];
+    auto src_ptrs = new global_ptr<T>[len];
+    auto dest_ptrs = new T*[len];
     
     for(int i=0; i < len; i++) {
       dest_ptrs[i] = dest + i;
@@ -35,15 +36,17 @@ struct ops_as_regular {
     
     auto done = upcxx::rget_regular(src_ptrs, src_ptrs + len, 1, dest_ptrs, dest_ptrs + len, 1);
     done.wait();
+
+    delete[] dest_ptrs;
+    delete[] src_ptrs;
   }
 };
 
 struct ops_as_irregular {
   template<typename T, int len>
   void put(T const *src, global_ptr<T> dest) {
-    // allocate arrays of len+1 in case len==0, extra element never used
-    std::pair<T const* const, int> src_runs[len+1];
-    std::tuple<global_ptr<T>, const unsigned> dest_runs[len+1];
+    auto src_runs = new std::pair<T const* const, int>[len];
+    auto dest_runs = new std::tuple<global_ptr<T>, const unsigned>[len];
     
     for(int i=0; i < len; i++) {
       new((void*)&src_runs[i]) std::pair<T const* const, int>(src + i, 1);
@@ -52,13 +55,15 @@ struct ops_as_irregular {
     
     auto done = upcxx::rput_irregular(src_runs, src_runs + len, dest_runs, dest_runs + len);
     done.wait();
+
+    delete[] src_runs;
+    delete[] dest_runs;
   }
 
   template<typename T, int len>
   void get(global_ptr<T> src, T *dest) {
-    // allocate arrays of len+1 in case len==0, extra element never used
-    std::tuple<const global_ptr<T>, unsigned> src_runs[len+1];
-    std::pair<T*, const int> dest_runs[len+1];
+    auto src_runs = new std::tuple<const global_ptr<T>, unsigned>[len];
+    auto dest_runs = new std::pair<T*, const int>[len];
     
     for(int i=0; i < len; i++) {
       new((void*)&src_runs[i]) std::tuple<const global_ptr<T>, unsigned>(src + i, 1);
@@ -67,6 +72,9 @@ struct ops_as_irregular {
     
     auto done = upcxx::rget_irregular(src_runs, src_runs + len, dest_runs, dest_runs + len);
     done.wait();
+
+    delete[] src_runs;
+    delete[] dest_runs;
   }
 };
 
