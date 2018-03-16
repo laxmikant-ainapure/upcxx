@@ -78,7 +78,7 @@ template<typename Reg, typename value_t>
 bool check(Reg start, Reg end, std::size_t count, value_t value);
 
 template<typename Reg, typename value_t>
-void set(Reg start, Reg end, std::size_t count, value_t value);
+void vset(Reg start, Reg end, std::size_t count, value_t value);
 
 void reset(patch_t& patch, lli value);
 
@@ -130,14 +130,20 @@ int main() {
     for(int i=0; i<6; i++)
       std::cout<<" "<<srcTest[i];
     std::cout<<"\n";
-    auto f0 = rput_irregular(svec.begin(), svec.end(),
+    future<> fsource, foperation;
+    std::tie(fsource, foperation)  = rput_irregular(svec.begin(), svec.end(),
                              dvec.begin(), dvec.end(),
+                             source_cx::as_future() |
                              remote_cx::as_rpc([](dist_object<count_t>& c) {
                                  (*c)[1]++;}, counters) |
                              operation_cx::as_future()
                              );
 
-    f0.wait();
+
+    //mycount[0]++;  //reading from myself
+    fsource.wait();
+    foperation.wait();
+
     while(mycount[1]!=1)  progress(); // wait to see my lo neighbor has modified my count
  
     for(int i=0; i<6; i++)
@@ -155,18 +161,30 @@ int main() {
   auto fd1 = IterF<global_ptr<lli>>(hi, B, N);
   auto fd1_end = fd1; fd1_end+=M*N;
   auto fr1 = IterF<lli*>(myPtr, B, N);
-  auto fr1_end = fr1; fr1_end+=M*N; 
-
+  auto fr1_end = fr1; fr1_end+=M*N;
+  auto rr1 = IterR<lli*>(myPtr+N-B, N);
+  auto rr1_end = rr1;  rr1_end+=M*N;
+  
   barrier(); // need to see the reset done above
-  auto f1 = rput_irregular(fs1, fs1_end, fd1, fd1_end);
+  future<> fsource, foperation;
+  std::tie(fsource, foperation) = rput_irregular(fs1, fs1_end, fd1, fd1_end,
+                           source_cx::as_future()| operation_cx::as_future());
 
 
-  f1.wait();
+ 
+  fsource.wait();
+  // clobber source data locations now, verify source completion is OK
+  // with data being altered after source completion.
+  lli token = -15;
+
+  vset(rr1, rr1_end, B, token);
+  foperation.wait();
+
   barrier();
   
   success = success && check(fr1, fr1_end, (lli)nebrLo);
   lli sm = sum(myPatch);
-  lli correctAnswer = (me*(N-B)+B*nebrLo)*M;
+  lli correctAnswer = (token*B+me*(N-2*B)+B*nebrLo)*M;
   
   if(sm != correctAnswer)
     {
@@ -180,10 +198,9 @@ int main() {
   auto rs1_end = rs1; rs1_end+=M*N;
   auto rd1 = IterR<global_ptr<lli>>(lo+N-B,N);
   auto rd1_end = rd1; rd1_end+=M*N;
-  auto rr1 = IterR<lli*>(myPtr+N-B, N);
-  auto rr1_end = rr1;  rr1_end+=M*N;
-  lli token=-1;
-  ::set(rr1, rr1_end, B, token);
+
+  token=-1;
+  vset(rr1, rr1_end, B, token);
   
   barrier();  
 
@@ -212,7 +229,7 @@ int main() {
   // strided put
   auto s1 = rput_strided<2>(myPtr+N-B, {{sizeof(lli),N*sizeof(lli)}},
                             hi, {{sizeof(lli),N*sizeof(lli)}}, {{B,M}},
-                            operation_cx::as_lpc(default_persona(),[&](){ mycount[0]++;}) |
+                            source_cx::as_lpc(default_persona(),[&](){ mycount[0]++;}) |
                             operation_cx::as_future() |
                             remote_cx::as_rpc([](dist_object<count_t>& c){
                                 (*c)[1]++;},counters));
@@ -296,7 +313,7 @@ int main() {
   reset(myPatch, me);
   rr1 = IterR<lli*>(myPtr, N);
   rr1_end = rr1; rr1_end+=M*N;
-  ::set(rr1, rr1_end, B, token);
+  vset(rr1, rr1_end, B, token);
   barrier();
   auto g1 = rget_regular(rd1, rd1_end, B, rs1, rs1_end, B);
   g1.wait();
@@ -328,11 +345,76 @@ int main() {
       std::cout<<" Strided get expected sum:"<<correctAnswer<<" actual sum: "<<sm<<"\n";
       success = false;
     }
+
+
+  //  Transpose strided operations
+  std::cout<<"rput_strided with transpose\n";
+
+  uint8_t guardCellHi=0xFF;
+  lli tmp[5][2] = {{m,m+1},{m+2, m+3},{m+4,m+5},{m+6,m+7},{m+8,m+9}};
+  uint8_t guardCellLo=0xFF;
+  
+  reset(myPatch, me);
+  barrier();
+  //  insert the transpose of tmp into the start of hi patch
+  auto tr1 = rput_strided<2>(&(tmp[0][0]), {{sizeof(lli),2*sizeof(lli)}},
+                            hi, {{N*sizeof(lli),sizeof(lli)}}, {{2,5}});
+  tr1.wait();
+  for(lli* s=&(tmp[0][0]); s<&(tmp[0][0])+10; s++) *s=0;
+  barrier();
+  sm=sum(myPatch);
+  correctAnswer = me*(N*M-10) + 10*nebrLo + 45;
+  if(sm != correctAnswer)
+    {
+      std::cout<<" Strided transpose put expected sum:"<<correctAnswer<<" actual sum: "<<sm<<"\n";
+      success = false;
+    }
+  lli val=nebrLo;
+  for(int i=0;i<5;i++)
+    for(int j=0;j<2; j++)
+      {
+        if(myPatch[j][i] != val){
+          std::cout<<"Wrong value in transpose "<<myPatch[j][i]<<" "<<val<<"\n";
+          success=false;
+        }
+        myPatch[j][i]+=1+m; // set up the get test next;
+        val++;
+      }
+
+  barrier();
+
+  std::cout<<"rget_strided with transpose\n";
+  // slightly different arrangement, unit stride at the remote rank, jumbled
+  // stride on arrival buffer.
+  auto tr2 = rget_strided<2>(hi, {{sizeof(lli),N*sizeof(lli)}},
+                             &(tmp[0][0]), {{2*sizeof(lli),sizeof(lli)}},
+                             {{5,2}});
+
+  tr2.wait();
+
+  if(guardCellHi != 0xFF || guardCellLo != 0xFF)
+    {
+      std::cout<<"guardCells corrupted\n";
+      success=false;
+    }
+
+  val = m + nebrHi+1;
+  for(int j=0; j<5; j++)
+    for(int i=0; i<2; i++)
+      {
+        if(tmp[j][i] != val)
+          {
+          std::cout<<"rget_strided transpose got:"<<tmp[j][i]<<" expected"<<val<<"\n";
+          success=false;
+          }
+        val+=1;
+      }
   
   print_test_success(success);
   
   finalize();
-  
+
+  if(!success) return 4;
   return 0;
 }
 
@@ -407,7 +489,7 @@ bool check(Reg start, Reg end, std::size_t count, value_t value)
 }
 
 template<typename Reg, typename value_t>
-void set(Reg start, Reg end, std::size_t count, value_t value)
+void vset(Reg start, Reg end, std::size_t count, value_t value)
 {
   while(!(start == end))
     {
