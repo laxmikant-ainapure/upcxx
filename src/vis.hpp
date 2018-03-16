@@ -281,18 +281,8 @@ namespace upcxx
       Cxs>;
 
  
-    std::size_t srcsize=0;
     constexpr std::size_t tsize=sizeof(T);
-
-    std::vector<upcxx::detail::memvec_t> src(std::distance(src_runs_begin, src_runs_end));
-    auto sv=src.begin();
-    for(SrcIter s=src_runs_begin; !(s==src_runs_end); ++s,++sv)
-      {
-        sv->gex_addr=std::get<0>(*s);
-        sv->gex_len =std::get<1>(*s)*tsize;
-        srcsize+=sv->gex_len;
-      }
-    
+ 
     intrank_t gpdrank = -1;
     std::vector<upcxx::detail::memvec_t>  dest(std::distance(dst_runs_begin, dst_runs_end));
     auto dv=dest.begin();
@@ -309,6 +299,16 @@ namespace upcxx
     UPCXX_ASSERT( !(gpdrank < 0 && detail::completions_has_event<Cxs, remote_cx_event>::value),
                   "Cannot request remote completion without providing at least one global_ptr "
                   "in the destination sequence." );
+    
+    std::size_t srcsize=0;
+    std::vector<upcxx::detail::memvec_t> src(std::distance(src_runs_begin, src_runs_end));
+    auto sv=src.begin();
+    for(SrcIter s=src_runs_begin; !(s==src_runs_end); ++s,++sv)
+      {
+        sv->gex_addr=std::get<0>(*s);
+        sv->gex_len =std::get<1>(*s)*tsize;
+        srcsize+=sv->gex_len;
+      }
     
     UPCXX_ASSERT(dstsize==srcsize);
     
@@ -375,7 +375,17 @@ namespace upcxx
 
 
     constexpr std::size_t tsize=sizeof(T);
-
+    
+    std::vector<upcxx::detail::memvec_t> dest(std::distance(dst_runs_begin, dst_runs_end));
+    auto dv=dest.begin();
+    std::size_t dstsize=0;
+    for(DestIter d=dst_runs_begin; !(d==dst_runs_end); ++d,++dv)
+      {
+        dv->gex_addr=(std::get<0>(*d));
+        dv->gex_len =std::get<1>(*d)*tsize;
+        dstsize+=dv->gex_len;
+      }
+    
     std::vector<upcxx::detail::memvec_t> src(std::distance(src_runs_begin, src_runs_end));
     auto sv=src.begin();
     std::size_t srcsize=0;
@@ -393,16 +403,7 @@ namespace upcxx
                  "Cannot request remote completion without providing at least one global_ptr "
                  "in the source sequence.");
     
-    std::vector<upcxx::detail::memvec_t> dest(std::distance(dst_runs_begin, dst_runs_end));
-    auto dv=dest.begin();
-    std::size_t dstsize=0;
-    for(DestIter d=dst_runs_begin; !(d==dst_runs_end); ++d,++dv)
-      {
-        dv->gex_addr=(std::get<0>(*d));
-        dv->gex_len =std::get<1>(*d)*tsize;
-        dstsize+=dv->gex_len;
-      }
-    
+
     UPCXX_ASSERT(dstsize==srcsize);
     auto *cb = new detail::rget_cb_irreg<cxs_here_t,cxs_remote_t>{
       rank_s,
@@ -467,23 +468,16 @@ namespace upcxx
       /*EventValues=*/detail::rput_event_values,
       Cxs>;
 
-    // Construct list of src run pointers. The old code called `resize` followed
-    // by setting elements, which incurred an unnecessary zeroing of the elements
-    // during the resize. This new way is to do a `reserve` followed by `push_back's`.
-    std::vector<void*> src_ptrs;
-
-    src_ptrs.reserve(std::distance(src_runs_begin, src_runs_end));
-  
-
-    for(SrcIter s=src_runs_begin; !(s == src_runs_end); ++s)
-      src_ptrs.push_back(const_cast<void*>((void const*)*s));
-
+ 
+ 
     // Construct list of dest run pointers
     std::vector<void*> dst_ptrs;
     
+       // Construct list of src run pointers. The old code called `resize` followed
+    // by setting elements, which incurred an unnecessary zeroing of the elements
+    // during the resize. This new way is to do a `reserve` followed by `push_back's`.
     dst_ptrs.reserve(std::distance(dst_runs_begin, dst_runs_end));
  
-
     intrank_t dst_rank = -1; // negative rank indicates empty pointer sequence
     
     for(DestIter d=dst_runs_begin; !(d == dst_runs_end); ++d) {
@@ -499,7 +493,15 @@ namespace upcxx
       !(dst_rank < 0 && detail::completions_has_event<Cxs, remote_cx_event>::value),
       "Cannot request remote completion without providing at least one global_ptr "
       "in the destination sequence." );
-    
+
+    std::vector<void*> src_ptrs;
+
+    src_ptrs.reserve(std::distance(src_runs_begin, src_runs_end));
+  
+
+    for(SrcIter s=src_runs_begin; !(s == src_runs_end); ++s)
+      src_ptrs.push_back(const_cast<void*>((void const*)*s));
+
     UPCXX_ASSERT(src_ptrs.size()*src_run_length == dst_ptrs.size()*dst_run_length,
                  "Source and destination must contain same number of elements.");
 
@@ -572,9 +574,16 @@ namespace upcxx
     // Construct list of src run pointers. The old code called `resize` followed
     // by setting elements, which incurred an unnecessary zeroing of the elements
     // during the resize. This new way is to do a `reserve` followed by `push_back's`.
-    std::vector<void*> src_ptrs;
-
+    
+       // Construct list of dest run pointers
+    std::vector<void*> dst_ptrs;
+    dst_ptrs.reserve(std::distance(dst_runs_begin, dst_runs_end));
  
+    for(DestIter d=dst_runs_begin; !(d == dst_runs_end); ++d)
+      dst_ptrs.push_back((void*)*d);
+
+    
+    std::vector<void*> src_ptrs;
     src_ptrs.reserve(std::distance(src_runs_begin, src_runs_end));
    
     intrank_t src_rank = -1; // negative rank encodes empty memory set
@@ -588,16 +597,7 @@ namespace upcxx
       src_rank = (*s).rank_;
     }
 
-    // Construct list of dest run pointers
-    std::vector<void*> dst_ptrs;
-    
-    // Support potential for InputIterators by only calling distance on forward-or-better
-    // iterators.
-
-    dst_ptrs.reserve(std::distance(dst_runs_begin, dst_runs_end));
  
-    for(DestIter d=dst_runs_begin; !(d == dst_runs_end); ++d)
-      dst_ptrs.push_back((void*)*d);
     
     UPCXX_ASSERT(
       src_ptrs.size()*src_run_length == dst_ptrs.size()*dst_run_length,
