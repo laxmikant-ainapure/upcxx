@@ -19,10 +19,11 @@ namespace upcxx
   
   namespace detail {
 
-    typedef struct {
+    struct memvec_t {
+      memvec_t() { }
       const void  *gex_addr;  // TODO: When gasnet changes Memvec we need to track it
       size_t gex_len;
-    } memvec_t;
+    };
 
     
     void rma_put_irreg_nb(
@@ -296,10 +297,10 @@ namespace upcxx
     std::vector<upcxx::detail::memvec_t>  dest(std::distance(dst_runs_begin, dst_runs_end));
     auto dv=dest.begin();
     std::size_t dstsize=0;
+    if(dest.size()>0) gpdrank = std::get<0>(*dst_runs_begin).rank_;
     for(DestIter d=dst_runs_begin; !(d==dst_runs_end); ++d,++dv)
       {
-        UPCXX_ASSERT(gpdrank == -1 || gpdrank==std::get<0>(*d).rank_);
-        gpdrank =(std::get<0>(*d)).rank_;
+        UPCXX_ASSERT(gpdrank==std::get<0>(*d).rank_);
         dv->gex_addr=(std::get<0>(*d)).raw_ptr_;
         dv->gex_len =std::get<1>(*d)*tsize;
         dstsize+=dv->gex_len;
@@ -379,11 +380,11 @@ namespace upcxx
     auto sv=src.begin();
     std::size_t srcsize=0;
     intrank_t rank_s = -1;
+    if(src.size()>0) rank_s = std::get<0>(*src_runs_begin).rank_;
     for(SrcIter s=src_runs_begin; !(s==src_runs_end); ++s,++sv)
       {
-        UPCXX_ASSERT(rank_s==-1 || rank_s==std::get<0>(*s).rank_,
+        UPCXX_ASSERT(rank_s==std::get<0>(*s).rank_,
                      "All ranks in rput need to target the same rank");
-        rank_s = std::get<0>(*s).rank_;
         sv->gex_addr=std::get<0>(*s).raw_ptr_;
         sv->gex_len =std::get<1>(*s)*tsize;
         srcsize+=sv->gex_len;
