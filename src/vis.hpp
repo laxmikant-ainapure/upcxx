@@ -585,11 +585,10 @@ namespace upcxx
     std::vector<void*> src_ptrs;
     src_ptrs.reserve(std::distance(src_runs_begin, src_runs_end));
    
-    intrank_t src_rank = -1; // negative rank encodes empty memory set
-
+    intrank_t src_rank = 0; // gasnet accepts rank zero for empty message
+    if(src_ptrs.capacity() != 0) src_rank = (*src_runs_begin).rank_;
     for(SrcIter s=src_runs_begin; !(s == src_runs_end); ++s) {
-      UPCXX_ASSERT(
-        src_rank == -1 || src_rank == (*s).rank_,
+      UPCXX_ASSERT(src_rank == (*s).rank_,
         "All global_ptr's in source runs must reference memory on the same rank."
       );
       src_ptrs.push_back((*s).raw_ptr_);
