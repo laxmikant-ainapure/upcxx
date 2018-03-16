@@ -283,11 +283,12 @@ namespace upcxx
  
     constexpr std::size_t tsize=sizeof(T);
  
-    intrank_t gpdrank = -1;
+ 
     std::vector<upcxx::detail::memvec_t>  dest(std::distance(dst_runs_begin, dst_runs_end));
     auto dv=dest.begin();
     std::size_t dstsize=0;
-    if(dest.size()>0) gpdrank = std::get<0>(*dst_runs_begin).rank_;
+    intrank_t gpdrank = 0; // zero is a valid rank for gasnet to set event flag.
+    if(dest.size()!=0) gpdrank = std::get<0>(*dst_runs_begin).rank_; //hoist gpdrank assign out of loop
     for(DestIter d=dst_runs_begin; !(d==dst_runs_end); ++d,++dv)
       {
         UPCXX_ASSERT(gpdrank==std::get<0>(*d).rank_);
@@ -296,7 +297,7 @@ namespace upcxx
         dstsize+=dv->gex_len;
       }
 
-    UPCXX_ASSERT( !(gpdrank < 0 && detail::completions_has_event<Cxs, remote_cx_event>::value),
+    UPCXX_ASSERT( !(dest.size() == 0 && detail::completions_has_event<Cxs, remote_cx_event>::value),
                   "Cannot request remote completion without providing at least one global_ptr "
                   "in the destination sequence." );
     
@@ -389,8 +390,8 @@ namespace upcxx
     std::vector<upcxx::detail::memvec_t> src(std::distance(src_runs_begin, src_runs_end));
     auto sv=src.begin();
     std::size_t srcsize=0;
-    intrank_t rank_s = -1;
-    if(src.size()>0) rank_s = std::get<0>(*src_runs_begin).rank_;
+    intrank_t rank_s = 0; // zero is a valid rank for gasnet to perform event completion
+    if(src.size()!=0) rank_s = std::get<0>(*src_runs_begin).rank_; // hoist rank_s assign out of loop
     for(SrcIter s=src_runs_begin; !(s==src_runs_end); ++s,++sv)
       {
         UPCXX_ASSERT(rank_s==std::get<0>(*s).rank_,
@@ -399,7 +400,7 @@ namespace upcxx
         sv->gex_len =std::get<1>(*s)*tsize;
         srcsize+=sv->gex_len;
       }
-    UPCXX_ASSERT(!(rank_s < 0 && detail::completions_has_event<Cxs, remote_cx_event>::value),
+    UPCXX_ASSERT(!(src.size() ==0  && detail::completions_has_event<Cxs, remote_cx_event>::value),
                  "Cannot request remote completion without providing at least one global_ptr "
                  "in the source sequence.");
     
@@ -478,21 +479,19 @@ namespace upcxx
     // during the resize. This new way is to do a `reserve` followed by `push_back's`.
     dst_ptrs.reserve(std::distance(dst_runs_begin, dst_runs_end));
  
-    intrank_t dst_rank = -1; // negative rank indicates empty pointer sequence
-    
+    intrank_t dst_rank = 0; // zero is a valid rank for gasnet to perform completion
+    if(dst_ptrs.capacity() !=0) dst_rank = (*dst_runs_begin).rank_;
     for(DestIter d=dst_runs_begin; !(d == dst_runs_end); ++d) {
-      UPCXX_ASSERT(
-        dst_rank == -1 || dst_rank == (*d).rank_,
+      UPCXX_ASSERT(dst_rank == (*d).rank_,
         "All global_ptr's in destination must reference memory from the same rank."
       );
       dst_rank = (*d).rank_;
       dst_ptrs.push_back((*d).raw_ptr_);
     }
 
-    UPCXX_ASSERT(
-      !(dst_rank < 0 && detail::completions_has_event<Cxs, remote_cx_event>::value),
-      "Cannot request remote completion without providing at least one global_ptr "
-      "in the destination sequence." );
+    UPCXX_ASSERT(!(dst_ptrs.size()==0  && detail::completions_has_event<Cxs, remote_cx_event>::value),
+                 "Cannot request remote completion without providing at least one global_ptr "
+                 "in the destination sequence." );
 
     std::vector<void*> src_ptrs;
 

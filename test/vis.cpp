@@ -137,7 +137,6 @@ int main() {
                              operation_cx::as_future()
                              );
 
-    mycount[0]++;  //reading from myself
     f0.wait();
     while(mycount[1]!=1)  progress(); // wait to see my lo neighbor has modified my count
  
@@ -161,7 +160,7 @@ int main() {
   barrier(); // need to see the reset done above
   auto f1 = rput_irregular(fs1, fs1_end, fd1, fd1_end);
 
- 
+
   f1.wait();
   barrier();
   
@@ -190,7 +189,10 @@ int main() {
 
   auto r1 = rput_regular(rs1, rs1_end, B , rd1, rd1_end, B);
 
- 
+  auto r1_empty = rput_regular(rs1, rs1, B, rd1, rd1, B,
+                               source_cx::as_lpc(default_persona(),[&](){ mycount[0]++;}) |
+                               operation_cx::as_future());
+  r1_empty.wait();
   r1.wait();
   barrier();
   

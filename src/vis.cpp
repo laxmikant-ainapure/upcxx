@@ -80,15 +80,12 @@ void upcxx::detail::rma_put_reg_nb(
 {
   gex_Event_t op_h;
 
-  if(rank_d >= 0) { // negative ranks imply empty memory set
-    op_h = gex_VIS_IndexedPutNB(gasnet::world_team,
-                                rank_d,
-                                _dstcount, _dstlist, _dstlen,
-                                _srccount, _srclist, _srclen,
-                                /*flags*/ 0);
-  }
-  else
-    op_h = GEX_EVENT_INVALID;
+ 
+  op_h = gex_VIS_IndexedPutNB(gasnet::world_team,
+                              rank_d,
+                              _dstcount, _dstlist, _dstlen,
+                              _srccount, _srclist, _srclen,
+                              /*flags*/ 0);
   
   if(source_cb!=NULL)
     {
@@ -110,15 +107,11 @@ void upcxx::detail::rma_get_reg_nb(
 {
   gex_Event_t op_h;
 
-  if(rank_s >= 0) { // negative ranks imply empty memory set
-    op_h = gex_VIS_IndexedGetNB(gasnet::world_team,
-                                _dstcount, _dstlist, _dstlen,
-                                rank_s,
-                                _srccount, _srclist, _srclen,
-                                /*flags*/ 0);
-  }
-  else
-    op_h = GEX_EVENT_INVALID;
+  op_h = gex_VIS_IndexedGetNB(gasnet::world_team,
+                              _dstcount, _dstlist, _dstlen,
+                              rank_s,
+                              _srccount, _srclist, _srclen,
+                              /*flags*/ 0);
   
   operation_cb->handle = reinterpret_cast<uintptr_t>(op_h);
   gasnet::register_cb(operation_cb);
