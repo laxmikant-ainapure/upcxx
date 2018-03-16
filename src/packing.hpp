@@ -104,24 +104,24 @@ namespace upcxx {
   // unpacked_of_t<T>: Type alias for the `unpacked_t` typedef from `packing<T>`
   // if it exists, otherwise `T`.
 
-  template<typename PackingOfT, typename T, typename = void>
-  struct unpacked_of_packing {
+  template<typename T,
+           typename PackingOfT = packing<T>,
+           typename = void>
+  struct unpacked_of {
     using type = T;
   };
   
-  template<typename PackingOfT, typename T>
-  struct unpacked_of_packing<PackingOfT, T,
+  template<typename T, typename PackingOfT>
+  struct unpacked_of<
+      T, PackingOfT,
       typename std::conditional<true, void, typename PackingOfT::unpacked_t>::type
     > {
     using type = typename PackingOfT::unpacked_t;
   };
 
-  template<typename PackingOfT, typename T>
-  using unpacked_of_packing_t = typename unpacked_of_packing<PackingOfT,T>::type;
+  template<typename T, typename PackingOfT = packing<T>>
+  using unpacked_of_t = typename unpacked_of<T,PackingOfT>::type;
 
-  template<typename T>
-  using unpacked_of_t = typename unpacked_of_packing<packing<T>, T>::type;
-  
   //////////////////////////////////////////////////////////////////////////////
   // unpacking<T>: Use this to to unpack a T (via unpacking<T>::unpack())
   // since packing<T>::unpack isn't the right unpacker if unpacked_t != T.
@@ -443,7 +443,7 @@ namespace upcxx {
         *delta = w.size() - size0;
       }
 
-      using unpacked_t = unpacked_of_packing_t<Dumb,T>;
+      using unpacked_t = unpacked_of_t<T,Dumb>;
 
       static void skip(parcel_reader &r) {
         std::size_t delta = r.pop_trivial_aligned<std::size_t>();

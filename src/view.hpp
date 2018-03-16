@@ -305,7 +305,7 @@ namespace upcxx {
         *delta = w.size() - size0;
       }
 
-      using unpacked_t = view<T/*, default iterator*/>;
+      using unpacked_t = view<unpacked_of_t<T>/*, default iterator*/>;
       
       static void skip(parcel_reader &r) {
         std::size_t delta = r.pop_trivial_aligned<std::size_t>();

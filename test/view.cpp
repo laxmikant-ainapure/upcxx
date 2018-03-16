@@ -74,6 +74,12 @@ static_assert(!is_definitely_trivially_serializable<upcxx::view<vector<int>>>::v
 static_assert(is_definitely_serializable<upcxx::view<vector<int>>>::value, "ERROR");
 static_assert(!packing_is_trivial<upcxx::view<vector<int>>>::value, "ERROR");
 
+#define view_t upcxx::view<upcxx::view<int, vector<int>::const_iterator>, vector<upcxx::view<int, vector<int>::const_iterator>>::const_iterator>
+static_assert(!is_definitely_trivially_serializable<view_t>::value, "ERROR");
+static_assert(is_definitely_serializable<view_t>::value, "ERROR");
+static_assert(!packing_is_trivial<view_t>::value, "ERROR");
+#undef view_t
+
 #define view_t upcxx::view<vector<int>, vector<int>::iterator>
 static_assert(!is_definitely_trivially_serializable<view_t>::value, "ERROR");
 static_assert(is_definitely_serializable<view_t>::value, "ERROR");
@@ -120,11 +126,13 @@ int main() {
 
     // build our hunks to ship in rpc
     vector<list<tuple<int,int>>> hunk1(hunk1_n);
+    vector<view<tuple<int,int>, list<tuple<int,int>>::const_iterator>> hunk1v;
     deque<int> hunk2;
 
     for(int i=0; i < hunk1_n; i++) {
       for(int j=0; j < 1 + i*i; j++)
         hunk1[i].push_back(std::make_tuple(j, j*j));
+      hunk1v.push_back(upcxx::make_view(hunk1[i]));
     }
 
     for(int i=0; i < hunk2_n; i++)
@@ -136,6 +144,7 @@ int main() {
       
       [](dist_object<int> &dobj,
          view<list<tuple<int,int>>> hunk1,
+         view<view<tuple<int,int>>> hunk1v,
          view<int> hunk2,
          my_pod,
          my_nonpod2
@@ -148,6 +157,20 @@ int main() {
           UPCXX_ASSERT_ALWAYS(hunk1.size() == hunk1_n);
           i = hunk1_n;
           for(list<tuple<int,int>> const& x: hunk1) {
+            i--;
+            UPCXX_ASSERT_ALWAYS(x.size() == 1u + i*i);
+            
+            int j=0;
+            for(auto y: x) {
+              UPCXX_ASSERT_ALWAYS(std::get<0>(y) == j);
+              UPCXX_ASSERT_ALWAYS(std::get<1>(y) == j*j);
+              j++;
+            }
+          }
+
+          UPCXX_ASSERT_ALWAYS(hunk1v.size() == hunk1_n);
+          i = hunk1_n;
+          for(upcxx::view<tuple<int,int>> const& x: hunk1v) {
             i--;
             UPCXX_ASSERT_ALWAYS(x.size() == 1u + i*i);
             
@@ -193,6 +216,7 @@ int main() {
       },
       dobj,
       upcxx::make_view(hunk1.rbegin(), hunk1.rend()),
+      upcxx::make_view(hunk1v.crbegin(), hunk1v.crend()),
       upcxx::make_view(hunk2),
       my_pod{},
       my_nonpod2{} // change to my_nonpod1 and watch the static_assert for is_definitely_serializable fail!
