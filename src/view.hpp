@@ -245,7 +245,7 @@ namespace upcxx {
   template<typename Bag,
            typename T = typename Bag::value_type,
            typename Iter = typename Bag::const_iterator>
-  constexpr view<T, Iter> make_view(Bag const &bag) {
+  view<T, Iter> make_view(Bag const &bag) {
     return {bag.cbegin(), bag.cend(), bag.size()};
   }
 
@@ -254,17 +254,20 @@ namespace upcxx {
     return {(T const*)bag, (T const*)bag + n, n};
   }
 
-  template<typename Iter,
+  template<typename Iter1,
+           typename Iter = typename std::decay<Iter1>::type,
            typename T = typename std::iterator_traits<Iter>::value_type,
-           typename = decltype(std::distance(std::declval<Iter>(), std::declval<Iter>()))>
-  constexpr view<T, Iter> make_view(Iter &&begin, Iter &&end) {
-    return {static_cast<Iter&&>(begin), static_cast<Iter&&>(end), (std::size_t)std::distance(begin, end)};
+           typename = decltype(std::distance(std::declval<Iter1>(), std::declval<Iter1>()))>
+  view<T, Iter> make_view(Iter1 &&begin, Iter1 &&end) {
+    std::size_t n = std::distance(begin, end);
+    return {static_cast<Iter1&&>(begin), static_cast<Iter1&&>(end), n};
   }
   
-  template<typename Iter,
+  template<typename Iter1,
+           typename Iter = typename std::decay<Iter1>::type,
            typename T = typename std::iterator_traits<Iter>::value_type>
-  constexpr view<T, Iter> make_view(Iter &&begin, Iter &&end, std::size_t n) {
-    return {static_cast<Iter&&>(begin), static_cast<Iter&&>(end), n};
+  constexpr view<T, Iter> make_view(Iter1 &&begin, Iter1 &&end, std::size_t n) {
+    return {static_cast<Iter1&&>(begin), static_cast<Iter1&&>(end), n};
   }
 
   //////////////////////////////////////////////////////////////////////////////

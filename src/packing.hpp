@@ -904,8 +904,13 @@ namespace upcxx {
       
       template<bool skippable>
       static void unpack(parcel_reader &r, void *into, std::integral_constant<bool,skippable>) {
-        packing<A>::unpack(r, &((std::pair<A,B>*)into)->first, std::false_type());
-        packing<B>::unpack(r, &((std::pair<A,B>*)into)->second, std::false_type());
+        raw_storage<A> a;
+        packing<A>::unpack(r, &a, std::false_type());
+        
+        raw_storage<B> b;
+        packing<B>::unpack(r, &b, std::false_type());
+        
+        ::new(into) std::pair<A,B>{a.value_and_destruct(), b.value_and_destruct()};
       }
     };
   }
@@ -1222,7 +1227,7 @@ namespace upcxx {
     template<typename Bag, typename = void>
     struct packing_container_insert {
       void operator()(Bag &bag, typename Bag::value_type &&x) {
-        bag.insert(static_cast<typename Bag::value_type&&>(x), bag.end());
+        bag.insert(bag.end(), static_cast<typename Bag::value_type&&>(x));
       }
     };
     template<typename Bag>
