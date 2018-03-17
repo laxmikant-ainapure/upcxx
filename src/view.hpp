@@ -26,7 +26,7 @@ namespace upcxx {
     parcel_reader r_;
 
   public:
-    deserializing_iterator(char const *p): r_(p) {}
+    deserializing_iterator(char const *p = nullptr): r_(p) {}
     
     T operator*() const {
       parcel_reader r1{r_};
@@ -224,6 +224,9 @@ namespace upcxx {
     std::size_t n_;
 
   public:
+    constexpr view():
+      beg_(), end_(), n_(0) {
+    }
     constexpr view(Iter begin, Iter end, std::size_t n):
       beg_{std::move(begin)},
       end_{std::move(end)},

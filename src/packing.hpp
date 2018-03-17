@@ -1033,7 +1033,7 @@ namespace upcxx {
     };
 
     template<typename T, typename Arr,
-             typename T_Ub = decltype(packing<T>::ubound(parcel_size_empty(), std::declval<T>())),
+             typename T_Ub = decltype(packing<T>::ubound(parcel_size_empty(), std::declval<T>(), std::false_type())),
              bool T_Ub_static = T_Ub::all_static>
     struct packing_array_base;
       
@@ -1087,7 +1087,7 @@ namespace upcxx {
       
       template<bool skippable>
       static void unpack(parcel_reader &r, void *into, std::integral_constant<bool,skippable>) {
-        packing_sequence<T>::unpack_elts(r, into, sizeof(Arr)/sizeof(T), std::false_type());
+        packing_sequence<T>::unpack_elts(r, (T*)into, sizeof(Arr)/sizeof(T), std::false_type());
       }
     };
 
