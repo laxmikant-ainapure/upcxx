@@ -807,11 +807,12 @@ namespace upcxx {
       // inherits skip()
       
       template<int ...i>
-      static std::tuple<T...> take_from_storage(
-          std::tuple<raw_storage<T>...> storage,
+      static void take_from_storage(
+          std::tuple<raw_storage<T>...> &storage,
+          void *into,
           upcxx::index_sequence<i...>
         ) {
-        return std::tuple<T...>{std::get<i>(storage).value_and_destruct()...};
+        ::new(into) std::tuple<T...>{std::get<i>(storage).value_and_destruct()...};
       }
       
       template<bool skippable>
@@ -820,9 +821,7 @@ namespace upcxx {
         
         detail::packing_tuple_each<sizeof...(T), 0, T...>::unpack_into(r, storage);
         
-        ::new(into) std::tuple<T...>{
-          take_from_storage(storage, upcxx::make_index_sequence<sizeof...(T)>())
-        };
+        take_from_storage(storage, into, upcxx::make_index_sequence<sizeof...(T)>());
       }
     };
   }
@@ -1256,7 +1255,7 @@ namespace upcxx {
       static void pack(parcel_writer &w, const Bag &xs, std::integral_constant<bool,skippable>) {
         std::size_t n = xs.size();
         w.put_trivial_aligned<std::size_t>(n);
-        packing_sequence<T>::pack_elts(w, xs.begin(), n);
+        packing_sequence<T>::pack_elts(w, xs.begin(), n, std::false_type());
       }
 
       static void skip(parcel_reader &r) {

@@ -9,6 +9,7 @@
 #include <list>
 #include <vector>
 #include <cmath>
+#include <string>
 #include <thread>
 
 using namespace upcxx;
@@ -98,6 +99,12 @@ static_assert(is_definitely_serializable<view_t>::value, "ERROR");
 static_assert(!packing_is_trivial<view_t>::value, "ERROR");
 #undef view_t
 
+#define pair_t std::pair<std::string, double>
+static_assert(!is_definitely_trivially_serializable<pair_t>::value, "ERROR");
+static_assert(is_definitely_serializable<pair_t>::value, "ERROR");
+static_assert(!packing_is_trivial<pair_t>::value, "ERROR");
+#undef pair_t
+
 ////////////////////////////////////////////////////////////////////////////////
 // runtime test
 
@@ -146,11 +153,17 @@ int main() {
          view<list<tuple<int,int>>> hunk1,
          view<view<tuple<int,int>>> hunk1v,
          view<int> hunk2,
+         vector<char> const &abc,
+         std::string const &hey,
+         std::pair<std::string, double> const &hi123,
          my_pod,
          my_nonpod2
       ) {
         UPCXX_ASSERT_ALWAYS(*dobj == rank_me());
-
+        UPCXX_ASSERT_ALWAYS(abc.size()==3 && abc[0]=='a'&&abc[1]=='b'&&abc[2]=='c');
+        UPCXX_ASSERT_ALWAYS(hey == "hey");
+        UPCXX_ASSERT_ALWAYS(hi123.first == "hi" && int(hi123.second)==123);
+        
         return worker.lpc([=]() {
           int i;
 
@@ -218,6 +231,9 @@ int main() {
       upcxx::make_view(hunk1.rbegin(), hunk1.rend()),
       upcxx::make_view(hunk1v.crbegin(), hunk1v.crend()),
       upcxx::make_view(hunk2),
+      vector<char>{'a','b','c'},
+      std::string("hey"),
+      std::pair<std::string,double>("hi", 123),
       my_pod{},
       my_nonpod2{} // change to my_nonpod1 and watch the static_assert for is_definitely_serializable fail!
     );
