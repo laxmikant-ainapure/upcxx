@@ -152,7 +152,7 @@ namespace backend {
       std::free(buf);
     else
       upcxx::deallocate(buf);
-  };
+  }
   
   template<upcxx::progress_level level, typename Fn1>
   void send_am_master(intrank_t recipient, Fn1 &&fn) {
