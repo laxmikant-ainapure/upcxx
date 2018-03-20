@@ -2,10 +2,7 @@
 #include <cstdlib>
 #include <cstddef>
 
-#include <upcxx/allocate.hpp>
-#include <upcxx/future.hpp>
-#include <upcxx/vis.hpp>
-#include <upcxx/dist_object.hpp>
+#include <upcxx/upcxx.hpp>
 
 template<typename T>
 struct sallocator   {
@@ -88,8 +85,9 @@ int main() {
 
   {
     uvector sParticles(240);
+    //size the landing vector and return the global_ptr
     future<global_ptr<particle_t> > hiVectorF = rpc(nebrHi, [](){
-        if(dParticles.size()==0) dParticles.resize(500);
+        if(dParticles.size()<38) dParticles.resize(38); 
         return global_ptr<particle_t>(&((dParticles).front()));});
  
     hiVectorF.wait();
