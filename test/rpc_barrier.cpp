@@ -17,7 +17,7 @@ struct barrier_action {
   intrank_t round;
   std::deque<std::deque<char>> extra;
 
-  UPCXX_REFLECTED(epoch, round, extra);
+  UPCXX_REFLECTED(epoch, round, extra)
   
   barrier_action(int epoch, intrank_t round):
     epoch{epoch},
