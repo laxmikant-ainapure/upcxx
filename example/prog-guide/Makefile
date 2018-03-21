@@ -38,8 +38,7 @@ EXAMPLES = \
 all: $(EXAMPLES)
 
 # The rule for building any example.
-.SECONDEXPANSION:
-$(EXAMPLES): $$@.cpp $(wildcard *.h) $(wildcard *.hpp)
+%: %.cpp $(wildcard *.h) $(wildcard *.hpp)
 	$(CXX) $@.cpp $(PPFLAGS) $(LDFLAGS) $(EXTRA_FLAGS) $(LIBFLAGS) -o $@
 
 # Example-specific variable specializations.
