@@ -102,6 +102,7 @@ int main() {
   if(me==0)
     std::cout<<"SUCCESS"<<std::endl;
   
+  uvector().swap(dParticles);
   finalize();
   
   return 0;
