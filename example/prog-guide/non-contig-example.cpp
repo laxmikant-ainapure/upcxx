@@ -46,7 +46,7 @@ typedef float dpatch_t[ddim[2]][ddim[1]][ddim[0]];
 
 typedef std::vector<particle_t,sallocator<particle_t>> uvector;
 
-static uvector dParticles;
+static uvector* dParticles;
 
 int main() {
 
@@ -86,8 +86,8 @@ int main() {
     uvector sParticles(240);
     //size the landing vector and return the global_ptr
     future<global_ptr<particle_t> > hiVectorF = rpc(nebrHi, [](){
-        if(dParticles.size()<38) dParticles.resize(38); 
-        return global_ptr<particle_t>(&((dParticles).front()));});
+        dParticles = new uvector(38); 
+        return global_ptr<particle_t>(&((dParticles)->front()));});
  
     hiVectorF.wait();
     
@@ -102,7 +102,7 @@ int main() {
   if(me==0)
     std::cout<<"SUCCESS"<<std::endl;
   
-  uvector().swap(dParticles);
+  delete dParticles;
   finalize();
   
   return 0;
