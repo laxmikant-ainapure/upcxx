@@ -62,7 +62,6 @@ int main() {
   dpatch_t* myPatchDPtr = (dpatch_t*)allocate(sizeof(dpatch_t));
   dist_object<global_ptr<float> > dmesh(global_ptr<float>((float*)myPatchDPtr));
   
-
   future<global_ptr<float>> dgpf = dmesh.fetch(nebrHi);
   future<global_ptr<float>> sgpf = smesh.fetch(nebrLo);
 
@@ -99,6 +98,10 @@ int main() {
 
     // ok for src and dest and sParictles to now go out of scope
   }
+  barrier();
+  if(me==0)
+    std::cout<<"SUCCESS"<<std::endl;
+  
   finalize();
   
   return 0;
