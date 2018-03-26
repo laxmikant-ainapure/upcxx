@@ -10,7 +10,7 @@ int64_t reduce_to_rank0(int64_t my_hits)
         // rank 0 gets all the values
         for (int i = 0; i < upcxx::rank_n(); i++) {
             // fetch the distributed object from remote rank i
-            hits += fetch(all_hits, i).wait();
+            hits += all_hits.fetch(i).wait();
         }
     }
     // ensure that no distributed objects are destructed before rank 0 is done

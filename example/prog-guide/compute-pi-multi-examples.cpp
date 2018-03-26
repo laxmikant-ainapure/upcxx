@@ -13,8 +13,6 @@
 
 using namespace std;
 
-#include "fetch.hpp"
-
 namespace rpc {
     #include "rpc-reduce_to_rank0.hpp"
 }
