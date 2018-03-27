@@ -1,6 +1,6 @@
 # Building UPC\+\+ #
 
-These instructions are for UPC++ developers only.
+These instructions are for UPC++ runtime developers only.
 
 THIS INTERNAL DOCUMENTATION IS NOT CAREFULLY MAINTAINED AND MAY BE OUT OF DATE.
 

@@ -57,7 +57,7 @@ For instructions on installing UPC++ and compiling programs, look at
 
 ## Using UPC++ with MPI
 
-For guidance on using UPC++ and MPI in the same applciation, see
+For guidance on using UPC++ and MPI in the same application, see
 [docs/hybrid.md](docs/hybrid.md).
 
 ## Testing

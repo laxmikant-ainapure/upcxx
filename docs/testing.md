@@ -54,15 +54,15 @@ order of decreasing precedence:
 3. `cc` and `CC` when running on Cray XC systems.
 4. `gcc` and `g++`. 
 
-It is also possible to set the optimization level (`-O<level>`) and debugging
-(`-g`) with environment variables. For example, the following will enable
-optimization and disable debugging builds:
+It is also possible to set the optimization level (`-O<level>`), debugging symbols
+(`-g`) and assertion checking with environment variables. For example, the following will enable
+optimization and disable debugging and assertions:
 
 ```bash
-DBGSYM=0 OPTLEV=3 ./run-tests
+DBGSYM=0 ASSERT=0 OPTLEV=3 ./run-tests
 ```
 
-`DBGSYM` can be either 0 or 1, and `OPTLEV` can be 0, 1, 2 or 3, corresponding
-to optimization levels. By default, debugging is on and the optimization level
+`DBGSYM` and `ASSERT` can be either 0 or 1, and `OPTLEV` can be 0, 1, 2 or 3, corresponding
+to optimization levels. By default, debugging and assertions are on and the optimization level
 is 0.
 
