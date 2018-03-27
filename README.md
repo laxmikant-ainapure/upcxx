@@ -25,7 +25,7 @@ a modern C++11/14 compiler and corresponding STL implementation.
 
 The current release is known to work on the following configurations:
 
-* Mac OS X 10.11, 10.12 and 10.13 (El Capitan, Sierra and High Sierra,
+* macOS 10.11, 10.12 and 10.13 (El Capitan, Sierra and High Sierra,
   respectively) with the most recent Xcode releases for each, though it is
   suspected that any Xcode release 8.0 or newer will work. (smp and udp
   conduits)

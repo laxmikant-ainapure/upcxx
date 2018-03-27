@@ -93,7 +93,7 @@ platform_sanity_checks() {
             COMPILER_GOOD=1
         fi
 
-        RECOMMEND='We recommend Linux or OS X on x86_64 with one of the following C++ compilers: 
+        RECOMMEND='We recommend Linux or macOS on x86_64 with one of the following C++ compilers: 
          g++ 5.1.0 or newer, LLVM/clang 3.7.0 or newer, Xcode/clang 8.0.0 or newer'
 
         if test -n "$ARCH_BAD" ; then
