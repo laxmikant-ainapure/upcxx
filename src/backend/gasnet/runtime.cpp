@@ -3,8 +3,12 @@
 #include <upcxx/backend/gasnet/rpc_inbox.hpp>
 
 #include <upcxx/os_env.hpp>
+#include <upcxx/team.hpp>
 
+#include <algorithm>
+#include <cstdlib>
 #include <cstring>
+#include <memory>
 
 #include <sched.h>
 #include <unistd.h>
@@ -13,7 +17,7 @@ namespace backend = upcxx::backend;
 namespace detail  = upcxx::detail;
 namespace gasnet  = upcxx::backend::gasnet;
 
-using upcxx::future;
+using upcxx::command;
 using upcxx::intrank_t;
 using upcxx::parcel_reader;
 using upcxx::parcel_writer;
@@ -61,6 +65,9 @@ intrank_t backend::rank_me; // leave undefined so valgrind can catch it.
 persona backend::master;
 persona_scope *backend::initial_master_scope = nullptr;
 
+intrank_t backend::local_peer_lb;
+intrank_t backend::local_peer_ub;
+
 ////////////////////////////////////////////////////////////////////////
 // from: upcxx/backend/gasnet/runtime.hpp
 
@@ -81,6 +88,30 @@ namespace {
   // master-owned
   rpc_inbox rpcs_internal_;
   rpc_inbox rpcs_user_;
+
+  // Given index in local_team:
+  //   local_minus_remote: Encodes virtual address translation which is added
+  //     to the raw encoding to get local virtual address.
+  //   vbase: Local virtual address mapping to beginning of peer's segment
+  //   size: Size of peer's segment in bytes.
+  unique_ptr<uintptr_t[/*local_team.size()*/]> local_mem_local_minus_remote;
+  unique_ptr<uintptr_t[/*local_team.size()*/]> local_mem_vbase;
+  unique_ptr<uintptr_t[/*local_team.size()*/]> local_mem_size;
+
+  // List of {vbase, peer} pairs (in seperate arrays) sorted by `vbase`, where
+  // `vbase` is the local virt-address base for peer segments and `peer` is the
+  // local peer index owning that segment.
+  unique_ptr<uintptr_t[/*local_team.size()*/]> local_mem_owner_vbase;
+  unique_ptr<intrank_t[/*local_team.size()*/]> local_mem_owner_peer;
+
+  #if UPCXX_BACKEND_GASNET_SEQ
+    // Set by the thread which initiates gasnet since in SEQ only that thread
+    // may invoke gasnet.
+    void *gasnet_seq_thread_id = nullptr;
+  #else
+    // unused
+    constexpr void *gasnet_seq_thread_id = nullptr;
+  #endif
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -125,6 +156,10 @@ void upcxx::init() {
   
   int ok;
 
+  #if UPCXX_BACKEND_GASNET_SEQ
+    gasnet_seq_thread_id = upcxx::detail::thread_id();
+  #endif
+
   gex_Client_t client;
   gex_EP_t endpoint;
   gex_Segment_t segment;
@@ -138,19 +173,25 @@ void upcxx::init() {
   size_t segment_size = size_t(os_env<double>("UPCXX_SEGMENT_MB", 128)*(1<<20));
   // page size should always be a power of 2
   segment_size = (segment_size + GASNET_PAGESIZE-1) & -GASNET_PAGESIZE;
-  // Do this instead? segment_size = gasnet_getMaxLocalSegmentSize();
   
   backend::rank_n = gex_TM_QuerySize(gasnet::world_team);
   backend::rank_me = gex_TM_QueryRank(gasnet::world_team);
+
+  // Build team upcxx::world()
+  new(&detail::the_world_team.raw) upcxx::team(
+    detail::internal_only(),
+    0, backend::rank_n
+  );
   
   // now adjust the segment size if it's less than the GASNET_MAX_SEGSIZE
   size_t gasnet_max_segsize = gasnet_getMaxLocalSegmentSize();
-  if (segment_size > gasnet_max_segsize) {
-      if (upcxx::rank_me() == 0) 
-          cerr << "WARNING: Requested UPCXX segment size (" << segment_size << ") "
+  if(segment_size > gasnet_max_segsize) {
+    if(upcxx::rank_me() == 0) {
+      cerr << "WARNING: Requested UPCXX segment size (" << segment_size << ") "
               "is larger than the GASNet segment size (" << gasnet_max_segsize << "). "
               "Adjusted segment size to " << (gasnet_max_segsize) << ".\n";
-      segment_size = gasnet_max_segsize;
+    }
+    segment_size = gasnet_max_segsize;
   }
   
   backend::initial_master_scope = new persona_scope{backend::master};
@@ -168,9 +209,6 @@ void upcxx::init() {
     /*flags*/0,
     3
   );
-  gasnet_barrier_notify(0, GASNET_BARRIERFLAG_ANONYMOUS);
-  ok = gasnet_barrier_wait(0, GASNET_BARRIERFLAG_ANONYMOUS);
-  UPCXX_ASSERT_ALWAYS(ok == GASNET_OK);
   
   /* TODO: I pulled this from thin air. We want to lean towards only
    * sending very small messages eagerly so as not to clog the landing
@@ -185,6 +223,7 @@ void upcxx::init() {
     am_medium_size < 1<<10 ? 256 :
     am_medium_size < 8<<10 ? 512 :
                              1024;
+  UPCXX_ASSERT(gasnet::am_size_rdzv_cutover_min <= gasnet::am_size_rdzv_cutover);
   
   // setup shared segment allocator
   void *segment_base;
@@ -197,6 +236,88 @@ void upcxx::init() {
   
   segment_mspace_ = create_mspace_with_base(segment_base, segment_size, 1);
   mspace_set_footprint_limit(segment_mspace_, segment_size);
+
+  //////////////////////////////////////////////////////////////////////////////
+  // Setup the local-memory neighborhood tables.
+  
+  gex_NbrhdInfo_t *nbhd;
+  gex_Rank_t peer_n, peer_me;
+  gex_System_QueryNbrhdInfo(&nbhd, &peer_n, &peer_me);
+
+  bool contiguous_nbhd = true;
+  for(gex_Rank_t p=1; p < peer_n; p++)
+    contiguous_nbhd &= (nbhd[p].gex_jobrank == 1 + nbhd[p-1].gex_jobrank);
+
+  if(!contiguous_nbhd) {
+    // Discontiguous rank-set is collapsed to singleton set of "me"
+    backend::local_peer_lb = backend::rank_me;
+    backend::local_peer_ub = backend::rank_me + 1;
+    peer_n = 1;
+    peer_me = 0;
+  }
+  else {
+    backend::local_peer_lb = nbhd[0].gex_jobrank;
+    backend::local_peer_ub = nbhd[0].gex_jobrank + peer_n;
+  }
+
+  // Build upcxx::local_team()
+  new(&detail::the_local_team.raw) upcxx::team(
+    detail::internal_only(),
+    backend::local_peer_lb,
+    backend::local_peer_ub
+  );
+  
+  local_mem_local_minus_remote.reset(new uintptr_t[peer_n]);
+  local_mem_vbase.reset(new uintptr_t[peer_n]);
+  local_mem_size.reset(new uintptr_t[peer_n]);
+  local_mem_owner_vbase.reset(new uintptr_t[peer_n]);
+  local_mem_owner_peer.reset(new intrank_t[peer_n]);
+  
+  for(gex_Rank_t p=0; p < peer_n; p++) {
+    void *owner_vbase, *local_vbase;
+    uintptr_t size;
+
+    gex_Segment_QueryBound(
+      /*team*/gasnet::world_team,
+      /*rank*/backend::local_peer_lb + p,
+      &owner_vbase, &local_vbase, &size
+    );
+    
+    local_mem_local_minus_remote[p] = reinterpret_cast<uintptr_t>(local_vbase) - reinterpret_cast<uintptr_t>(owner_vbase);
+    local_mem_vbase[p] = reinterpret_cast<uintptr_t>(local_vbase);
+    local_mem_size[p] = size;
+    
+    local_mem_owner_peer[p] = p; // initialize peer indices as identity permutation
+  }
+
+  // Sort peer indices according to their vbase. We use `std::qsort` instead of
+  // `std::sort` because performance is not critical and qsort *hopefully*
+  // generates a lot less code in the executable binary.
+  std::qsort(
+    /*first*/local_mem_owner_peer.get(),
+    /*count*/peer_n,
+    /*size*/sizeof(intrank_t),
+    /*compare*/[](void const *pa, void const *pb)->int {
+      intrank_t a = *static_cast<intrank_t const*>(pa);
+      intrank_t b = *static_cast<intrank_t const*>(pb);
+
+      uintptr_t va = local_mem_vbase[a];
+      uintptr_t vb = local_mem_vbase[b];
+      
+      return va < vb ? -1 : va == vb ? 0 : +1;
+    }
+  );
+
+  // permute vbase's into sorted order
+  for(gex_Rank_t i=0; i < peer_n; i++)
+    local_mem_owner_vbase[i] = local_mem_vbase[local_mem_owner_peer[i]];
+
+  //////////////////////////////////////////////////////////////////////////////
+  // Exit barrier
+  
+  gasnet_barrier_notify(0, GASNET_BARRIERFLAG_ANONYMOUS);
+  ok = gasnet_barrier_wait(0, GASNET_BARRIERFLAG_ANONYMOUS);
+  UPCXX_ASSERT_ALWAYS(ok == GASNET_OK);
 }
 
 void upcxx::finalize() {
@@ -206,6 +327,9 @@ void upcxx::finalize() {
     return;
   
   upcxx::barrier();
+
+  detail::the_world_team.destruct();
+  detail::the_local_team.destruct();
   
   if(backend::initial_master_scope != nullptr)
     delete backend::initial_master_scope;
@@ -249,6 +373,58 @@ void upcxx::deallocate(void *p) {
   #endif
   
   mspace_free(segment_mspace_, p);
+}
+
+//////////////////////////////////////////////////////////////////////
+// from: upcxx/backend.hpp
+
+void* backend::localize_memory(intrank_t rank, uintptr_t raw) {
+  if(raw == reinterpret_cast<uintptr_t>(nullptr))
+    return nullptr;
+  
+  UPCXX_ASSERT(
+    local_peer_lb <= rank && rank < local_peer_ub,
+    "Rank "<<rank<<" is not local with current rank ("<<upcxx::rank_me()<<")."
+  );
+
+  intrank_t peer = rank - local_peer_lb;
+  uintptr_t u = raw + local_mem_local_minus_remote[peer];
+
+  UPCXX_ASSERT(
+    u - local_mem_vbase[peer] < local_mem_size[peer], // unsigned arithmetic handles both sides of the interval test
+    "Memory address (raw="<<raw<<", local="<<reinterpret_cast<void*>(u)<<") is not within shared segment of rank "<<rank<<"."
+  );
+
+  return reinterpret_cast<void*>(u);
+}
+
+tuple<intrank_t/*rank*/, uintptr_t/*raw*/> backend::globalize_memory(void *addr) {
+  intrank_t peer_n = local_peer_ub - local_peer_lb;
+  uintptr_t uaddr = reinterpret_cast<uintptr_t>(addr);
+
+  // key is a pointer to one past the last vbase less-or-equal to addr.
+  uintptr_t *key = std::upper_bound(
+    local_mem_owner_vbase.get(),
+    local_mem_owner_vbase.get() + peer_n,
+    uaddr
+  );
+
+  int key_ix = key - local_mem_owner_vbase.get();
+
+  #define bad_memory "Local memory "<<addr<<" is not in any local rank's shared segment."
+
+  UPCXX_ASSERT(key_ix > 0, bad_memory);
+  
+  intrank_t peer = local_mem_owner_peer[key_ix-1];
+
+  UPCXX_ASSERT(uaddr - local_mem_vbase[peer] <= local_mem_size[peer], bad_memory);
+  
+  return std::make_tuple(
+    local_peer_lb + peer,
+    uaddr - local_mem_local_minus_remote[peer]
+  );
+
+  #undef bad_memory
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -381,9 +557,7 @@ void gasnet::send_am_rdzv(
           backend::during_level<level>([=]() {
             // Execute buffer.
             parcel_reader r{buf_d};
-            command_execute(r) >> [=]() {
-              upcxx::deallocate(buf_d);
-            };
+            command<bool,void*>::execute(r, /*use_free=*/false, buf_d);
           });
         }
       );
@@ -443,7 +617,8 @@ void upcxx::progress(progress_level level) {
   int total_exec_n = 0;
   int exec_n;
   
-  gasnet_AMPoll();
+  if(!UPCXX_BACKEND_GASNET_SEQ || gasnet_seq_thread_id == upcxx::detail::thread_id())
+    gasnet_AMPoll();
   
   do {
     exec_n = 0;
@@ -504,11 +679,9 @@ namespace {
       gex_AM_Arg_t buf_align
     ) {
     
-    future<> buf_done;
-    
     if(0 == (reinterpret_cast<uintptr_t>(buf) & (buf_align-1))) {
       parcel_reader r{buf};
-      buf_done = command_execute(r);
+      command<>::execute(r);
     }
     else {
       void *tmp;
@@ -518,12 +691,10 @@ namespace {
       std::memcpy((void**)tmp, (void**)buf, buf_size);
       
       parcel_reader r{tmp};
-      buf_done = command_execute(r);
+      command<>::execute(r);
       
       std::free(tmp);
     }
-    
-    UPCXX_ASSERT(buf_done.ready());
   }
   
   void am_eager_master(

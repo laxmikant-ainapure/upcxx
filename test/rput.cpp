@@ -17,6 +17,11 @@ using upcxx::remote_cx;
 global_ptr<int> my_thing;
 int got_rpc = 0;
 
+struct non_pod {
+  non_pod() {}
+  non_pod(const non_pod&) {}
+};
+
 int main() {
   upcxx::init();
 
@@ -29,6 +34,10 @@ int main() {
   my_thing = upcxx::allocate<int>();
   
   upcxx::barrier();
+
+  // Uncomment and watch it fail with static_assert about
+  // DefinitelyTriviallySerializable of non_pod.
+  //upcxx::rget(global_ptr<non_pod>{});
   
   global_ptr<int> nebr_thing; {
     future<global_ptr<int>> fut = upcxx::rpc(nebr, []() { return my_thing; });
@@ -39,9 +48,9 @@ int main() {
   
   int value = 100+me;
   #if 1
-    std::tie(done_g, done_s) = upcxx::rput(
+    done_g = upcxx::make_future();
+    done_s = upcxx::rput(
       &value, nebr_thing, 1,
-      operation_cx::as_future() |
       source_cx::as_future() |
       remote_cx::as_rpc([=]() { got_rpc++; })
     );
@@ -54,7 +63,7 @@ int main() {
       remote_cx::as_rpc([=]() { got_rpc++; })
     );
   #endif
-  
+
   int buf;
   done_g = done_g.then([&]() {
     promise<int> *pro1 = new promise<int>;

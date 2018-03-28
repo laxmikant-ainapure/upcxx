@@ -4,6 +4,7 @@
 #include <upcxx/backend.hpp>
 #include <upcxx/completion.hpp>
 #include <upcxx/global_ptr.hpp>
+#include <upcxx/packing.hpp>
 
 // For the time being, our implementation of put/get requires the
 // gasnet backend. Ideally we would detect gasnet via UPCXX_BACKEND_GASNET
@@ -80,7 +81,12 @@ namespace upcxx {
       void send_remote() {
         backend::send_am_master<progress_level::user>(
           rank_s,
-          std::move(state_remote)
+          upcxx::bind(
+            [](CxStateRemote &st) {
+              return st.template operator()<remote_cx_event>();
+            },
+            std::move(state_remote)
+          )
         );
       }
     };
@@ -162,7 +168,17 @@ namespace upcxx {
       Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
     ) {
 
-    UPCXX_ASSERT_ALWAYS((detail::completions_has_event<Cxs, operation_cx_event>::value));
+    static_assert(
+      is_definitely_trivially_serializable<T>::value,
+      "RMA operations only work on DefinitelyTriviallySerializable types."
+    );
+
+    UPCXX_ASSERT_ALWAYS(
+      (detail::completions_has_event<Cxs, operation_cx_event>::value),
+      "Not requesting operation completion is surely an error. You'll have no "
+      "way of ever knowing when then the source or target memory are safe to "
+      "access again without incurring a data race."
+    );
     
     using cxs_here_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_here,
@@ -203,7 +219,17 @@ namespace upcxx {
       Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
     ) {
 
-    UPCXX_ASSERT_ALWAYS((detail::completions_has_event<Cxs, operation_cx_event>::value));
+    static_assert(
+      is_definitely_trivially_serializable<T>::value,
+      "RMA operations only work on DefinitelyTriviallySerializable types."
+    );
+
+    UPCXX_ASSERT_ALWAYS(
+      (detail::completions_has_event<Cxs, operation_cx_event>::value),
+      "Not requesting operation completion is surely an error. You'll have no "
+      "way of ever knowing when then the source or target memory are safe to "
+      "access again without incurring a data race."
+    );
     
     using cxs_here_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_here,

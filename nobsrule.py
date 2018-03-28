@@ -135,7 +135,7 @@ def gasnet_user(cxt):
   value = env('GASNET', None)
   
   if not value:
-    default_gasnetex_url_b64 = 'aHR0cHM6Ly9nYXNuZXQubGJsLmdvdi9FWC9HQVNOZXQtMjAxNy4xMi4wLnRhci5neg=='
+    default_gasnetex_url_b64 = 'aHR0cHM6Ly9nYXNuZXQubGJsLmdvdi9FWC9HQVNOZXQtMjAxOC4zLjAudGFyLmd6'
     import base64
     value = base64.b64decode(default_gasnetex_url_b64)
   
@@ -873,7 +873,16 @@ class gasnet_source:
         @async.launched
         def download():
           import urllib
-          urllib.urlretrieve(url, tgz)
+          try:
+            urllib.urlretrieve(url, tgz)
+          except IOError as e:
+            if e.args[0] == 'socket error':
+              raise errorlog.LoggedError(
+'Internet troubles.',
+'Socket error "%s" when attempting to download "%s".\n'%(e.args[1].strerror, url)
+              )
+            else:
+              raise
         
         print>>sys.stderr, 'Downloading %s' % url
         yield download()

@@ -105,14 +105,14 @@ namespace upcxx {
     }*/;
     
     // Apply function to results of future with return lifted to future.
-    template<typename App> // App = Fn(future1<Kind,T...>)
+    template<typename Fn, typename Arg>
     struct apply_futured_as_future/*{
       typedef future1<Kind,U...> return_type;
-      return_type operator()(Fn &&fn, future1<Kind,T...> &&arg);
+      return_type operator()(Fn fn, future1<Kind,T...> arg);
     }*/;
     
-    template<typename App>
-    using apply_futured_as_future_return_t = typename apply_futured_as_future<App>::return_type;
+    template<typename Fn, typename Arg>
+    using apply_futured_as_future_return_t = typename apply_futured_as_future<Fn,Arg>::return_type;
   }
 
   //////////////////////////////////////////////////////////////////////
@@ -139,13 +139,13 @@ namespace upcxx {
   namespace detail {
     template<
       typename Arg, typename Fn,
-      typename FnRet = apply_futured_as_future_return_t<Fn(Arg)>,
+      typename FnRet = apply_futured_as_future_return_t<Fn,Arg>,
       bool arg_trivial = future_is_trivially_ready<Arg>::value>
     struct future_then;
     
     template<
       typename Arg, typename Fn,
-      typename FnRet = apply_futured_as_future_return_t<Fn(Arg)>,
+      typename FnRet = apply_futured_as_future_return_t<Fn,Arg>,
       bool arg_trivial = future_is_trivially_ready<Arg>::value,
       bool fnret_trivial = future_is_trivially_ready<FnRet>::value>
     struct future_then_pure;

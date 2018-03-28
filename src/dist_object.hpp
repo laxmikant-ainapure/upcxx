@@ -153,14 +153,22 @@ namespace upcxx {
   struct binding<dist_object<T>&> {
     using on_wire_type = dist_id<T>;
     using off_wire_type = dist_object<T>&;
+    using stripped_type = dist_object<T>&;
     
-    static dist_id<T> on_wire(dist_object<T> &o) {
+    static dist_id<T> on_wire(dist_object<T> const &o) {
       return o.id();
     }
     
     static future<dist_object<T>&> off_wire(dist_id<T> id) {
       return id.when_here();
     }
+  };
+  
+  template<typename T>
+  struct binding<dist_object<T> const&>:
+    binding<dist_object<T>&> {
+    
+    using stripped_type = dist_object<T> const&;
   };
   
   template<typename T>

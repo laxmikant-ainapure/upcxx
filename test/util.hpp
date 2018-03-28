@@ -26,10 +26,9 @@
 
 template<typename=void>
 std::string test_name(const char *file) {
-    const char test_dir[] = "upcxx/test/";
-    int pos = std::string{file}.rfind(test_dir);
-    pos += sizeof(test_dir)-1; // skip over test_dir substring
-    return std::string{file + pos};
+    size_t pos = std::string{file}.rfind("/");
+    if (pos == std::string::npos) return std::string(file);
+    return std::string{file + pos + 1};
 }
 
 #ifdef UPCXX_BACKEND
@@ -49,8 +48,7 @@ std::string test_name(const char *file) {
           upcxx::barrier();
       }
       
-      if(0 == upcxx::rank_me())
-          std::cout << std::flush<< KLGREEN << "Test result: "<<(success?"SUCCESS":"FAILURE") << KNORM << std::endl;
+      std::cout << std::flush<< KLGREEN << "Test result: "<<(success?"SUCCESS":"ERROR") << KNORM << std::endl;
   }
 #else
   template<typename=void>
@@ -60,7 +58,7 @@ std::string test_name(const char *file) {
 
   template<typename=void>
   void print_test_success(bool success=true) {
-      std::cout << std::flush<< KLGREEN << "Test result: "<<(success?"SUCCESS":"FAILURE") << KNORM << std::endl;
+      std::cout << std::flush<< KLGREEN << "Test result: "<<(success?"SUCCESS":"ERROR") << KNORM << std::endl;
   }
 #endif
 

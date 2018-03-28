@@ -138,7 +138,7 @@ namespace upcxx {
       Fn fn_;
       
       void operator()() {
-        upcxx::apply_tupled_as_future(fn_, std::tuple<>{})
+        upcxx::apply_as_future(fn_)
           .then(lpc_recipient_executed<Promise>{initiator_, pro_});
       }
     };
@@ -148,14 +148,10 @@ namespace upcxx {
     auto lpc(Fn fn)
       -> typename detail::future_from_tuple_t<
         detail::future_kind_shref<detail::future_header_ops_general>, // the default future kind
-        typename decltype(
-          upcxx::apply_tupled_as_future(fn, std::tuple<>{})
-        )::results_type
+        typename decltype(upcxx::apply_as_future(fn))::results_type
       > {
       
-      using results_type = typename decltype(
-          upcxx::apply_tupled_as_future(fn, std::tuple<>{})
-        )::results_type;
+      using results_type = typename decltype(upcxx::apply_as_future(fn))::results_type;
       using results_promise = upcxx::tuple_types_into_t<results_type, promise>;
       
       results_promise *pro = new results_promise;

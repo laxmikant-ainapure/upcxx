@@ -2,7 +2,7 @@
 
 With care, it is possible to construct applications which use both UPC++ and MPI
 explicitly in user code (note that this is different from UPC++ programs which
-do not explicitly use MPI, but are compiled with 'CONDUIT=mpi': such programs do
+do not explicitly use MPI, but are compiled with `UPCXX_GASNET_CONDUIT=mpi`: such programs do
 not require any special treatment). Note however, that strict programming
 conventions (below) must be adhered to when switching between MPI and UPC++
 network communication, otherwise deadlock can result on many systems.
@@ -19,6 +19,7 @@ compiler that was used when UPC++ itself was build (normally the 'mpicc' in
 one's $PATH, unless some action is taken to override that default).
 Additionally, the MPI portion of an application should make use of
 'MPI_Initialized()' to ensure exactly one call is made to initialize MPI.
+See 'Correct library initialization' section below.
 
 Both MPI and UPC++ cause network communication, and the respective runtimes do
 so without any coordination. As a result, it is quite easy to cause network
@@ -45,6 +46,148 @@ observed:
 If this simple construct of alternating MPI and UPC++ phases can be observed,
 then it should be possible to avoid deadlock.
 
+### Correct library initialization
+
+When writing your hybrid MPI / UPC++ program, it's important to correctly
+initialize both layers before using them. When doing so, it's crucial to
+realize that UPC++ might also be initializing MPI inside `upcxx::init()`,
+e.g., in order to control MPI-based job spawning. Whether or not this happens
+depends on your site configuration (see next section).
+
+The recommended method for hybrids with no special MPI thread safety 
+requirements is a formula such as:
+
+```
+#include <upcxx/upcxx.hpp>
+#include <mpi.h>
+
+#include <iostream> // optional
+
+int main(int argc, char **argv) {
+  // init UPC++
+  upcxx::init();
+
+  // init MPI, if necessary
+  int mpi_already_init;
+  MPI_Initialized(&mpi_already_init);
+  if (!mpi_already_init) MPI_Init(&argc, &argv);
+
+  /* program goes here */
+  int mpi_rankme, mpi_rankn;
+  MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rankme);
+  MPI_Comm_size(MPI_COMM_WORLD, &mpi_rankn);
+  char hostname[MPI_MAX_PROCESSOR_NAME];
+  int junk;
+  MPI_Get_processor_name(hostname, &junk);
+  std::cout << "Hello world from UPC++ rank " << upcxx::rank_me() << "/" << upcxx::rank_n()
+            << ", MPI rank " << mpi_rankme << "/" << mpi_rankn << " : " 
+            << hostname << std::endl;
+
+  // Finalize MPI only if we initted it
+  if (!mpi_already_init) MPI_Finalize();
+
+  // finalize UPC++
+  upcxx::finalize();
+
+  return 0;
+}
+```
+
+#### MPI thread-safety considerations
+
+UPC++ configurations that initialize MPI generally do so with the minimal
+thread-safety guarantees needed for correct UPC++ operation. For
+`UPCXX_THREADMODE=seq` (the default) this usually means single-threaded MPI
+mode `MPI_THREAD_SINGLE`. For `UPCXX_THREADMODE=par`, this usually means
+`MPI_THREAD_SERIALIZED` (where the application is responsible for serializing
+multi-threaded calls to MPI *and* UPC++ operations that may invoke MPI).  If your
+MPI program needs full MPI thread safety (e.g., `MPI_THREAD_MULTIPLE`), there are
+two possible approaches:
+
+1. If your current UPC++ configuration is initting MPI for you, set
+   `export GASNET_MPI_THREAD=MULTIPLE` to request it does so using the stronger
+   thread-safety mode. Note this only has any effect if `upcxx::init` indeed
+   inits MPI and does so before any other `MPI_Init*` calls in the process.
+   You can confirm the setting by running with `upcxx-run -vv`.
+
+2. Call `MPI_Init_thread()` explicitly before `upcxx::init()` with the desired
+   thread-safety level.  UPC++ configurations using MPI will detect MPI has
+   already been initialized and act accordingly.  Consult MPI documentation for
+   the details of using this call.
+
+### Job spawning
+
+The details of correctly spawning parallel jobs are often site-specific,
+especially for distributed systems. Correctly spawning a hybrid MPI / UPC++
+application carries additional wrinkles on some systems. The details also
+differ based on which GASNet conduit your UPC++ application was compiled for
+(via `$UPCXX_GASNET_CONDUIT` or the default value determined at installation
+time).
+
+#### aries-conduit and gemini-conduit for Cray XC/XE/XK systems
+
+The native GASNet conduits on Cray are fully compatible with the PMI-based ALPS
+and SLURM spawners used at most sites. Run your job using the normal `aprun` or
+`srun` command recommended for MPI programs at your site.
+
+#### ibv-conduit for InfiniBand networks
+
+On ibv-conduit, the use of the MPI-based spawner is recommended for best
+results.  To enable this support, make sure to set `CXX=mpicxx` when installing
+UPC++.  You may additionally need to set `$MPI_CC` at install time to the
+location of the MPI C compiler, if the correct`mpicc` is not first in your
+`$PATH`. This should enable MPI-based spawning by default when using
+`upcxx-run`, otherwise you can force this behavior at run-time by setting
+`GASNET_IBV_SPAWNER=mpi`.  
+
+This assumes that job spawn support for regular MPI programs is already
+correctly installed and configured on your system. Consult the documentation
+for your MPI distribution if this is not the case.
+
+#### udp-conduit for laptops and Ethernet networks
+
+When running hybrid applications on a single-node system (e.g., your laptop) or on
+Ethernet-based clusters, the recommended GASNet backend is udp-conduit (ie
+`UPCXX_GASNET_CONDUIT=udp` at app compile time). A few additional run-time
+settings are recommended for MPI integration, and
+then the job can be spawned using `upcxx-run`:
+
+```
+export GASNET_SPAWNFN='C'
+export GASNET_CSPAWN_CMD='mpirun -np %N %C'
+upcxx-run -np 2 hello-world
+```
+
+This assumes the `mpirun` command is in your `$PATH` and takes the usual
+arguments - otherwise adjust the above settings accordingly. It also assumes
+that job spawn support for regular MPI programs is already correctly installed
+and configured on your system. Consult the documentation for your MPI
+distribution if this is not the case.
+
+Note that udp-conduit may number your UPC++ ranks differently from MPI ranks,
+so you may want to perform an MPI rank renumbering after startup, eg:
+```
+  MPI_Comm newcomm;
+  MPI_Comm_split(MPI_COMM_WORLD, 0, upcxx::rank_me(), &newcomm);
+```
+to create an MPI communicator that re-numbers the MPI ranks to match the UPC++ rank order.
+Consult MPI documentation for further details on using communicators.
+
+#### mpi-conduit portable MPI-based backend
+
+On mpi-conduit, your UPC++ application *is* an MPI program, so job spawning works
+exactly like it would for any other MPI program. Note this portable conduit exists
+only for portability reasons and is basically *never* the highest-performance
+choice for distributed systems.
+
+#### smp-conduit for single-node systems
+
+smp-conduit is currently incompatible with hybrid MPI applications, due to job
+spawning limitations. Please use one of the other conduits listed above with
+appropriate spawn arguments to use your single node. By default UPC++ will use
+process shared memory and efficient inter-process comms to implement all the
+on-node communication (bypassing the network adapter).  High-quality MPI
+implementations will do the same.
 
 ### Troubleshooting:
 
@@ -67,9 +210,9 @@ here are some things to consider:
         [here](http://gasnet.lbl.gov/dist/other/mpi-spawner/README) (look for
         the phrase "hybrid GASNet+MPI").
     2.  Use UDP for communication in UPC++  
-        Set `CONDUIT=udp` when installing UPC++
+        Set `export UPCXX_GASNET_CONDUIT=udp` when compiling UPC++ app code
     3.  Use MPI for communication in UPC++  
-        Set `CONDUIT=mpi` when installing UPC++
+        Set `export UPCXX_GASNET_CONDUIT=mpi` when compling UPC++ app code
 
 2.  The Aries network adapter on the Cray XC platform has approximately 120
     hardware contexts for communications.  With MPI and UPC++ each consuming one

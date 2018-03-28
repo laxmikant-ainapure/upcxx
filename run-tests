@@ -20,6 +20,7 @@ sys_info
 
 echo "Checking platform..."
 platform_sanity_checks
+platform_settings
 
 # Check for supported conduits
 eval "case '$CONDUIT' in
@@ -40,10 +41,11 @@ fi
 echo "Running tests on $RANKS ranks"
 
 check_result() {
+    RESULT=$1
     if test -n "$UPCXX_VERBOSE" ; then
       cat .run-tests.err
     fi
-    if [ $1 -ne 0 ]; then
+    if test $RESULT -ne 0 || grep "ERROR" .run-tests.err ; then
         echo -e "\e[91m$2 failed, the trace can be found in test/run-tests.err\e[0m"
         # force a flush
         cat .run-tests.err > run-tests.err
@@ -54,7 +56,7 @@ check_result() {
 }
 
 export GASNET_CONDUIT=$CONDUIT
-export GASNET_BACKTRACE=1
+export GASNET_BACKTRACE=${GASNET_BACKTRACE:=1}
 # default to debugging mode
 export ASSERT=${ASSERT:=1}
 export DBGSYM=${DBGSYM:=1}
@@ -80,12 +82,16 @@ run_test "atomics.cpp"
 run_test "collectives.cpp"
 run_test "dist_object.cpp"
 run_test "future.cpp"
+run_test "local_team.cpp"
 run_test "lpc_barrier.cpp"
 run_test "rpc_barrier.cpp"
 run_test "rpc_ff_ring.cpp"
 run_test "rput.cpp" "par"
+run_test "vis.cpp"
+run_test "vis_stress.cpp"
 run_test "uts/uts_ranks.cpp"
 THREADS="$RANKS" run_test "uts/uts_threads.cpp"
+run_test "view.cpp"
 
 UPCXX_BACKEND=gasnet_par run_test "uts/uts_hybrid.cpp"
 

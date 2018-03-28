@@ -29,9 +29,12 @@ function upcxx_sourceme {
   
   export NOBS_ROOT
   export NOBS_PATH
-  
   function nobs {
-    "${NOBS_PATH}/tool.py" "$@"
+    if [[ -z "${UPCXX_PYTHON}" ]]; then
+      "${NOBS_PATH}/tool.py" "$@"
+    else
+      "${UPCXX_PYTHON}" "${NOBS_PATH}/tool.py" "$@"
+    fi
   }
   
   if [ -e "./sourceme.ext" ]; then

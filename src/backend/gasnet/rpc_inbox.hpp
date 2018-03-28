@@ -71,12 +71,7 @@ namespace gasnet {
     UPCXX_ASSERT(this->next_ == this); // cannot be in an rpc_inbox
     
     upcxx::parcel_reader r{this->payload};
-    future<> buf_done = upcxx::command_execute(r);
-    
-    // delete buffer when future says its ok
-    buf_done >> [this]() {
-      std::free(this->payload);
-    };
+    upcxx::command<bool,void*>::execute(r, /*use_free=*/true, /*buf=*/this->payload);
   }
   
   inline void rpc_inbox::enqueue(rpc_message *m) {

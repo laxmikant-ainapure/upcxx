@@ -10,31 +10,41 @@ ifeq ($(wildcard $(UPCXX_INSTALL)/bin/upcxx-meta),)
 $(error Please set UPCXX_INSTALL=/path/to/upcxx/install)
 endif
 
-EXTRA_FLAGS=-std=c++11
-CXX=$(shell $(UPCXX_INSTALL)/bin/upcxx-meta CXX)
-PPFLAGS=$(shell $(UPCXX_INSTALL)/bin/upcxx-meta PPFLAGS)
-LDFLAGS=$(shell $(UPCXX_INSTALL)/bin/upcxx-meta LDFLAGS)
-LIBFLAGS=$(shell $(UPCXX_INSTALL)/bin/upcxx-meta LIBFLAGS)
+UPCXX_THREADMODE ?= seq
+
+ENV = env UPCXX_THREADMODE=$(UPCXX_THREADMODE)
+
+CXX = $(shell $(ENV) $(UPCXX_INSTALL)/bin/upcxx-meta CXX)
+PPFLAGS = $(shell $(ENV) $(UPCXX_INSTALL)/bin/upcxx-meta PPFLAGS)
+LDFLAGS = $(shell $(ENV) $(UPCXX_INSTALL)/bin/upcxx-meta LDFLAGS)
+LIBFLAGS = $(shell $(ENV) $(UPCXX_INSTALL)/bin/upcxx-meta LIBFLAGS)
+
+PTHREAD_FLAGS = -pthread
+OPENMP_FLAGS = -fopenmp
+
+EXTRA_FLAGS = -std=c++11
 
 # Programs to build, assuming each has a corresponding *.cpp file
-EXAMPLES = hello-world compute-pi compute-pi-multi-examples persona-example
+EXAMPLES = \
+  compute-pi \
+  compute-pi-multi-examples \
+  hello-world \
+  non-contig-example \
+  persona-example \
+  view-histogram1 \
+  view-histogram2 \
+  view-matrix-tasks
 
 all: $(EXAMPLES)
 
-.cpp: *.h *.hpp
-	$(CXX) $< $(PPFLAGS) $(LDFLAGS) $(EXTRA_FLAGS) $(LIBFLAGS) -o $@
+# The rule for building any example.
+%: %.cpp $(wildcard *.h) $(wildcard *.hpp)
+	$(CXX) $@.cpp $(PPFLAGS) $(LDFLAGS) $(EXTRA_FLAGS) $(LIBFLAGS) -o $@
 
-# This part shows a specialized rule for building an OpenMP example
-OPENMP_EXAMPLES = persona-example
-OPENMP_FLAGS=-fopenmp
-$(OPENMP_EXAMPLES): % : %.cpp
-	@if test -z "$$UPCXX_BUILDING_PAR" ; then \
-	  export UPCXX_BUILDING_PAR=1 ; \
-	  export UPCXX_THREADMODE="par" ; \
-	  $(MAKE) $@ EXTRA_FLAGS="$(EXTRA_FLAGS) $(OPENMP_FLAGS)" ; \
-	else set -x ; \
-	  $(CXX) $< $(PPFLAGS) $(LDFLAGS) $(EXTRA_FLAGS) $(LIBFLAGS) -o $@ ; \
-	fi
+# Example-specific variable specializations.
+persona-example: UPCXX_THREADMODE = par
+persona-example: EXTRA_FLAGS += $(OPENMP_FLAGS)
+view-matrix-tasks: EXTRA_FLAGS += $(PTHREAD_FLAGS)
 
 clean:
 	rm -f $(EXAMPLES)

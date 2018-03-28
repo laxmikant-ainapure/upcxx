@@ -8,10 +8,12 @@ int64_t reduce_to_rank0(int64_t my_hits)
         hits = my_hits;
         upcxx::future<> f = upcxx::make_future();
         for (int i = 1; i < upcxx::rank_n(); i++) {
-           // construct the chain of futures
-           f = upcxx::when_all(f, fetch(all_hits, i).then([&](int64_t rhit) { hits += rhit; }));
+          // construct the conjoined futures
+          f = upcxx::when_all(f,
+            all_hits.fetch(i).then([&](int64_t rhit) { hits += rhit; })
+          );
         }
-        // wait for the chain to complete
+        // wait for the futures to complete
         f.wait();
     }
     upcxx::barrier();

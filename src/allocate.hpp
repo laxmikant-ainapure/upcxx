@@ -34,12 +34,12 @@ namespace upcxx {
   global_ptr<T> allocate(std::size_t n = 1) {
     void *p = upcxx::allocate(n * sizeof(T), alignment);
     return p == nullptr
-      ? global_ptr<T>{nullptr}
-      : global_ptr<T>{
-        detail::global_ptr_ctor_internal{},
-        upcxx::rank_me(),
-        reinterpret_cast<T*>(p)
-      };
+      ? global_ptr<T>(nullptr)
+      : global_ptr<T>(
+          detail::internal_only{},
+          upcxx::rank_me(),
+          reinterpret_cast<T*>(p)
+        );
   }
 
   template<typename T>
@@ -74,11 +74,11 @@ namespace upcxx {
         throw;
       }
 
-      return global_ptr<T>{
-        detail::global_ptr_ctor_internal{},
+      return global_ptr<T>(
+        detail::internal_only{},
         upcxx::rank_me(),
         reinterpret_cast<T*>(ptr)
-      };
+      );
     }
   }
 
@@ -139,11 +139,7 @@ namespace upcxx {
         }
       }
       
-      return global_ptr<T>{
-        detail::global_ptr_ctor_internal{},
-        upcxx::rank_me(),
-        elts
-      };
+      return global_ptr<T>(detail::internal_only{}, upcxx::rank_me(), elts);
     }
   }
 

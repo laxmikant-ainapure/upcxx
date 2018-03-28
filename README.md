@@ -25,7 +25,7 @@ a modern C++11/14 compiler and corresponding STL implementation.
 
 The current release is known to work on the following configurations:
 
-* Mac OS X 10.11, 10.12 and 10.13 (El Capitan, Sierra and High Sierra,
+* macOS 10.11, 10.12 and 10.13 (El Capitan, Sierra and High Sierra,
   respectively) with the most recent Xcode releases for each, though it is
   suspected that any Xcode release 8.0 or newer will work. (smp and udp
   conduits)
@@ -40,7 +40,7 @@ The current release is known to work on the following configurations:
 
 Miscellaneous software requirements:
 
-* Python version 2.7.5 or newer
+* Python2 version 2.7.5 or newer
 
 * Perl version 5.005 or newer
 
@@ -57,7 +57,7 @@ For instructions on installing UPC++ and compiling programs, look at
 
 ## Using UPC++ with MPI
 
-For guidance on using UPC++ and MPI in the same applciation, see
+For guidance on using UPC++ and MPI in the same application, see
 [docs/hybrid.md](docs/hybrid.md).
 
 ## Testing
@@ -66,10 +66,45 @@ To run a test script, see [docs/testing.md](docs/testing.md)
 
 ## ChangeLog
 
+### 2018.03.31: Release 2018.3.0
+
+This release of UPC++ v1.0 supports most of the functionality specified in the 
+[UPC++ 1.0 Draft 6 Specification](docs/spec.pdf).
+
+New features/enhancements:
+
+ * Non-Contiguous One-Sided RMA interface is now fully implemented.
+ * Remote Atomics have been revamped, expanded and implemented. See the updated specification
+   for usage details.  The current implementation leverages hardware support in
+   shared memory and NIC offload support in Cray Aries.
+ * View-Based Serialization - see the specification for details
+ * Implementation of local memory translation (achieved with
+   `global_ptr::local()` / `global_ptr(T*)`). This encompasses a limited
+   implementation of teams to support `upcxx::world` and `upcxx::local_team`
+   so clients may query their local neighborhood of ranks.
+
+The following features from the specification are not yet implemented:
+
+ * Teams: `team::split`, `team_id`, collectives over teams, passing
+       `team&` arguments to rpcs, constructing `dist_object` over teams.
+ * Vector broadcast `broadcast(T *buf, size_t count, ...)`
+ * `barrier_async`
+ * User-defined Serialization interface
+
+Notable bug fixes:
+
+ * issue 119: Build system is now more robust to GASNet-EX download failures.
+ * issue 125: Fix upcxx-run exit code handling.
+ * Minor improvements to upcxx-run and run-tests.
+
+This release is not yet performant, and may be unstable or buggy.
+
+Please report any problems in the [issue tracker](https://bitbucket.org/berkeleylab/upcxx/issues).
+
 ### 2018.01.31: Release 2018.1.0 BETA
 
 This is a BETA preview release of UPC++ v1.0. This release supports most of the
-functionality specified in the [UPC++ 1.0 Draft 5 Specification](docs/spec.pdf).
+functionality specified in the [UPC++ 1.0 Draft 5 Specification](https://bitbucket.org/upcxx/upcxx/downloads/upcxx-spec-V1.0-Draft5.pdf).
 
 New features/enhancements:
 

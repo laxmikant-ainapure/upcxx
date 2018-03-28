@@ -69,7 +69,7 @@ namespace upcxx {
       //void destruct_early();
       
       void leave_active(future_header_dependent *hdr) {
-        auto proxied = apply_futured_as_future<Fn(FuArg)>()(this->fn_, this->dep_);
+        auto proxied = apply_futured_as_future<Fn&, FuArg&>()(this->fn_, this->dep_);
         
         void *me_mem = this->storage_;
         this->dep_.cleanup_ready();
@@ -105,7 +105,7 @@ namespace upcxx {
       }
       
       void leave_active(future_header_dependent *hdr) {
-        auto proxied = apply_futured_as_future<Fn(FuArg)>()(this->fn_, this->dep_);
+        auto proxied = apply_futured_as_future<Fn&, FuArg&>()(this->fn_, this->dep_);
         
         void *me_mem = this->storage_;
         this->dep_.cleanup_ready();
@@ -166,7 +166,7 @@ namespace upcxx {
       // Was there a reason for type-erasing it to the general kind?
       template<typename Arg1, typename Fn1>
       future1<FnRetKind,FnRetT...> operator()(Arg1 &&arg, Fn1 &&fn) {
-        return apply_futured_as_future<Fn(Arg)>()(
+        return apply_futured_as_future<Fn1&&, Arg1&&>()(
           std::forward<Fn1>(fn),
           std::forward<Arg1>(arg)
         );
@@ -246,8 +246,8 @@ namespace upcxx {
         fnret_trivial
       > {
       template<typename Arg1, typename Fn1>
-      future1<FnRetKind, FnRetT...> operator()(Arg &&arg, Fn1 &&fn) {
-        return apply_futured_as_future<Fn(Arg)>()(
+      future1<FnRetKind, FnRetT...> operator()(Arg1 &&arg, Fn1 &&fn) {
+        return apply_futured_as_future<Fn1&&,Arg1&&>()(
           std::forward<Fn1>(fn),
           std::forward<Arg1>(arg)
         );

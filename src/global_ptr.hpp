@@ -11,34 +11,14 @@
 #include <cassert> // assert
 #include <cstddef> // ptrdiff_t
 #include <cstdint> // uintptr_t
+#include <cstring> // memcpy
 #include <iostream> // ostream
 #include <type_traits> // is_const, is_volatile
 
 namespace upcxx {
-  //////////////////////////////////////////////////////////////////////
-  // Internal PSHM functions.
-  // TODO: Rethink API, move to backend.hpp
+  //////////////////////////////////////////////////////////////////////////////
+  // global_ptr
   
-  inline bool is_memory_shared_with(intrank_t r) {
-    return r == upcxx::rank_me();
-  }
-  
-  inline void *pshm_remote_addr2local(intrank_t r, void *addr) {
-    return addr;
-  }
-  
-  inline void *pshm_local_addr2remote(void *addr, intrank_t &rank_out) {
-    rank_out = upcxx::rank_me();
-    return addr;
-  }
-  
-  //////////////////////////////////////////////////////////////////////
-  
-  namespace detail {
-    struct global_ptr_ctor_internal{};
-  }
-  
-  // Definition of global_ptr
   template<typename T>
   class global_ptr {
   public:
@@ -47,32 +27,36 @@ namespace upcxx {
 
     using element_type = T;
 
+    explicit global_ptr(detail::internal_only, intrank_t rank, T *raw):
+      rank_{rank},
+      raw_ptr_{raw} {
+
+      static_assert(std::is_trivially_copyable<global_ptr<T>>::value, "Internal error.");
+    }
+    
     // null pointer represented with rank 0
     global_ptr(std::nullptr_t nil = nullptr):
-      rank_{0},
-      raw_ptr_{nullptr} {
+      global_ptr(detail::internal_only(), 0, nullptr) {
     }
 
     explicit global_ptr(T *ptr) {
-      if (ptr == nullptr) {
+      if(ptr == nullptr) {
         raw_ptr_ = ptr;
         rank_ = 0; // null pointer represented with rank 0
-      } else {
-        raw_ptr_ = static_cast<T*>(pshm_local_addr2remote(ptr, rank_));
-        UPCXX_ASSERT(raw_ptr_ && "address must be in shared segment");
+      }
+      else {
+        intrank_t rank;
+        std::uintptr_t raw;
+        
+        std::tie(rank, raw) = backend::globalize_memory(ptr);
+
+        rank_ = rank;
+        raw_ptr_ = reinterpret_cast<T*>(raw);
       }
     }
     
-    explicit global_ptr(
-        detail::global_ptr_ctor_internal,
-        intrank_t rank, T *raw
-      ):
-      rank_{rank},
-      raw_ptr_{raw} {
-    }
-    
     bool is_local() const {
-      return is_memory_shared_with(rank_);
+      return backend::rank_is_local(rank_);
     }
 
     bool is_null() const {
@@ -80,24 +64,40 @@ namespace upcxx {
     }
 
     T* local() const {
-      return static_cast<T*>(pshm_remote_addr2local(rank_, raw_ptr_));
+      return static_cast<T*>(
+        backend::localize_memory(
+          rank_,
+          reinterpret_cast<std::uintptr_t>(raw_ptr_)
+        )
+      );
     }
 
     intrank_t where() const {
       return rank_;
     }
 
-    global_ptr operator+(std::ptrdiff_t diff) const {
-      return global_ptr(rank_, raw_ptr_ + diff);
+    global_ptr operator+=(std::ptrdiff_t diff) {
+      raw_ptr_ += diff;
+      return *this;
     }
-
+    global_ptr operator+(std::ptrdiff_t diff) const {
+      global_ptr y = *this;
+      y += diff;
+      return y;
+    }
+    
+    global_ptr operator-=(std::ptrdiff_t diff) {
+      raw_ptr_ -= diff;
+      return *this;
+    }
     global_ptr operator-(std::ptrdiff_t diff) const {
-      return global_ptr(rank_, raw_ptr_ - diff);
+      global_ptr y = *this;
+      y -= diff;
+      return y;
     }
 
     std::ptrdiff_t operator-(global_ptr rhs) const {
-      assert(rank_ == rhs.rank_ &&
-             "operator- requires pointers to the same rank");
+      UPCXX_ASSERT(rank_ == rhs.rank_, "operator-(global_ptr,global_ptr): requires pointers to the same rank.");
       return raw_ptr_ - rhs.raw_ptr_;
     }
 
@@ -174,7 +174,8 @@ namespace upcxx {
 
   template<typename T, typename U>
   global_ptr<T> reinterpret_pointer_cast(global_ptr<U> ptr) {
-    return global_ptr<T>(ptr.rank_,
+    return global_ptr<T>(detail::internal_only(),
+                         ptr.rank_,
                          reinterpret_cast<T*>(ptr.raw_ptr_));
   }
 
@@ -182,9 +183,11 @@ namespace upcxx {
   std::ostream& operator<<(std::ostream &os, global_ptr<T> ptr) {
     return os << "(gp: " << ptr.rank_ << ", " << ptr.raw_ptr_ << ")";
   }
-} // namespace upcxx
+}
 
+////////////////////////////////////////////////////////////////////////////////
 // Specializations of standard function objects
+
 namespace std {
   // Comparators specify total order
   template<typename T>
@@ -195,27 +198,27 @@ namespace std {
              (lhs.rank_ == rhs.rank_ && lhs.raw_ptr_ < rhs.raw_ptr_));
     }
   };
-
+  
   template<typename T>
-  struct less_equal<upcxx::global_ptr <T>> {
+  struct less_equal<upcxx::global_ptr<T>> {
     constexpr bool operator()(upcxx::global_ptr<T> lhs,
                               upcxx::global_ptr<T> rhs) const {
       return (lhs.rank_ < rhs.rank_ ||
              (lhs.rank_ == rhs.rank_ && lhs.raw_ptr_ <= rhs.raw_ptr_));
     }
   };
-
+  
   template <typename T>
-  struct greater<upcxx::global_ptr <T>> {
+  struct greater<upcxx::global_ptr<T>> {
     constexpr bool operator()(upcxx::global_ptr<T> lhs,
                               upcxx::global_ptr<T> rhs) const {
       return (lhs.rank_ > rhs.rank_ ||
              (lhs.rank_ == rhs.rank_ && lhs.raw_ptr_ > rhs.raw_ptr_));
     }
   };
-
+  
   template<typename T>
-  struct greater_equal<upcxx::global_ptr <T>> {
+  struct greater_equal<upcxx::global_ptr<T>> {
     constexpr bool operator()(upcxx::global_ptr<T> lhs,
                               upcxx::global_ptr<T> rhs) const {
       return (lhs.rank_ > rhs.rank_ ||
@@ -257,6 +260,5 @@ namespace std {
       return std::size_t(h);
     }
   };
-} // namespace std
-
+}
 #endif

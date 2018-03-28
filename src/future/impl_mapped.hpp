@@ -36,7 +36,7 @@ namespace upcxx {
       }
       
       struct result_lrefs_function {
-        typedef apply_futured_as_future_return_t<Fn(FuArg)> fn_return_t;
+        typedef apply_futured_as_future_return_t<Fn,FuArg> fn_return_t;
         typedef decltype(std::declval<fn_return_t>().impl_.result_lrefs_getter()) fn_return_getter_t;
         
         fn_return_t result_;
@@ -75,13 +75,13 @@ namespace upcxx {
       
       result_lrefs_function result_lrefs_getter() const {
         return result_lrefs_function{
-          apply_futured_as_future<Fn(FuArg)>()(this->fn_, this->arg_)
+          apply_futured_as_future<Fn const&, FuArg const&>()(this->fn_, this->arg_)
         };
       }
       
       std::tuple<T...> result_rvals() {
         return std::tuple<T...>{
-          apply_futured_as_future<Fn(FuArg)>()(this->fn_, this->arg_)
+          apply_futured_as_future<Fn&, FuArg&>()(this->fn_, this->arg_)
             .impl_.result_lrefs_getter()()
         };
       }
@@ -134,7 +134,7 @@ namespace upcxx {
       
       result_lrefs_function result_lrefs_getter() const {
         return result_lrefs_function{
-          apply_futured_as_future<Fn(FuArg)>()(this->fn_, this->dep_)
+          apply_futured_as_future<Fn const&, FuArg const&>()(this->fn_, this->dep_)
         };
       }
       

@@ -30,6 +30,12 @@ sys_info() {
 
 platform_sanity_checks() {
     if test -z "$UPCXX_INSTALL_NOCHECK" ; then (
+        KERNEL=`uname -s 2> /dev/null`
+        if test Linux = "$KERNEL" || test Darwin = "$KERNEL" ; then
+            KERNEL_GOOD=1
+        else
+            KERNEL_GOOD=
+        fi
         if test -n "$CRAY_PRGENVINTEL" ; then
             echo 'ERROR: UPC++ on Cray XC currently requires PrgEnv-gnu. Please do: `module switch PrgEnv-intel PrgEnv-gnu`'
             exit 1
@@ -42,15 +48,12 @@ platform_sanity_checks() {
 	    if test -z "$CROSS" && test -z "$GASNET" ; then
 	      echo 'WARNING: To build for Cray XC compute nodes, you should set the CROSS variable (e.g. CROSS=cray-aries-slurm)'
 	    fi
+        elif test "$KERNEL" = "Darwin" ; then # default to XCode clang
+            CC=${CC:-/usr/bin/clang}
+            CXX=${CXX:-/usr/bin/clang++}
         else
             CC=${CC:-gcc}
             CXX=${CXX:-g++}
-        fi
-        KERNEL=`uname -s 2> /dev/null`
-        if test Linux = "$KERNEL" || test Darwin = "$KERNEL" ; then
-            KERNEL_GOOD=1
-        else
-            KERNEL_GOOD=
         fi
         ARCH=`uname -m 2> /dev/null`
         ARCH_GOOD=
@@ -90,7 +93,7 @@ platform_sanity_checks() {
             COMPILER_GOOD=1
         fi
 
-        RECOMMEND='We recommend Linux or OS X on x86_64 with one of the following C++ compilers: 
+        RECOMMEND='We recommend Linux or macOS on x86_64 with one of the following C++ compilers: 
          g++ 5.1.0 or newer, LLVM/clang 3.7.0 or newer, Xcode/clang 8.0.0 or newer'
 
         if test -n "$ARCH_BAD" ; then
