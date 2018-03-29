@@ -768,3 +768,21 @@ namespace {
     }
   }
 }
+
+////////////////////////////////////////////////////////////////////////
+// Library version watermarking
+
+#include <upcxx/upcxx.hpp> // for UPCXX_VERSION
+
+#ifndef UPCXX_VERSION
+#error  UPCXX_VERSION missing!
+#endif
+GASNETT_IDENT(UPCXX_IdentString_LibraryVersion, "$UPCXXLibraryVersion: " _STRINGIFY(UPCXX_VERSION) " $");
+
+#ifndef UPCXX_GIT_VERSION
+#include <upcxx/git_version.h>
+#endif
+#ifdef  UPCXX_GIT_VERSION
+GASNETT_IDENT(UPCXX_IdentString_GitVersion, "$UPCXXGitVersion: " _STRINGIFY(UPCXX_GIT_VERSION) " $");
+#endif
+
