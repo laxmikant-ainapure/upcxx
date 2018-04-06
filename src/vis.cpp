@@ -1,7 +1,7 @@
 #include <upcxx/vis.hpp>
 #include <upcxx/backend/gasnet/runtime_internal.hpp>
-#if UPCXX_BACKEND_GASNET 
-#include <gasnet_vis.h> //
+#if UPCXX_BACKEND_GASNET && !NOBS_DISCOVERY
+  #include <gasnet_vis.h>
 #endif
 
 namespace gasnet = upcxx::backend::gasnet;

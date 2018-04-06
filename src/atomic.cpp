@@ -2,7 +2,7 @@
 #include <upcxx/atomic.hpp>
 #include <upcxx/backend/gasnet/runtime_internal.hpp>
 
-#if UPCXX_BACKEND_GASNET
+#if UPCXX_BACKEND_GASNET && !NOBS_DISCOVERY
   #include <gasnet_ratomic.h>
 #endif
 
