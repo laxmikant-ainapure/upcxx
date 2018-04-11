@@ -60,6 +60,10 @@ For instructions on installing UPC++ and compiling programs, look at
 For guidance on using UPC++ and MPI in the same application, see
 [docs/hybrid.md](docs/hybrid.md).
 
+## Debugging
+
+For recommendations on debugging, see [docs/debugging.md](docs/debugging.md)
+
 ## Testing
 
 To run a test script, see [docs/testing.md](docs/testing.md)
