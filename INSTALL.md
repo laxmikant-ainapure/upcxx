@@ -80,7 +80,33 @@ environment variables:
     * `syncfree`: Thread unsafe queues. Will not function correctly in a
       multi-threaded context.
 
-# Compiling Against UPC\+\+ #
+# Compiling Against UPC\+\+ on the Command Line #
+
+With UPC\+\+ installed, the easiest way to build a UPC++ application from the
+command line is to use the `upcxx` compiler wrapper, installed in 
+`<upcxx-install-path>/bin/upcxx`. This arguments to this wrapper work
+just like the C++ compiler used to install UPC++ (analogous to the
+`mpicxx` compiler wrapper often provided for MPI/C++ programs).
+
+For example, to build an application consisting of `my-app1.cpp` and
+`my-app2.cpp`:
+
+```bash
+export PATH="<upcxx-install-path>/bin/:$PATH"
+upcxx -O -c my-app1.cpp my-app2.cpp
+upcxx -O -o my-app my-app1.o my-app2.o -lm
+```
+
+Be sure that all commands used to build one executable consistently pass either
+a -O option to select the optimized/production version of UPC++ (for
+performance runs), or a -g option to select the debugging version of UPC++
+(for tracking down bugs in your application).
+
+To select a non-default network backend or thread-safe version of the library, 
+you'll need to set the `UPCXX_GASNET_CONDUIT` or `UPCXX_THREADMODE` variables
+prior to invoking compilation. See the `UPC++ Backends` section below.
+
+# Compiling Against UPC\+\+ in Makefiles #
 
 With UPC\+\+ installed, the application's build process can query for the
 appropriate compiler flags to enable building against upcxx by invoking the
