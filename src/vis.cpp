@@ -33,15 +33,17 @@ void upcxx::detail::rma_put_irreg_nb(
                                          reinterpret_cast<const gex_Memvec_t*>(_srclist),
                                          flags);
 
-
+  operation_cb->handle = reinterpret_cast<uintptr_t>(op_h);
   if(source_cb!=NULL) // user has asked for source completion
     {
       gex_Event_t VISput_LC = gex_Event_QueryLeaf(op_h, GEX_EC_LC);
       source_cb->handle = reinterpret_cast<uintptr_t>(VISput_LC);
       gasnet::register_cb(source_cb);// it appears to matter in what order I register_cb
     }
-  operation_cb->handle = reinterpret_cast<uintptr_t>(op_h);
-  gasnet::register_cb(operation_cb);
+  else
+    {
+      gasnet::register_cb(operation_cb);
+    }
   gasnet::after_gasnet();
 }
 
@@ -87,14 +89,17 @@ void upcxx::detail::rma_put_reg_nb(
                               _dstcount, _dstlist, _dstlen,
                               _srccount, _srclist, _srclen,
                               flags);
+  operation_cb->handle = reinterpret_cast<uintptr_t>(op_h);
   if(source_cb!=NULL) // user has asked for source completion
     {
       gex_Event_t VISput_LC = gex_Event_QueryLeaf(op_h, GEX_EC_LC);
       source_cb->handle = reinterpret_cast<uintptr_t>(VISput_LC);
       gasnet::register_cb(source_cb);// it appears to matter in what order I register_cb
     }
-  operation_cb->handle = reinterpret_cast<uintptr_t>(op_h);
-  gasnet::register_cb(operation_cb);
+  else
+    {
+      gasnet::register_cb(operation_cb);
+    }
   gasnet::after_gasnet();
 }
 
@@ -137,14 +142,17 @@ void upcxx::detail::rma_put_strided_nb(
                                           _elemsz,
                                           _count, _stridelevels,
                                           flags);
+  operation_cb->handle = reinterpret_cast<uintptr_t>(op_h);
   if(source_cb!=NULL) // user has asked for source completion
     {
       gex_Event_t VISput_LC = gex_Event_QueryLeaf(op_h, GEX_EC_LC);
       source_cb->handle = reinterpret_cast<uintptr_t>(VISput_LC);
       gasnet::register_cb(source_cb);// it appears to matter in what order I register_cb
     }
-  operation_cb->handle = reinterpret_cast<uintptr_t>(op_h);
-  gasnet::register_cb(operation_cb);
+  else
+    {
+      gasnet::register_cb(operation_cb);
+    }
   gasnet::after_gasnet();
 
 }
