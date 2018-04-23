@@ -11,12 +11,14 @@ REQUIRES_GASNET = [
 
 REQUIRES_PTHREAD = [
   'lpc_barrier.cpp',
+  'rput_thread.cpp',
   'uts/uts_threads.cpp',
   'uts/uts_hybrid.cpp',
   'view.cpp',
 ]
 
 REQUIRES_OPENMP = [
+  'rput_omp.cpp',
   'uts/uts_omp.cpp',
   'uts/uts_omp_ranks.cpp'
 ]

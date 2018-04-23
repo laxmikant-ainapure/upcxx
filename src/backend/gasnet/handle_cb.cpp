@@ -20,7 +20,7 @@ int handle_cb_queue::burst(int burst_n) {
       // remove from queue
       *pp = p->next_;
       if(*pp == nullptr)
-        this->tailp_ = pp;
+        this->set_tailp(pp);
       
       // do it!
       p->execute_and_delete(handle_cb_successor{this, pp});

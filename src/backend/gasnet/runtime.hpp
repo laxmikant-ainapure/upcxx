@@ -88,13 +88,15 @@ namespace backend {
   }
   template<typename Fn>
   void during_level(std::integral_constant<progress_level, progress_level::user>, Fn &&fn) {
-    UPCXX_ASSERT(!UPCXX_BACKEND_GASNET_SEQ || backend::master.active_with_caller());
+    detail::persona_tls &tls = detail::the_persona_tls;
+    
+    UPCXX_ASSERT(!UPCXX_BACKEND_GASNET_SEQ || backend::master.active_with_caller(tls));
     
     persona &p = UPCXX_BACKEND_GASNET_SEQ
       ? backend::master
-      : *detail::tl_top_persona;
+      : *tls.get_top_persona();
     
-    detail::persona_during(
+    tls.during(
       p, progress_level::user, std::forward<Fn>(fn),
       /*known_active=*/std::true_type{}
     );

@@ -53,6 +53,10 @@ namespace upcxx {
   void progress(progress_level level = progress_level::user);
   
   void barrier();
+  
+  namespace detail {
+    int progressing();
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -71,6 +75,9 @@ namespace backend {
   
   namespace upcxx {
   namespace backend {
+    // This type is contained within `__thread` storage, so it must be:
+    //   1. trivially destructible.
+    //   2. constexpr constructible equivalent to zero-initialization.
     struct persona_state {
       // personas carry their list of oustanding gasnet handles
       gasnet::handle_cb_queue hcbs;
@@ -79,6 +86,9 @@ namespace backend {
 #else
   namespace upcxx {
   namespace backend {
+    // This type is contained within `__thread` storage, so it must be:
+    //   1. trivially destructible.
+    //   2. constexpr constructible equivalent to zero-initialization.
     struct persona_state {
       // personas carry no extra state
     };

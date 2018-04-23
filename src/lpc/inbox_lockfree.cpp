@@ -48,7 +48,12 @@ int lpc_inbox_lockfree<queue_n>::burst(int q, int burst_n) {
   //  2) All elements added after reset will start at `head_` and so
   //     won't be successors of the last element from 1.
   this->head_[q].store(nullptr, std::memory_order_relaxed);
-  std::atomic<lpc*> *last_next = this->tailp_[q].exchange(&this->head_[q]);
+  
+  std::atomic<lpc*> *last_next = decode_tailp(q,
+                                   this->tailp_xor_head_[q].exchange(
+                                     encode_tailp(q, &this->head_[q])
+                                   )
+                                 );
   
   // Process all elements before the last.
   while(&p->next != last_next) {

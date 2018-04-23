@@ -12,10 +12,10 @@ int lpc_inbox_syncfree<queue_n>::burst(int q, int burst_n) {
   
   { // steal the current list into `got`, replace with empty list
     got_head = this->head_[q];
-    got_tailp = this->tailp_[q];
+    got_tailp = this->get_tailp(q);
     
     this->head_[q] = nullptr;
-    this->tailp_[q] = &this->head_[q];
+    this->set_tailp(q, &this->head_[q]);
   }
   
   // process stolen list
@@ -29,7 +29,7 @@ int lpc_inbox_syncfree<queue_n>::burst(int q, int burst_n) {
   // prepend remainder of unexecuted stolen list back into main list
   if(got_head != nullptr) {
     if(this->head_[q] == nullptr)
-      this->tailp_[q] = got_tailp;
+      this->set_tailp(q, got_tailp);
     
     *got_tailp = this->head_[q];
     this->head_[q] = got_head;

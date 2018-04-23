@@ -187,14 +187,15 @@ void upcxx::init() {
   size_t gasnet_max_segsize = gasnet_getMaxLocalSegmentSize();
   if(segment_size > gasnet_max_segsize) {
     if(upcxx::rank_me() == 0) {
-      cerr << "WARNING: Requested UPCXX segment size (" << segment_size << ") "
+      cerr << "WARNING: Requested UPC++ segment size (" << segment_size << ") "
               "is larger than the GASNet segment size (" << gasnet_max_segsize << "). "
               "Adjusted segment size to " << (gasnet_max_segsize) << ".\n";
     }
     segment_size = gasnet_max_segsize;
   }
   
-  backend::initial_master_scope = new persona_scope{backend::master};
+  backend::initial_master_scope = new persona_scope(backend::master);
+  UPCXX_ASSERT_ALWAYS(backend::master.active_with_caller());
   
   ok = gex_Segment_Attach(&segment, gasnet::world_team, segment_size);
   UPCXX_ASSERT_ALWAYS(ok == GASNET_OK);
@@ -569,11 +570,13 @@ template void gasnet::send_am_rdzv<progress_level::internal>(intrank_t, persona*
 template void gasnet::send_am_rdzv<progress_level::user>(intrank_t, persona*, void*, size_t, size_t);
 
 void gasnet::after_gasnet() {
-  if(detail::tl_progressing >= 0)
-    return;
-  detail::tl_progressing = (int)progress_level::internal;
+  detail::persona_tls &tls = detail::the_persona_tls;
   
-  bool have_master = UPCXX_BACKEND_GASNET_SEQ || backend::master.active_with_caller();
+  if(tls.get_progressing() >= 0)
+    return;
+  tls.set_progressing((int)progress_level::internal);
+  
+  bool have_master = UPCXX_BACKEND_GASNET_SEQ || backend::master.active_with_caller(tls);
   int total_exec_n = 0;
   int exec_n;
   
@@ -584,40 +587,46 @@ void gasnet::after_gasnet() {
       #if UPCXX_BACKEND_GASNET_SEQ
         exec_n += gasnet::master_hcbs.burst(4);
       #endif
-      
-      detail::persona_as_top(backend::master, [&]() {
+      {
+        detail::persona_scope_redundant tmp(backend::master, tls);
         exec_n += rpcs_internal_.burst(20);
-      });
+      };
     }
     
-    detail::persona_foreach_active([&](persona &p) {
+    tls.foreach_active_as_top([&](persona &p) {
       #if UPCXX_BACKEND_GASNET_PAR
         exec_n += p.backend_state_.hcbs.burst(4);
       #endif
-      exec_n += detail::persona_burst(p, progress_level::internal);
+      exec_n += tls.burst(p, progress_level::internal);
     });
     
     total_exec_n += exec_n;
   }
   while(total_exec_n < 100 && exec_n != 0);
   
-  detail::tl_progressing = -1;
+  tls.set_progressing(-1);
 }
 
 
 ////////////////////////////////////////////////////////////////////////
 // from: upcxx/backend.hpp
 
+int upcxx::detail::progressing() {
+  return the_persona_tls.get_progressing();
+}
+
 void upcxx::progress(progress_level level) {
-  if(detail::tl_progressing >= 0)
-    return;
-  detail::tl_progressing = (int)level;
+  detail::persona_tls &tls = detail::the_persona_tls;
   
-  bool have_master = backend::master.active_with_caller();
+  if(tls.get_progressing() >= 0)
+    return;
+  tls.set_progressing((int)level);
+  
+  bool have_master = backend::master.active_with_caller(tls);
   int total_exec_n = 0;
   int exec_n;
   
-  if(!UPCXX_BACKEND_GASNET_SEQ || gasnet_seq_thread_id == upcxx::detail::thread_id())
+  if(!UPCXX_BACKEND_GASNET_SEQ || gasnet_seq_thread_id == detail::thread_id())
     gasnet_AMPoll();
   
   do {
@@ -627,19 +636,19 @@ void upcxx::progress(progress_level level) {
       #if UPCXX_BACKEND_GASNET_SEQ
         exec_n += gasnet::master_hcbs.burst(4);
       #endif
-      
-      detail::persona_as_top(backend::master, [&]() {
+      {
+        detail::persona_scope_redundant tmp(backend::master, tls);
         exec_n += rpcs_internal_.burst(100);
         if(level == progress_level::user)
           exec_n += rpcs_user_.burst(100);
-      });
+      }
     }
     
-    detail::persona_foreach_active([&](persona &p) {
+    tls.foreach_active_as_top([&](persona &p) {
       #if UPCXX_BACKEND_GASNET_PAR
         exec_n += p.backend_state_.hcbs.burst(4);
       #endif
-      exec_n += detail::persona_burst(p, level);
+      exec_n += tls.burst(p, level);
     });
     
     total_exec_n += exec_n;
@@ -657,7 +666,7 @@ void upcxx::progress(progress_level level) {
    * receiving nothing, sending nothing, but is loaded with compute
    * and is only periodically progressing to be "nice".
    */
-  thread_local int consecutive_nothings = 0;
+  static __thread int consecutive_nothings = 0;
   
   if(total_exec_n != 0)
     consecutive_nothings = 0;
@@ -666,7 +675,7 @@ void upcxx::progress(progress_level level) {
     consecutive_nothings = 0;
   }
   
-  detail::tl_progressing = -1;
+  tls.set_progressing(-1);
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -709,8 +718,10 @@ namespace {
     
     rpc_message *m = rpc_message::build_copy(buf, buf_size, buf_align);
     
-    if(UPCXX_BACKEND_GASNET_PAR && !backend::master.active_with_caller()) {
-      detail::persona_defer(
+    detail::persona_tls &tls = detail::the_persona_tls;
+    
+    if(UPCXX_BACKEND_GASNET_PAR && !backend::master.active_with_caller(tls)) {
+      tls.defer(
         backend::master,
         level_user ? progress_level::user : progress_level::internal,
         [=]() {
@@ -753,8 +764,10 @@ namespace {
     
     rpc_message *m = rpc_message::build_copy(buf, buf_size, buf_align);
     
-    if(UPCXX_BACKEND_GASNET_PAR && (per != &backend::master || !per->active_with_caller())) {
-      detail::persona_defer(
+    detail::persona_tls &tls = detail::the_persona_tls;
+    
+    if(UPCXX_BACKEND_GASNET_PAR && (per != &backend::master || !per->active_with_caller(tls))) {
+      tls.defer(
         *per,
         level_user ? progress_level::user : progress_level::internal,
         [=]() {
