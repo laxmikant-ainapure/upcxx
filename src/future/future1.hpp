@@ -50,12 +50,10 @@ namespace upcxx {
   
   namespace detail {
     #ifdef UPCXX_BACKEND
-      extern thread_local int tl_progressing/* = -1*/; // defined in persona.hpp
-      
       struct future_wait_upcxx_progress_user {
         void operator()() const {
           UPCXX_ASSERT(
-            detail::tl_progressing == -1,
+            -1 == detail::progressing(),
             "You have attempted to wait() on a non-ready future within upcxx progress, this is prohibited because it will never complete."
           );
           upcxx::progress();

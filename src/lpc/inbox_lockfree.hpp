@@ -26,14 +26,30 @@ namespace upcxx {
     };
   }
   
+  // This type is contained within `__thread` storage, so it must be:
+  //   1. trivially destructible.
+  //   2. constexpr constructible equivalent to zero-initialization.
   template<int queue_n>
   struct lpc_inbox_lockfree: detail::lpc_inbox_lockfree_base {
     std::atomic<lpc*> head_[queue_n];
-    std::atomic<std::atomic<lpc*>*> tailp_[queue_n];
+    //std::atomic<std::atomic<lpc*>*> tailp_[queue_n] = {&this->head_[q]...};
+    std::atomic<std::uintptr_t> tailp_xor_head_[queue_n];
+    
+  private:
+    constexpr std::atomic<lpc*>* decode_tailp(int q, std::uintptr_t u) const {
+      return reinterpret_cast<std::atomic<lpc*>*>(
+        u ^ reinterpret_cast<std::uintptr_t>(&head_[q])
+      );
+    }
+    constexpr std::uintptr_t encode_tailp(int q, std::atomic<lpc*> *val) const {
+      return reinterpret_cast<std::uintptr_t>(val) ^ reinterpret_cast<std::uintptr_t>(&head_[q]);
+    }
   
   public:
-    lpc_inbox_lockfree();
-    ~lpc_inbox_lockfree();
+    constexpr lpc_inbox_lockfree():
+      head_(),
+      tailp_xor_head_() {
+    }
     lpc_inbox_lockfree(lpc_inbox_lockfree const&) = delete;
     
     template<typename Fn1>
@@ -46,24 +62,6 @@ namespace upcxx {
   //////////////////////////////////////////////////////////////////////
   
   template<int queue_n>
-  lpc_inbox_lockfree<queue_n>::lpc_inbox_lockfree() {
-    for(int q=0; q < queue_n; q++) {
-      head_[q].store(nullptr, std::memory_order_relaxed);
-      tailp_[q].store(&head_[q], std::memory_order_relaxed);
-    }
-  }
-  
-  template<int queue_n>
-  lpc_inbox_lockfree<queue_n>::~lpc_inbox_lockfree() {
-    for(int q=0; q < queue_n; q++) {
-      UPCXX_ASSERT(
-        this->head_[q].load(std::memory_order_relaxed) == nullptr,
-        "Abandoned lpc's detected."
-      );
-    }
-  }
-  
-  template<int queue_n>
   template<typename Fn1>
   void lpc_inbox_lockfree<queue_n>::send(int q, Fn1 &&fn) {
     using Fn = typename std::decay<Fn1>::type;
@@ -71,7 +69,11 @@ namespace upcxx {
     auto *m = new lpc_inbox_lockfree::lpc_impl<Fn>{std::forward<Fn1>(fn)};
     m->next.store(nullptr, std::memory_order_relaxed);
     
-    std::atomic<lpc*> *got = this->tailp_[q].exchange(&m->next);
+    std::atomic<lpc*> *got = decode_tailp(q,
+                               this->tailp_xor_head_[q].exchange(
+                                 encode_tailp(q, &m->next)
+                               )
+                             );
     got->store(m, std::memory_order_relaxed);
   }
 }

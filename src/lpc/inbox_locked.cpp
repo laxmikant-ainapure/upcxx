@@ -4,6 +4,8 @@
 
 using upcxx::lpc_inbox_locked;
 
+std::mutex upcxx::detail::lpc_inbox_locked_base::the_locks[1<<lock_log2_n];
+
 template<int queue_n>
 int lpc_inbox_locked<queue_n>::burst(int q, int burst_n) {
   using lpc = lpc_inbox_locked::lpc;
@@ -22,17 +24,20 @@ int lpc_inbox_locked<queue_n>::burst(int q, int burst_n) {
     return 0;
   
   lpc *got_head;
-  lpc **got_tailp;
+  lpc *got_tail;
   int exec_n = 0;
-
+  
+  std::mutex &lock = this->get_lock();
+  
   // Steal the current list into `got`, replace with empty list.
-  { std::lock_guard<std::mutex> locked{this->lock_};
+  {
+    std::lock_guard<std::mutex> locked(lock);
   
     got_head = this->head_[q];
-    got_tailp = this->tailp_[q];
+    got_tail = this->tail_[q];
     
     this->head_[q] = nullptr;
-    this->tailp_[q] = &this->head_[q];
+    this->tail_[q] = nullptr;
   }
   
   // Process stolen list.
@@ -45,12 +50,13 @@ int lpc_inbox_locked<queue_n>::burst(int q, int burst_n) {
   
   // Prepend remainder of unexecuted stolen list back into main list.
   if(got_head != nullptr) {
-    std::lock_guard<std::mutex> locked{this->lock_};
+    std::lock_guard<std::mutex> locked(lock);
     
-    if(this->head_[q] == nullptr)
-      this->tailp_[q] = got_tailp;
+    if(this->head_[q] != nullptr)
+      got_tail->next = this->head_[q];
+    else
+      this->tail_[q] = got_tail;
     
-    *got_tailp = this->head_[q];
     this->head_[q] = got_head;
   }
   

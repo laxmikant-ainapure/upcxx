@@ -23,9 +23,11 @@ persona *peer_persona[thread_n];
 
 void thread_progress() {
   bool worked = false;
-  upcxx::detail::persona_foreach_active([&](upcxx::persona &p) {
-    worked |= 0 != upcxx::detail::persona_burst(p, upcxx::progress_level::user);
-  });
+  upcxx::detail::the_persona_tls.foreach_active_as_top(
+    [&](upcxx::persona &p) {
+      worked |= 0 != upcxx::detail::the_persona_tls.burst(p, upcxx::progress_level::user);
+    }
+  );
   
   static thread_local int nothings = 0;
   

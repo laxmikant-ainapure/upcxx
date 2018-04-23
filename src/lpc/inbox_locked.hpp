@@ -3,11 +3,15 @@
 
 #include <upcxx/diagnostic.hpp>
 
+#include <atomic>
 #include <mutex>
 
 namespace upcxx {
   namespace detail {
     struct lpc_inbox_locked_base {
+      static constexpr int lock_log2_n = 9;
+      static std::mutex the_locks[1<<lock_log2_n];
+      
       struct lpc {
         lpc *next;
         virtual void execute_and_delete() = 0;
@@ -26,15 +30,33 @@ namespace upcxx {
     };
   }
   
+  // This type is contained within `__thread` storage, so it must be:
+  //   1. trivially destructible.
+  //   2. constexpr constructible equivalent to zero-initialization.
   template<int queue_n>
   struct lpc_inbox_locked: detail::lpc_inbox_locked_base {
     lpc *head_[queue_n];
-    lpc **tailp_[queue_n];
-    std::mutex lock_;
+    lpc *tail_[queue_n];
+    
+  private:
+    std::mutex& get_lock() {
+      constexpr std::uintptr_t magic = std::uintptr_t(
+          8*sizeof(std::uintptr_t) == 32
+            ? 0x9e3779b9u
+            : 0x9e3779b97f4a7c15u
+        );
+      std::uintptr_t u = reinterpret_cast<std::uintptr_t>(this);
+      u ^= u >> 8*sizeof(std::uintptr_t)/2;
+      u *= magic;
+      u >>= 8*sizeof(std::uintptr_t) - lock_log2_n;
+      return the_locks[u];
+    }
     
   public:
-    lpc_inbox_locked();
-    ~lpc_inbox_locked();
+    constexpr lpc_inbox_locked():
+      head_(),
+      tail_() {
+    }
     lpc_inbox_locked(lpc_inbox_locked const&) = delete;
     
     template<typename Fn1>
@@ -47,21 +69,6 @@ namespace upcxx {
   //////////////////////////////////////////////////////////////////////
   
   template<int queue_n>
-  lpc_inbox_locked<queue_n>::lpc_inbox_locked() {
-    for(int q=0; q < queue_n; q++) {
-      head_[q] = nullptr;
-      tailp_[q] = &head_[q];
-    }
-  }
-  
-  template<int queue_n>
-  lpc_inbox_locked<queue_n>::~lpc_inbox_locked() {
-    for(int q=0; q < queue_n; q++) {
-      UPCXX_ASSERT(this->head_[q] == nullptr, "Abandoned lpc's detected.");
-    }
-  }
-  
-  template<int queue_n>
   template<typename Fn1>
   void lpc_inbox_locked<queue_n>::send(int q, Fn1 &&fn) {
     using Fn = typename std::decay<Fn1>::type;
@@ -69,10 +76,15 @@ namespace upcxx {
     auto *m = new lpc_inbox_locked::lpc_impl<Fn>{std::forward<Fn1>(fn)};
     m->next = nullptr;
 
-    { std::lock_guard<std::mutex> locked{this->lock_};
+    {
+      std::lock_guard<std::mutex> locked(this->get_lock());
     
-      *this->tailp_[q] = m;
-      this->tailp_[q] = &m->next;
+      if(this->tail_[q] != nullptr)
+        this->tail_[q]->next = m;
+      else
+        this->head_[q] = m;
+      
+      this->tail_[q] = m;
     }
   }
 }

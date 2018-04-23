@@ -20,6 +20,9 @@
 #include <mutex>
 
 namespace upcxx {
+  // This type is contained within `__thread` storage, so it must be:
+  //   1. trivially destructible.
+  //   2. constexpr constructible equivalent to zero-initialization.
   template<int queue_n, bool thread_safe>
   struct lpc_inbox;
   

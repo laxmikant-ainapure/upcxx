@@ -24,12 +24,29 @@ namespace gasnet {
     virtual void execute_and_delete(handle_cb_successor) = 0;
   };
 
+  // This type is contained within `__thread` storage, so it must be:
+  //   1. trivially destructible.
+  //   2. constexpr constructible equivalent to zero-initialization.
   struct handle_cb_queue {
-    handle_cb *head_ = nullptr;
-    handle_cb **tailp_ = &this->head_;
+    friend struct handle_cb_successor;
+    
+    handle_cb *head_;
+    // handle_cb **tailp_ = &this->head_;
+    std::uintptr_t tailp_xor_head_;
   
+  private:
+    handle_cb** get_tailp() const {
+      return reinterpret_cast<handle_cb**>(tailp_xor_head_ ^ reinterpret_cast<std::uintptr_t>(&head_));
+    }
+    void set_tailp(handle_cb **val) {
+      tailp_xor_head_ = reinterpret_cast<std::uintptr_t>(val) ^ reinterpret_cast<std::uintptr_t>(&head_);
+    }
+    
   public:
-    handle_cb_queue() = default;
+    constexpr handle_cb_queue():
+      head_(),
+      tailp_xor_head_() {
+    }
     handle_cb_queue(handle_cb_queue const&) = delete;
     
     void enqueue(handle_cb *cb);
@@ -42,14 +59,14 @@ namespace gasnet {
   inline void handle_cb_queue::enqueue(handle_cb *cb) {
     UPCXX_ASSERT(cb->next_ == reinterpret_cast<handle_cb*>(0x1));
     cb->next_ = nullptr;
-    *this->tailp_ = cb;
-    this->tailp_ = &cb->next_;
+    *this->get_tailp() = cb;
+    this->set_tailp(&cb->next_);
   }
 
   inline void handle_cb_successor::operator()(handle_cb *succ) {
     if(succ->next_ == reinterpret_cast<handle_cb*>(0x1)) {
       if(*pp_ == nullptr)
-        q_->tailp_ = &succ->next_;
+        q_->set_tailp(&succ->next_);
       succ->next_ = *pp_;
       *pp_ = succ;
     }
