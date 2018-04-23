@@ -4,12 +4,7 @@
 #include <cstddef>
 #include <iterator>
 
-#include <upcxx/diagnostic.hpp>
-#include <upcxx/allocate.hpp>
-#include <upcxx/future.hpp>
-#include <upcxx/wait.hpp>
-#include <upcxx/vis.hpp>
-#include <upcxx/dist_object.hpp>
+#include <upcxx/upcxx.hpp>
 
 #include "util.hpp"
 
