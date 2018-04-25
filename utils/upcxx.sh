@@ -42,7 +42,7 @@ verbose UPCXX_META=$UPCXX_META
 
 if [[ $dodebug && !$doopt ]] ; then
   UPCXX_CODEMODE=debug
-elif [[ $doopt && !$dodebug ]] ; then
+elif [[ ( $doopt && !$dodebug ) || $doversion ]] ; then
   UPCXX_CODEMODE=O3
 elif [[ $UPCXX_CODEMODE ]] ; then
   :
