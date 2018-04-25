@@ -117,8 +117,7 @@ platform_sanity_checks() {
 platform_settings() {
    KERNEL=`uname -s 2> /dev/null`
    case "$KERNEL" in
-     CYGWIN_NT*) # workaround issue #58: gcc bug with TLS initializers
-       export LDFLAGS="-Wl,--image-base,0x10000000 $LDFLAGS"
+     *)
        ;;
    esac
 }
