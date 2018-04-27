@@ -30,7 +30,10 @@ to override this behavior. Additional environment variables allowing finer
 control over how UPC\+\+ is configured can be found in the
 "Advanced Installer Configuration" section below.
 
-**Installation: Mac**
+**Installation: Apple macOS**
+
+On macOS, UPC++ defaults to using the Apple LLVM clang compiler that is part
+of the Xcode Command Line Tools.
 
 The Xcode Command Line Tools need to be installed *before* invoking `install`,
 i.e.:
@@ -38,6 +41,9 @@ i.e.:
 ```bash
 xcode-select --install
 ```
+
+Alternatively, the `CC` and `CXX` environment variables can be set to an alternative
+compiler installation for a supported compiler before running `./install`.
 
 **Installation: Cray XC**
 

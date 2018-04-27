@@ -27,8 +27,9 @@ The current release is known to work on the following configurations:
 
 * macOS 10.11, 10.12 and 10.13 (El Capitan, Sierra and High Sierra,
   respectively) with the most recent Xcode releases for each, though it is
-  suspected that any Xcode release 8.0 or newer will work. (smp and udp
-  conduits)
+  suspected that any Xcode (ie Apple clang) release 8.0 or newer will work. 
+  Free Software Foundation GCC (e.g., as installed by Homebrew or Fink)
+  version 5.1.0 or newer should also work (smp and udp conduits)
 
 * Linux/x86-64 with gcc-5.1.0 or newer, or with clang-3.7.0 or newer when using
   libstdc++ from gcc-5.1.0.  If your system compilers do not meet these
