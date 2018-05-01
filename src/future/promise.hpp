@@ -50,6 +50,8 @@ namespace upcxx {
     
     promise(const promise&) = delete;
     promise(promise&&) = default;
+
+    promise& operator=(promise &&) = default;
     
     void require_anonymous(std::intptr_t n) {
       UPCXX_ASSERT(this->countdown_ + n > 0);
