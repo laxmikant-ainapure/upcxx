@@ -6,6 +6,14 @@
 using namespace std;
 using namespace upcxx;
 
+#ifndef KEEP_MASTER
+  #if UPCXX_BACKEND_GASNET_SEQ
+    #define KEEP_MASTER 1
+  #else
+    #define KEEP_MASTER 0
+  #endif
+#endif
+
 int main() {
     upcxx::init();
     print_test_header();
@@ -21,6 +29,9 @@ int main() {
     dist_object<global_ptr<int>> dobj(new_array<int>(rank_n()));
     global_ptr<int> gptr = *dobj;
     if (rank_me() == 0) {
+      #if !KEEP_MASTER
+        liberate_master_persona(); // drop master persona
+      #endif
       // fetch remote landing zones
       auto LZ = new global_ptr<int>[rank_n()];
       for (int i=1; i < rank_n(); i++) {
@@ -46,6 +57,9 @@ int main() {
            gasnett_sched_yield();
         }
       }
+      #if !KEEP_MASTER
+        persona_scope *ps = new persona_scope(master_persona());  // re-acquire master
+      #endif
     } else {
       while (!done.ready()) progress();
     }
