@@ -71,6 +71,30 @@ To run a test script, see [docs/testing.md](docs/testing.md)
 
 ## ChangeLog
 
+### 2018.??.??: PENDING
+
+This release of UPC++ v1.0 supports most of the functionality specified in the 
+[UPC++ 1.0 Draft ?? Specification](docs/spec.pdf).
+
+New features/enhancements:
+
+* New `upcxx` compiler wrapper makes it easier to build UPC++ programs
+* UPC++ now supports the GCC compiler on macOS (e.g., as installed by Homebrew or Fink)
+* rput_{strided,(ir)regular) now provide asynchronous source completion
+* UPC++ library now contains ident strings that can be used to query version info
+  from a compiled executable, using the UNIX `ident` tool.
+
+The following features from the specification are not yet implemented:
+
+...
+
+Notable bug fixes:
+
+* issue #49: stability and portability issues caused by C++ thread_local
+* issue #141: missing promise move assignment operator
+
+Please report any problems in the [issue tracker](https://bitbucket.org/berkeleylab/upcxx/issues).
+
 ### 2018.03.31: Release 2018.3.0
 
 This release of UPC++ v1.0 supports most of the functionality specified in the 
