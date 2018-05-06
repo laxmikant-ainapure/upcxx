@@ -121,6 +121,7 @@ which form of flags are desired. Valid values are:
 
 * `PPFLAGS`: Preprocessor flags which will put the upcxx headers in the
   compiler's search path and define macros required by those headers.
+* `CXXFLAGS`: (optional) Compiler flags which set debug/optimization settings.
 * `LDFLAGS`: Linker flags usually belonging at the front of the link command
   line (before the list of object files).
 * `LIBFLAGS`: Linker flags belonging at the end of the link command line. These
@@ -131,8 +132,8 @@ For example, to build an application consisting of `my-app1.cpp` and
 
 ```bash
 upcxx="<upcxx-install-path>/bin/upcxx-meta"
-<c++ compiler> -std=c++11 $($upcxx PPFLAGS) -c my-app1.cpp
-<c++ compiler> -std=c++11 $($upcxx PPFLAGS) -c my-app2.cpp
+<c++ compiler> -std=c++11 $($upcxx PPFLAGS) $($upcxx CXXFLAGS) -c my-app1.cpp
+<c++ compiler> -std=c++11 $($upcxx PPFLAGS) $($upcxx CXXFLAGS) -c my-app2.cpp
 <c++ compiler> $($upcxx LDFLAGS) my-app1.o my-app2.o $($upcxx LIBFLAGS)
 ```
 

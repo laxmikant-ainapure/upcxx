@@ -16,6 +16,7 @@ ENV = env UPCXX_THREADMODE=$(UPCXX_THREADMODE)
 
 CXX = $(shell $(ENV) $(UPCXX_INSTALL)/bin/upcxx-meta CXX)
 PPFLAGS = $(shell $(ENV) $(UPCXX_INSTALL)/bin/upcxx-meta PPFLAGS)
+CXXFLAGS = $(shell $(ENV) $(UPCXX_INSTALL)/bin/upcxx-meta CXXFLAGS)
 LDFLAGS = $(shell $(ENV) $(UPCXX_INSTALL)/bin/upcxx-meta LDFLAGS)
 LIBFLAGS = $(shell $(ENV) $(UPCXX_INSTALL)/bin/upcxx-meta LIBFLAGS)
 
@@ -39,7 +40,7 @@ all: $(EXAMPLES)
 
 # The rule for building any example.
 %: %.cpp $(wildcard *.h) $(wildcard *.hpp)
-	$(CXX) $@.cpp $(PPFLAGS) $(LDFLAGS) $(EXTRA_FLAGS) $(LIBFLAGS) -o $@
+	$(CXX) $@.cpp $(PPFLAGS) $(CXXFLAGS) $(LDFLAGS) $(EXTRA_FLAGS) $(LIBFLAGS) -o $@
 
 # Example-specific variable specializations.
 persona-example: UPCXX_THREADMODE = par

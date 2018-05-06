@@ -55,7 +55,7 @@ for var in UPCXX_CODEMODE UPCXX_GASNET_CONDUIT UPCXX_THREADMODE ; do
   eval verbose $var=\$$var
 done
 
-for var in CXX PPFLAGS LDFLAGS LIBFLAGS ; do 
+for var in CXX CXXFLAGS PPFLAGS LDFLAGS LIBFLAGS ; do 
   val=`$UPCXX_META $var`
   eval $var=\$val
   verbose "$UPCXX_META $var: $val"
@@ -80,9 +80,9 @@ function doit {
 }
 
 if [[ $dolink == 0 ]] ; then
-  doit $CXX $EXTRAFLAGS $PPFLAGS "$@"
+  doit $CXX $EXTRAFLAGS $CXXFLAGS $PPFLAGS "$@"
 else
-  doit $CXX $EXTRAFLAGS $PPFLAGS $LDFLAGS "$@" $LIBFLAGS
+  doit $CXX $EXTRAFLAGS $CXXFLAGS $PPFLAGS $LDFLAGS "$@" $LIBFLAGS
 fi
 error failed to run compiler $CXX
 

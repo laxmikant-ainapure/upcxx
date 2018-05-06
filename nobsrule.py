@@ -1620,6 +1620,7 @@ def install_libset(install_path, name, libset, meta_extra={}):
     meta_contents = \
 '''#!/bin/sh
 PPFLAGS="''' + ' '.join(libset_ppflags(installed_libset)) + '''"
+CXXFLAGS="''' + ' '.join(libset_cgflags(installed_libset)) + '''"
 LDFLAGS="''' + ' '.join(libset_ldflags(installed_libset)) + '''"
 LIBFLAGS="''' + ' '.join(libset_libflags(installed_libset)) + '''"
 ''' + '\n'.join(
