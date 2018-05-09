@@ -15,10 +15,10 @@ UPCXX_THREADMODE ?= seq
 ENV = env UPCXX_THREADMODE=$(UPCXX_THREADMODE)
 
 CXX = $(shell $(ENV) $(UPCXX_INSTALL)/bin/upcxx-meta CXX)
-PPFLAGS = $(shell $(ENV) $(UPCXX_INSTALL)/bin/upcxx-meta PPFLAGS)
+CPPFLAGS = $(shell $(ENV) $(UPCXX_INSTALL)/bin/upcxx-meta CPPFLAGS)
 CXXFLAGS = $(shell $(ENV) $(UPCXX_INSTALL)/bin/upcxx-meta CXXFLAGS)
 LDFLAGS = $(shell $(ENV) $(UPCXX_INSTALL)/bin/upcxx-meta LDFLAGS)
-LIBFLAGS = $(shell $(ENV) $(UPCXX_INSTALL)/bin/upcxx-meta LIBFLAGS)
+LIBS = $(shell $(ENV) $(UPCXX_INSTALL)/bin/upcxx-meta LIBS)
 
 PTHREAD_FLAGS = -pthread
 OPENMP_FLAGS = -fopenmp
@@ -40,7 +40,7 @@ all: $(EXAMPLES)
 
 # The rule for building any example.
 %: %.cpp $(wildcard *.h) $(wildcard *.hpp)
-	$(CXX) $@.cpp $(PPFLAGS) $(CXXFLAGS) $(LDFLAGS) $(EXTRA_FLAGS) $(LIBFLAGS) -o $@
+	$(CXX) $@.cpp $(CPPFLAGS) $(CXXFLAGS) $(LDFLAGS) $(EXTRA_FLAGS) $(LIBS) -o $@
 
 # Example-specific variable specializations.
 persona-example: UPCXX_THREADMODE = par
