@@ -1619,9 +1619,12 @@ def install_libset(install_path, name, libset, meta_extra={}):
     meta_path = join(install_path, 'bin', name+'-meta')
     meta_contents = \
 '''#!/bin/sh
-PPFLAGS="''' + ' '.join(libset_ppflags(installed_libset)) + '''"
+CPPFLAGS="''' + ' '.join(libset_ppflags(installed_libset)) + '''"
+CXXFLAGS="''' + ' '.join(libset_cgflags(installed_libset)) + '''"
 LDFLAGS="''' + ' '.join(libset_ldflags(installed_libset)) + '''"
-LIBFLAGS="''' + ' '.join(libset_libflags(installed_libset)) + '''"
+LIBS="''' + ' '.join(libset_libflags(installed_libset)) + '''"
+PPFLAGS="$CPPFLAGS"
+LIBFLAGS="$LIBS"
 ''' + '\n'.join(
   ["%s='%s'"%(k,v) for k,v in sorted(metas.items()) if v is not None]
 ) + '''
