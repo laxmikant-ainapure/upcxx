@@ -66,6 +66,10 @@ To run a test script, see [docs/testing.md](docs/testing.md)
 
 ## ChangeLog
 
+### 2018.05.10: Release 2018.3.2
+
+This is a re-release of version 2018.3.0 (see below) that corrects a packaging error.
+
 ### 2018.03.31: Release 2018.3.0
 
 This release of UPC++ v1.0 supports most of the functionality specified in the 
