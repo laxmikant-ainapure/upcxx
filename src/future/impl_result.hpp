@@ -2,6 +2,7 @@
 #define _c1e666db_a184_42a1_8492_49b8a1d9259d
 
 #include <upcxx/future/core.hpp>
+#include <upcxx/future/future1.hpp>
 
 namespace upcxx {
   //////////////////////////////////////////////////////////////////////
@@ -103,9 +104,10 @@ namespace upcxx {
     struct future_dependency<
         future1<future_kind_result>
       > {
+      template<typename ...T>
       future_dependency(
           future_header_dependent *suc_hdr,
-          future1<future_kind_result> arg
+          future1<future_kind_result, T...> arg
         ) {
       }
       

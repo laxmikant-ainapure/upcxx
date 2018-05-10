@@ -36,13 +36,10 @@ platform_sanity_checks() {
         else
             KERNEL_GOOD=
         fi
-        if test -n "$CRAY_PRGENVINTEL" ; then
-            echo 'ERROR: UPC++ on Cray XC currently requires PrgEnv-gnu. Please do: `module switch PrgEnv-intel PrgEnv-gnu`'
-            exit 1
-        elif test -n "$CRAY_PRGENVCRAY" ; then
+        if test -n "$CRAY_PRGENVCRAY" ; then
             echo 'ERROR: UPC++ on Cray XC currently requires PrgEnv-gnu. Please do: `module switch PrgEnv-cray PrgEnv-gnu`'
             exit 1
-        elif test -n "$CRAY_PRGENVGNU" ; then
+        elif test -n "$CRAY_PRGENVGNU" || test -n "$CRAY_PRGENVINTEL" ; then
             CC=${CC:-cc}
             CXX=${CXX:-CC}
 	    if test -z "$CROSS" && test -z "$GASNET" ; then

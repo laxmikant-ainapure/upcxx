@@ -454,7 +454,7 @@ namespace upcxx {
       > {
       static constexpr bool empty = false;
 
-      cx_state<Cx, typename EventValues::template tuple_t<typename Cx::event_t>> state_;
+      cx_state<Cx, typename EventValues::template tuple_t<Cx::event_t>> state_;
       
       completions_state_head(Cx cx):
         state_{std::move(cx)} {
