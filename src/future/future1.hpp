@@ -119,29 +119,29 @@ namespace upcxx {
     template<int i=0>
     typename upcxx::tuple_element_or_void<i, results_type>::type result() const {
       return (typename upcxx::tuple_element_or_void<i, results_type>::type)
-        upcxx::get_or_void<i>(impl_.template result_lrefs_getter()());
+        upcxx::get_or_void<i>(impl_.result_lrefs_getter()());
     }
     
     results_type results() const {
-      return results_type{const_cast<impl_type&>(impl_).template result_rvals()};
+      return results_type{const_cast<impl_type&>(impl_).result_rvals()};
     }
     results_type result_tuple() const {
-      return results_type{const_cast<impl_type&>(impl_).template result_rvals()};
+      return results_type{const_cast<impl_type&>(impl_).result_rvals()};
     }
     
     template<int i=0>
     auto result_moved()
-      -> decltype(upcxx::get_or_void<i>(impl_.template result_rvals())) {
-      return upcxx::get_or_void<i>(impl_.template result_rvals());
+      -> decltype(upcxx::get_or_void<i>(impl_.result_rvals())) {
+      return upcxx::get_or_void<i>(impl_.result_rvals());
     }
     
     auto results_moved()
-      -> decltype(impl_.template result_rvals()) {
-      return impl_.template result_rvals();
+      -> decltype(impl_.result_rvals()) {
+      return impl_.result_rvals();
     }
     auto results_tuple_moved()
-      -> decltype(impl_.template result_rvals()) {
-      return impl_.template result_rvals();
+      -> decltype(impl_.result_rvals()) {
+      return impl_.result_rvals();
     }
     
     template<typename Fn>
