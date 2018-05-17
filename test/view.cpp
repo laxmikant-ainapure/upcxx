@@ -149,7 +149,7 @@ int main() {
     auto rpc_done1 = upcxx::rpc(
       /*target*/(rank_me() + 1)%rank_n(),
       
-      [](dist_object<int> &dobj,
+      [=](dist_object<int> &dobj,
          view<list<tuple<int,int>>> hunk1,
          view<view<tuple<int,int>>> hunk1v,
          view<int> hunk2,

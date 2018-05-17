@@ -345,7 +345,7 @@ namespace upcxx {
       promise<> &pro_;
 
       cx_state(promise_cx<Event> cx):
-        pro_{cx.pro_} {
+        pro_(cx.pro_) {
         pro_.require_anonymous(1);
       }
       

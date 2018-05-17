@@ -149,10 +149,10 @@ namespace upcxx {
           future_header_dependent *suc_hdr,
           future1<future_kind_when_all<Arg...>, T...> all_args
         ):
-        future_dependency_when_all_arg<i,Arg>{
+        future_dependency_when_all_arg<i,Arg>(
           suc_hdr,
           std::move(std::get<i>(all_args.impl_.args_))
-        }... {
+					      )... {
       }
       
       template<typename ...U>

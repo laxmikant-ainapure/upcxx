@@ -287,7 +287,7 @@ def lang_cxx11(cxt):
   """
   String list to engage C++11 language dialect for the C++ compiler.
   """
-  return ['-std=c++11']
+  return ['-std=c++14']
 
 @rule(path_arg='src')
 @coroutine
