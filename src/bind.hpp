@@ -156,8 +156,8 @@ namespace upcxx {
       auto operator()(
           typename binding<Fn>::off_wire_type &fn,
           typename binding<B>::off_wire_type &...b
-        ) /*->
-	    decltype(fn(b..., std::get<ai>(a)...))*/ {
+        ) ->
+        decltype(fn(b..., std::get<ai>(a)...)) {
         return fn(b..., std::get<ai>(a)...);
       }
     };
@@ -268,15 +268,15 @@ namespace upcxx {
         packing_is_ubound_tight<std::tuple<B...>>::value;
       
       template<typename Ub, bool skippable>
-      static auto ubound(Ub ub, const bound_function<Fn,B...> &fn, std::integral_constant<bool,skippable>) {
-        // -> decltype(
-        //   packing<std::tuple<typename binding<B>::on_wire_type...>>::ubound(
-        //     packing<typename binding<Fn>::on_wire_type>::ubound(
-        //       ub, fn.fn_, std::false_type()
-        //     ),
-        //     fn.b_, std::false_type()
-        //   )
-        // ) {
+      static auto ubound(Ub ub, const bound_function<Fn,B...> &fn, std::integral_constant<bool,skippable>)
+        -> decltype(
+          packing<std::tuple<typename binding<B>::on_wire_type...>>::ubound(
+            packing<typename binding<Fn>::on_wire_type>::ubound(
+              ub, fn.fn_, std::false_type()
+            ),
+            fn.b_, std::false_type()
+          )
+        ) {
         return packing<std::tuple<typename binding<B>::on_wire_type...>>::ubound(
           packing<typename binding<Fn>::on_wire_type>::ubound(
             ub, fn.fn_, /*skippable=*/std::false_type()
@@ -396,12 +396,12 @@ namespace upcxx {
   }
   
   template<typename Fn, typename ...B>
-  auto bind(Fn &&fn, B &&...b) {
-    // -> decltype(
-    //   detail::bind<typename binding<Fn&&>::stripped_type>()(
-    //     std::forward<Fn>(fn), std::forward<B>(b)...
-    //   )
-    // ) {
+  auto bind(Fn &&fn, B &&...b)
+    -> decltype(
+      detail::bind<typename binding<Fn&&>::stripped_type>()(
+        std::forward<Fn>(fn), std::forward<B>(b)...
+      )
+    ) {
     return detail::bind<typename binding<Fn&&>::stripped_type>()(
       std::forward<Fn>(fn), std::forward<B>(b)...
     );
@@ -419,13 +419,13 @@ namespace upcxx {
         std::tuple<P...> parms,
         upcxx::index_sequence<heads...>,
         std::integral_constant<int,tail>
-		   ) {
-      // -> decltype(
-      //   detail::bind<typename binding<typename std::tuple_element<tail, std::tuple<P...>>::type>::type>()(
-      //     std::move(std::get<tail>(parms)),
-      //     std::move(std::get<heads>(parms))...
-      //   )
-      // ) {
+      )
+      -> decltype(
+        detail::bind<typename binding<typename std::tuple_element<tail, std::tuple<P...>>::type>::type>()(
+          std::move(std::get<tail>(parms)),
+          std::move(std::get<heads>(parms))...
+        )
+      ) {
       return detail::bind<typename binding<typename std::tuple_element<tail, std::tuple<P...>>::type>::type>()(
         std::move(std::get<tail>(parms)),
         std::move(std::get<heads>(parms))...
@@ -434,14 +434,14 @@ namespace upcxx {
   }
   
   template<typename ...P>
-  auto bind_last(P &&...parm) {
-    // -> decltype(
-    //   detail::bind_last(
-    //     std::tuple<P&&...>{std::forward<P>(parm)...},
-    //     upcxx::make_index_sequence<sizeof...(P)-1>(),
-    //     std::integral_constant<int, sizeof...(P)-1>()
-    //   )
-    // ) {
+  auto bind_last(P &&...parm)
+    -> decltype(
+      detail::bind_last(
+        std::tuple<P&&...>{std::forward<P>(parm)...},
+        upcxx::make_index_sequence<sizeof...(P)-1>(),
+        std::integral_constant<int, sizeof...(P)-1>()
+      )
+    ) {
     return detail::bind_last(
       std::tuple<P&&...>{std::forward<P>(parm)...},
       upcxx::make_index_sequence<sizeof...(P)-1>(),
@@ -450,8 +450,8 @@ namespace upcxx {
   }
   
   template<typename Fn>
-  auto bind_last(Fn fn) {
-    // -> decltype(bind(std::move(fn))) {
+  auto bind_last(Fn fn)
+    -> decltype(bind(std::move(fn))) {
     return bind(std::move(fn));
   }
 }

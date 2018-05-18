@@ -159,13 +159,13 @@ namespace detail {
 
 namespace upcxx {
   template<typename Fn, typename ...Arg>
-  auto apply_as_future(Fn &&fn, Arg &&...arg) {
-    // -> decltype(
-    //   detail::apply_variadic_as_future_dispatch<
-    //       Fn&&, std::tuple<Arg&&...>,
-    //       typename std::result_of<Fn&&(Arg&&...)>::type
-    //     >()(static_cast<Fn&&>(fn), static_cast<Arg&&>(arg)...)
-    // ) {
+  auto apply_as_future(Fn &&fn, Arg &&...arg)
+    -> decltype(
+      detail::apply_variadic_as_future_dispatch<
+          Fn&&, std::tuple<Arg&&...>,
+          typename std::result_of<Fn&&(Arg&&...)>::type
+        >()(static_cast<Fn&&>(fn), static_cast<Arg&&>(arg)...)
+    ) {
     return detail::apply_variadic_as_future_dispatch<
         Fn&&, std::tuple<Arg&&...>,
         typename std::result_of<Fn&&(Arg&&...)>::type

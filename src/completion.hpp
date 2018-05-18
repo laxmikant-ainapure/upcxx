@@ -447,14 +447,17 @@ namespace upcxx {
       template<typename Event, typename ...V>
       void operator()(V&&...) {/*nop*/}
     };
-    
+
+    template<typename Cx>
+    using cx_event_t = typename Cx::event_t;
+
     template<typename EventValues, typename Cx>
     struct completions_state_head<
         /*event_enabled=*/true, EventValues, Cx
       > {
       static constexpr bool empty = false;
 
-      cx_state<Cx, typename EventValues::template tuple_t<Cx::event_t>> state_;
+      cx_state<Cx, typename EventValues::template tuple_t<cx_event_t<Cx>>> state_;
       
       completions_state_head(Cx cx):
         state_{std::move(cx)} {
