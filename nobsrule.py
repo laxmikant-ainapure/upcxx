@@ -13,13 +13,14 @@ from nobs import errorlog
 from nobs import os_extra
 from nobs import subexec
 
-cxx_exts = ('.cpp','.cxx','.c++','.C','.C++')
+cxx_exts = ('.cpp','.cxx','.c++','.cc','.C','.C++')
 c_exts = ('.c',)
-header_exts = ('.h','.hpp','.hxx','.h++')
+header_exts = ('.h','.hpp','.hxx','.h++','.hh')
 
 crawlable_dirs = [
   here('src'),
-  here('test')
+  here('test'),
+  here('bench')
 ]
 
 """
@@ -869,25 +870,8 @@ class gasnet_source:
       else: # kind == 'tarball-url'
         url = value
         tgz = me.mktemp()
+        yield download(url, to=tgz)
         
-        @async.launched
-        def download():
-          import urllib
-          try:
-            urllib.urlretrieve(url, tgz)
-          except IOError as e:
-            if e.args[0] == 'socket error':
-              raise errorlog.LoggedError(
-'Internet troubles.',
-'Socket error "%s" when attempting to download "%s".\n'%(e.args[1].strerror, url)
-              )
-            else:
-              raise
-        
-        print>>sys.stderr, 'Downloading %s' % url
-        yield download()
-        print>>sys.stderr, 'Finished    %s' % url
-      
       untar_dir = me.mkpath(key=None)
       os.makedirs(untar_dir)
       
@@ -1658,12 +1642,15 @@ def env(name, otherwise, universe=None):
   """
   try:
     got = os.environ[name]
-    try: got = int(got)
-    except ValueError: pass
+    if got == '':
+      got = otherwise
+    else:
+      try: got = int(got)
+      except ValueError: pass
   except KeyError:
     got = otherwise
   
-  if universe is not None and got not in universe:
+  if universe is not None and got != otherwise and got not in universe:
     raise errorlog.LoggedError('%s must be one of: %s'%(name, ', '.join(universe)))
   
   return got
@@ -1699,3 +1686,22 @@ def output_of(cmd_args):
     return (p.returncode, stdout, stderr)
   except OSError as e:
     return (e.errno, None, None)
+
+def download(url, to):
+  @async.launched
+  def doit():
+    import urllib
+    try:
+      urllib.urlretrieve(url, to)
+    except IOError as e:
+      if e.args[0] == 'socket error':
+        raise errorlog.LoggedError(
+  'Internet troubles.',
+  'Socket error "%s" when attempting to download "%s".\n'%(e.args[1].strerror, url)
+        )
+      else:
+        raise
+  
+  print>>sys.stderr, 'Downloading %s' % url
+  yield doit()
+  print>>sys.stderr, 'Finished    %s' % url
