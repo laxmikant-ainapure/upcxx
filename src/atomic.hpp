@@ -5,6 +5,8 @@
 #include <upcxx/completion.hpp>
 #include <upcxx/global_ptr.hpp>
 
+#include <upcxx/backend/gasnet/runtime.hpp>
+
 #include <climits>
 #include <cstdint>
 #include <vector>
@@ -18,7 +20,11 @@ namespace upcxx {
                                inc, fetch_inc,
                                dec, fetch_dec,
                                compare_exchange };
-
+  
+  namespace detail {
+    enum class amo_done : int { none, operation };
+  }
+  
   // Atomic domain for an ?int*_t type.
   template<typename T>
   class atomic_domain {
@@ -40,11 +46,14 @@ namespace upcxx {
       int atomic_gex_ops = 0;
       // The opaque gasnet atomic domain handle.
       std::uintptr_t ad_gex_handle = 0;
-
+      
       // call to backend gasnet function
-      void call_gex_AD_OpNB(T*, upcxx::global_ptr<T>, atomic_op, T, T,
-                            std::memory_order, backend::gasnet::handle_cb*);
-
+      detail::amo_done inject(
+        T*, upcxx::global_ptr<T>, atomic_op, T, T,
+        std::memory_order order,
+        backend::gasnet::handle_cb*
+      );
+      
       // event values for non-fetching operations
       struct nofetch_aop_event_values {
         template<typename Event>
@@ -102,15 +111,33 @@ namespace upcxx {
         UPCXX_ASSERT(atomic_gex_ops != 0 || ad_gex_handle != 0, "Atomic domain is not constructed");
         UPCXX_ASSERT((detail::completions_has_event<Cxs, operation_cx_event>::value));
         UPCXX_ASSERT(gptr != nullptr, "Global pointer for atomic operation is null");
+        
         // we only have local completion, not remote
         using cxs_here_t = detail::completions_state<detail::event_is_here,
             fetch_aop_event_values, Cxs>;
+        
         // Create the callback object
         auto *cb = new fetch_op_cb<cxs_here_t>{cxs_here_t{std::move(cxs)}};
+        
         auto returner = detail::completions_returner<detail::event_is_here,
             fetch_aop_event_values, Cxs>{cb->state_here};
+        
         // execute the backend gasnet function
-        call_gex_AD_OpNB(&cb->result, gptr, aop, val1, val2, order, cb);
+        detail::amo_done done = this->inject(
+          &cb->result, gptr, aop, val1, val2, order, cb
+        );
+        
+        switch(done) {
+        case detail::amo_done::none:
+          backend::gasnet::register_cb(cb);
+          backend::gasnet::after_gasnet();
+          break;
+        case detail::amo_done::operation:
+        default:
+          backend::gasnet::get_handle_cb_queue().execute_outside(cb);
+          break;
+        }
+        
         return returner();
       }
 
@@ -121,15 +148,35 @@ namespace upcxx {
         UPCXX_ASSERT(atomic_gex_ops != 0 || ad_gex_handle != 0, "Atomic domain is not constructed");
         UPCXX_ASSERT((detail::completions_has_event<Cxs, operation_cx_event>::value));
         UPCXX_ASSERT(gptr != nullptr, "Global pointer for atomic operation is null");
+        
         // we only have local completion, not remote
         using cxs_here_t = detail::completions_state<detail::event_is_here,
             nofetch_aop_event_values, Cxs>;
-        // Create the callback object..
-        auto *cb = new nofetch_op_cb<cxs_here_t>{cxs_here_t{std::move(cxs)}};
+        
+        // Create the callback object on stack..
+        nofetch_op_cb<cxs_here_t> cb(cxs_here_t(std::move(cxs)));
+        
         auto returner = detail::completions_returner<detail::event_is_here,
-            nofetch_aop_event_values, Cxs>{cb->state_here};
+            nofetch_aop_event_values, Cxs>{cb.state_here};
+        
         // execute the backend gasnet function
-        call_gex_AD_OpNB(nullptr, gptr, aop, val1, val2, order, cb);
+        detail::amo_done done = this->inject(
+          nullptr, gptr, aop, val1, val2, order, &cb
+        );
+        
+        switch(done) {
+        case detail::amo_done::none:
+          // move callback to heap since it lives asynchronously
+          backend::gasnet::register_cb(new decltype(cb)(std::move(cb)));
+          backend::gasnet::after_gasnet();
+          break;
+        case detail::amo_done::operation:
+        default:
+          // do callback's execute_and_delete, minus the delete
+          cb.state_here.template operator()<operation_cx_event>();
+          break;
+        }
+        
         return returner();
       }
 

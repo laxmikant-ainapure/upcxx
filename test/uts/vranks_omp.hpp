@@ -22,13 +22,7 @@ namespace vranks {
   }
   
   inline void progress() {
-    bool worked = false;
-    auto &tls = upcxx::detail::the_persona_tls;
-    tls.foreach_active_as_top(
-      [&](upcxx::persona &p) {
-        worked |= 0 != tls.burst(p, upcxx::progress_level::user);
-      }
-    );
+    bool worked = upcxx::detail::the_persona_tls.persona_only_progress();
     
     static thread_local int nothings = 0;
     

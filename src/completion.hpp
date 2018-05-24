@@ -307,7 +307,7 @@ namespace upcxx {
       cx_state(future_cx<Event>) {}
       
       void operator()(T ...vals) {
-        backend::during_user(std::move(pro_), std::forward<T>(vals)...);
+        backend::fulfill_during_user(std::move(pro_), std::tuple<T...>(std::forward<T>(vals)...));
       }
     };
 
@@ -322,7 +322,7 @@ namespace upcxx {
       }
       
       void operator()(T ...vals) {
-        backend::during_user(pro_, std::forward<T>(vals)...);
+        backend::fulfill_during_user(pro_, std::tuple<T...>(std::forward<T>(vals)...));
       }
     };
     // event is empty
@@ -336,8 +336,7 @@ namespace upcxx {
       }
       
       void operator()() {
-        promise<T...> *pro = &pro_;
-        backend::during_user([=]() { pro->fulfill_anonymous(1); });
+        backend::fulfill_during_user(pro_, 1);
       }
     };
     // promise and event are empty
@@ -351,8 +350,7 @@ namespace upcxx {
       }
       
       void operator()() {
-        promise<> *pro = &pro_;
-        backend::during_user([=]() { pro->fulfill_anonymous(1); });
+        backend::fulfill_during_user(pro_, 1);
       }
     };
     

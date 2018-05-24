@@ -65,11 +65,6 @@ def upcxx_backend_id():
              otherwise="gasnet_seq",
              universe=("gasnet_seq","gasnet_par"))
 
-def upcxx_lpc_inbox_id():
-  return env('UPCXX_LPC_INBOX',
-             otherwise='lockfree',
-             universe=('locked','lockfree','syncfree'))
-
 @cached # only execute once per nobs invocation
 def _pthread():
   """

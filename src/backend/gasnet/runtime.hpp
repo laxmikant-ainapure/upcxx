@@ -71,6 +71,81 @@ namespace gasnet {
     void *command_buf,
     std::size_t buf_size, std::size_t buf_align
   );
+  
+  // The receiver-side rpc message type. Inherits lpc base type since rpc's
+  // reside in the lpc queues.
+  struct rpc_as_lpc: detail::lpc_base {
+    detail::lpc_vtable the_vtbl;
+    void *payload; // serialized rpc command
+    bool is_rdzv; // was this shipped via rdzv?
+    intrank_t rank_s; // only used when shipped via rdzv
+    
+    // rpc producer's should use `payload_of` and `cleanup` as the similarly
+    // named template parameters to `command<lpc_base*>::pack()`. That will allow
+    // the `executor` function of the command to be used as the `execute_and_delete`
+    // of the lpc.
+    static void* payload_of(detail::lpc_base *me) {
+      return static_cast<rpc_as_lpc*>(me)->payload;
+    }
+    
+    template<bool never_rdzv>
+    static void cleanup(detail::lpc_base *me1);
+    
+    // Build copy of a packed command buffer (upcxx/command.hpp) as a rpc_as_lpc.
+    static rpc_as_lpc* build_copy(
+      void *cmd_buf,
+      std::size_t cmd_size,
+      std::size_t cmd_alignment // alignment requirement of packing
+    );
+    
+    // Allocate space to receive a rdzv. The payload should be used as the dest
+    // of the GET. When the GET completes, the command executor should be copied
+    // into our `execute_and_delete`.
+    static rpc_as_lpc* build_rdzv_lz(
+      intrank_t rank_s,
+      std::size_t cmd_size,
+      std::size_t cmd_alignment // alignment requirement of packing
+    );
+  };
+  
+  template<typename ParcelSize,
+           bool is_small = ParcelSize::all_static && (ParcelSize::static_size <= 1024)>
+  struct eager_buffer;
+
+  template<typename ParcelSize>
+  struct eager_buffer<ParcelSize, /*is_small=*/false> {
+    void *big_ = nullptr;
+    typename std::aligned_storage<
+        512,
+        ParcelSize::is_align_static ? ParcelSize::static_align : 64
+      >::type tiny_;
+    
+    void* allocate(ParcelSize ub) {
+      if(ub.size <= 512 && ub.align <= 64) {
+        big_ = nullptr;
+        return &tiny_;
+      }
+      else {
+        if(posix_memalign(&big_, ub.align, ub.size))
+          {/*Ignoring return value, casting to (void) is not enough!*/}
+        return big_;
+      }
+    }
+    
+    ~eager_buffer() {
+      if(big_ != nullptr)
+        std::free(big_);
+    }
+  };
+
+  template<typename ParcelSize>
+  struct eager_buffer<ParcelSize, /*is_small=*/true> {
+    typename std::aligned_storage<ParcelSize::size, ParcelSize::align>::type buf_;
+
+    void* allocate(ParcelSize) {
+      return &buf_;
+    }
+  };
 }}}
 
 //////////////////////////////////////////////////////////////////////
@@ -109,76 +184,37 @@ namespace backend {
   
   //////////////////////////////////////////////////////////////////////
   // send_am_{master|persona}
-
-  template<typename ParcelSize,
-           bool is_small = ParcelSize::all_static && (ParcelSize::static_size <= 1024)>
-  struct eager_buffer;
-
-  template<typename ParcelSize>
-  struct eager_buffer<ParcelSize, /*is_small=*/false> {
-    void *big_ = nullptr;
-    typename std::aligned_storage<
-        512,
-        ParcelSize::is_align_static ? ParcelSize::static_align : 64
-      >::type tiny_;
-    
-    void* allocate(ParcelSize ub) {
-      if(ub.size <= 512 && ub.align <= 64) {
-        big_ = nullptr;
-        return &tiny_;
-      }
-      else {
-        if(posix_memalign(&big_, ub.align, ub.size))
-          {/* ignoring return value */}
-        return big_;
-      }
-    }
-    
-    ~eager_buffer() {
-      if(big_ != nullptr)
-        std::free(big_);
-    }
-  };
-
-  template<typename ParcelSize>
-  struct eager_buffer<ParcelSize, /*is_small=*/true> {
-    typename std::aligned_storage<ParcelSize::size, ParcelSize::align>::type buf_;
-
-    void* allocate(ParcelSize) {
-      return &buf_;
-    }
-  };
-
-  inline void am_cleanup(bool use_free, void *buf) {
-    if(use_free)
-      std::free(buf);
-    else
-      upcxx::deallocate(buf);
-  }
   
   template<upcxx::progress_level level, typename Fn1>
   void send_am_master(intrank_t recipient, Fn1 &&fn) {
     UPCXX_ASSERT(!UPCXX_BACKEND_GASNET_SEQ || backend::master.active_with_caller());
-
+    
+    using gasnet::eager_buffer;
+    using gasnet::rpc_as_lpc;
+    
     using Fn = typename std::decay<Fn1>::type;
     
-    auto ub = command<bool,void*>::ubound(parcel_size_empty(), fn);
+    auto ub = command<detail::lpc_base*>::ubound(parcel_size_empty(), fn);
     
-    bool rdzv = ub.size > gasnet::am_size_rdzv_cutover_min &&
-                ub.size > gasnet::am_size_rdzv_cutover;
+    constexpr bool definitely_eager = ub.static_size <= gasnet::am_size_rdzv_cutover_min;
+    bool eager = ub.size <= gasnet::am_size_rdzv_cutover_min &&
+                 ub.size <= gasnet::am_size_rdzv_cutover;
 
     eager_buffer<decltype(ub)> ebuf;
     void *buf;
     
-    if(!rdzv)
+    if(eager)
       buf = ebuf.allocate(ub);
     else
       buf = upcxx::allocate(ub.size, ub.align);
+    
+    parcel_writer w(buf);
+    command<detail::lpc_base*>::template pack<
+        rpc_as_lpc::payload_of,
+        rpc_as_lpc::template cleanup</*never_rdzv=*/definitely_eager>
+      >(w, ub.size, fn);
 
-    parcel_writer w{buf};
-    command<bool,void*>::pack<am_cleanup>(w, ub.size, fn);
-
-    if(!rdzv)
+    if(eager)
       gasnet::send_am_eager_master(level, recipient, buf, w.size(), w.align());
     else
       gasnet::template send_am_rdzv<level>(recipient, /*master*/nullptr, buf, w.size(), w.align());
@@ -192,12 +228,16 @@ namespace backend {
     ) {
     UPCXX_ASSERT(!UPCXX_BACKEND_GASNET_SEQ || backend::master.active_with_caller());
     
-    auto ub = command<bool,void*>::ubound(parcel_size_empty(), fn);
+    using gasnet::eager_buffer;
+    using gasnet::rpc_as_lpc;
     
+    auto ub = command<detail::lpc_base*>::ubound(parcel_size_empty(), fn);
+    
+    constexpr bool definitely_eager = ub.static_size <= gasnet::am_size_rdzv_cutover_min;
     bool eager = ub.size <= gasnet::am_size_rdzv_cutover_min ||
                  ub.size <= gasnet::am_size_rdzv_cutover;
 
-    eager_buffer<decltype(ub)> ebuf;
+    gasnet::eager_buffer<decltype(ub)> ebuf;
     void *buf;
     
     if(eager)
@@ -205,8 +245,11 @@ namespace backend {
     else
       buf = upcxx::allocate(ub.size, ub.align);
     
-    parcel_writer w{buf};
-    command<bool,void*>::pack<am_cleanup>(w, ub.size, fn);
+    parcel_writer w(buf);
+    command<detail::lpc_base*>::template pack<
+        rpc_as_lpc::payload_of,
+        rpc_as_lpc::template cleanup</*never_rdzv=*/definitely_eager>
+      >(w, ub.size, fn);
     
     if(eager)
       gasnet::send_am_eager_persona(level, recipient_rank, recipient_persona, buf, w.size(), w.align());
@@ -224,46 +267,50 @@ namespace gasnet {
   //////////////////////////////////////////////////////////////////////
   // register_handle_cb
   
-  inline void register_cb(handle_cb *cb) {
+  inline handle_cb_queue& get_handle_cb_queue() {
     UPCXX_ASSERT(!UPCXX_BACKEND_GASNET_SEQ || backend::master.active_with_caller());
 
     #if UPCXX_BACKEND_GASNET_SEQ
-      gasnet::master_hcbs.enqueue(cb);
+      return gasnet::master_hcbs;
     #elif UPCXX_BACKEND_GASNET_PAR
-      upcxx::current_persona().backend_state_.hcbs.enqueue(cb);
+      return upcxx::current_persona().backend_state_.hcbs;
     #endif
+  }
+  
+  inline void register_cb(handle_cb *cb) {
+    get_handle_cb_queue().enqueue(cb);
   }
   
   //////////////////////////////////////////////////////////////////////
   // send_am_restricted
   
+  inline void* restricted_payload_of(void *p) { return p; }
+  inline void restricted_cleanup(void *p) {}
+  
   template<typename Fn>
   void send_am_restricted(intrank_t recipient, Fn &&fn) {
     UPCXX_ASSERT(!UPCXX_BACKEND_GASNET_SEQ || backend::master.active_with_caller());
     
-    auto ub = command<>::ubound(parcel_size_empty(), fn);
-    
-    bool rdzv = ub.size > gasnet::am_size_rdzv_cutover_min &&
-                ub.size > gasnet::am_size_rdzv_cutover;
-
+    auto ub = command<detail::lpc_base*>::ubound(parcel_size_empty(), fn);
     eager_buffer<decltype(ub)> ebuf;
-    void *buf;
+    void *buf = ebuf.allocate(ub);
     
-    if(!rdzv)
-      buf = ebuf.allocate(ub);
-    else
-      buf = upcxx::allocate(ub.size, ub.align);
+    parcel_writer w(buf);
+    command<void*>::pack<
+        restricted_payload_of,
+        restricted_cleanup
+      >(w, ub.size, fn);
     
-    parcel_writer w{buf};
-    command<>::pack(w, ub.size, fn);
-    
-    if(!rdzv)
-      gasnet::send_am_eager_restricted(recipient, buf, w.size(), w.align());
-    else {
-      gasnet::send_am_rdzv<progress_level::internal>(
-        recipient, /*master*/nullptr, buf, w.size(), w.align()
-      );
-    }
+    gasnet::send_am_eager_restricted(recipient, buf, w.size(), w.align());
+  }
+  
+  //////////////////////////////////////////////////////////////////////
+  // rpc_as_lpc
+  
+  template<>
+  inline void rpc_as_lpc::cleanup</*never_rdzv=*/true>(detail::lpc_base *me1) {
+    rpc_as_lpc *me = static_cast<rpc_as_lpc*>(me1);
+    std::free(me->payload);
   }
 }}}
 

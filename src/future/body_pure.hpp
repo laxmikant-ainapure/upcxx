@@ -30,16 +30,16 @@ namespace detail {
     void leave_active(future_header_dependent *hdr) {
       void *storage = this->storage_;
       
-      if(0 == hdr->refs_drop(1)) { // left active queue
+      if(0 == hdr->decref(1)) { // left active queue
         this->dep_.cleanup_ready();
         this->~future_body_pure();
-        ::operator delete(storage);
+        future_body::operator delete(storage);
         delete hdr;
       }
       else {
         future_header *result = this->dep_.cleanup_ready_get_header();
         this->~future_body_pure();
-        ::operator delete(storage);
+        future_body::operator delete(storage);
         
         hdr->enter_ready(result);
       }

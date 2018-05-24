@@ -93,7 +93,7 @@ namespace upcxx {
         future_header_dependent *hdr = new future_header_dependent;
         
         typedef future_body_pure<future1<future_kind_mapped<FuArg,Fn>,T...>> body_type;
-        void *body_mem = ::operator new(sizeof(body_type));
+        void *body_mem = body_type::operator new(sizeof(body_type));
         
         body_type *body = new(body_mem) body_type{
           body_mem, hdr, std::move(*this)
@@ -139,10 +139,10 @@ namespace upcxx {
       }
       
       future_header* cleanup_ready_get_header() {
-        future_header *hdr = new future_header_result<T...>{
-          /*not_ready=*/false,
-          this->result_lrefs_getter()()
-        };
+        future_header *hdr = &(new future_header_result<T...>(
+            /*not_ready=*/false,
+            this->result_lrefs_getter()()
+          ))->base_header;
         
         dep_.cleanup_ready();
         

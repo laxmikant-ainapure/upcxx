@@ -9,6 +9,7 @@
 #include <upcxx/future.hpp>
 #include <upcxx/persona.hpp>
 
+#include <memory>
 #include <tuple>
 
 ////////////////////////////////////////////////////////////////////////
@@ -48,15 +49,26 @@ namespace backend {
   //////////////////////////////////////////////////////////////////////
 
   // inclusive lower and exclusive upper bounds for local_team ranks
-  extern intrank_t local_peer_lb, local_peer_ub;
+  extern intrank_t pshm_peer_lb, pshm_peer_ub;
   
+  // Given index in local_team:
+  //   local_minus_remote: Encodes virtual address translation which is added
+  //     to the raw encoding to get local virtual address.
+  //   vbase: Local virtual address mapping to beginning of peer's segment
+  //   size: Size of peer's segment in bytes.
+  extern std::unique_ptr<std::uintptr_t[/*local_team.size()*/]> pshm_local_minus_remote;
+  extern std::unique_ptr<std::uintptr_t[/*local_team.size()*/]> pshm_vbase;
+  extern std::unique_ptr<std::uintptr_t[/*local_team.size()*/]> pshm_size;
+
   inline bool rank_is_local(intrank_t r) {
-    return local_peer_lb <= r && r < local_peer_ub;
+    return pshm_peer_lb <= r && r < pshm_peer_ub;
   }
   
   void* localize_memory(intrank_t rank, std::uintptr_t raw);
+  void* localize_memory_nonnull(intrank_t rank, std::uintptr_t raw);
   
-  std::tuple<intrank_t/*rank*/, std::uintptr_t/*raw*/> globalize_memory(void *addr);
+  std::tuple<intrank_t/*rank*/, std::uintptr_t/*raw*/> globalize_memory(void const *addr);
+  std::uintptr_t globalize_memory_nonnull(intrank_t rank, void const *addr);
 }}
 
 ////////////////////////////////////////////////////////////////////////
@@ -86,35 +98,67 @@ namespace backend {
   }
   
   template<typename ...T>
-  void during_user(promise<T...> &&pro, T ...vals) {
-    struct deferred {
-      promise<T...> pro;
-      std::tuple<T...> vals;
-      void operator()() { pro.fulfill_result(vals); }
-    };
-    
-    during_user(
-      deferred{
-        std::move(pro),
-        std::tuple<T...>{std::move(vals)...}
-      }
-    );
+  void fulfill_during_user(promise<T...> &pro, std::tuple<T...> vals) {
+    auto &tls = detail::the_persona_tls;
+    tls.fulfill_during_user_of_top(pro, std::move(vals));
+  }
+  template<typename ...T>
+  void fulfill_during_user(promise<T...> &pro, std::intptr_t anon) {
+    auto &tls = detail::the_persona_tls;
+    tls.fulfill_during_user_of_top(pro, anon);
   }
   
   template<typename ...T>
-  void during_user(promise<T...> &pro, T ...vals) {
-    struct deferred {
-      promise<T...> *pro;
-      std::tuple<T...> vals;
-      void operator()() { pro->fulfill_result(vals); }
-    };
-    
-    during_user(
-      deferred{
-        &pro,
-        std::tuple<T...>{std::move(vals)...}
-      }
+  void fulfill_during_user(promise<T...> &&pro, std::tuple<T...> vals) {
+    auto &tls = detail::the_persona_tls;
+    tls.fulfill_during_user_of_top(std::move(pro), std::move(vals));
+  }
+  template<typename ...T>
+  void fulfill_during_user(promise<T...> &&pro, std::intptr_t anon) {
+    auto &tls = detail::the_persona_tls;
+    tls.fulfill_during_user_of_top(std::move(pro), anon);
+  }
+  
+  inline void* localize_memory_nonnull(intrank_t rank, std::uintptr_t raw) {
+    UPCXX_ASSERT(
+      pshm_peer_lb <= rank && rank < pshm_peer_ub,
+      "Rank "<<rank<<" is not local with current rank ("<<upcxx::rank_me()<<")."
     );
+
+    intrank_t peer = rank - pshm_peer_lb;
+    std::uintptr_t u = raw + pshm_local_minus_remote[peer];
+
+    UPCXX_ASSERT(
+      u - pshm_vbase[peer] < pshm_size[peer], // unsigned arithmetic handles both sides of the interval test
+      "Memory address (raw="<<raw<<", local="<<reinterpret_cast<void*>(u)<<") is not within shared segment of rank "<<rank<<"."
+    );
+
+    return reinterpret_cast<void*>(u);
+  }
+  
+  inline void* localize_memory(intrank_t rank, uintptr_t raw) {
+    if(raw == reinterpret_cast<uintptr_t>(nullptr))
+      return nullptr;
+    
+    return localize_memory_nonnull(rank, raw);
+  }
+  
+  inline std::uintptr_t globalize_memory_nonnull(intrank_t rank, void const *addr) {
+    UPCXX_ASSERT(
+      pshm_peer_lb <= rank && rank < pshm_peer_ub,
+      "Rank "<<rank<<" is not local with current rank ("<<upcxx::rank_me()<<")."
+    );
+    
+    std::uintptr_t u = reinterpret_cast<std::uintptr_t>(addr);
+    intrank_t peer = rank - pshm_peer_lb;
+    std::uintptr_t raw = u - pshm_local_minus_remote[peer];
+    
+    UPCXX_ASSERT(
+      u - pshm_vbase[peer] < pshm_size[peer], // unsigned arithmetic handles both sides of the interval test
+      "Memory address (raw="<<raw<<", local="<<addr<<") is not within shared segment of rank "<<rank<<"."
+    );
+    
+    return raw;
   }
 }}
   

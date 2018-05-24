@@ -26,26 +26,40 @@ namespace upcxx {
   }
   
   //////////////////////////////////////////////////////////////////////
+  // internal promise accessors
+  
+  namespace detail {
+    template<typename ...T>
+    promise_meta* promise_meta_of(promise<T...> &pro);
+    
+    template<typename ...T>
+    future_header_promise<T...>* promise_header_of(promise<T...> &pro);
+    
+    template<typename ...T>
+    future_header_promise<T...>* promise_header_of(promise_meta *meta);
+  }
+  
+  //////////////////////////////////////////////////////////////////////
   // promise implemention
   
   template<typename ...T>
   class promise:
     private detail::future_impl_shref<
-      detail::future_header_ops_result, T...
+      detail::future_header_ops_promise, T...
     > {
     
-    std::intptr_t countdown_;
+    friend detail::promise_meta* detail::promise_meta_of<T...>(promise<T...>&);
+    friend detail::future_header_promise<T...>* detail::promise_header_of<T...>(promise<T...> &pro);
     
     promise(detail::future_header *hdr):
-      detail::future_impl_shref<detail::future_header_ops_result, T...>{hdr} {
+      detail::future_impl_shref<detail::future_header_ops_promise, T...>(hdr) {
     }
     
   public:
     promise():
-      detail::future_impl_shref<detail::future_header_ops_result, T...>{
-        new detail::future_header_result<T...>
-      },
-      countdown_{1} {
+      detail::future_impl_shref<detail::future_header_ops_promise, T...>(
+        &(new detail::future_header_promise<T...>)->base_header_result
+      ) {
     }
     
     promise(const promise&) = delete;
@@ -54,67 +68,77 @@ namespace upcxx {
     promise& operator=(promise &&) = default;
     
     void require_anonymous(std::intptr_t n) {
-      UPCXX_ASSERT(this->countdown_ + n > 0);
-      this->countdown_ += n;
+      UPCXX_ASSERT(detail::promise_meta_of(*this)->countdown + n > 0);
+      detail::promise_meta_of(*this)->countdown += n;
     }
     
     void fulfill_anonymous(std::intptr_t n) {
-      UPCXX_ASSERT(this->countdown_ - n >= 0);
-      if(0 == (this->countdown_ -= n)) {
-        auto *hdr = static_cast<detail::future_header_result<T...>*>(this->hdr_);
-        hdr->readify();
-      }
+      auto *hdr = reinterpret_cast<detail::future_header_promise<T...>*>(this->hdr_);
+      hdr->fulfill(n);
     }
     
     template<typename ...U>
     void fulfill_result(U &&...values) {
-      auto *hdr = static_cast<detail::future_header_result<T...>*>(this->hdr_);
-      hdr->construct_results(std::forward<U>(values)...);
-      if(0 == --this->countdown_)
-        hdr->readify();
+      auto *hdr = reinterpret_cast<detail::future_header_promise<T...>*>(this->hdr_);
+      hdr->base_header_result.construct_results(std::forward<U>(values)...);
+      hdr->fulfill(1);
     }
     
     // *** not spec'd ***
     template<typename ...U>
     void fulfill_result(std::tuple<U...> &&values) {
-      auto *hdr = static_cast<detail::future_header_result<T...>*>(this->hdr_);
-      hdr->construct_results(std::move(values));
-      if(0 == --this->countdown_)
-        hdr->readify();
+      auto *hdr = reinterpret_cast<detail::future_header_promise<T...>*>(this->hdr_);
+      hdr->base_header_result.construct_results(std::move(values));
+      hdr->fulfill(1);
     }
     
     future1<
-        detail::future_kind_shref<detail::future_header_ops_result>,
+        detail::future_kind_shref<detail::future_header_ops_promise>,
         T...
       >
     finalize() {
-      UPCXX_ASSERT(this->countdown_-1 >= 0);
-
-      if(0 == --this->countdown_) {
-        auto *hdr = static_cast<detail::future_header_result<T...>*>(this->hdr_);
-        hdr->readify();
-      }
+      auto *hdr = reinterpret_cast<detail::future_header_promise<T...>*>(this->hdr_);
+      hdr->fulfill(1);
       
       return static_cast<
           detail::future_impl_shref<
-            detail::future_header_ops_result,
+            detail::future_header_ops_promise,
             T...
           > const&
         >(*this);
     }
     
     future1<
-        detail::future_kind_shref<detail::future_header_ops_result>,
+        detail::future_kind_shref<detail::future_header_ops_promise>,
         T...
       >
     get_future() const {
       return static_cast<
           detail::future_impl_shref<
-            detail::future_header_ops_result,
+            detail::future_header_ops_promise,
             T...
           > const&
         >(*this);
     }
   };
-}  
+  
+  //////////////////////////////////////////////////////////////////////////////
+  
+  namespace detail {
+    template<typename ...T>
+    promise_meta* promise_meta_of(promise<T...> &pro) {
+      return &reinterpret_cast<future_header_promise<T...>*>(pro.hdr_)->pro_meta;
+    }
+    
+    template<typename ...T>
+    future_header_promise<T...>* promise_header_of(promise<T...> &pro) {
+      return reinterpret_cast<future_header_promise<T...>*>(pro.hdr_);
+    }
+    
+    template<typename ...T>
+    future_header_promise<T...>* promise_header_of(promise_meta *meta) {
+      return (future_header_promise<T...>*)((char*)meta - offsetof(future_header_promise<T...>, pro_meta));
+    }
+  }
+}
 #endif

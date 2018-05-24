@@ -1,6 +1,5 @@
 #include <upcxx/backend/gasnet/runtime.hpp>
 #include <upcxx/backend/gasnet/runtime_internal.hpp>
-#include <upcxx/backend/gasnet/rpc_inbox.hpp>
 
 #include <upcxx/os_env.hpp>
 #include <upcxx/team.hpp>
@@ -9,6 +8,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <memory>
+#include <mutex>
 
 #include <sched.h>
 #include <unistd.h>
@@ -28,8 +28,7 @@ using upcxx::progress_level;
 using backend::persona_state;
 
 using gasnet::handle_cb_queue;
-using gasnet::rpc_inbox;
-using gasnet::rpc_message;
+using gasnet::rpc_as_lpc;
 
 using namespace std;
 
@@ -65,8 +64,12 @@ intrank_t backend::rank_me; // leave undefined so valgrind can catch it.
 persona backend::master;
 persona_scope *backend::initial_master_scope = nullptr;
 
-intrank_t backend::local_peer_lb;
-intrank_t backend::local_peer_ub;
+intrank_t backend::pshm_peer_lb;
+intrank_t backend::pshm_peer_ub;
+
+unique_ptr<uintptr_t[/*local_team.size()*/]> backend::pshm_local_minus_remote;
+unique_ptr<uintptr_t[/*local_team.size()*/]> backend::pshm_vbase;
+unique_ptr<uintptr_t[/*local_team.size()*/]> backend::pshm_size;
 
 ////////////////////////////////////////////////////////////////////////
 // from: upcxx/backend/gasnet/runtime.hpp
@@ -85,24 +88,11 @@ gex_TM_t gasnet::world_team;
 ////////////////////////////////////////////////////////////////////////
 
 namespace {
-  // master-owned
-  rpc_inbox rpcs_internal_;
-  rpc_inbox rpcs_user_;
-
-  // Given index in local_team:
-  //   local_minus_remote: Encodes virtual address translation which is added
-  //     to the raw encoding to get local virtual address.
-  //   vbase: Local virtual address mapping to beginning of peer's segment
-  //   size: Size of peer's segment in bytes.
-  unique_ptr<uintptr_t[/*local_team.size()*/]> local_mem_local_minus_remote;
-  unique_ptr<uintptr_t[/*local_team.size()*/]> local_mem_vbase;
-  unique_ptr<uintptr_t[/*local_team.size()*/]> local_mem_size;
-
   // List of {vbase, peer} pairs (in seperate arrays) sorted by `vbase`, where
   // `vbase` is the local virt-address base for peer segments and `peer` is the
   // local peer index owning that segment.
-  unique_ptr<uintptr_t[/*local_team.size()*/]> local_mem_owner_vbase;
-  unique_ptr<intrank_t[/*local_team.size()*/]> local_mem_owner_peer;
+  unique_ptr<uintptr_t[/*local_team.size()*/]> pshm_owner_vbase;
+  unique_ptr<intrank_t[/*local_team.size()*/]> pshm_owner_peer;
 
   #if UPCXX_BACKEND_GASNET_SEQ
     // Set by the thread which initiates gasnet since in SEQ only that thread
@@ -251,28 +241,28 @@ void upcxx::init() {
 
   if(!contiguous_nbhd) {
     // Discontiguous rank-set is collapsed to singleton set of "me"
-    backend::local_peer_lb = backend::rank_me;
-    backend::local_peer_ub = backend::rank_me + 1;
+    backend::pshm_peer_lb = backend::rank_me;
+    backend::pshm_peer_ub = backend::rank_me + 1;
     peer_n = 1;
     peer_me = 0;
   }
   else {
-    backend::local_peer_lb = nbhd[0].gex_jobrank;
-    backend::local_peer_ub = nbhd[0].gex_jobrank + peer_n;
+    backend::pshm_peer_lb = nbhd[0].gex_jobrank;
+    backend::pshm_peer_ub = nbhd[0].gex_jobrank + peer_n;
   }
 
   // Build upcxx::local_team()
   new(&detail::the_local_team.raw) upcxx::team(
     detail::internal_only(),
-    backend::local_peer_lb,
-    backend::local_peer_ub
+    backend::pshm_peer_lb,
+    backend::pshm_peer_ub
   );
   
-  local_mem_local_minus_remote.reset(new uintptr_t[peer_n]);
-  local_mem_vbase.reset(new uintptr_t[peer_n]);
-  local_mem_size.reset(new uintptr_t[peer_n]);
-  local_mem_owner_vbase.reset(new uintptr_t[peer_n]);
-  local_mem_owner_peer.reset(new intrank_t[peer_n]);
+  backend::pshm_local_minus_remote.reset(new uintptr_t[peer_n]);
+  backend::pshm_vbase.reset(new uintptr_t[peer_n]);
+  backend::pshm_size.reset(new uintptr_t[peer_n]);
+  pshm_owner_vbase.reset(new uintptr_t[peer_n]);
+  pshm_owner_peer.reset(new intrank_t[peer_n]);
   
   for(gex_Rank_t p=0; p < peer_n; p++) {
     void *owner_vbase, *local_vbase;
@@ -280,30 +270,30 @@ void upcxx::init() {
 
     gex_Segment_QueryBound(
       /*team*/gasnet::world_team,
-      /*rank*/backend::local_peer_lb + p,
+      /*rank*/backend::pshm_peer_lb + p,
       &owner_vbase, &local_vbase, &size
     );
     
-    local_mem_local_minus_remote[p] = reinterpret_cast<uintptr_t>(local_vbase) - reinterpret_cast<uintptr_t>(owner_vbase);
-    local_mem_vbase[p] = reinterpret_cast<uintptr_t>(local_vbase);
-    local_mem_size[p] = size;
+    backend::pshm_local_minus_remote[p] = reinterpret_cast<uintptr_t>(local_vbase) - reinterpret_cast<uintptr_t>(owner_vbase);
+    backend::pshm_vbase[p] = reinterpret_cast<uintptr_t>(local_vbase);
+    backend::pshm_size[p] = size;
     
-    local_mem_owner_peer[p] = p; // initialize peer indices as identity permutation
+    pshm_owner_peer[p] = p; // initialize peer indices as identity permutation
   }
 
   // Sort peer indices according to their vbase. We use `std::qsort` instead of
   // `std::sort` because performance is not critical and qsort *hopefully*
   // generates a lot less code in the executable binary.
   std::qsort(
-    /*first*/local_mem_owner_peer.get(),
+    /*first*/pshm_owner_peer.get(),
     /*count*/peer_n,
     /*size*/sizeof(intrank_t),
     /*compare*/[](void const *pa, void const *pb)->int {
       intrank_t a = *static_cast<intrank_t const*>(pa);
       intrank_t b = *static_cast<intrank_t const*>(pb);
 
-      uintptr_t va = local_mem_vbase[a];
-      uintptr_t vb = local_mem_vbase[b];
+      uintptr_t va = backend::pshm_vbase[a];
+      uintptr_t vb = backend::pshm_vbase[b];
       
       return va < vb ? -1 : va == vb ? 0 : +1;
     }
@@ -311,7 +301,7 @@ void upcxx::init() {
 
   // permute vbase's into sorted order
   for(gex_Rank_t i=0; i < peer_n; i++)
-    local_mem_owner_vbase[i] = local_mem_vbase[local_mem_owner_peer[i]];
+    pshm_owner_vbase[i] = backend::pshm_vbase[pshm_owner_peer[i]];
 
   //////////////////////////////////////////////////////////////////////////////
   // Exit barrier
@@ -379,50 +369,30 @@ void upcxx::deallocate(void *p) {
 //////////////////////////////////////////////////////////////////////
 // from: upcxx/backend.hpp
 
-void* backend::localize_memory(intrank_t rank, uintptr_t raw) {
-  if(raw == reinterpret_cast<uintptr_t>(nullptr))
-    return nullptr;
-  
-  UPCXX_ASSERT(
-    local_peer_lb <= rank && rank < local_peer_ub,
-    "Rank "<<rank<<" is not local with current rank ("<<upcxx::rank_me()<<")."
-  );
-
-  intrank_t peer = rank - local_peer_lb;
-  uintptr_t u = raw + local_mem_local_minus_remote[peer];
-
-  UPCXX_ASSERT(
-    u - local_mem_vbase[peer] < local_mem_size[peer], // unsigned arithmetic handles both sides of the interval test
-    "Memory address (raw="<<raw<<", local="<<reinterpret_cast<void*>(u)<<") is not within shared segment of rank "<<rank<<"."
-  );
-
-  return reinterpret_cast<void*>(u);
-}
-
-tuple<intrank_t/*rank*/, uintptr_t/*raw*/> backend::globalize_memory(void *addr) {
-  intrank_t peer_n = local_peer_ub - local_peer_lb;
+tuple<intrank_t/*rank*/, uintptr_t/*raw*/> backend::globalize_memory(void const *addr) {
+  intrank_t peer_n = pshm_peer_ub - pshm_peer_lb;
   uintptr_t uaddr = reinterpret_cast<uintptr_t>(addr);
 
   // key is a pointer to one past the last vbase less-or-equal to addr.
   uintptr_t *key = std::upper_bound(
-    local_mem_owner_vbase.get(),
-    local_mem_owner_vbase.get() + peer_n,
+    pshm_owner_vbase.get(),
+    pshm_owner_vbase.get() + peer_n,
     uaddr
   );
 
-  int key_ix = key - local_mem_owner_vbase.get();
+  int key_ix = key - pshm_owner_vbase.get();
 
   #define bad_memory "Local memory "<<addr<<" is not in any local rank's shared segment."
 
   UPCXX_ASSERT(key_ix > 0, bad_memory);
   
-  intrank_t peer = local_mem_owner_peer[key_ix-1];
+  intrank_t peer = pshm_owner_peer[key_ix-1];
 
-  UPCXX_ASSERT(uaddr - local_mem_vbase[peer] <= local_mem_size[peer], bad_memory);
+  UPCXX_ASSERT(uaddr - pshm_vbase[peer] <= pshm_size[peer], bad_memory);
   
   return std::make_tuple(
-    local_peer_lb + peer,
-    uaddr - local_mem_local_minus_remote[peer]
+    pshm_peer_lb + peer,
+    uaddr - pshm_local_minus_remote[peer]
   );
 
   #undef bad_memory
@@ -493,7 +463,7 @@ namespace {
   template<typename Fn>
   struct rma_get_cb final: gasnet::handle_cb {
     Fn fn_;
-    rma_get_cb(Fn fn): fn_{std::move(fn)} {}
+    rma_get_cb(Fn fn): fn_(std::move(fn)) {}
 
     void execute_and_delete(gasnet::handle_cb_successor add) {
       fn_();
@@ -531,8 +501,8 @@ void gasnet::send_am_rdzv(
     intrank_t rank_d,
     persona *persona_d,
     void *buf_s,
-    size_t buf_size,
-    size_t buf_align
+    size_t cmd_size,
+    size_t cmd_align
   ) {
   
   intrank_t rank_s = backend::rank_me;
@@ -541,27 +511,37 @@ void gasnet::send_am_rdzv(
     rank_d,
     persona_d,
     [=]() {
-      // TODO: Elide rma_get (copy) for node-local sends with pointer
-      // translation and execution directly from source buffer.
-      
-      void *buf_d = upcxx::allocate(buf_size, buf_align);
-      UPCXX_ASSERT_ALWAYS(buf_d != nullptr, "Exhausted shared segment!");
-      
-      rma_get(
-        buf_d, rank_s, buf_s, buf_size,
-        [=]() {
-          // Notify source rank it can free buffer.
-          gasnet::send_am_restricted(rank_s,
-            [=]() { upcxx::deallocate(buf_s); }
-          );
-          
-          backend::during_level<level>([=]() {
-            // Execute buffer.
-            parcel_reader r{buf_d};
-            command<bool,void*>::execute(r, /*use_free=*/false, buf_d);
-          });
-        }
-      );
+      if(backend::rank_is_local(rank_s)) {
+        void *payload = backend::localize_memory_nonnull(rank_s, reinterpret_cast<std::uintptr_t>(buf_s));
+        
+        rpc_as_lpc *m = new rpc_as_lpc;
+        m->the_vtbl.execute_and_delete = command<detail::lpc_base*>::get_executor(payload);
+        m->vtbl = &m->the_vtbl;
+        m->payload = payload;
+        m->is_rdzv = true;
+        m->rank_s = rank_s;
+        
+        auto &tls = detail::the_persona_tls;
+        tls.enqueue(*tls.get_top_persona(), level, m, /*known_active=*/std::true_type());
+      }
+      else {
+        rpc_as_lpc *m = rpc_as_lpc::build_rdzv_lz(rank_s, cmd_size, cmd_align);
+        
+        rma_get(
+          m->payload, rank_s, buf_s, cmd_size,
+          [=]() {
+            auto &tls = detail::the_persona_tls;
+            
+            m->the_vtbl.execute_and_delete = command<detail::lpc_base*>::get_executor(m->payload);
+            tls.enqueue(*tls.get_top_persona(), level, m, /*known_active=*/std::true_type());
+            
+            // Notify source rank it can free buffer.
+            gasnet::send_am_restricted(rank_s,
+              [=]() { upcxx::deallocate(buf_s); }
+            );
+          }
+        );
+      }
     }
   );
 }
@@ -569,44 +549,110 @@ void gasnet::send_am_rdzv(
 template void gasnet::send_am_rdzv<progress_level::internal>(intrank_t, persona*, void*, size_t, size_t);
 template void gasnet::send_am_rdzv<progress_level::user>(intrank_t, persona*, void*, size_t, size_t);
 
+template<>
+void rpc_as_lpc::cleanup</*never_rdzv=*/false>(detail::lpc_base *me1) {
+  rpc_as_lpc *me = static_cast<rpc_as_lpc*>(me1);
+  
+  if(!me->is_rdzv)
+    std::free(me->payload);
+  else {
+    if(backend::rank_is_local(me->rank_s)) {
+      // Notify source rank it can free buffer.
+      std::uintptr_t buf_s = backend::globalize_memory_nonnull(me->rank_s, me->payload);
+      
+      send_am_restricted(me->rank_s,
+        [=]() { upcxx::deallocate(reinterpret_cast<void*>(buf_s)); }
+      );
+      
+      delete me;
+    }
+    else
+      upcxx::deallocate(me->payload);
+  }
+}
+
+inline rpc_as_lpc* rpc_as_lpc::build_copy(
+    void *cmd_buf,
+    std::size_t cmd_size,
+    std::size_t cmd_alignment
+  ) {
+  
+  std::size_t msg_size = cmd_size;
+  msg_size = (msg_size + alignof(rpc_as_lpc)-1) & -alignof(rpc_as_lpc);
+  
+  std::size_t msg_offset = msg_size;
+  msg_size += sizeof(rpc_as_lpc);
+  
+  void *msg_buf;
+  int ok = posix_memalign(&msg_buf, cmd_alignment, msg_size);
+  UPCXX_ASSERT_ALWAYS(ok == 0);
+  
+  rpc_as_lpc *m = new((char*)msg_buf + msg_offset) rpc_as_lpc;
+  m->the_vtbl.execute_and_delete = command<detail::lpc_base*>::get_executor(cmd_buf);
+  m->vtbl = &m->the_vtbl;
+  m->payload = msg_buf;
+  m->is_rdzv = false;
+  
+  // The (void**) casts *might* inform memcpy that it can assume word
+  // alignment.
+  std::memcpy((void**)msg_buf, (void**)cmd_buf, cmd_size);
+  
+  return m;
+}
+
+inline rpc_as_lpc* rpc_as_lpc::build_rdzv_lz(
+    intrank_t rank_s,
+    std::size_t cmd_size,
+    std::size_t cmd_alignment // alignment requirement of packing
+  ) {
+  std::size_t offset = (cmd_size + alignof(rpc_as_lpc)-1) & -alignof(rpc_as_lpc);
+  std::size_t buf_size = offset + sizeof(rpc_as_lpc);
+  std::size_t buf_align = std::max(cmd_alignment, alignof(rpc_as_lpc));
+  
+  void *buf = upcxx::allocate(buf_size, buf_align);
+  UPCXX_ASSERT_ALWAYS(buf != nullptr);
+  
+  rpc_as_lpc *m = new((char*)buf + offset) rpc_as_lpc;
+  m->the_vtbl.execute_and_delete = nullptr; // filled in when GET completes
+  m->vtbl = &m->the_vtbl;
+  m->payload = buf;
+  m->is_rdzv = true;
+  m->rank_s = rank_s;
+  
+  return m;
+}
+
 void gasnet::after_gasnet() {
   detail::persona_tls &tls = detail::the_persona_tls;
   
-  if(tls.get_progressing() >= 0)
+  if(tls.get_progressing() >= 0 || !tls.is_burstable(progress_level::internal))
     return;
   tls.set_progressing((int)progress_level::internal);
   
-  bool have_master = UPCXX_BACKEND_GASNET_SEQ || backend::master.active_with_caller(tls);
   int total_exec_n = 0;
   int exec_n;
   
   do {
     exec_n = 0;
     
-    if(have_master) {
-      #if UPCXX_BACKEND_GASNET_SEQ
-        exec_n += gasnet::master_hcbs.burst(4);
-      #endif
-      {
-        detail::persona_scope_redundant tmp(backend::master, tls);
-        exec_n += rpcs_internal_.burst(20);
-      };
-    }
-    
     tls.foreach_active_as_top([&](persona &p) {
-      #if UPCXX_BACKEND_GASNET_PAR
+      #if UPCXX_BACKEND_GASNET_SEQ
+        if(&p == &backend::master)
+          exec_n += gasnet::master_hcbs.burst(4);
+      #elif UPCXX_BACKEND_GASNET_PAR
         exec_n += p.backend_state_.hcbs.burst(4);
       #endif
-      exec_n += tls.burst(p, progress_level::internal);
+      
+      exec_n += tls.burst_internal(p);
     });
     
     total_exec_n += exec_n;
   }
   while(total_exec_n < 100 && exec_n != 0);
+  //while(0);
   
   tls.set_progressing(-1);
 }
-
 
 ////////////////////////////////////////////////////////////////////////
 // from: upcxx/backend.hpp
@@ -622,7 +668,9 @@ void upcxx::progress(progress_level level) {
     return;
   tls.set_progressing((int)level);
   
-  bool have_master = backend::master.active_with_caller(tls);
+  if(level == progress_level::user)
+    tls.flip_burstable(progress_level::user);
+  
   int total_exec_n = 0;
   int exec_n;
   
@@ -632,49 +680,51 @@ void upcxx::progress(progress_level level) {
   do {
     exec_n = 0;
     
-    if(have_master) {
-      #if UPCXX_BACKEND_GASNET_SEQ
-        exec_n += gasnet::master_hcbs.burst(4);
-      #endif
-      {
-        detail::persona_scope_redundant tmp(backend::master, tls);
-        exec_n += rpcs_internal_.burst(100);
-        if(level == progress_level::user)
-          exec_n += rpcs_user_.burst(100);
-      }
-    }
-    
     tls.foreach_active_as_top([&](persona &p) {
-      #if UPCXX_BACKEND_GASNET_PAR
+      #if UPCXX_BACKEND_GASNET_SEQ
+        if(&p == &backend::master)
+          exec_n += gasnet::master_hcbs.burst(4);
+      #elif UPCXX_BACKEND_GASNET_PAR
         exec_n += p.backend_state_.hcbs.burst(4);
       #endif
-      exec_n += tls.burst(p, level);
+      
+      exec_n += tls.burst_internal(p);
+      
+      if(level == progress_level::user) {
+        tls.flip_burstable(progress_level::user);
+        exec_n += tls.burst_user(p);
+        tls.flip_burstable(progress_level::user);
+      }
     });
     
     total_exec_n += exec_n;
   }
   // Try really hard to do stuff before leaving attentiveness.
   while(total_exec_n < 1000 && exec_n != 0);
+  //while(0);
   
-  /* In SMP tests we typically oversubscribe ranks to cpus. This is
-   * an attempt at heuristically determining if this rank is just
-   * spinning fruitlessly hogging the cpu from another who needs it.
-   * It would be a lot more effective if we included knowledge of
-   * whether outgoing communication was generated between progress
-   * calls, then we would really know that we're just idle. Well,
-   * almost. There would still exist the case where this rank is
-   * receiving nothing, sending nothing, but is loaded with compute
-   * and is only periodically progressing to be "nice".
-   */
-  static __thread int consecutive_nothings = 0;
+  #if 1
+    /* In SMP tests we typically oversubscribe ranks to cpus. This is
+     * an attempt at heuristically determining if this rank is just
+     * spinning fruitlessly hogging the cpu from another who needs it.
+     * It would be a lot more effective if we included knowledge of
+     * whether outgoing communication was generated between progress
+     * calls, then we would really know that we're just idle. Well,
+     * almost. There would still exist the case where this rank is
+     * receiving nothing, sending nothing, but is loaded with compute
+     * and is only periodically progressing to be "nice".
+     */
+    static __thread int consecutive_nothings = 0;
+    
+    if(total_exec_n != 0)
+      consecutive_nothings = 0;
+    else if(++consecutive_nothings == 10) {
+      sched_yield();
+      consecutive_nothings = 0;
+    }
+  #endif
   
-  if(total_exec_n != 0)
-    consecutive_nothings = 0;
-  else if(++consecutive_nothings == 10) {
-    sched_yield();
-    consecutive_nothings = 0;
-  }
-  
+  tls.flip_burstable(progress_level::user);
   tls.set_progressing(-1);
 }
 
@@ -689,8 +739,7 @@ namespace {
     ) {
     
     if(0 == (reinterpret_cast<uintptr_t>(buf) & (buf_align-1))) {
-      parcel_reader r{buf};
-      command<>::execute(r);
+      command<void*>::get_executor(buf)(buf);
     }
     else {
       void *tmp;
@@ -699,8 +748,7 @@ namespace {
       
       std::memcpy((void**)tmp, (void**)buf, buf_size);
       
-      parcel_reader r{tmp};
-      command<>::execute(r);
+      command<void*>::get_executor(buf)(buf);
       
       std::free(tmp);
     }
@@ -712,27 +760,21 @@ namespace {
       gex_AM_Arg_t buf_align_and_level
     ) {
     
-    UPCXX_ASSERT(backend::rank_n!=-1);
+    UPCXX_ASSERT(backend::rank_n != -1);
+    
     size_t buf_align = buf_align_and_level>>1;
     bool level_user = buf_align_and_level & 1;
     
-    rpc_message *m = rpc_message::build_copy(buf, buf_size, buf_align);
+    rpc_as_lpc *m = rpc_as_lpc::build_copy(buf, buf_size, buf_align);
     
     detail::persona_tls &tls = detail::the_persona_tls;
     
-    if(UPCXX_BACKEND_GASNET_PAR && !backend::master.active_with_caller(tls)) {
-      tls.defer(
-        backend::master,
-        level_user ? progress_level::user : progress_level::internal,
-        [=]() {
-          m->execute_and_delete();
-        }
-      );
-    }
-    else {
-      rpc_inbox &inbox = level_user ? rpcs_user_ : rpcs_internal_;
-      inbox.enqueue(m);
-    }
+    tls.enqueue(
+      backend::master,
+      level_user ? progress_level::user : progress_level::internal,
+      m,
+      /*known_active=*/std::integral_constant<bool, !UPCXX_BACKEND_GASNET_PAR>()
+    );
   }
   
   void am_eager_persona(
@@ -743,7 +785,8 @@ namespace {
       gex_AM_Arg_t per_hi
     ) {
     
-    UPCXX_ASSERT(backend::rank_n!=-1);
+    UPCXX_ASSERT(backend::rank_n != -1);
+    
     size_t buf_align = buf_align_and_level>>1;
     bool level_user = buf_align_and_level & 1;
     
@@ -762,24 +805,45 @@ namespace {
     );
     per = per == nullptr ? &backend::master : per; 
     
-    rpc_message *m = rpc_message::build_copy(buf, buf_size, buf_align);
+    rpc_as_lpc *m = rpc_as_lpc::build_copy(buf, buf_size, buf_align);
     
     detail::persona_tls &tls = detail::the_persona_tls;
     
-    if(UPCXX_BACKEND_GASNET_PAR && (per != &backend::master || !per->active_with_caller(tls))) {
-      tls.defer(
-        *per,
-        level_user ? progress_level::user : progress_level::internal,
-        [=]() {
-          m->execute_and_delete();
-        }
-      );
-    }
-    else {
-      rpc_inbox &inbox = level_user ? rpcs_user_ : rpcs_internal_;
-      inbox.enqueue(m);
-    }
+    tls.enqueue(
+      *per,
+      level_user ? progress_level::user : progress_level::internal,
+      m,
+      /*known_active=*/std::integral_constant<bool, !UPCXX_BACKEND_GASNET_PAR>()
+    );
   }
+}
+
+////////////////////////////////////////////////////////////////////////
+
+inline int handle_cb_queue::burst(int burst_n) {
+  int exec_n = 0;
+  handle_cb **pp = &this->head_;
+  
+  while(burst_n-- && *pp != nullptr) {
+    handle_cb *p = *pp;
+    gex_Event_t ev = reinterpret_cast<gex_Event_t>(p->handle);
+    
+    if(0 == gex_Event_Test(ev)) {
+      // remove from queue
+      *pp = p->next_;
+      if(*pp == nullptr)
+        this->set_tailp(pp);
+      
+      // do it!
+      p->execute_and_delete(handle_cb_successor{this, pp});
+      
+      exec_n += 1;
+    }
+    else
+      pp = &p->next_;
+  }
+  
+  return exec_n;
 }
 
 ////////////////////////////////////////////////////////////////////////
