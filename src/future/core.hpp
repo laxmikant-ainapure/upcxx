@@ -7,17 +7,6 @@
 #include <new>
 
 namespace upcxx {
-  #define OPNEW_OVERLOADS \
-    static void* operator new(std::size_t size) { \
-      return ::operator new(size); \
-    } \
-    static void* operator new(std::size_t size, void *to) { \
-      return to; \
-    } \
-    static void operator delete(void *me) { \
-      ::operator delete(me); \
-    }
-
   //////////////////////////////////////////////////////////////////////
   // Forwards of internal types.
   
@@ -263,8 +252,6 @@ namespace upcxx {
       // Drop reference to "a" in favor of its proxied header (returned).
       // "a->status_" must be "status_proxying" or "status_proxying_active".
       static future_header* drop_for_proxied(future_header *a);
-      
-      OPNEW_OVERLOADS
     };
     
     struct future_header_nil {
@@ -429,8 +416,6 @@ namespace upcxx {
       // Tell this body that its time to leave the "active" state by running
       // its specific action.
       virtual void leave_active(future_header_dependent *owner_hdr) = 0;
-      
-      OPNEW_OVERLOADS
     };
     
     // Base type for bodies that proxy other futures.
@@ -467,8 +452,6 @@ namespace upcxx {
       using results_t = std::tuple<T...>;
       using results_raw_t = typename std::aligned_storage<sizeof(results_t), alignof(results_t)>::type;
       results_raw_t results_raw_;
-      
-      OPNEW_OVERLOADS
       
     public:
       future_header_result():
@@ -560,8 +543,6 @@ namespace upcxx {
       };
       
       future_header base_header;
-      
-      OPNEW_OVERLOADS
       
     public:  
       future_header_result():
@@ -673,8 +654,6 @@ namespace upcxx {
       promise_meta pro_meta;
       
       future_header_promise();
-      
-      OPNEW_OVERLOADS
       
       static constexpr bool is_trivially_deletable = future_header_result<T...>::is_trivially_deletable;
       
@@ -955,7 +934,5 @@ namespace upcxx {
     }
   } // namespace detail
 }
-
-#undef OPNEW_OVERLOADS
 
 #endif

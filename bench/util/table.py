@@ -355,8 +355,14 @@ def plot(t, title=''):
   
   import matplotlib.pyplot as pyplot
   
+  dims_trivial = t.dims_trivial()
+  
   try:
-    xdim = sorted([d for d in t.dims if d in xdims], key=lambda d: xdims[d].get('rank',99))[0]
+    def rank_of(x):
+      if x in dims_trivial: return 102
+      if x in xdims: return xdims[x].get('rank',101)
+      return 100
+    xdim = sorted(t.dims, key=rank_of)[0]
   except IndexError:
     raise Exception("No suitable x-dimension found among %r, given table.xdims=%r."%(t.dims, xdims))
   
@@ -370,11 +376,11 @@ def plot(t, title=''):
   if len(xs) <= 10:
     tick_of = lambda x: xs.index(x)
     xticks = range(len(xs))
-    xlabels = [xdims[xdim].get('pretty',pretty)(xs[i]) for i in xticks]
+    xlabels = [xdims.get(xdim,{}).get('pretty',pretty)(xs[i]) for i in xticks]
   else:
     tick_of = lambda x: xs.index(x) * float(10)/len(xs)
     xticks = range(10)
-    xlabels = [xdims[xdim].get('pretty',pretty)(xs[int(i*len(xs)/10)]) for i in xticks]
+    xlabels = [xdims.get(xdim,{}).get('pretty',pretty)(xs[int(i*len(xs)/10)]) for i in xticks]
   
   pyplot.xticks(xticks, xlabels)
   
@@ -384,10 +390,8 @@ def plot(t, title=''):
     ss = map(lambda s: s.rjust(w), ss)
     return ', '.join(ss)
   
-  dims_trivial = gs.dims_trivial()
-  
   pyplot.title(title + ('\nwhere: ' if title else '') + pretty(dims_trivial))
-  pyplot.xlabel(xdims[xdim].get('title',xdim))
+  pyplot.xlabel(xdims.get(xdim,{}).get('title',xdim))
   
   legwth = {}
   for g,curve in gs:

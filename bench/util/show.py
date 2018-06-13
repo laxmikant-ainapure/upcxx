@@ -34,7 +34,7 @@ T = tab.T
 reportfiles = set()
 dimvals = {}
 
-tab.xdims['alloc'] = dict(title='Allocator')
+tab.xdims['opnew'] = dict(title='Allocator')
 
 for arg in sys.argv[1:]:
   if arg.startswith('-'):

@@ -9,6 +9,7 @@
 #include <upcxx/future.hpp>
 #include <upcxx/persona.hpp>
 
+#include <cstdint>
 #include <memory>
 #include <tuple>
 
@@ -49,7 +50,7 @@ namespace backend {
   //////////////////////////////////////////////////////////////////////
 
   // inclusive lower and exclusive upper bounds for local_team ranks
-  extern intrank_t pshm_peer_lb, pshm_peer_ub;
+  extern intrank_t pshm_peer_lb, pshm_peer_ub, pshm_peer_n;
   
   // Given index in local_team:
   //   local_minus_remote: Encodes virtual address translation which is added
@@ -61,7 +62,9 @@ namespace backend {
   extern std::unique_ptr<std::uintptr_t[/*local_team.size()*/]> pshm_size;
 
   inline bool rank_is_local(intrank_t r) {
-    return pshm_peer_lb <= r && r < pshm_peer_ub;
+    return std::uintptr_t(r) - std::uintptr_t(pshm_peer_lb) < std::uintptr_t(pshm_peer_n);
+    // Is equivalent to...
+    // return pshm_peer_lb <= r && r < pshm_peer_ub;
   }
   
   void* localize_memory(intrank_t rank, std::uintptr_t raw);

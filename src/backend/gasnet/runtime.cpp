@@ -66,6 +66,7 @@ persona_scope *backend::initial_master_scope = nullptr;
 
 intrank_t backend::pshm_peer_lb;
 intrank_t backend::pshm_peer_ub;
+intrank_t backend::pshm_peer_n;
 
 unique_ptr<uintptr_t[/*local_team.size()*/]> backend::pshm_local_minus_remote;
 unique_ptr<uintptr_t[/*local_team.size()*/]> backend::pshm_vbase;
@@ -250,7 +251,8 @@ void upcxx::init() {
     backend::pshm_peer_lb = nbhd[0].gex_jobrank;
     backend::pshm_peer_ub = nbhd[0].gex_jobrank + peer_n;
   }
-
+  backend::pshm_peer_n = peer_n;
+  
   // Build upcxx::local_team()
   new(&detail::the_local_team.raw) upcxx::team(
     detail::internal_only(),

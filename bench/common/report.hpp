@@ -50,18 +50,21 @@ namespace bench {
   
   // operator& conjoins two rows into a result row.
   template<typename A0, typename ...A, typename ...B>
-  row<A0,A...,B...> operator&(row<A0,A...> a, row<B...> b) {
+  constexpr row<A0,A...,B...> operator&(row<A0,A...> a, row<B...> b) {
     return {a.name_, a.val_, a.tail_ & b};
   }
   template<typename ...B>
-  row<B...> operator&(row<> a, row<B...> b) {
+  constexpr row<B...> operator&(row<> a, row<B...> b) {
     return b;
   }
 
-  // Writes a report file consisting of emitted rows. Constructor reads env vars:
+  // Writes a report file consisting of emitted rows. This may not be entered
+  // concurrently, so you will need to funnel your report data to a single rank
+  // to write the report. Constructor reads env vars:
   //  "report_file": location to append data points (default="bench.out").
   //  "report_args": python formatted string of keyword argument assignments
-  //    to be passed as additional independent variable assignments to the `emit` function.
+  //    to be passed as additional independent variable assignments to the `emit`
+  //    function.
   class report {
     std::string args, app, filename;
     std::ofstream f;

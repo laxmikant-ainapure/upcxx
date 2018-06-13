@@ -1,5 +1,53 @@
+/* This benchmark attempts to capture the overhead UPC++ adds on top of GASNet.
+ * We  flood the wire with PUTs for sizes spread out over powers of 2.
+ * We do this with upcxx using futures and promises, and gasnet with NB events.
+ * 
+ * Reported dimensions:
+ * 
+ *   peer = {self|local|remote}: Whether the destination rank was this rank, a
+ *     rank local memory sharing, or remote rank. A single rank job will only
+ *     emit self-puts. A multi-rank job will detect which of {local|remote} are
+ *     available and will do one or both if possible.
+ * 
+ *   size: the size of the PUT in bytes.
+ * 
+ *   op = {put_lat|put_bw}:
+ *     put_lat: Latency sensitive test where only one put is in-flight at
+ *              a time.
+ *     put_bw:  Bandwidth test which has lots of puts in flight concurrently.
+ *
+ *   how = {upcxx|gasnet}: Was this done using upcxx or gasnet API's.
+ * 
+ * Note that the intent of "how=gasnet" is not to benchmark gasnet's maximum
+ * throughput, but to capture what the best possible implementation of the
+ * corresponding "how=upcxx" could be expected to achieve.
+ * 
+ * Reported measurements:
+ * 
+ *   bw = Bandwidth in bytes/second. This is the measured quantity as dependent
+ *     on the other dimensions. Even the "op=put_lat" present their throughput
+ *     measurement as bandwidth.
+ * 
+ * Compile-time parameters (like -Dfoo=bar):
+ *   
+ *   PROGRESS_PERIOD=<int>: The number of PUTs to issue between calls to 
+ *     `upcxx::progress()`. Default=32. Consider using a power of two so the
+ *     modulo test is fast. Nobs will read this out of the "progress_period"
+ *     environment variable.
+ * 
+ *   Also see those of: ./common/operator_new.hpp
+ * 
+ * Environment variables:
+ * 
+ *   put_size_ub: The maximum (inclusive) put size to capture in bytes. Only
+ *     powers of two sizes up to and including this quantity are considered.
+ *     Default = 4194304 (4MB)
+ * 
+ *   wait_secs: The number of (fractional) seconds to spend on each measurement.
+ *     Default = 0.5. Larger values smooth out system noise.
+ */
+
 #include <upcxx/upcxx.hpp>
-#include <upcxx/os_env.hpp>
 #include <upcxx/backend/gasnet/runtime_internal.hpp>
 
 #include <gasnet.h>
@@ -7,6 +55,7 @@
 #include "common/timer.hpp"
 #include "common/report.hpp"
 #include "common/operator_new.hpp"
+#include "common/os_env.hpp"
 
 #include <cstdint>
 #include <string>
@@ -31,6 +80,10 @@ constexpr bool DO_GASNET = true;
   extern char __etext;
 #endif
 
+#ifndef PROGRESS_PERIOD
+  #define PROGRESS_PERIOD 32
+#endif
+
 struct measure {
   size_t ops;
   double secs;
@@ -51,7 +104,19 @@ int main() {
     );
   #endif
   
-  upcxx::global_ptr<char> blob = upcxx::new_array<char>(64<<20);
+  size_t size_ub = os_env<size_t>("put_size_ub", 4<<20);
+  double wait_secs = os_env<double>("wait_secs", 0.5);
+  
+  constexpr int mag_lb = 3;
+  constexpr int mag_ub_max = 30;
+  
+  int mag_ub = mag_lb;
+  while(size_t(1)<<mag_ub <= size_ub)
+    mag_ub += 1;
+  
+  UPCXX_ASSERT_ALWAYS(mag_ub < mag_ub_max, "put_size_ub="<<size_ub<<" cannot exceed "<<(size_t(1)<<mag_ub_max));
+    
+  upcxx::global_ptr<char> blob = upcxx::new_array<char>(size_ub);
   char *blob_local = blob.local();
   
   std::vector<upcxx::global_ptr<char>> blobs;
@@ -61,16 +126,12 @@ int main() {
   
   timer tim;
   
-  constexpr int mag_lb = 3;
-  constexpr int mag_ub = 22;
-  constexpr double wait_secs = 0.5;
-  
   if(upcxx::rank_me() == 0) {
-    measure put_upcxx_lat[2][mag_ub];
-    measure put_gas_lat[2][mag_ub];
-    measure put_upcxx_bw_fut[2][mag_ub];
-    measure put_upcxx_bw_pro[2][mag_ub];
-    measure put_gas_bw[2][mag_ub];
+    measure put_upcxx_lat[2][mag_ub_max+1];
+    measure put_gas_lat[2][mag_ub_max+1];
+    measure put_upcxx_bw_fut[2][mag_ub_max+1];
+    measure put_upcxx_bw_pro[2][mag_ub_max+1];
+    measure put_gas_bw[2][mag_ub_max+1];
     
     int local_peer = -1;
     int remote_peer = -1;
@@ -117,8 +178,8 @@ int main() {
           int iters = 0;
           do {
             for(int i=0; i < step; i++) {
-              auto src = blob_local + i*size;
-              auto dest = blobs[peer] + (i+1)%step*size;
+              auto src = blob_local;
+              auto dest = blobs[peer];
               upcxx::rput(src, dest, size).wait();
             }
             iters += step;
@@ -136,8 +197,8 @@ int main() {
           int iters = 0;
           do {
             for(int i=0; i < step; i++) {
-              auto src = blob_local + i*size;
-              auto dest = blobs[peer] + (i+1)%step*size;
+              auto src = blob_local;
+              auto dest = blobs[peer];
               gex_Event_t *e = new gex_Event_t(
                 gex_RMA_PutNB(
                   upcxx::backend::gasnet::world_team, dest.rank_,
@@ -166,12 +227,12 @@ int main() {
           do {
             upcxx::promise<> pro;
             for(int i=0; i < step; i++) {
-              auto src = blob_local + i*size;
-              auto dest = blobs[peer] + (i+1)%step*size;
+              auto src = blob_local;
+              auto dest = blobs[peer];
               upcxx::rput(src, dest, size,
                 upcxx::operation_cx::as_promise(pro)
               );
-              if(0 == i%32) upcxx::progress();
+              if(0 == i%PROGRESS_PERIOD) upcxx::progress();
             }
             pro.finalize().wait();
             iters += step;
@@ -190,12 +251,12 @@ int main() {
           do {
             upcxx::future<> f = upcxx::make_future();
             for(int i=0; i < step; i++) {
-              auto src = blob_local + i*size;
-              auto dest = blobs[peer] + (i+1)%step*size;
+              auto src = blob_local;
+              auto dest = blobs[peer];
               f = upcxx::when_all(f,
                 upcxx::rput(src, dest, size)
               );
-              if(0 == i%32) upcxx::progress();
+              if(0 == i%PROGRESS_PERIOD) upcxx::progress();
             }
             f.wait();
             iters += step;
@@ -215,8 +276,8 @@ int main() {
             std::list<gex_Event_t> evs;
             
             for(int i=0; i < step; i++) {
-              auto src = blob_local + i*size;
-              auto dest = blobs[peer] + (i+1)%step*size;
+              auto src = blob_local;
+              auto dest = blobs[peer];
               
               gex_Event_t h = gex_RMA_PutNB(
                 upcxx::backend::gasnet::world_team, dest.rank_,
@@ -268,7 +329,8 @@ int main() {
         const int size = 1<<mag;
         auto common = opnew_row()
                     & column("peer", peer)
-                    & column("size", size);
+                    & column("size", size)
+                    & column("progress_period", PROGRESS_PERIOD);
         
         if(DO_UPCXX) {
           rep.emit({"bw"},
