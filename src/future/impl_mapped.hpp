@@ -95,7 +95,7 @@ namespace upcxx {
         typedef future_body_pure<future1<future_kind_mapped<FuArg,Fn>,T...>> body_type;
         void *body_mem = body_type::operator new(sizeof(body_type));
         
-        body_type *body = new(body_mem) body_type{
+        body_type *body = ::new(body_mem) body_type{
           body_mem, hdr, std::move(*this)
         };
         hdr->body_ = body;

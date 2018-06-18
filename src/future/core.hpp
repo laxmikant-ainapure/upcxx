@@ -6,6 +6,27 @@
 #include <upcxx/utility.hpp>
 #include <new>
 
+/* Place this macro in a class definition to give it overrides of operator
+ * new/delete that just call the language provided defaults. This might seem
+ * pointless now, but if we ever customize our own allocator we'll need
+ * something like this slapped on all of our classes (except it won't just
+ * call the std defaults). The reason we're doing this here (and now) is because
+ * there is code in "./core.cpp" that wants to delete `void*` storage which it
+ * *knows* must have been allocated for a `future_body`. Without these stubs,
+ * calling `future_body::operator delete(x)` would be invalid. Adding these
+ * stubs seems better than dumbing down offending code to always call the generic
+ * deallocate, which if we get custom allocation might be slower or just wrong.
+ */
+#ifndef UPCXX_OPNEW_AS_STD // pretty sure not defined anywhere, just thinking ahead.
+  #define UPCXX_OPNEW_AS_STD \
+    static void* operator new(std::size_t size) {\
+      return ::operator new(size);\
+    }\
+    static void operator delete(void *p) {\
+      ::operator delete(p);\
+    }
+#endif
+
 namespace upcxx {
   //////////////////////////////////////////////////////////////////////
   // Forwards of internal types.
@@ -162,6 +183,8 @@ namespace upcxx {
   
   namespace detail {
     struct future_header {
+      UPCXX_OPNEW_AS_STD
+      
       // Our refcount. A negative value indicates a static lifetime.
       int ref_n_;
       
@@ -403,6 +426,8 @@ namespace upcxx {
     
     // Base type for all future bodies.
     struct future_body {
+      UPCXX_OPNEW_AS_STD
+      
       // The memory block holding this body. Managed by future_body::operator new/delete().
       void *storage_;
       
@@ -444,6 +469,8 @@ namespace upcxx {
     
     template<typename ...T>
     struct future_header_result {
+      UPCXX_OPNEW_AS_STD
+      
       future_header base_header;
       
       static constexpr int status_results_yes = future_header::status_active + 1;
@@ -471,7 +498,7 @@ namespace upcxx {
           /*sucs_head_*/nullptr,
           {/*result_*/&this->base_header}
         } {
-        new(&results_raw_) results_t(std::move(values));
+        ::new(&results_raw_) results_t(std::move(values));
       }
     
     public:
@@ -498,14 +525,14 @@ namespace upcxx {
       template<typename ...U>
       void construct_results(U &&...values) {
         UPCXX_ASSERT(this->base_header.status_ == status_results_no);
-        new(&this->results_raw_) std::tuple<T...>(std::forward<U>(values)...);
+        ::new(&this->results_raw_) std::tuple<T...>(std::forward<U>(values)...);
         this->base_header.status_ = status_results_yes;
       }
       
       template<typename ...U>
       void construct_results(std::tuple<U...> &&values) {
         UPCXX_ASSERT(this->base_header.status_ == status_results_no);
-        new(&this->results_raw_) std::tuple<T...>(std::move(values));
+        ::new(&this->results_raw_) std::tuple<T...>(std::move(values));
         this->base_header.status_ = status_results_yes;
       }
       
@@ -536,6 +563,8 @@ namespace upcxx {
     
     template<>
     struct future_header_result<> {
+      UPCXX_OPNEW_AS_STD
+      
       static future_header the_always;
       
       enum {
@@ -646,6 +675,8 @@ namespace upcxx {
     // The future header of a promise.
     template<typename ...T>
     struct future_header_promise {
+      UPCXX_OPNEW_AS_STD
+      
       // We "inherit" from future_header_result<T...> use "first member of standard
       // layout" since real inheritance would break standard layout.
       future_header_result<T...> base_header_result;

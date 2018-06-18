@@ -169,7 +169,7 @@ void upcxx::init() {
   backend::rank_me = gex_TM_QueryRank(gasnet::world_team);
 
   // Build team upcxx::world()
-  new(&detail::the_world_team.raw) upcxx::team(
+  ::new(&detail::the_world_team.raw) upcxx::team(
     detail::internal_only(),
     0, backend::rank_n
   );
@@ -254,7 +254,7 @@ void upcxx::init() {
   backend::pshm_peer_n = peer_n;
   
   // Build upcxx::local_team()
-  new(&detail::the_local_team.raw) upcxx::team(
+  ::new(&detail::the_local_team.raw) upcxx::team(
     detail::internal_only(),
     backend::pshm_peer_lb,
     backend::pshm_peer_ub
@@ -589,7 +589,7 @@ inline rpc_as_lpc* rpc_as_lpc::build_copy(
   int ok = posix_memalign(&msg_buf, cmd_alignment, msg_size);
   UPCXX_ASSERT_ALWAYS(ok == 0);
   
-  rpc_as_lpc *m = new((char*)msg_buf + msg_offset) rpc_as_lpc;
+  rpc_as_lpc *m = ::new((char*)msg_buf + msg_offset) rpc_as_lpc;
   m->the_vtbl.execute_and_delete = command<detail::lpc_base*>::get_executor(cmd_buf);
   m->vtbl = &m->the_vtbl;
   m->payload = msg_buf;
@@ -614,7 +614,7 @@ inline rpc_as_lpc* rpc_as_lpc::build_rdzv_lz(
   void *buf = upcxx::allocate(buf_size, buf_align);
   UPCXX_ASSERT_ALWAYS(buf != nullptr);
   
-  rpc_as_lpc *m = new((char*)buf + offset) rpc_as_lpc;
+  rpc_as_lpc *m = ::new((char*)buf + offset) rpc_as_lpc;
   m->the_vtbl.execute_and_delete = nullptr; // filled in when GET completes
   m->vtbl = &m->the_vtbl;
   m->payload = buf;

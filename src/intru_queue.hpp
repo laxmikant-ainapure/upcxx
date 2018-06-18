@@ -371,7 +371,7 @@ namespace upcxx {
           unsafe_queue *tmpq;
           {
             std::lock_guard<std::mutex> locked(the_lock_);
-            tmpq = new(&tmpq_blob) unsafe_queue(std::move(q_));
+            tmpq = ::new(&tmpq_blob) unsafe_queue(std::move(q_));
           }
           
           int ans = tmpq->burst(std::forward<Fn>(fn));
@@ -388,7 +388,7 @@ namespace upcxx {
           unsafe_queue *tmpq;
           {
             std::lock_guard<std::mutex> locked(the_lock_);
-            tmpq = new(&tmpq_blob) unsafe_queue(std::move(q_));
+            tmpq = ::new(&tmpq_blob) unsafe_queue(std::move(q_));
           }
           
           int ans = tmpq->burst(max_n, std::forward<Fn>(fn));

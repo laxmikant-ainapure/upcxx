@@ -43,7 +43,7 @@ namespace upcxx {
           }
           else {
             hdr->enter_proxying(
-              new(storage) future_body_proxy<T...>(storage),
+              ::new(storage) future_body_proxy<T...>(storage),
               proxied_hdr
             );
           }
@@ -142,7 +142,7 @@ namespace upcxx {
         void *storage = future_body::operator new(sizeof(body_union_t));
         
         future_body_then<Arg,Fn> *body =
-          new(storage) future_body_then<Arg,Fn>(
+          ::new(storage) future_body_then<Arg,Fn>(
             storage, hdr,
             std::forward<Arg1>(arg),
             std::forward<Fn1>(fn)
@@ -226,7 +226,7 @@ namespace upcxx {
         };
         void *body_mem = future_body::operator new(sizeof(body_union_t));
         
-        hdr->body_ = new(body_mem) future_body_then_pure<Arg,Fn>(
+        hdr->body_ = ::new(body_mem) future_body_then_pure<Arg,Fn>(
           body_mem, hdr,
           std::forward<Arg1>(arg),
           std::forward<Fn1>(fn)

@@ -67,7 +67,7 @@ namespace upcxx {
       }
       
       try {
-        new(ptr) T(std::forward<Args>(args)...); // placement new
+        ::new(ptr) T(std::forward<Args>(args)...); // placement new
       } catch (...) {
         // reclaim memory and rethrow the exception
         deallocate(ptr);
@@ -126,7 +126,7 @@ namespace upcxx {
         T *p = elts;
         try {
           for(T *p1=elts+n; p != p1; p++)
-            new(p) T;
+            ::new(p) T;
         } catch (...) {
           // destruct constructed elements, reclaim memory, and
           // rethrow the exception
