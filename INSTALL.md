@@ -77,11 +77,6 @@ environment variables:
   publicly available GASNet-EX tarball.
 * `GASNET_CONFIGURE_ARGS`: List of additional command line arguments passed to
   GASNet's configure phase.
-* `UPCXX_MPSC_QUEUE=[atomic|biglock]`. The implementation to use for multi-
-  producer single-consumer queues in the runtime.
-    * `atomic`: (default) Highest performance: one atomic exchange per enqueue.
-    * `biglock`: Naive global-mutex protected linked list. Low performance, but
-      least risk with respect to potential bugs in implementation.
 
 # Compiling Against UPC\+\+ on the Command Line #
 
