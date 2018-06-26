@@ -49,12 +49,21 @@ namespace gasnet {
     }
     handle_cb_queue(handle_cb_queue const&) = delete;
     
+    bool empty() const;
+    
     void enqueue(handle_cb *cb);
     
-    int burst(int burst_n);
+    template<typename Cb>
+    void execute_outside(Cb *cb);
+    
+    int burst(int burst_n); // defined in runtime.cpp
   };
   
   ////////////////////////////////////////////////////////////////////
+  
+  inline bool handle_cb_queue::empty() const {
+    return this->head_ == nullptr;
+  }
   
   inline void handle_cb_queue::enqueue(handle_cb *cb) {
     UPCXX_ASSERT(cb->next_ == reinterpret_cast<handle_cb*>(0x1));
@@ -62,7 +71,12 @@ namespace gasnet {
     *this->get_tailp() = cb;
     this->set_tailp(&cb->next_);
   }
-
+  
+  template<typename Cb>
+  void handle_cb_queue::execute_outside(Cb *cb) {
+    cb->execute_and_delete(handle_cb_successor{this, this->get_tailp()});
+  }
+  
   inline void handle_cb_successor::operator()(handle_cb *succ) {
     if(succ->next_ == reinterpret_cast<handle_cb*>(0x1)) {
       if(*pp_ == nullptr)

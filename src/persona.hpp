@@ -3,7 +3,8 @@
 
 #include <upcxx/backend_fwd.hpp>
 #include <upcxx/future.hpp>
-#include <upcxx/lpc/inbox.hpp>
+#include <upcxx/intru_queue.hpp>
+#include <upcxx/lpc.hpp>
 
 #include <atomic>
 #include <cstdint>
@@ -29,13 +30,18 @@ namespace upcxx {
   private:
     // persona *owner = this;
     std::atomic<std::uintptr_t> owner_xor_this_;
-    
-    // bool burstable[2] = {true, true};
-    bool not_burstable_[/*progress_level's*/2];
-    
-    lpc_inbox</*queue_n=*/2, /*thread_safe=*/false> self_inbox_;
-    lpc_inbox</*queue_n=*/2, /*thread_safe=*/true> peer_inbox_;
   
+    detail::lpc_inbox<detail::intru_queue_safety::mpsc> peer_inbox_[2];
+    detail::lpc_inbox<detail::intru_queue_safety::none> self_inbox_[2];
+    
+  private:
+    detail::intru_queue<
+        detail::lpc_base,
+        detail::intru_queue_safety::none,
+        &detail::lpc_base::intruder
+      >
+      pros_deferred_trivial_;
+    
   public:
     backend::persona_state backend_state_;
   
@@ -47,9 +53,9 @@ namespace upcxx {
     // Constructs the default persona for the current thread.
     constexpr persona(detail::internal_only):
       owner_xor_this_(), // owner = this, default persona's are their own owner
-      not_burstable_(),
-      self_inbox_(),
       peer_inbox_(),
+      self_inbox_(),
+      pros_deferred_trivial_(),
       backend_state_() {
     }
   
@@ -57,9 +63,9 @@ namespace upcxx {
     // Constructs a non-default persona.
     persona():
       owner_xor_this_(reinterpret_cast<std::uintptr_t>(this)), // owner = null
-      not_burstable_(),
-      self_inbox_(),
       peer_inbox_(),
+      self_inbox_(),
+      pros_deferred_trivial_(),
       backend_state_() {
     }
     
@@ -138,13 +144,10 @@ namespace upcxx {
       persona_scope_raw *next_;
       std::uintptr_t persona_xor_default_;
       persona_scope *next_unique_;
-      union {
-        std::uintptr_t restore_active_bloom_; // used by `persona_scope`
-        detail::persona_tls *tls; // used by `persona_scope_redundnat`
-      };
+      detail::persona_tls *tls; // used by `persona_scope_redundant`
       union {
         void *lock_; // used by `persona_scope`
-        persona *restore_top_persona_; // used by `persona_scope_redundnat`
+        persona *restore_top_persona_; // used by `persona_scope_redundant`
       };
       void(*unlocker_)(void*);
       
@@ -153,7 +156,7 @@ namespace upcxx {
         next_(),
         persona_xor_default_(),
         next_unique_(),
-        restore_active_bloom_(),
+        tls(),
         lock_(),
         unlocker_() {
       }
@@ -209,9 +212,9 @@ namespace upcxx {
     //   1. trivially destructible.
     //   2. constexpr constructible equivalent to zero-initialization.
     struct persona_tls {
-      // int progressing = -1;
-      int progressing_plus1;
-      std::uintptr_t active_bloom;
+      int progressing_add_1;
+      unsigned burstable_bits;
+      
       persona default_persona;
       // persona_scope default_scope;
       persona_scope_raw default_scope_raw;
@@ -226,8 +229,8 @@ namespace upcxx {
       static_assert(std::is_trivially_destructible<persona_scope_raw>::value, "upcxx::detail::persona_scope_raw must be TriviallyDestructible.");
       
       constexpr persona_tls():
-        progressing_plus1(),
-        active_bloom(),
+        progressing_add_1(),
+        burstable_bits(),
         default_persona(internal_only()), // call special constructor that builds default persona
         default_scope_raw(),
         top_xor_default(),
@@ -238,15 +241,27 @@ namespace upcxx {
       //////////////////////////////////////////////////////////////////////////
       // getters/setters for fields with zero-friendly encodings
       
+      int get_progressing() const {
+        return progressing_add_1 - 1;
+      }
+      void set_progressing(int val) {
+        progressing_add_1 = val + 1;
+      }
+      
+      bool is_burstable(progress_level lev) const {
+        // The OR with 1 makes internal progress always burstable
+        return (burstable_bits | 1) & (1<<(int)lev);
+      }
+      void flip_burstable(progress_level lev) {
+        burstable_bits ^= 1<<(int)lev;
+      }
+      
       persona_scope& default_scope() {
         return *static_cast<persona_scope*>(&default_scope_raw);
       }
       persona_scope const& default_scope() const {
         return *static_cast<persona_scope const*>(&default_scope_raw);
       }
-      
-      int get_progressing() const { return progressing_plus1 - 1; }
-      void set_progressing(int val) { progressing_plus1 = val + 1; }
       
       persona_scope_raw* get_top_scope() const {
         return reinterpret_cast<persona_scope_raw*>(
@@ -279,22 +294,6 @@ namespace upcxx {
       }
       
       //////////////////////////////////////////////////////////////////////////
-      // bloom filter for active set of personas with this thread
-      
-      // Compute query mask for given pointer. If all the 1-bits in a query mask
-      // are set in the filter, then it reports membership in the set as true.
-      std::uintptr_t bloom_query(persona const *x) const;
-      
-      bool possibly_active(persona const *x) const {
-        std::uintptr_t q = bloom_query(x);
-        return (this->active_bloom & q) == q;
-      }
-      
-      void include_active(persona const *x) {
-        this->active_bloom |= bloom_query(x);
-      }
-      
-      //////////////////////////////////////////////////////////////////////////
       // operations
       
       // Enqueue a lambda onto persona's progress level queue. Note: this
@@ -302,10 +301,25 @@ namespace upcxx {
       template<typename Fn, bool known_active>
       void during(persona&, progress_level level, Fn &&fn, std::integral_constant<bool,known_active> known_active1 = {});
       
+      // Enqueue a promise to be fulfilled during user progress of the current
+      // "top" persona.
+      template<typename ...T>
+      void fulfill_during_user_of_top(promise<T...> &pro, std::tuple<T...> vals);
+      template<typename ...T>
+      void fulfill_during_user_of_top(promise<T...> &pro, std::intptr_t anon);
+      
+      template<typename ...T>
+      void fulfill_during_user_of_top(promise<T...> &&pro, std::tuple<T...> vals);
+      template<typename ...T>
+      void fulfill_during_user_of_top(promise<T...> &&pro, std::intptr_t anon);
+      
       // Enqueue a lambda onto persona's progress level queue. Unlike
       // `during`, lambda will definitely not execute in calling context.
       template<typename Fn, bool known_active=false>
       void defer(persona&, progress_level level, Fn &&fn, std::integral_constant<bool,known_active> known_active1 = {});
+      
+      template<bool known_active=false>
+      void enqueue(persona&, progress_level level, detail::lpc_base *m, std::integral_constant<bool,known_active> known_active1 = {});
       
       // Call `fn` on each `persona&` active with calling thread.
       template<typename Fn>
@@ -313,7 +327,10 @@ namespace upcxx {
       
       // Returns number of lpc's fired. Persona *should* be top-most active
       // on this thread, but don't think anything would break if it isn't.
-      int burst(persona&, progress_level level);
+      int burst_internal(persona&);
+      int burst_user(persona&);
+      
+      int persona_only_progress();
     };
     
     extern __thread persona_tls the_persona_tls;
@@ -345,15 +362,6 @@ namespace upcxx {
   }
   
   inline bool persona::active_with_caller(detail::persona_tls &tls) const {
-    if(!tls.possibly_active(this))
-      return false;
-    
-    // The bloom filter query above filters out most accesses to the owner field
-    // of personas not active with this thread, since that might involve
-    // cache-line traffic. We use a soft fence here to encourage the compiler
-    // not to issue the load unless the bloom filter fails.
-    std::atomic_signal_fence(std::memory_order_acq_rel);
-    
     return this->get_owner() == &tls.default_persona;
   }
   
@@ -369,9 +377,9 @@ namespace upcxx {
   template<typename Fn>
   void persona::lpc_ff(detail::persona_tls &tls, Fn fn) {
     if(this->active_with_caller(tls))
-      this->self_inbox_.send((int)progress_level::user, std::move(fn));
+      this->self_inbox_[(int)progress_level::user].send(std::move(fn));
     else
-      this->peer_inbox_.send((int)progress_level::user, std::move(fn));
+      this->peer_inbox_[(int)progress_level::user].send(std::move(fn));
   }
   
   template<typename Fn>
@@ -460,14 +468,9 @@ namespace upcxx {
     tls.set_top_scope(this);
     tls.set_top_persona(&p);
     
-    this->restore_active_bloom_ = tls.active_bloom;
-    
     if(!was_active) {
       this->next_unique_ = tls.get_top_unique_scope();
       tls.set_top_unique_scope(this);
-      
-      // include persona in thread's active set filter
-      tls.include_active(&p);
     }
     else
       this->next_unique_ = reinterpret_cast<persona_scope*>(0x1);
@@ -503,14 +506,9 @@ namespace upcxx {
     tls.set_top_scope(this);
     tls.set_top_persona(&p);
     
-    this->restore_active_bloom_ = tls.active_bloom;
-    
     if(!was_active) {
       this->next_unique_ = tls.get_top_unique_scope();
       tls.set_top_unique_scope(this);
-      
-      // include persona in thread's active set filter
-      tls.include_active(&p);
     }
     else
       this->next_unique_ = reinterpret_cast<persona_scope*>(0x1);
@@ -530,8 +528,6 @@ namespace upcxx {
       
       if(this->next_unique_ != reinterpret_cast<persona_scope*>(0x1))
         tls.set_top_unique_scope(this->next_unique_);
-      
-      tls.active_bloom = this->restore_active_bloom_;
       
       if(this->unlocker_)
         this->unlocker_(this->lock_);
@@ -562,39 +558,6 @@ namespace upcxx {
   
   //////////////////////////////////////////////////////////////////////
   
-  inline std::uintptr_t detail::persona_tls::bloom_query(persona const *x) const {
-    constexpr int bits = 8*sizeof(std::uintptr_t);
-    static_assert(bits == 32 || bits == 64, "Crazy architecture!");
-    
-    constexpr std::uintptr_t magic = std::uintptr_t(
-        bits == 32 ? 0x9e3779b9u : 0x9e3779b97f4a7c15u
-      );
-    
-    // XOR bits of `x` pointer against the address of this thread's default
-    // persona. Importantly, this yields zero iff `x` is our default persona.
-    std::uintptr_t u = reinterpret_cast<std::uintptr_t>(x);
-    u ^= reinterpret_cast<std::uintptr_t>(&this->default_persona);
-    
-    // Now take `u` and mix up the bits twice using injective functions.
-    std::uintptr_t a = u ^ (u >> bits/2);
-    std::uintptr_t b = a * magic;
-    
-    // Ideally `a` and `b` would be "good" hashes of `u`, therefor you could
-    // expect each to be a 50/50 split of 1 vs 0 bits. ANDing them together
-    // would then produces a word with 25% 1 bits. The recommended number of
-    // hash functions for a bloom filter with 64 bits and an expected population
-    // of 3 is 14. So our mask `a & b` is like we used ~16 hash functions,
-    // which is darn close to that ideal of 14.
-    
-    // Also, since `b = a * <odd number>`, its impossible for `a & b` to be zero
-    // unless `a` is zero, and `a` could only be zero if `x` is the default
-    // persona of this thread. A query mask of all zeros is dangerous since it
-    // always reports true. But we've guaranteed that only this thread's
-    // default persona can generate that mask, which is precisely the persona
-    // that always should test as true!
-    return a & b;
-  }
-  
   template<typename Fn, bool known_active>
   void detail::persona_tls::during(
       persona &p,
@@ -605,23 +568,88 @@ namespace upcxx {
     persona_tls &tls = *this;
     
     if(known_active || p.active_with_caller(tls)) {
-      if(level == progress_level::internal || (
-          (int)level <= tls.get_progressing() && !p.not_burstable_[(int)level]
-        )) {
-        p.not_burstable_[(int)level] = true;
+      if(tls.is_burstable(level)) {
+        tls.flip_burstable(level);
         {
           persona_scope_redundant tmp(p, tls);
           fn();
         }
-        p.not_burstable_[(int)level] = false;
+        tls.flip_burstable(level);
       }
       else
-        p.self_inbox_.send((int)level, std::forward<Fn>(fn));
+        p.self_inbox_[(int)level].send(std::forward<Fn>(fn));
     }
     else
-      p.peer_inbox_.send((int)level, std::forward<Fn>(fn));
+      p.peer_inbox_[(int)level].send(std::forward<Fn>(fn));
   }
-
+  
+  template<typename ...T>
+  void detail::persona_tls::fulfill_during_user_of_top(
+      promise<T...> &pro, std::tuple<T...> vals
+    ) {
+    
+    // This is where we use the fact that promises can be enqueued as lpc's.
+    // Of course they can only reside (intrusively) in exactly one lpc queue,
+    // but since promise manipulation isn't thread-safe, we can assume that
+    // being in multiple queues concurrently introduces a data race, and is
+    // therefor not possible. So if the promise is already in a queue we can
+    // just assume its the one we're putting it in.
+    
+    constexpr int user = (int)progress_level::user;
+    persona_tls &tls = *this;
+    
+    auto *hdr = detail::promise_header_of(pro);
+    promise_meta *meta = detail::promise_meta_of(pro);
+    
+    hdr->base_header_result.construct_results(std::move(vals));
+    
+    if(0 == meta->deferred_decrements++) { // Already in the queue?
+      hdr->incref(1);
+      
+      if(future_header_promise<T...>::is_trivially_deletable)
+        tls.get_top_persona()->pros_deferred_trivial_.enqueue(&meta->base);
+      else
+        tls.get_top_persona()->self_inbox_[user].enqueue(&meta->base);
+    }
+  }
+  
+  template<typename ...T>
+  void detail::persona_tls::fulfill_during_user_of_top(
+      promise<T...> &pro, std::intptr_t anon
+    ) {
+      
+    // See blurb just above in other `fulfill_during_user_of_top`.
+    
+    constexpr int user = (int)progress_level::user;
+    persona_tls &tls = *this;
+    
+    auto *hdr = detail::promise_header_of(pro);
+    promise_meta *meta = detail::promise_meta_of(pro);
+    
+    if(anon == (meta->deferred_decrements += anon)) { // Already in the queue?
+      hdr->incref(1);
+      
+      if(future_header_promise<T...>::is_trivially_deletable)
+        tls.get_top_persona()->pros_deferred_trivial_.enqueue(&meta->base);
+      else
+        tls.get_top_persona()->self_inbox_[user].enqueue(&meta->base);
+    }
+  }
+  
+  template<typename ...T>
+  void detail::persona_tls::fulfill_during_user_of_top(
+      promise<T...> &&pro, std::tuple<T...> vals
+    ) {
+    this->fulfill_during_user_of_top(static_cast<promise<T...>&>(pro), std::move(vals));
+  }
+  
+  template<typename ...T>
+  void detail::persona_tls::fulfill_during_user_of_top(
+      promise<T...> &&pro, std::intptr_t anon
+    ) {
+    this->fulfill_during_user_of_top(static_cast<promise<T...>&>(pro), anon);
+  }
+  
   template<typename Fn, bool known_active>
   void detail::persona_tls::defer(
       persona &p,
@@ -632,45 +660,101 @@ namespace upcxx {
     persona_tls &tls = *this;
     
     if(known_active || p.active_with_caller(tls))
-      p.self_inbox_.send((int)level, std::forward<Fn>(fn));
+      p.self_inbox_[(int)level].send(std::forward<Fn>(fn));
     else
-      p.peer_inbox_.send((int)level, std::forward<Fn>(fn));
+      p.peer_inbox_[(int)level].send(std::forward<Fn>(fn));
+  }
+
+  template<bool known_active>
+  void detail::persona_tls::enqueue(
+      persona &p,
+      progress_level level,
+      lpc_base *m,
+      std::integral_constant<bool, known_active>
+    ) {
+    persona_tls &tls = *this;
+    
+    if(known_active || p.active_with_caller(tls))
+      p.self_inbox_[(int)level].enqueue(m);
+    else
+      p.peer_inbox_[(int)level].enqueue(m);
   }
 
   template<typename Fn>
-  void detail::persona_tls::foreach_active_as_top(Fn &&body) {
+  inline void detail::persona_tls::foreach_active_as_top(Fn &&fn) {
     persona_tls &tls = *this;
     persona_scope *u = tls.get_top_unique_scope();
     do {
       persona *p = u->get_persona(tls);
-      persona_scope_redundant tmp(*p, tls);
-      body(*p);
+      detail::persona_scope_redundant as_top(*p, tls);
+      fn(*p);
       u = u->next_unique_;
     } while(u != nullptr);
   }
   
-  inline int detail::persona_tls::burst(persona &p, upcxx::progress_level level) {
+  inline int detail::persona_tls::burst_internal(persona &p) {
     constexpr int q_internal = (int)progress_level::internal;
-    constexpr int q_user     = (int)progress_level::user;
+    
+    #if 0
+      bool all_empty = true;
+      
+      all_empty &= p.peer_inbox_[q_internal].empty();
+      all_empty &= p.self_inbox_[q_internal].empty();
+      
+      if(all_empty) return 0;
+    #endif
     
     int exec_n = 0;
     
-    UPCXX_ASSERT(!p.not_burstable_[q_user], "An internal action is already trying to burst internal progress.");
-    if(!p.not_burstable_[q_user]) {
-      p.not_burstable_[q_internal] = true;
-      exec_n += p.peer_inbox_.burst(q_internal);
-      exec_n += p.self_inbox_.burst(q_internal);
-      p.not_burstable_[q_internal] = false;
-    }
+    exec_n += p.peer_inbox_[q_internal].burst();
+    exec_n += p.self_inbox_[q_internal].burst();
     
-    if(level == progress_level::user) {
-      UPCXX_ASSERT(!p.not_burstable_[q_user]);
-      p.not_burstable_[q_user] = true;
-      exec_n += p.peer_inbox_.burst(q_user);
-      exec_n += p.self_inbox_.burst(q_user);
-      p.not_burstable_[q_user] = false;
-    }
+    return exec_n;
+  }
+  
+  inline int detail::persona_tls::burst_user(persona &p) {
+    constexpr int q_user = (int)progress_level::user;
     
+    #if 0
+      bool all_empty = true;
+      
+      all_empty &= p.peer_inbox_[q_user].empty();
+      all_empty &= p.self_inbox_[q_user].empty();
+      all_empty &= p.pros_deferred_trivial_.empty();
+      
+      if(all_empty) return 0;
+    #endif
+    
+    int exec_n = 0;
+    
+    exec_n += p.peer_inbox_[q_user].burst();
+    exec_n += p.self_inbox_[q_user].burst();
+    
+    exec_n += p.pros_deferred_trivial_.burst(
+      [](lpc_base *m) {
+        detail::promise_vtable::fulfill_deferred_and_drop_trivial(m);
+      }
+    );
+    
+    return exec_n;
+  }
+  
+  inline int detail::persona_tls::persona_only_progress() {
+    auto &tls = *this;
+    
+    if(-1 != tls.get_progressing())
+      return 0;
+    tls.set_progressing((int)progress_level::user);
+    tls.flip_burstable(progress_level::user);
+    
+    int exec_n = 0;
+    tls.foreach_active_as_top([&](persona &p) {
+      exec_n += tls.burst_internal(p);
+      exec_n += tls.burst_user(p);
+    });
+    
+    tls.flip_burstable(progress_level::user);
+    tls.set_progressing(-1);
     return exec_n;
   }
 }

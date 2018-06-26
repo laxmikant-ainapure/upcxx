@@ -3,6 +3,7 @@
 using namespace std;
 
 using upcxx::detail::future_header;
+using upcxx::detail::future_header_nil;
 using upcxx::detail::future_header_dependent;
 using upcxx::detail::future_body;
 using upcxx::detail::future_body_proxy_;
@@ -10,12 +11,16 @@ using upcxx::detail::future_body_proxy_;
 template<typename ...T>
 using future_header_result = upcxx::detail::future_header_result<T...>;
 
-future_header future_header::the_nil = {
+constexpr future_header future_header_nil::the_nil
+#if 0
+= {
   /*ref_n_*/-1,
   /*status_*/future_header::status_active + 666,
   /*sucs_head_*/nullptr,
   {/*result_*/nullptr}
-};
+}
+#endif
+;
 
 future_header future_header_result<>::the_always = {
   /*ref_n_*/-1,
@@ -25,7 +30,7 @@ future_header future_header_result<>::the_always = {
 };
 
 namespace {
-  thread_local future_header_dependent **active_tail_ = nullptr;
+  __thread future_header_dependent **active_tail_ = nullptr;
 }
 
 void future_header::dependency_link::unlink() {
@@ -38,7 +43,7 @@ void future_header::dependency_link::unlink() {
 }
 
 void future_header_dependent::entered_active() {
-  this->refs_add(1); // being in active queue is a reference
+  this->incref(1); // being in active queue is a reference
   
   if(active_tail_ != nullptr) {
     // add to existing active queue
@@ -70,15 +75,17 @@ void future_header_dependent::entered_active() {
   }
 }
 
-void future_header::enter_ready(future_header *result) {
+void future_header::entered_ready_with_sucs(future_header *result, dependency_link *sucs_head) {
+  /* Outlined:
   // caller gave us a reference in result->ref_n_
-  
   this->result_ = result;
   this->status_ = future_header::status_ready;
+  */
   
   // keep track of references we lose as we give our result to our successors
   int this_refs = this->ref_n_;
-  int this_refs_unit = result == this || this_refs < 0 ? 0 : 1;
+  UPCXX_ASSERT(this_refs > 0);
+  int this_refs_unit = result == this ? 0 : 1;
   
   int result_refs = result->ref_n_;
   int result_refs_unit = result == this || result_refs < 0 ? 0 : 1;
@@ -92,7 +99,7 @@ void future_header::enter_ready(future_header *result) {
   { // nobody will enter our sucs list while we traverse, because:
     // 1. we defer draining til after traversal, no functions called here.
     // 2. we're ready, so nobody should be entering our sucs_head_ anyway
-    dependency_link *link = this->sucs_head_;
+    dependency_link *link = sucs_head;
     this->sucs_head_ = nullptr;
     
     while(link != nullptr) {
@@ -105,7 +112,7 @@ void future_header::enter_ready(future_header *result) {
       result_refs += result_refs_unit;
       
       if(--suc->status_ <= future_header::status_active) {
-        suc->ref_n_ += 1; // being in active queue is a reference
+        suc->incref(1); // being in active queue is a reference
         // add to active queue
         *active_tail_ = suc;
         suc->active_next_ = nullptr;
@@ -163,9 +170,9 @@ void future_header_dependent::enter_proxying(
     future_body_proxy_ *proxied_body = static_cast<future_body_proxy_*>(proxied->body_);
     future_header *proxied1 = proxied_body->link_.dep;
     
-    proxied1->refs_add(1);
+    proxied1->incref(1);
     
-    if(0 == static_cast<future_header_dependent*>(proxied)->refs_drop(1)) {
+    if(0 == static_cast<future_header_dependent*>(proxied)->decref(1)) {
       // steal body from proxied, dont use given body
       deferred_delete_1 = body->storage_;
       body = proxied_body;
@@ -225,7 +232,7 @@ void future_header_dependent::enter_proxying(
     
     if(this_refs == 0) {
       // nobody points to us, so we die...
-      operator delete(body->storage_);
+      future_body::operator delete(body->storage_);
       delete this;
     }
     else {
@@ -242,9 +249,9 @@ void future_header_dependent::enter_proxying(
     }
   }
   
-  if(deferred_delete_1) ::operator delete(deferred_delete_1);
-  if(deferred_delete_2) delete deferred_delete_2;
-  if(deferred_delete_3) ::operator delete(deferred_delete_3);
+  future_body::operator delete(deferred_delete_1);
+  delete deferred_delete_2;
+  future_body::operator delete(deferred_delete_3);
 }
 
 void future_body_proxy_::leave_active(future_header_dependent *hdr) {
@@ -255,14 +262,14 @@ void future_body_proxy_::leave_active(future_header_dependent *hdr) {
     
     // discard the body. no destructor needed since future_body_proxy<T...>
     // is trivially destructible and we dont want to decref the proxied pointer.
-    ::operator delete(this->storage_);
+    operator delete(this->storage_);
     
     hdr->enter_ready(result);
   }
   else { // only reference is active queue, just delete it
     void *storage = this->storage_;
     this->destruct_early();
-    ::operator delete(storage);
+    operator delete(storage);
     delete hdr;
   }
 }

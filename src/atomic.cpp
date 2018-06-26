@@ -10,6 +10,7 @@
 #include <string>
 
 namespace gasnet = upcxx::backend::gasnet;
+namespace detail = upcxx::detail;
 
 using upcxx::atomic_domain;
 using upcxx::atomic_op;
@@ -44,12 +45,13 @@ namespace {
   int get_gex_flags(std::memory_order order) {
     int flags = 0;
     switch (order) {
-      case std::memory_order_acquire: flags |= GEX_FLAG_AD_ACQ; break;
-      case std::memory_order_release: flags |= GEX_FLAG_AD_REL; break;
-      case std::memory_order_acq_rel: flags |= (GEX_FLAG_AD_ACQ | GEX_FLAG_AD_REL); break;
+      case std::memory_order_acquire: flags = GEX_FLAG_AD_ACQ; break;
+      case std::memory_order_release: flags = GEX_FLAG_AD_REL; break;
+      case std::memory_order_acq_rel: flags = (GEX_FLAG_AD_ACQ | GEX_FLAG_AD_REL); break;
       case std::memory_order_relaxed: break;
       case std::memory_order_seq_cst:
         UPCXX_ASSERT(0, "Unsupported memory order: std::memory_order_seq_cst");
+        break;
       case std::memory_order_consume:
         UPCXX_ASSERT(0, "Unsupported memory order: std::memory_order_consume");
         break;
@@ -143,7 +145,7 @@ atomic_domain<T>::~atomic_domain() {
 }
 
 template<typename T>
-void atomic_domain<T>::call_gex_AD_OpNB(
+detail::amo_done atomic_domain<T>::inject(
     T *p, global_ptr<T> gp, atomic_op opcode,
     T val1, T val2,
     std::memory_order order,
@@ -154,24 +156,23 @@ void atomic_domain<T>::call_gex_AD_OpNB(
 
   UPCXX_ASSERT(op_gex & atomic_gex_ops,
     "Atomic operation '" << atomic_op_str[static_cast<int>(opcode)] << "'"
-    " not in domain's operation set '" << opset_gex_to_string(atomic_gex_ops) << "'\n");
+    " not in domain's operation set '" << opset_gex_to_string(this->atomic_gex_ops) << "'\n");
 
   int flags = get_gex_flags(order);
-
+  
   gex_Event_t h = shim_gex_AD_OpNB<T>(
-    reinterpret_cast<gex_AD_t>(ad_gex_handle), p,
+    reinterpret_cast<gex_AD_t>(this->ad_gex_handle), p,
     gp.rank_, gp.raw_ptr_, op_gex, val1, val2, flags
   );
 
   cb->handle = reinterpret_cast<uintptr_t>(h);
-
-  gasnet::register_cb(cb);
-  gasnet::after_gasnet();
+  
+  return gex_Event_Test(h) == 0
+    ? detail::amo_done::operation
+    : detail::amo_done::none;
 }
 
 template class upcxx::atomic_domain<int32_t>;
 template class upcxx::atomic_domain<uint32_t>;
 template class upcxx::atomic_domain<int64_t>;
 template class upcxx::atomic_domain<uint64_t>;
-
-

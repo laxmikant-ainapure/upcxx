@@ -102,9 +102,9 @@ namespace upcxx {
         future_header_dependent *hdr = new future_header_dependent;
         
         typedef future_body_pure<future1<future_kind_when_all<FuArg...>,T...>> body_type;
-        void *body_mem = ::operator new(sizeof(body_type));
+        void *body_mem = body_type::operator new(sizeof(body_type));
         
-        hdr->body_ = new(body_mem) body_type{body_mem, hdr, std::move(*this)};
+        hdr->body_ = ::new(body_mem) body_type{body_mem, hdr, std::move(*this)};
         
         if(hdr->status_ == future_header::status_active)
           hdr->entered_active();
@@ -216,10 +216,10 @@ namespace upcxx {
       }
       
       future_header* cleanup_ready_get_header() {
-        future_header *hdr = new future_header_result<T...>{
-          /*not_ready=*/false,
-          /*values=*/this->result_lrefs_getter()()
-        };
+        future_header *hdr = &(new future_header_result<T...>(
+            /*not_ready=*/false,
+            /*values=*/this->result_lrefs_getter()()
+          ))->base_header;
         this->cleanup_ready();
         return hdr;
       }

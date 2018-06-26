@@ -3,6 +3,9 @@
 
 #include <upcxx/future/core.hpp>
 
+// TODO: Consider adding debug checks for operations against a moved-out of
+// future_impl_shref.
+
 namespace upcxx {
   //////////////////////////////////////////////////////////////////////
   // future_is_trivially_ready: future_impl_shref specialization
@@ -25,47 +28,38 @@ namespace upcxx {
     
     public:
       future_impl_shref() {
-        this->hdr_ = &future_header::the_nil;
+        this->hdr_ = future_header_nil::nil();
       }
       // hdr comes comes with a reference included for us
       template<typename Header>
       future_impl_shref(Header *hdr) {
         this->hdr_ = hdr;
       }
+      future_impl_shref(future_header_result<T...> *hdr) {
+        this->hdr_ = &hdr->base_header;
+      }
       
       future_impl_shref(const future_impl_shref &that) {
         this->hdr_ = that.hdr_;
-        this->hdr_->refs_add(1);
+        HeaderOps::incref(this->hdr_);
       }
-      template<typename Ops1>
+      template<typename HeaderOps1>
       future_impl_shref(
-          const future_impl_shref<Ops1,T...> &that,
-          typename std::enable_if<std::is_base_of<HeaderOps,Ops1>::value>::type* = 0
+          const future_impl_shref<HeaderOps1,T...> &that,
+          typename std::enable_if<std::is_base_of<HeaderOps,HeaderOps1>::value>::type* = 0
         ) {
         this->hdr_ = that.hdr_;
-        this->hdr_->refs_add(1);
+        HeaderOps1::incref(this->hdr_);
       }
       
       future_impl_shref& operator=(const future_impl_shref &that) {
         future_header *this_hdr = this->hdr_;
         future_header *that_hdr = that.hdr_;
         
-        int this_refs = this_hdr->ref_n_;
-        int this_unit = this_refs < 0 || this_hdr == that_hdr ? 0 : 1;
+        this->hdr_  = that_hdr;
         
-        int that_refs = that_hdr->ref_n_;
-        int that_unit = that_refs < 0 || this_hdr == that_hdr ? 0 : 1;
-        
-        that_refs += that_unit;
-        this_refs -= this_unit;
-        
-        {int trash; (this_unit ? this_hdr->ref_n_ : trash) = this_refs;}
-        {int trash; (that_unit ? that_hdr->ref_n_ : trash) = that_refs;}
-        
-        this->hdr_ = that_hdr;
-        
-        if(this_refs == 0)
-          HeaderOps::template delete_header<T...>(this_hdr);
+        HeaderOps::incref(that_hdr);
+        HeaderOps::template dropref<T...>(this_hdr, /*maybe_nil=*/std::true_type());
         
         return *this;
       }
@@ -79,29 +73,17 @@ namespace upcxx {
         future_header *this_hdr = this->hdr_;
         future_header *that_hdr = that.hdr_;
         
-        int this_refs = this_hdr->ref_n_;
-        int this_unit = this_refs < 0 || this_hdr == that_hdr ? 0 : 1;
+        this->hdr_  = that_hdr;
         
-        int that_refs = that_hdr->ref_n_;
-        int that_unit = that_refs < 0 || this_hdr == that_hdr ? 0 : 1;
-        
-        that_refs += that_unit;
-        this_refs -= this_unit;
-        
-        {int trash; (this_unit ? this_hdr->ref_n_ : trash) = this_refs;}
-        {int trash; (that_unit ? that_hdr->ref_n_ : trash) = that_refs;}
-        
-        this->hdr_ = that_hdr;
-        
-        if(this_refs == 0)
-          HeaderOps::template delete_header<T...>(this_hdr);
+        HeaderOps1::incref(that_hdr);
+        HeaderOps::template dropref<T...>(this_hdr, /*maybe_nil=*/std::true_type());
         
         return *this;
       }
       
       future_impl_shref(future_impl_shref &&that) {
         this->hdr_ = that.hdr_;
-        that.hdr_ = &future_header::the_nil;
+        that.hdr_ = future_header_nil::nil();
       }
       template<typename Ops1>
       future_impl_shref(
@@ -109,7 +91,7 @@ namespace upcxx {
           typename std::enable_if<std::is_base_of<HeaderOps,Ops1>::value>::type* = 0
         ) {
         this->hdr_ = that.hdr_;
-        that.hdr_ = &future_header::the_nil;
+        that.hdr_ = future_header_nil::nil();
       }
       
       future_impl_shref& operator=(future_impl_shref &&that) {
@@ -126,10 +108,7 @@ namespace upcxx {
       }
       
       ~future_impl_shref() {
-        // unnecessary check but hopefully it helps compiler remove redundant
-        // decref's when our header pointer has been moved out.
-        if(this->hdr_ != &future_header::the_nil)
-          HeaderOps::template decref_header<T...>(this->hdr_);
+        HeaderOps::template dropref<T...>(this->hdr_, /*maybe_nil=*/std::true_type());
       }
     
     public:
@@ -160,7 +139,7 @@ namespace upcxx {
       
       future_header* steal_header() {
         future_header *hdr = this->hdr_;
-        this->hdr_ = &future_header::the_nil;
+        this->hdr_ = future_header_nil::nil();
         return hdr;
       }
     };
@@ -169,11 +148,12 @@ namespace upcxx {
     //////////////////////////////////////////////////////////////////////
     // future_dependency: future_impl_shref specialization
     
-    template<bool is_trivially_ready_result>
+    template<typename HeaderOps,
+             bool is_trivially_ready_result = HeaderOps::is_trivially_ready_result>
     struct future_dependency_shref_base;
     
-    template<>
-    struct future_dependency_shref_base</*is_trivially_ready_result=*/false> {
+    template<typename HeaderOps>
+    struct future_dependency_shref_base<HeaderOps, /*is_trivially_ready_result=*/false> {
       future_header::dependency_link link_;
       
       future_dependency_shref_base(
@@ -181,9 +161,10 @@ namespace upcxx {
           future_header *arg_hdr
         ) {
         
-        if(arg_hdr->status_ == future_header::status_proxying ||
+        if(HeaderOps::is_possibly_dependent && (
+           arg_hdr->status_ == future_header::status_proxying ||
            arg_hdr->status_ == future_header::status_proxying_active
-          ) {
+          )) {
           arg_hdr = future_header::drop_for_proxied(arg_hdr);
         }
         
@@ -207,8 +188,8 @@ namespace upcxx {
       future_header* header_() const { return link_.dep; }
     };
     
-    template<>
-    struct future_dependency_shref_base</*is_trivially_ready_result=*/true> {
+    template<typename HeaderOps>
+    struct future_dependency_shref_base<HeaderOps, /*is_trivially_ready_result=*/true> {
       future_header *hdr_;
       
       future_dependency_shref_base(
@@ -227,13 +208,13 @@ namespace upcxx {
     struct future_dependency<
         future1<future_kind_shref<HeaderOps>, T...>
       >:
-      future_dependency_shref_base<HeaderOps::is_trivially_ready_result> {
+      future_dependency_shref_base<HeaderOps> {
       
       future_dependency(
           future_header_dependent *suc_hdr,
           future1<future_kind_shref<HeaderOps>, T...> arg
         ):
-        future_dependency_shref_base<HeaderOps::is_trivially_ready_result>{
+        future_dependency_shref_base<HeaderOps>{
           suc_hdr,
           arg.impl_.steal_header()
         } {
@@ -241,11 +222,12 @@ namespace upcxx {
       
       void cleanup_early() {
         this->unlink_();
-        HeaderOps::template decref_header<T...>(this->header_());
+        auto *hdr = this->header_();
+        HeaderOps::template dropref<T...>(hdr, /*maybe_nil=*/std::true_type());
       }
       
       void cleanup_ready() {
-        future_header_ops_result_ready::template decref_header<T...>(this->header_());
+        future_header_ops_result_ready::template dropref<T...>(this->header_(), /*maybe_nil*/std::false_type());
       }
       
       upcxx::constant_function<std::tuple<T&...>> result_lrefs_getter() const {

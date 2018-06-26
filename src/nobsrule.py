@@ -31,13 +31,32 @@ def required_libraries(cxt, src):
     ]:
     return cxt.gasnet()
   
-  elif src == here('lpc/inbox.hpp'):
-    # Anyone including "lpc_inbox.hpp" needs UPCXX_LPC_INBOX_<impl> defined.
-    return {'upcxx-lpc-inbox': {
-      'ppdefs': {
-        'UPCXX_LPC_INBOX_%s'%cxt.upcxx_lpc_inbox_id(): 1
-      }
-    }}
+  elif src == here('intru_queue.hpp'):
+    # Anyone including "intru_queue.hpp" needs UPCXX_MPSC_QUEUE_<impl> defined.
+    mpsc = cxt.env('UPCXX_MPSC_QUEUE', '', universe=['atomic','biglock'])
+    
+    if mpsc == '':
+      # If UPCXX_MPSC_QUEUE wasn't found then look for deprecated UPCXX_LPC_INBOX
+      lpc_inbox = cxt.env('UPCXX_LPC_INBOX',
+                          otherwise='lockfree',
+                          universe=['locked','lockfree','syncfree'])
+      mpsc = {
+          'lockfree': 'atomic',
+          'locked': 'biglock',
+          'syncfree': 'atomic'
+        }[lpc_inbox]
+    
+    mpsc = mpsc.upper()
+    
+    return cxt.libset_merge(
+      {'upcxx-mpsc-queue': {
+        'ppdefs': {
+          'UPCXX_MPSC_QUEUE_%s'%mpsc: 1
+        }
+      }},
+      # we need pthreads for biglock queue
+      cxt.pthread() if mpsc == 'BIGLOCK' else {}
+    )
 
   elif src == here('diagnostic.hpp'):
     # Anyone including "diagnostic.hpp" gets UPCXX_ASSERT_ENABLED defined.
