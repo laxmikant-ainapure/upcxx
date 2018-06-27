@@ -74,9 +74,11 @@ def load_args():
                          help='Spawn NUM number of UPC++ ranks. Required.')
     _parser.add_argument('-N', dest='nnodes', type=nodes_type, default=None, metavar='NUM',
                          help='Run on NUM of nodes.')
-    _parser.add_argument('-shared-heap', dest='heapsz', type=heapsz_type, default='128MB',
+    _parser.add_argument('-shared-heap', dest='heapsz', type=heapsz_type,
+                         default=(os.environ.get('UPCXX_SEGMENT_MB') or '128') + 'MB',
                          help='Requests HEAPSZ size of shared memory per rank. ' + \
-                        'Units must be specified as ' + ', '.join(HEAPSZ_UNITS) + '. Default %(default)s')
+                        'Units must be specified as ' + ', '.join(HEAPSZ_UNITS) + '.' +
+                        'Default is ${UPCXX_SEGMENT_MB} MBs if set, 128MB otherwise.')
     _parser.add_argument('-backtrace', dest='backtrace', default=False, action='store_true',
                          help='Enable backtraces. Compile with -g for full debugging information.')
     _parser.add_argument('-show', dest='show', default=False, action='store_true',
