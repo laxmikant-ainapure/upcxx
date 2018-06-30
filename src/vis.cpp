@@ -23,7 +23,7 @@ void upcxx::detail::rma_put_irreg_nb(
 
   gex_Flags_t flags = 0;
   if(source_cb!=NULL) // user has requested source completion event
-    flags = GEX_FLAG_VIS_WITH_LC;
+    flags = GEX_FLAG_ENABLE_LEAF_LC;
   
   gex_Event_t op_h = gex_VIS_VectorPutNB(gasnet::world_team,
                                          rank_d,
@@ -82,7 +82,7 @@ void upcxx::detail::rma_put_reg_nb(
   gex_Event_t op_h;
   gex_Flags_t flags = 0;
   if(source_cb!=NULL) // user has requested source completion event
-    flags = GEX_FLAG_VIS_WITH_LC;
+    flags = GEX_FLAG_ENABLE_LEAF_LC;
  
   op_h = gex_VIS_IndexedPutNB(gasnet::world_team,
                               rank_d,
@@ -133,7 +133,7 @@ void upcxx::detail::rma_put_strided_nb(
 {
   gex_Flags_t flags = 0;
   if(source_cb!=NULL) // user has requested source completion event
-    flags = GEX_FLAG_VIS_WITH_LC;
+    flags = GEX_FLAG_ENABLE_LEAF_LC;
   
   gex_Event_t op_h = gex_VIS_StridedPutNB(gasnet::world_team,
                                           rank_d,

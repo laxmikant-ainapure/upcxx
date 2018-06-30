@@ -232,7 +232,7 @@ void upcxx::init() {
   //////////////////////////////////////////////////////////////////////////////
   // Setup the local-memory neighborhood tables.
   
-  gex_NbrhdInfo_t *nbhd;
+  gex_RankInfo_t *nbhd;
   gex_Rank_t peer_n, peer_me;
   gex_System_QueryNbrhdInfo(&nbhd, &peer_n, &peer_me);
 
