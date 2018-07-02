@@ -37,7 +37,7 @@ platform_sanity_checks() {
             KERNEL_GOOD=
         fi
         if test -n "$CRAY_PRGENVCRAY" ; then
-            echo 'ERROR: UPC++ on Cray XC currently requires PrgEnv-gnu. Please do: `module switch PrgEnv-cray PrgEnv-gnu`'
+            echo 'ERROR: UPC++ on Cray XC currently requires PrgEnv-gnu or PrgEnv-intel. Please do: `module switch PrgEnv-cray PrgEnv-gnu` or `module switch PrgEnv-cray PrgEnv-intel`'
             exit 1
         elif test -n "$CRAY_PRGENVINTEL" && ! test -n "$GCC_VERSION" ; then
             echo 'ERROR: UPC++ on Cray XC with PrgEnv-intel must also have the gcc module loaded. Please do: `module load gcc`'
