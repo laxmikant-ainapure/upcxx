@@ -122,13 +122,16 @@ namespace upcxx {
       static T& as_lref(T &&rref) { return rref; }
       
       template<typename Me, typename ...Arg>
-      static auto apply_(Me &&me, Arg &&...a) {
-        // -> decltype(
-        //   binding<Fn>::off_wire(me.fn_)(
-        //     std::declval<typename binding<B>::off_wire_type&>()...,
-        //     std::forward<Arg>(a)...
-        //   )
-        // ) {
+      static auto apply_(Me &&me, Arg &&...a)
+#ifndef __INTEL_COMPILER
+        -> decltype(
+          binding<Fn>::off_wire(me.fn_)(
+            std::declval<typename binding<B>::off_wire_type&>()...,
+            std::forward<Arg>(a)...
+          )
+        )
+#endif
+      {
         return binding<Fn>::off_wire(me.fn_)(
           as_lref(
             binding<B>::off_wire(
@@ -172,26 +175,29 @@ namespace upcxx {
       std::tuple<typename binding<B>::on_wire_type...> b_;
       
       template<typename Me, typename ...Arg>
-      static auto apply_(Me &&me, Arg &&...a) {
-        // -> decltype(
-        //   upcxx::when_all(
-        //     upcxx::to_future(
-        //       binding<Fn>::off_wire(
-        //         std::declval<typename binding<Fn>::on_wire_type&&>()
-        //       )
-        //     ),
-        //     upcxx::to_future(
-        //       binding<B>::off_wire(
-        //         std::declval<typename binding<B>::on_wire_type&&>()
-        //       )
-        //     )...
-        //   ).then(
-        //     std::declval<bound_function_applicator<
-        //         Fn, std::tuple<B...>,
-        //         std::tuple<typename binding<Arg&&>::stripped_type...>
-        //       >>()
-        //   )
-        // ) {
+      static auto apply_(Me &&me, Arg &&...a)
+#ifndef __INTEL_COMPILER
+        -> decltype(
+          upcxx::when_all(
+            upcxx::to_future(
+              binding<Fn>::off_wire(
+                std::declval<typename binding<Fn>::on_wire_type&&>()
+              )
+            ),
+            upcxx::to_future(
+              binding<B>::off_wire(
+                std::declval<typename binding<B>::on_wire_type&&>()
+              )
+            )...
+          ).then(
+            std::declval<bound_function_applicator<
+                Fn, std::tuple<B...>,
+                std::tuple<typename binding<Arg&&>::stripped_type...>
+              >>()
+          )
+        )
+#endif
+      {
         return upcxx::when_all(
             upcxx::to_future(
               binding<Fn>::off_wire(std::move(me.fn_))
@@ -233,14 +239,20 @@ namespace upcxx {
     }
     
     template<typename ...Arg>
-    auto operator()(Arg &&...a) const {//->
-      // decltype(base_type::apply_(*this, std::forward<Arg>(a)...)) {
+    auto operator()(Arg &&...a) const
+#ifndef __INTEL_COMPILER
+      -> decltype(base_type::apply_(*this, std::forward<Arg>(a)...))
+#endif
+    {
       return base_type::apply_(*this, std::forward<Arg>(a)...);
     }
     
     template<typename ...Arg>
-    auto operator()(Arg &&...a) {//->
-      // decltype(base_type::apply_(*this, std::forward<Arg>(a)...)) {
+    auto operator()(Arg &&...a)
+#ifndef __INTEL_COMPILER
+      -> decltype(base_type::apply_(*this, std::forward<Arg>(a)...))
+#endif
+    {
       return base_type::apply_(*this, std::forward<Arg>(a)... );
     }
   };
