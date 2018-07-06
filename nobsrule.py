@@ -190,7 +190,7 @@ def gasnet_debug(cxt):
   """
   Whether to build GASNet in debug mode.
   """
-  return cxt.cg_dbgsym()
+  return cxt.cg_dbgsym() and cxt.cg_optlev_default() == 0
 
 @rule(cli='gasnet_install_to')
 def gasnet_install_to(cxt):
@@ -987,7 +987,7 @@ class gasnet_configured:
   """
   Returns a configured gasnet build directory.
   """
-  version_bump = 3
+  version_bump = 4
   
   @traced
   def get_gasnet_user(me, cxt):
@@ -996,11 +996,17 @@ class gasnet_configured:
   @traced
   @coroutine
   def get_config(me, cxt):
+    flags = ['-O%d'%cxt.cg_optlev_default()] + (['-g'] if cxt.cg_dbgsym() else []) 
+    
     cc = yield cxt.cc()
+    cc = cc + flags
+    
     cc_ver = version_of(cc)
     me.depend_fact(key='CC', value=cc_ver)
     
     cxx = yield cxt.cxx()
+    cxx = cxx + flags
+    
     cxx_ver = version_of(cxx)
     me.depend_fact(key='CXX', value=cxx_ver)
     
