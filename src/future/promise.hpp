@@ -5,6 +5,7 @@
 #include <upcxx/future/impl_shref.hpp>
 
 #include <cstdint>
+#include <cstddef>
 
 namespace upcxx {
   template<typename ...T>

@@ -4,6 +4,8 @@
   #include <gasnet_vis.h>
 #endif
 
+#include <cstddef>
+
 namespace gasnet = upcxx::backend::gasnet;
 
 static_assert(offsetof(gex_Memvec_t, gex_addr) == offsetof(upcxx::detail::memvec_t, gex_addr) &&

@@ -4,6 +4,8 @@
 #include <upcxx/diagnostic.hpp>
 #include <upcxx/lpc.hpp>
 #include <upcxx/utility.hpp>
+
+#include <cstddef>
 #include <new>
 
 /* Place this macro in a class definition to give it overrides of operator
