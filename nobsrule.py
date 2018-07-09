@@ -291,7 +291,7 @@ def lang_cxx11(cxt):
   cxx = yield cxt.cxx()
   _,out,_ = yield version_of(cxx)
   
-  if out[0:4] == 'icpc':
+  if '(ICC)' in out.split():
     yield ['-std=c++14']
   else:
     yield ['-std=c++11']
