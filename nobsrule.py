@@ -283,11 +283,18 @@ def lang_c11(cxt):
   return ['-std=c11']
 
 @rule()
+@coroutine
 def lang_cxx11(cxt):
   """
   String list to engage C++11 language dialect for the C++ compiler.
   """
-  return ['-std=c++14']
+  cxx = yield cxt.cxx()
+  _,out,_ = yield version_of(cxx)
+  
+  if out[0:4] == 'icpc':
+    yield ['-std=c++14']
+  else:
+    yield ['-std=c++11']
 
 @rule(path_arg='src')
 @coroutine
@@ -299,7 +306,8 @@ def comp_lang(cxt, src):
   
   if ext in cxx_exts:
     cxx = yield cxt.cxx()
-    yield cxx + cxt.lang_cxx11()
+    cxx11 = yield cxt.lang_cxx11()
+    yield cxx + cxx11
   elif ext in c_exts:
     cc = yield cxt.cc()
     yield cc + cxt.lang_c11()
@@ -822,10 +830,12 @@ def install(cxt, main_src, install_path):
   libname, libset = yield cxt.library(main_src)
   cc = yield cxt.cc()
   cxx = yield cxt.cxx()
+  cxx11 = yield cxt.lang_cxx11()
   
   install_libset(install_path, libname, libset, meta_extra={
-    'CC': ' '.join(cc),
-    'CXX': ' '.join(cxx)
+    'CC': cc,
+    'CXX': cxx,
+    'CXXFLAGS': cxx11
   })
   
   yield None
@@ -1601,18 +1611,34 @@ def install_libset(install_path, name, libset, meta_extra={}):
         assert y == metas.get(x,y) # libraries provided conflicting values for same meta-varaible
         metas[x] = y
     
+    def flat(*xs):
+      if len(xs) == 1:
+        if xs[0] is None:
+          return ''
+        elif type(xs[0]) in (tuple, list):
+          return flat(*xs[0])
+        else:
+          return str(xs[0])
+      else:
+        return ' '.join([x for x in [flat(x) for x in xs] if x != ''])
+    
+    for k,v in dict(
+        CPPFLAGS = libset_ppflags(installed_libset),
+        CXXFLAGS = libset_cgflags(installed_libset),
+        LDFLAGS = libset_ldflags(installed_libset),
+        LIBS = libset_libflags(installed_libset)
+      ).items():
+      metas[k] = flat(metas.get(k), v)
+    
     meta_path = join(install_path, 'bin', name+'-meta')
     meta_contents = \
 '''#!/bin/sh
-CPPFLAGS="''' + ' '.join(libset_ppflags(installed_libset)) + '''"
-CXXFLAGS="''' + ' '.join(libset_cgflags(installed_libset)) + '''"
-LDFLAGS="''' + ' '.join(libset_ldflags(installed_libset)) + '''"
-LIBS="''' + ' '.join(libset_libflags(installed_libset)) + '''"
+''' + '\n'.join(
+  ["%s='%s'"%(k,flat(v)) for k,v in sorted(metas.items()) if flat(v) != '']
+) + '''
 PPFLAGS="$CPPFLAGS"
 LIBFLAGS="$LIBS"
-''' + '\n'.join(
-  ["%s='%s'"%(k,v) for k,v in sorted(metas.items()) if v is not None]
-) + '''
+
 [ "$1" != "" ] && eval echo '$'"$1"
 '''
     install_contents(meta_contents, meta_path, 0755)
