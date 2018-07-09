@@ -551,27 +551,31 @@ void gasnet::send_am_rdzv(
 template void gasnet::send_am_rdzv<progress_level::internal>(intrank_t, persona*, void*, size_t, size_t);
 template void gasnet::send_am_rdzv<progress_level::user>(intrank_t, persona*, void*, size_t, size_t);
 
-template<>
-void rpc_as_lpc::cleanup</*never_rdzv=*/false>(detail::lpc_base *me1) {
-  rpc_as_lpc *me = static_cast<rpc_as_lpc*>(me1);
-  
-  if(!me->is_rdzv)
-    std::free(me->payload);
-  else {
-    if(backend::rank_is_local(me->rank_s)) {
-      // Notify source rank it can free buffer.
-      std::uintptr_t buf_s = backend::globalize_memory_nonnull(me->rank_s, me->payload);
-      
-      send_am_restricted(me->rank_s,
-        [=]() { upcxx::deallocate(reinterpret_cast<void*>(buf_s)); }
-      );
-      
-      delete me;
+namespace upcxx {
+namespace backend {
+namespace gasnet {
+  template<>
+  void rpc_as_lpc::cleanup</*never_rdzv=*/false>(detail::lpc_base *me1) {
+    rpc_as_lpc *me = static_cast<rpc_as_lpc*>(me1);
+    
+    if(!me->is_rdzv)
+      std::free(me->payload);
+    else {
+      if(backend::rank_is_local(me->rank_s)) {
+        // Notify source rank it can free buffer.
+        std::uintptr_t buf_s = backend::globalize_memory_nonnull(me->rank_s, me->payload);
+        
+        send_am_restricted(me->rank_s,
+          [=]() { upcxx::deallocate(reinterpret_cast<void*>(buf_s)); }
+        );
+        
+        delete me;
+      }
+      else
+        upcxx::deallocate(me->payload);
     }
-    else
-      upcxx::deallocate(me->payload);
   }
-}
+}}}
 
 inline rpc_as_lpc* rpc_as_lpc::build_copy(
     void *cmd_buf,
