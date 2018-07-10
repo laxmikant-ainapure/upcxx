@@ -15,7 +15,7 @@ namespace upcxx {
      * to encourage code sharing by the compiler.
      */
     struct future_body_then_base: future_body {
-      future_body_then_base(void *storage): future_body{storage} {}
+      future_body_then_base(void *storage): future_body(storage) {}
       
       // future_body_then::leave_active calls this after lambda evaluation
       template<typename Kind, typename ...T>
@@ -60,9 +60,9 @@ namespace upcxx {
           void *storage, future_header_dependent *hdr,
           FuArg arg, Fn fn
         ):
-        future_body_then_base{storage},
-        dep_{hdr, std::move(arg)},
-        fn_{std::move(fn)} {
+        future_body_then_base(storage),
+        dep_(hdr, std::move(arg)),
+        fn_(std::move(fn)) {
       }
       
       // then's can't be destructed early so we inherit the stub
@@ -93,9 +93,9 @@ namespace upcxx {
           void *storage, future_header_dependent *hdr,
           FuArg arg, Fn fn
         ):
-        future_body_then_base{storage},
-        dep_{hdr, std::move(arg)},
-        fn_{std::move(fn)} {
+        future_body_then_base(storage),
+        dep_(hdr, std::move(arg)),
+        fn_(std::move(fn)) {
       }
       
       // then_pure's can be destructed early so we override stub

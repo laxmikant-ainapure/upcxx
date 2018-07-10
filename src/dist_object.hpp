@@ -99,7 +99,7 @@ namespace upcxx {
     
   public:
     dist_object(T value):
-      value_{std::move(value)} {
+      value_(std::move(value)) {
       
       // TODO: use team's collective digest generator
       id_ = {0, detail::dist_master_id_bump};
@@ -111,8 +111,8 @@ namespace upcxx {
     dist_object(dist_object const&) = delete;
     
     dist_object(dist_object &&that):
-      id_{that.id_},
-      value_{std::move(that.value_)} {
+      id_(that.id_),
+      value_(std::move(that.value_)) {
       
       that.id_ = digest{~0ull, ~0ull}; // the tombstone id value
       

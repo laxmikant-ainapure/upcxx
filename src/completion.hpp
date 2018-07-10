@@ -71,8 +71,8 @@ namespace upcxx {
     Fn fn_;
 
     lpc_cx(persona &target, Fn fn):
-      target_{&target},
-      fn_{std::move(fn)} {
+      target_(&target),
+      fn_(std::move(fn)) {
     }
   };
 
@@ -82,7 +82,7 @@ namespace upcxx {
     using event_t = Event;
     
     Fn fn_;
-    rpc_cx(Fn fn): fn_{std::move(fn)} {}
+    rpc_cx(Fn fn): fn_(std::move(fn)) {}
   };
   
   //////////////////////////////////////////////////////////////////////
@@ -106,12 +106,12 @@ namespace upcxx {
     }
     
     constexpr completions(H head, T ...tail):
-      completions<T...>{std::move(tail)...},
-      head{std::move(head)} {
+      completions<T...>(std::move(tail)...),
+      head(std::move(head)) {
     }
     constexpr completions(H head, completions<T...> tail):
-      completions<T...>{std::move(tail)},
-      head{std::move(head)} {
+      completions<T...>(std::move(tail)),
+      head(std::move(head)) {
     }
   };
 
@@ -317,7 +317,7 @@ namespace upcxx {
       promise<T...> &pro_;
 
       cx_state(promise_cx<Event,T...> cx):
-        pro_{cx.pro_} {
+        pro_(cx.pro_) {
         pro_.require_anonymous(1);
       }
       
@@ -331,7 +331,7 @@ namespace upcxx {
       promise<T...> &pro_;
 
       cx_state(promise_cx<Event,T...> cx):
-        pro_{cx.pro_} {
+        pro_(cx.pro_) {
         pro_.require_anonymous(1);
       }
       
@@ -360,8 +360,8 @@ namespace upcxx {
       Fn fn_;
       
       cx_state(lpc_cx<Event,Fn> cx):
-        target_{cx.target_},
-        fn_{std::move(cx.fn_)} {
+        target_(cx.target_),
+        fn_(std::move(cx.fn_)) {
       }
       
       void operator()(T ...vals) {
@@ -460,7 +460,7 @@ namespace upcxx {
       cx_state<Cx, typename EventValues::template tuple_t<cx_event_t<Cx>>> state_;
       
       completions_state_head(Cx cx):
-        state_{std::move(cx)} {
+        state_(std::move(cx)) {
       }
       
       template<typename ...V>
@@ -509,8 +509,8 @@ namespace upcxx {
       static constexpr bool empty = head_t::empty && tail_t::empty;
       
       completions_state(completions<CxH,CxT...> &&cxs):
-        head_t{cxs.head_moved()},
-        tail_t{cxs.tail_moved()} {
+        head_t(cxs.head_moved()),
+        tail_t(cxs.tail_moved()) {
       }
 
       head_t& head() { return static_cast<head_t&>(*this); }
