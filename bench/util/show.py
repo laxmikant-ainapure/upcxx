@@ -53,16 +53,18 @@ for arg in sys.argv[1:]:
   elif '=' in arg:
     x,y = arg.split('=')
     x = x.strip()
-    y = y.strip()
-    try: y = int(y)
-    except: pass
+    y = y.split(',')
+    def intify(s):
+      try: return int(s)
+      except: return s
+    y = map(lambda y: intify(y.strip()), y)
     dimvals[x] = y
 
 tabs = {}
 for report in reportfiles:
   def emit(dependent_vars, **xys):
     dependent_vars = tuple(dependent_vars)
-    if all(xys[x]==dimvals[x] for x in xys if x in dimvals):
+    if all(xys[x] in dimvals[x] for x in xys if x in dimvals):
       fact = dict(xys)
       for x in dependent_vars:
         fact.pop(x, None)
@@ -87,9 +89,10 @@ if '-rel' in sys.argv[1:]:
       try: y = int(y)
       except: pass
       relative_to[x] = y
-
+  
   for name in tabs:
     tabs[name] = tabs[name] / tabs[name].split(**relative_to)[0]
+    
 else:
   relative_to = {}
 

@@ -11,10 +11,9 @@
  * 
  *   size: the size of the PUT in bytes.
  * 
- *   op = {put_lat|put_bw}:
- *     put_lat: Latency sensitive test where only one put is in-flight at
- *              a time.
- *     put_bw:  Bandwidth test which has lots of puts in flight concurrently.
+ *   kind = {lat|bw}:
+ *     lat: Latency sensitive test where only one put is in-flight at a time.
+ *     bw:  Bandwidth test which has lots of puts in flight concurrently.
  *
  *   how = {upcxx|gasnet}: Was this done using upcxx or gasnet API's.
  * 
@@ -39,9 +38,8 @@
  * 
  * Environment variables:
  * 
- *   put_size_ub: The maximum (inclusive) put size to capture in bytes. Only
- *     powers of two sizes up to and including this quantity are considered.
- *     Default = 4194304 (4MB)
+ *   sizes: The list of transfer sizes to measure in bytes. 
+ *     Default = 8...4M
  * 
  *   wait_secs: The number of (fractional) seconds to spend on each measurement.
  *     Default = 0.5. Larger values smooth out system noise.
@@ -61,6 +59,7 @@
 #include <string>
 #include <iostream>
 #include <list>
+#include <unordered_map>
 #include <vector>
 
 #include <cstdio>
@@ -69,10 +68,6 @@ using namespace bench;
 using namespace std;
 
 #define USE_GPROF 0
-
-constexpr bool DO_BANDWIDTH = true;
-constexpr bool DO_UPCXX = true;
-constexpr bool DO_GASNET = true;
 
 #if USE_GPROF
   #include <sys/gmon.h>
@@ -83,15 +78,6 @@ constexpr bool DO_GASNET = true;
 #ifndef PROGRESS_PERIOD
   #define PROGRESS_PERIOD 32
 #endif
-
-struct measure {
-  size_t ops;
-  double secs;
-  
-  double bw(size_t op_size) const {
-    return double(ops)*double(op_size)/secs;
-  }
-};
 
 int main() {
   upcxx::init();
@@ -104,19 +90,21 @@ int main() {
     );
   #endif
   
-  size_t size_ub = os_env<size_t>("put_size_ub", 4<<20);
+  vector<size_t> sizes =
+    os_env<vector<size_t>>("sizes",
+      {8, 16, 32, 64, 128, 256, 512,
+       1<<10, 2<<10, 4<<10, 8<<10, 16<<10, 32<<10, 64<<10,
+       128<<10, 256<<10, 512<<10, 1<<20, 2<<20, 4<<20}
+    ); 
   double wait_secs = os_env<double>("wait_secs", 0.5);
   
-  constexpr int mag_lb = 3;
-  constexpr int mag_ub_max = 30;
+  size_t max_size = 0;
+  for(size_t sz: sizes)
+    max_size = std::max(max_size, sz);
   
-  int mag_ub = mag_lb;
-  while(size_t(1)<<mag_ub <= size_ub)
-    mag_ub += 1;
-  
-  UPCXX_ASSERT_ALWAYS(mag_ub < mag_ub_max, "put_size_ub="<<size_ub<<" cannot exceed "<<(size_t(1)<<mag_ub_max));
+  UPCXX_ASSERT_ALWAYS(max_size <= 1u<<30, "max size in `sizes` cannot exceed "<<(1u<<30));
     
-  upcxx::global_ptr<char> blob = upcxx::new_array<char>(size_ub);
+  upcxx::global_ptr<char> blob = upcxx::new_array<char>(2*max_size);
   char *blob_local = blob.local();
   
   std::vector<upcxx::global_ptr<char>> blobs;
@@ -124,15 +112,7 @@ int main() {
   for(int i=0; i < upcxx::rank_n(); i++)
     blobs[i] = upcxx::broadcast(blob, i).wait(); 
   
-  timer tim;
-  
   if(upcxx::rank_me() == 0) {
-    measure put_upcxx_lat[2][mag_ub_max+1];
-    measure put_gas_lat[2][mag_ub_max+1];
-    measure put_upcxx_bw_fut[2][mag_ub_max+1];
-    measure put_upcxx_bw_pro[2][mag_ub_max+1];
-    measure put_gas_bw[2][mag_ub_max+1];
-    
     int local_peer = -1;
     int remote_peer = -1;
     for(int r=1; r < upcxx::rank_n(); r++) {
@@ -162,43 +142,57 @@ int main() {
           <<"remote="<<remote_peer<<'\n';
     }
     
+    auto make_row =
+      [&](int peer, size_t size, const char *kind, const char *how) {
+        return column("peer",
+                 peer == local_peer ? "local" :
+                 peer == remote_peer ? "remote" :
+                 "self"
+               ) &
+               column("size", size) &
+               column("kind", kind) &
+               column("how", how);
+      };
+    
+    using row_t = decltype(make_row(0,0,0,0));
+    
+    std::unordered_map<row_t, double> bw_table;
+    
     for(int peer_ix=0; peer_ix < peer_n; peer_ix++) {
       const int peer = peers[peer_ix];
       cout<<"Putting to peer="<<peer<<'\n';
       
-      for(int mag=mag_lb; mag < mag_ub; mag++) {
-        const size_t size = 1<<mag;
-        const int step = mag < 10 ? 1000 : mag < 20 ? 100 : 1<<(mag_ub-mag);
+      for(size_t size: sizes) {
+        const int step = (1<<20)/size | 1;
         
-        if(DO_UPCXX) { // put upcxx latency
+        if(1) { // put upcxx latency
           cout<<"Measuring size="<<size<<" kind=lat how=upcxx"<<std::endl;
           cout.flush();
           
-          tim.reset();
-          int iters = 0;
+          timer tim;
+          int64_t ops = 0;
           do {
             for(int i=0; i < step; i++) {
               auto src = blob_local;
-              auto dest = blobs[peer];
+              auto dest = blobs[peer] + size;
               upcxx::rput(src, dest, size).wait();
             }
-            iters += step;
+            ops += step;
           } while(tim.elapsed() < wait_secs);
-
-          put_upcxx_lat[peer_ix][mag].ops = iters;
-          put_upcxx_lat[peer_ix][mag].secs = tim.reset();
-        }    
+          
+          bw_table[make_row(peer, size, "lat", "upcxx")] = ops*size/tim.elapsed();
+        }
         
-        if(DO_GASNET) { // put gasnet latency
+        if(1) { // put gasnet latency
           cout<<"Measuring size="<<size<<" kind=lat how=gasnet"<<std::endl;
           cout.flush();
           
-          tim.reset();
-          int iters = 0;
+          timer tim;
+          int64_t ops = 0;
           do {
             for(int i=0; i < step; i++) {
               auto src = blob_local;
-              auto dest = blobs[peer];
+              auto dest = blobs[peer] + size;
               gex_Event_t *e = new gex_Event_t(
                 gex_RMA_PutNB(
                   upcxx::backend::gasnet::world_team, dest.rank_,
@@ -211,108 +205,141 @@ int main() {
               while(0 != gex_Event_Test(*e));
               delete e;
             }
-            iters += step;
+            ops += step;
           } while(tim.elapsed() < wait_secs);
           
-          put_gas_lat[peer_ix][mag].ops = iters;
-          put_gas_lat[peer_ix][mag].secs = tim.reset();
+          bw_table[make_row(peer, size, "lat", "gasnet")] = ops*size/tim.elapsed();
         }
         
-        if(DO_BANDWIDTH) { // put upcxx bandwidth over promises
-          cout<<"Measuring size="<<size<<" kind=bw how=upcxx::pro"<<std::endl;
+        if(1) { // put upcxx bandwidth over promises
+          cout<<"Measuring size="<<size<<" kind=bw how=upcxx-pro"<<std::endl;
           cout.flush();
           
-          tim.reset();
-          int iters = 0;
+          timer tim;
+          int64_t ops = 0;
+          upcxx::promise<> pro;
+          
           do {
-            upcxx::promise<> pro;
             for(int i=0; i < step; i++) {
               auto src = blob_local;
-              auto dest = blobs[peer];
+              auto dest = blobs[peer] + size;
               upcxx::rput(src, dest, size,
                 upcxx::operation_cx::as_promise(pro)
               );
-              if(0 == i%PROGRESS_PERIOD) upcxx::progress();
+              ops += 1;
+              
+              if(0 == ops%PROGRESS_PERIOD)
+                upcxx::progress();
             }
-            pro.finalize().wait();
-            iters += step;
-          } while(tim.elapsed() < wait_secs);
+          }
+          while(tim.elapsed() < wait_secs);
           
-          put_upcxx_bw_pro[peer_ix][mag].ops = iters;
-          put_upcxx_bw_pro[peer_ix][mag].secs = tim.reset();
+          pro.finalize().wait();
+          
+          bw_table[make_row(peer, size, "bw", "upcxx-pro")] = ops*size/tim.elapsed();
         }
         
-        if(DO_BANDWIDTH) { // put upcxx bandwidth over futures
-          cout<<"Measuring size="<<size<<" kind=bw how=upcxx::fut"<<std::endl;
+        if(1) { // put upcxx bandwidth over futures
+          cout<<"Measuring size="<<size<<" kind=bw how=upcxx-fut"<<std::endl;
           cout.flush();
           
-          tim.reset();
-          int  iters = 0;
+          timer tim;
+          int64_t ops = 0;
+          std::list<upcxx::future<>> futs;
+          
           do {
-            upcxx::future<> f = upcxx::make_future();
             for(int i=0; i < step; i++) {
               auto src = blob_local;
-              auto dest = blobs[peer];
-              f = upcxx::when_all(f,
-                upcxx::rput(src, dest, size)
-              );
-              if(0 == i%PROGRESS_PERIOD) upcxx::progress();
+              auto dest = blobs[peer] + size;
+              futs.push_back(upcxx::rput(src, dest, size));
+              ops += 1;
+              
+              if(0 == ops%PROGRESS_PERIOD) {
+                upcxx::progress();
+                
+                while(!futs.empty() && futs.front().ready())
+                  futs.pop_front();
+              }
             }
-            f.wait();
-            iters += step;
-          } while(tim.elapsed() < wait_secs);
+          }
+          while(tim.elapsed() < wait_secs);
           
-          put_upcxx_bw_fut[peer_ix][mag].ops = iters;
-          put_upcxx_bw_fut[peer_ix][mag].secs = tim.reset();
+          while(!futs.empty()) {
+            futs.front().wait();
+            futs.pop_front();
+          }
+          
+          bw_table[make_row(peer, size, "bw", "upcxx-fut")] = ops*size/tim.elapsed();
         }
         
-        if(DO_BANDWIDTH) { // put gasnet bandwidth
+        if(1) { // put gasnet bandwidth
           cout<<"Measuring size="<<size<<" kind=bw how=gasnet"<<std::endl;
           cout.flush();
           
-          tim.reset();
-          int iters = 0;
+          timer tim;
+          int64_t ops = 0;
+          std::list<gex_Event_t> evs;
+          
           do {
-            std::list<gex_Event_t> evs;
-            
             for(int i=0; i < step; i++) {
               auto src = blob_local;
-              auto dest = blobs[peer];
-              
-              gex_Event_t h = gex_RMA_PutNB(
+              auto dest = blobs[peer] + size;
+              gex_Event_t e = gex_RMA_PutNB(
                 upcxx::backend::gasnet::world_team, dest.rank_,
                 dest.raw_ptr_, (void*)src, size,
                 GEX_EVENT_DEFER,
                 /*flags*/0
               );
+              ops += 1;
               
-              if(gex_Event_Test(h) != 0) {
-                evs.push_back(h);
-                if(0 == i%32) gasnet_AMPoll();
-                { // after_gasnet
-                  auto it = evs.begin();
-                  int n = 0;
-                  while(it != evs.end() && n < 4) {
-                    if(gex_Event_Test(*it) == 0)
-                      evs.erase(it++);
-                    else
-                      { ++it; ++n; }
-                  }
-                }
+              if(0 != gex_Event_Test(e))
+                evs.push_back(e);
+              
+              if(0 == ops%PROGRESS_PERIOD) {
+                gasnet_AMPoll();
+                while(!evs.empty() && 0 == gex_Event_Test(evs.front()))
+                  evs.pop_front();
               }
             }
-            
-            while(!evs.empty()) {
-              gasnet_AMPoll();
-              while(!evs.empty() && 0 == gex_Event_Test(evs.front()))
-                evs.pop_front();
-            }
-            
-            iters += step;
-          } while(tim.elapsed() < wait_secs);
+          }
+          while(tim.elapsed() < wait_secs);
           
-          put_gas_bw[peer_ix][mag].ops = iters;
-          put_gas_bw[peer_ix][mag].secs = tim.reset();
+          while(!evs.empty()) {
+            gasnet_AMPoll();
+            while(!evs.empty() && 0 == gex_Event_Test(evs.front()))
+              evs.pop_front();
+          }
+
+          bw_table[make_row(peer, size, "bw", "gasnet")] = ops*size/tim.elapsed();
+        }
+        
+        if(1) { // put gasnet-nbi bandwidth
+          cout<<"Measuring size="<<size<<" kind=bw how=gasnet-nbi"<<std::endl;
+          cout.flush();
+          
+          timer tim;
+          int64_t ops = 0;
+          
+          gex_NBI_BeginAccessRegion(0);
+          do {
+            for(int i=0; i < step; i++) {
+              auto src = blob_local;
+              auto dest = blobs[peer] + size;
+              gex_RMA_PutNBI(
+                upcxx::backend::gasnet::world_team, dest.rank_,
+                dest.raw_ptr_, (void*)src, size,
+                GEX_EVENT_DEFER,
+                /*flags*/0
+              );
+              ops += 1;
+            }
+          }
+          while(tim.elapsed() < wait_secs);
+          
+          gex_Event_t e = gex_NBI_EndAccessRegion(0);
+          gex_Event_Wait(e);
+          
+          bw_table[make_row(peer, size, "bw", "gasnet-nbi")] = ops*size/tim.elapsed();
         }
       }
     }
@@ -320,59 +347,31 @@ int main() {
     report rep(__FILE__);
     
     for(int peer_ix=0; peer_ix < peer_n; peer_ix++) {
-      const char *peer = 
-        peers[peer_ix]==local_peer ? "local" :
-        peers[peer_ix]==remote_peer ? "remote" :
-        "self";
-      
-      for(int mag=mag_lb; mag < mag_ub; mag++) {
-        const int size = 1<<mag;
-        auto common = opnew_row()
-                    & column("peer", peer)
-                    & column("size", size)
-                    & column("progress_period", PROGRESS_PERIOD);
-        
-        if(DO_UPCXX) {
-          rep.emit({"bw"},
-            common &
-            column("op", "put_lat") &
-            column("how", "upcxx") &
-            column("bw", put_upcxx_lat[peer_ix][mag].bw(size))
-          );
-        }
-        if(DO_GASNET) {
-          rep.emit({"bw"},
-            common &
-            column("op", "put_lat") &
-            column("how", "gasnet") &
-            column("bw", put_gas_lat[peer_ix][mag].bw(size))
-          );
-        }
-        if(DO_BANDWIDTH) {
-          rep.emit({"bw"},
-            common &
-            column("op", "put_bw") &
-            column("how", "upcxx_fut") &
-            column("bw", put_upcxx_bw_fut[peer_ix][mag].bw(size))
-          );
-          rep.emit({"bw"},
-            common &
-            column("op", "put_bw") &
-            column("how", "upcxx_pro") &
-            column("bw", put_upcxx_bw_pro[peer_ix][mag].bw(size))
-          );
-          rep.emit({"bw"},
-            common &
-            column("op", "put_bw") &
-            column("how", "gasnet") &
-            column("bw", put_gas_bw[peer_ix][mag].bw(size))
-          );
+      for(size_t size: sizes) {
+        const char *LAT = "lat", *BW = "bw";
+        for(const char *kind: {LAT,BW}) {
+          for(const char *how:
+              kind == LAT
+                ? std::initializer_list<const char*>{"upcxx","gasnet"}
+                : std::initializer_list<const char*>{"upcxx-fut","upcxx-pro","gasnet","gasnet-nbi"}
+            ) {
+            
+            auto r = make_row(peers[peer_ix], size, kind, how);
+            
+            if(bw_table.count(r)) { // in case one of the trials is disabled via "if(0) ..."
+              rep.emit({"bw"},
+                r & opnew_row()
+                  & column("progress_period", PROGRESS_PERIOD)
+                  & column("bw", bw_table[r])
+              );
+            }
+          }
         }
         
         rep.blank();
       }
     }
-  }
+  } // rank_me()==0
   
   upcxx::barrier();
   
