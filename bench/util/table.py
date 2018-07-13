@@ -131,7 +131,10 @@ class Table(object):
   
   def __len__(me):
     """Number of rows in table."""
-    return sum(map(len, me._tabs.values()))
+    n = 0
+    for rows,_ in me._tabs.values():
+      n += len(rows)
+    return n
   
   def __iter__(me):
     """Iterate the (row,val) pairs of table."""
@@ -139,17 +142,24 @@ class Table(object):
       for rowval in zip(rows,vals):
         yield rowval
   
+  def values(me):
+    ans = []
+    for rows,vals in me._tabs.values():
+      ans += vals
+    return ans
+  
   def dims_trivial(me):
     """
     Return a dictionary of dimensions to values for all dimensions which
     have exactly the same value across all rows.
     """
-    dims_common = me.dims_common
-    bins = {x:set() for x in dims_common}
+    dims = me.dims
+    bins = {x:set() for x in dims}
     for rows,vals in me._tabs.values():
       for row in rows:
-        for x in dims_common:
-          bins[x].add(row[x])
+        for x in dims:
+          if x in row:
+            bins[x].add(row[x])
     return {x:bins[x].pop() for x in bins if 1 == len(bins[x])}
   
   def split(me, **fact):
@@ -195,33 +205,35 @@ class Table(object):
     rows which collapsed (via dimension dropping) to the outer row.
     """
     dims = frozenset(dims)
-    dimstup = tuple(dims)
     grps = {}
     for tdims,(rows,vals) in me._tabs.items():
-      if len(dims & tdims) == len(dims):
-        for r,v in zip(rows,vals):
-          g = tuple(map(r.__getitem__, dimstup))
-          if g not in grps:
-            grps[g] = {}
-          
-          grp = grps[g]
-          if tdims not in grp:
-            grp[tdims] = ([],[])
-          
-          subrows, subvals = grp[tdims]
-          subrows.append(r)
-          subvals.append(v)
+      gdims = dims & tdims
+      gdimstup = tuple(gdims)
+      for r,v in zip(rows,vals):
+        g = (gdims, gdimstup, tuple(map(r.__getitem__, gdimstup)))
+        if g not in grps:
+          grps[g] = {}
+        
+        if g not in grps:
+          grps[g] = {}
+        grp = grps[g]
+        
+        if tdims not in grp:
+          grp[tdims] = ([],[])
+        subrows, subvals = grp[tdims]
+        
+        subrows.append(r)
+        subvals.append(v)
     
-    gs = grps.keys()
-    grps = grps.values()
+    tabs = {}
+    for (gdims,gdimstup,gdimsvals),grp in grps.items():
+      if gdims not in tabs:
+        tabs[gdims] = ([],[])
+      rows,vals = tabs[gdims]
+      rows.append(dict(zip(gdimstup, gdimsvals)))
+      vals.append(Table(holes=me.holes, tabs=grp))
     
-    return Table(
-      holes = emptyset,
-      tabs = {dims: (
-        [dict(zip(dimstup, g)) for g in gs],
-        [Table(holes=me.holes, tabs=grp) for grp in grps]
-      )}
-    )
+    return Table(holes=emptyset, tabs=tabs)
   
   def __add__(a, b): return _map2_tt(lambda a,b: a+b, a, b)
   def __radd__(b, a): return _map2_tt(lambda a,b: a+b, a, b)
@@ -368,19 +380,16 @@ def plot(t, title=''):
   
   gs = t.group(t.dims - frozenset([xdim]))
   
-  xs = set()
+  xs_all = set()
   for row,_ in t:
-    xs.add(row[xdim])
-  xs = sorted(xs)
+    xs_all.add(row[xdim])
+  xs_all = sorted(xs_all)
   
-  if len(xs) <= 10:
-    tick_of = lambda x: xs.index(x)
-    xticks = range(len(xs))
-    xlabels = [xdims.get(xdim,{}).get('pretty',pretty)(xs[i]) for i in xticks]
-  else:
-    tick_of = lambda x: xs.index(x) * float(10)/len(xs)
-    xticks = range(10)
-    xlabels = [xdims.get(xdim,{}).get('pretty',pretty)(xs[int(i*len(xs)/10)]) for i in xticks]
+  tick_of = lambda x: xs_all.index(x)
+  xticks = range(len(xs_all))
+  xlabels = [xdims.get(xdim,{}).get('pretty',pretty)(xs_all[i]) for i in xticks]
+  if len(xs_all) > 8:
+    xlabels = [xlabels[i] if i%(len(xs_all)/8) == 0 else '' for i in xrange(len(xlabels))]
   
   pyplot.xticks(xticks, xlabels)
   
@@ -400,10 +409,11 @@ def plot(t, title=''):
   
   gs = sorted(gs, key=lambda gc: sorted(gc[0].items()))
   for g,curve in gs:
-    xs, ys = [], []
+    xys = []
     for row,y in curve:
-      xs.append(row[xdim])
-      ys.append(y)
+      xys.append((row[xdim],y))
+    xys.sort()
+    xs, ys = zip(*xys)
     
     label = '   '.join(
       [('%s=%s'%(x,y)).ljust(legwth[x]) for x,y in sorted(g.items()) if x not in dims_trivial]

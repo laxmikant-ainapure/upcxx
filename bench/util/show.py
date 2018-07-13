@@ -77,8 +77,13 @@ for report in reportfiles:
   execfile(report, dict(emit=emit))
 
 for name in list(tabs.keys()):
-  tabs[name], = tab.tables([name], tabs[name])
-
+  t, = tab.tables([name], tabs[name])
+  def mean(seq):
+    return float(sum(seq))/len(seq)
+  g = t.group(t.dims - frozenset(['trial']))
+  t = T(lambda t: mean(t.values()))(g)
+  tabs[name] = t
+  
 if '-rel' in sys.argv[1:]:
   relative_to = {}
   for arg in sys.argv[sys.argv.index('-rel')+1:]:
