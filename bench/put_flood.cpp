@@ -84,18 +84,18 @@ using upcxx::global_ptr;
   #define PROGRESS_PERIOD 32
 #endif
 
-vector<size_t> sizes =
-  os_env<vector<size_t>>("sizes",
-    {8, 16, 32, 64, 128, 256, 512,
-     1<<10, 2<<10, 4<<10, 8<<10, 16<<10, 32<<10, 64<<10,
-     128<<10, 256<<10, 512<<10, 1<<20, 2<<20, 4<<20}
-  ); 
-double wait_secs = os_env<double>("wait_secs", 0);
-int fixed_iters = os_env<int>("fixed_iters", 0);
+// init'd from env vars after upcxx::init()
+vector<size_t> sizes; 
+double wait_secs;
+int fixed_iters;
 
 // maps rank to blob address
 vector<global_ptr<char>> blobs;
 
+// Runs `inject(T* src, global_ptr<T> dest, size_t size, int iters)` in a
+// loop until the measurement termination condition is met. Then runs
+// `finish()`, after which the timer is queried and total bandwidth is 
+// returned.
 template<typename Inject, typename Finish>
 double run_trial_bw(int peer, size_t size, Inject inject, Finish finish) {
   timer tim;
@@ -127,9 +127,6 @@ double run_trial_bw(int peer, size_t size, Inject inject, Finish finish) {
 int main() {
   upcxx::init();
   
-  if(wait_secs <= 0 && fixed_iters <= 0)
-    wait_secs = 0.5;
-  
   #if USE_GPROF
     setenv("GMON_OUT_PREFIX", (std::string("gmon.rank-") + std::to_string(upcxx::rank_me())).c_str(), 1);
     monstartup(
@@ -138,14 +135,36 @@ int main() {
     );
   #endif
   
+  //////////////////////////////////////////////////////////////////////////////
+  // initialize global constants from env vars
+  
+  sizes = os_env<vector<size_t>>("sizes",
+    {8, 16, 32, 64, 128, 256, 512,
+     1<<10, 2<<10, 4<<10, 8<<10, 16<<10, 32<<10, 64<<10,
+     128<<10, 256<<10, 512<<10, 1<<20, 2<<20, 4<<20}
+  ); 
+  wait_secs = os_env<double>("wait_secs", 0);
+  fixed_iters = os_env<int>("fixed_iters", 0);
+
+  if(wait_secs <= 0 && fixed_iters <= 0)
+    wait_secs = 0.5;
+  
   size_t max_size = 2<<20; // makes the min size allocated 2MB (huge page)
   for(size_t sz: sizes)
     max_size = std::max(max_size, sz);
   
   UPCXX_ASSERT_ALWAYS(max_size <= 1u<<30, "max size in `sizes` cannot exceed "<<(1u<<30));
   
+  //////////////////////////////////////////////////////////////////////////////
+  
   global_ptr<char> blob = upcxx::allocate<char, (2<<20)>(max_size);
   
+  // ensure requested alignment
+  UPCXX_ASSERT_ALWAYS(
+    reinterpret_cast<uintptr_t>(blob.local()) % (2<<20) == 0
+  );
+  
+  // share blobs across ranks
   blobs.resize(upcxx::rank_n());
   for(int i=0; i < upcxx::rank_n(); i++)
     blobs[i] = upcxx::broadcast(blob, i).wait(); 
