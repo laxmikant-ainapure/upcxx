@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-show.py [-i] [<report-file>...] [<name>=<val>...]
+show.py [-i|-out-csv] [<report-file>...] [<name>=<val>...]
         [-rel <name>=<val>...]
 
 Parse the given <report-file>'s (defaults to just "report.out")
@@ -14,10 +14,14 @@ than one app's are in the dataset).
 If "-rel" is present, then all "<name>=<val>" pairs after it
 are used as the denominator to produce relative data.
 
-If "-i" is present than instead of showing plots, an
+If "-i" is present then instead of showing plots, an
 interactive python shell will be entered which has all the
 dependent variables from the report files loaded as global
 variables. Each is an instance of Table (from table.py).
+
+If "-out-csv" is present then plain-text tabular data is dumped
+to stdout. Good for importing into spreadsheets.
+
 """
 
 import sys
@@ -101,18 +105,42 @@ if '-rel' in sys.argv[1:]:
 else:
   relative_to = {}
 
+titles = dict(
+  bw = 'Bandwidth',
+  secs = 'Elapsed (s)'
+)
+
 if '-i' in sys.argv[1:]:
   for name in tabs:
     globals()[name] = tabs[name]
   import code
   code.interact(local=globals())
 else:
-  titles = dict(
-    bw = 'Bandwidth',
-    secs = 'Elapsed (s)'
-  )
   for name in tabs:
+    t = tabs[name]
     title = titles[name]
     if relative_to:
       title += " relative to %s"%tab.pretty(relative_to)
-    plot(tabs[name], title=title)
+    
+    if '-out-csv' in sys.argv[1:]:
+      trivs = t.dims_trivial()
+      if trivs:
+        title += '\n  where:' + tab.pretty(trivs)
+      
+      out = sys.stdout.write
+      out(title + '\n')
+      dims = sorted(t.dims - set(t.dims_trivial()))
+      out(' '.join(['%10s'%d for d in dims + [name]]) + '\n')
+      out('-'*(11*len(dims) + 10) + '\n')
+      for row,val in sorted(t):
+        def pr(x):
+          if x is None:
+            return ''
+          elif type(x) in (int,float):
+            return '%.4g' % x
+          else:
+            return str(x)
+        out(' '.join(['%10s'%pr(row.get(d)) for d in dims] + ['%10s'%pr(val)]) + '\n')
+      out('\n')
+    else:
+      plot(t, title=title)  
