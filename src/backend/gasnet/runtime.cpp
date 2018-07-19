@@ -710,7 +710,7 @@ void upcxx::progress(progress_level level) {
   while(total_exec_n < 1000 && exec_n != 0);
   //while(0);
   
-  #if 1
+  #if GASNET_CONDUIT_SMP || GASNET_CONDUIT_UDP
     /* In SMP tests we typically oversubscribe ranks to cpus. This is
      * an attempt at heuristically determining if this rank is just
      * spinning fruitlessly hogging the cpu from another who needs it.
