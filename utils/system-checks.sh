@@ -82,7 +82,7 @@ platform_sanity_checks() {
             COMPILER_GOOD=1
         elif echo "$CXXVERS" | egrep ' +\([^\)]+\) +[1-4]\.' 2>&1 > /dev/null ; then
             COMPILER_BAD=1
-        elif echo "$CXXVERS" | egrep ' +\(ICC\) +(1[89]\.|2[0-9]\.)' 2>&1 > /dev/null ; then
+        elif echo "$CXXVERS" | egrep ' +\(ICC\) +(17\.0\.[2-9]|1[89]\.|2[0-9]\.)' 2>&1 > /dev/null ; then
 	    # Ex: icpc (ICC) 18.0.1 20171018
             COMPILER_GOOD=1
         elif echo "$CXXVERS" | egrep ' +\(ICC\) ' 2>&1 > /dev/null ; then
@@ -99,7 +99,7 @@ platform_sanity_checks() {
         fi
 
         RECOMMEND='We recommend Linux or macOS on x86_64 with one of the following C++ compilers: 
-         g++ 5.1.0 or newer, LLVM/clang 3.7.0 or newer, Xcode/clang 8.0.0 or newer'
+         g++ 5.1.0 or newer, LLVM/clang 3.7.0 or newer, Xcode/clang 8.0.0 or newer, Intel C 17.0.2 or newer'
 
         if test -n "$ARCH_BAD" ; then
             echo "ERROR: This version of UPC++ does not support the '$ARCH' architecture."
