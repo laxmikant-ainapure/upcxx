@@ -36,13 +36,13 @@ platform_sanity_checks() {
         else
             KERNEL_GOOD=
         fi
-        if test -n "$CRAY_PRGENVINTEL" ; then
-            echo 'ERROR: UPC++ on Cray XC currently requires PrgEnv-gnu. Please do: `module switch PrgEnv-intel PrgEnv-gnu`'
+        if test -n "$CRAY_PRGENVCRAY" ; then
+            echo 'ERROR: UPC++ on Cray XC currently requires PrgEnv-gnu or PrgEnv-intel. Please do: `module switch PrgEnv-cray PrgEnv-gnu` or `module switch PrgEnv-cray PrgEnv-intel`'
             exit 1
-        elif test -n "$CRAY_PRGENVCRAY" ; then
-            echo 'ERROR: UPC++ on Cray XC currently requires PrgEnv-gnu. Please do: `module switch PrgEnv-cray PrgEnv-gnu`'
+        elif test -n "$CRAY_PRGENVINTEL" && ( test -z "$GCC_VERSION" || expr "$GCC_VERSION" : "^[234]" > /dev/null ) ; then
+            echo 'ERROR: UPC++ on Cray XC with PrgEnv-intel must also have the gcc module loaded (version 5.x or newer). Please do: `module load gcc`'
             exit 1
-        elif test -n "$CRAY_PRGENVGNU" ; then
+        elif test -n "$CRAY_PRGENVGNU" || test -n "$CRAY_PRGENVINTEL" ; then
             CC=${CC:-cc}
             CXX=${CXX:-CC}
 	    if test -z "$CROSS" && test -z "$GASNET" ; then
@@ -66,9 +66,9 @@ platform_sanity_checks() {
 
         if test -z "$UPCXX_INSTALL_QUIET" ; then
             type -p ${CXX%% *}
-            $CXX --version
+            $CXX --version 2>&1 | grep -v 'warning #10315'
             type -p ${CC%% *}
-            $CC --version
+            $CC --version 2>&1 | grep -v 'warning #10315'
             echo " "
         fi
 
@@ -82,6 +82,11 @@ platform_sanity_checks() {
             COMPILER_GOOD=1
         elif echo "$CXXVERS" | egrep ' +\([^\)]+\) +[1-4]\.' 2>&1 > /dev/null ; then
             COMPILER_BAD=1
+        elif echo "$CXXVERS" | egrep ' +\(ICC\) +(17\.0\.[2-9]|1[89]\.|2[0-9]\.)' 2>&1 > /dev/null ; then
+	    # Ex: icpc (ICC) 18.0.1 20171018
+            COMPILER_GOOD=1
+        elif echo "$CXXVERS" | egrep ' +\(ICC\) ' 2>&1 > /dev/null ; then
+	    :
         elif echo "$CXXVERS" | egrep ' +\([^\)]+\) +([5-9]\.|[1-9][0-9])' 2>&1 > /dev/null ; then
             # Ex: g++ (Ubuntu 5.4.0-6ubuntu1~16.04.4) 5.4.0 20160609
             #     g++-7 (Homebrew GCC 7.2.0) 7.2.0
@@ -94,7 +99,7 @@ platform_sanity_checks() {
         fi
 
         RECOMMEND='We recommend Linux or macOS on x86_64 with one of the following C++ compilers: 
-         g++ 5.1.0 or newer, LLVM/clang 3.7.0 or newer, Xcode/clang 8.0.0 or newer'
+         g++ 5.1.0 or newer, LLVM/clang 3.7.0 or newer, Xcode/clang 8.0.0 or newer, Intel C 17.0.2 or newer'
 
         if test -n "$ARCH_BAD" ; then
             echo "ERROR: This version of UPC++ does not support the '$ARCH' architecture."

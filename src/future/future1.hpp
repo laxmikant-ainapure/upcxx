@@ -82,21 +82,21 @@ namespace upcxx {
     future1() = default;
     ~future1() = default;
     
-    future1(impl_type impl): impl_{std::move(impl)} {}
+    future1(impl_type impl): impl_(std::move(impl)) {}
     
     template<typename impl_type1,
              // Prune from overload resolution if `impl_type1` is a
              // future1 (and therefor not an actual impl type).
              typename = typename std::enable_if<!detail::is_future1<impl_type1>::value>::type>
-    future1(impl_type1 impl): impl_{std::move(impl)} {}
+    future1(impl_type1 impl): impl_(std::move(impl)) {}
     
     future1(future1 const&) = default;
     template<typename Kind1>
-    future1(future1<Kind1,T...> const &that): impl_{that.impl_} {}
+    future1(future1<Kind1,T...> const &that): impl_(that.impl_) {}
     
     future1(future1&&) = default;
     template<typename Kind1>
-    future1(future1<Kind1,T...> &&that): impl_{std::move(that.impl_)} {}
+    future1(future1<Kind1,T...> &&that): impl_(std::move(that.impl_)) {}
     
     future1& operator=(future1 const&) = default;
     template<typename Kind1>

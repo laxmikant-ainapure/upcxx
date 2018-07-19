@@ -23,7 +23,7 @@ LIBS = $(shell $(ENV) $(UPCXX_INSTALL)/bin/upcxx-meta LIBS)
 PTHREAD_FLAGS = -pthread
 OPENMP_FLAGS = -fopenmp
 
-EXTRA_FLAGS = -std=c++11
+EXTRA_FLAGS =
 
 # Programs to build, assuming each has a corresponding *.cpp file
 EXAMPLES = \

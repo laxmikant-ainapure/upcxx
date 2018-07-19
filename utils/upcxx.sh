@@ -60,7 +60,7 @@ for var in CXX CXXFLAGS CPPFLAGS LDFLAGS LIBS ; do
   eval $var=\$val
   verbose "$UPCXX_META $var: $val"
 done
-EXTRAFLAGS="-std=c++11"
+EXTRAFLAGS=""
 if [[ $doversion ]] ; then
   header="$prefix/upcxx.*/include/upcxx/upcxx.hpp"
   version=`(grep "#define UPCXX_VERSION" $header | head -1 | cut -d' ' -f 3 ) 2> /dev/null`
