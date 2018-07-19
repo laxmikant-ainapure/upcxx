@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 
 """
 show.py [-i|-out-csv] [<report-file>...] [<name>=<val>...]
@@ -82,10 +82,19 @@ for report in reportfiles:
 
 for name in list(tabs.keys()):
   t, = tab.tables([name], tabs[name])
+  
   def mean(seq):
     return float(sum(seq))/len(seq)
+  def stdev(seq):
+    from math import sqrt
+    bar = mean(seq)
+    return sqrt(sum([((x-bar)/bar)**2 for x in seq]))
+  
+  reducer = mean
+  #reducer = max
+  
   g = t.group(t.dims - frozenset(['trial']))
-  t = T(lambda t: mean(t.values()))(g)
+  t = T(lambda t: reducer(t.values()))(g)
   tabs[name] = t
   
 if '-rel' in sys.argv[1:]:
@@ -136,11 +145,16 @@ else:
         def pr(x):
           if x is None:
             return ''
-          elif type(x) in (int,float):
-            return '%.4g' % x
+          elif type(x) in (int,long):
+            if len(str(x)) < 10:
+              return str(x)
+            else:
+              return '%.4g' % x
+          elif type(x) is float:
+            return '%.3e' % x
           else:
             return str(x)
-        out(' '.join(['%10s'%pr(row.get(d)) for d in dims] + ['%10s'%pr(val)]) + '\n')
+        out(','.join(['%10s'%pr(row.get(d)) for d in dims] + ['%10s'%pr(val)]) + '\n')
       out('\n')
     else:
       plot(t, title=title)  
