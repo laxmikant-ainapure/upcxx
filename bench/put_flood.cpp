@@ -51,7 +51,9 @@
 #include <upcxx/upcxx.hpp>
 #include <upcxx/backend/gasnet/runtime_internal.hpp>
 
-#include <gasnet.h>
+#if !NOBS_DISCOVERY
+  #include <gasnet.h>
+#endif
 
 #include "common/timer.hpp"
 #include "common/report.hpp"
