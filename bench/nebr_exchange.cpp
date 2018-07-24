@@ -216,7 +216,10 @@ std::size_t exchange_via_rdzv(mesh_t &m) {
 // AMLong based exchange zone
 
 #include <sched.h>
-#include <gasnet.h>
+
+#if !NOBS_DISCOVERY
+  #include <gasnet.h>
+#endif
 
 // stolen from <upcxx/backend/gasnet/runtime_internal.hpp>
 namespace upcxx {
