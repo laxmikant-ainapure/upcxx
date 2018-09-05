@@ -69,6 +69,10 @@ For recommendations on debugging, see [docs/debugging.md](docs/debugging.md)
 
 To run a test script, see [docs/testing.md](docs/testing.md)
 
+## Legal terms
+
+For copyright notice and licensing agreement, see [LICENSE.txt](LICENSE.txt)
+
 ## ChangeLog
 
 ### 2018.??.??: PENDING
