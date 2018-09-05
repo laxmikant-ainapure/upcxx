@@ -1,4 +1,5 @@
 #include <upcxx/allocate.hpp>
+#include <upcxx/barrier.hpp>
 #include <upcxx/global_ptr.hpp>
 #include <upcxx/rput.hpp>
 #include <upcxx/rget.hpp>

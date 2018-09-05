@@ -2,7 +2,7 @@
 #define _1e7a65b7_b8d1_4def_98a3_76038c9431cf
 
 #include <upcxx/future/core.hpp>
-#ifdef UPCXX_BACKEND
+#if UPCXX_BACKEND
   #include <upcxx/backend_fwd.hpp>
 #endif
 

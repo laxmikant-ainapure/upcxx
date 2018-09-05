@@ -24,9 +24,9 @@ namespace upcxx {
       }
     };
     
-    template<typename Fn, void*(*payload)(Arg...), void(*cleanup)(Arg...)>
+    template<typename Fn, parcel_reader(*reader)(Arg...), void(*cleanup)(Arg...)>
     static void the_executor(Arg ...a) {
-      parcel_reader r(payload(a...));
+      parcel_reader r = reader(a...);
       
       r.pop_trivial_aligned<executor_wire_t>();
       
@@ -40,11 +40,11 @@ namespace upcxx {
   public:
     using executor_t = void(*)(Arg...);
     
-    // Given pointer to packed command buffer, this will retrieve its executor
-    // function.
-    static executor_t get_executor(void const *cmd) {
-      parcel_reader r(cmd);
+    // Given a reader in the same state as the one passed into `command::pack`,
+    // this will retrieve the executor function.
+    static executor_t get_executor(parcel_reader r) {
       executor_wire_t exec = r.pop_trivial_aligned<executor_wire_t>();
+      UPCXX_ASSERT(exec.u_ != 0);
       return exec.fnptr_non_null();
     }
 
@@ -59,14 +59,14 @@ namespace upcxx {
       return packing<Fn>::ubound(ub0.template trivial_added<executor_wire_t>(), fn, std::false_type());
     }
 
-    // Pack the given callable and payload and cleanup actions onto the writer.
-    template<void*(*payload)(Arg...), void(*cleanup)(Arg...),
+    // Pack the given callable and reader and cleanup actions onto the writer.
+    template<parcel_reader(*reader)(Arg...), void(*cleanup)(Arg...),
              typename Fn1,
              typename Fn = typename std::decay<Fn1>::type>
     static void pack(parcel_writer &w, std::size_t size_ub, Fn1 &&fn) {
-      w.template put_trivial_aligned<executor_wire_t>(
-        executor_wire_t(&the_executor<Fn,payload,cleanup>)
-      );
+      executor_wire_t exec = executor_wire_t(&the_executor<Fn,reader,cleanup>);
+      
+      w.template put_trivial_aligned<executor_wire_t>(exec);
       
       packing<Fn>::pack(w, fn, /*skippable=*/std::false_type());
       

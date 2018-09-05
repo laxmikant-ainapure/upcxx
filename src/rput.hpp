@@ -149,7 +149,7 @@ namespace upcxx {
         auto *cbs = static_cast<FinalType*>(this);
         
         backend::send_am_master<progress_level::user>(
-          cbs->rank_d,
+          upcxx::world(), cbs->rank_d,
           upcxx::bind(
             [](CxStateRemote &st) {
               return st.template operator()<remote_cx_event>();

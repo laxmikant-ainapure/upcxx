@@ -13,7 +13,7 @@ detail::rma_get_done detail::rma_get_nb(
   ) {
 
   gex_Event_t h = gex_RMA_GetNB(
-    gasnet::world_team,
+    gasnet::handle_of(upcxx::world()),
     buf_d, rank_s, const_cast<void*>(buf_s), buf_size,
     /*flags*/0
   );
@@ -32,7 +32,7 @@ void upcxx::detail::rma_get_b(
   ) {
 
   (void)gex_RMA_GetBlocking(
-    gasnet::world_team,
+    gasnet::handle_of(upcxx::world()),
     buf_d, rank_s, const_cast<void*>(buf_s), buf_size,
     /*flags*/0
   );

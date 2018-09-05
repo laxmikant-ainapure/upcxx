@@ -29,7 +29,7 @@ detail::rma_put_done detail::rma_put(
     }
     
     gex_Event_t op_h = gex_RMA_PutNB(
-      gasnet::world_team, rank_d,
+      gasnet::handle_of(upcxx::world()), rank_d,
       buf_d, const_cast<void*>(buf_s), size,
       src_ph,
       /*flags*/0
@@ -53,7 +53,7 @@ detail::rma_put_done detail::rma_put(
   }
   else {
     (void)gex_RMA_PutBlocking(
-      gasnet::world_team, rank_d,
+      gasnet::handle_of(upcxx::world()), rank_d,
       buf_d, const_cast<void*>(buf_s), size,
       /*flags*/0
     );

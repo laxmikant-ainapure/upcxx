@@ -83,11 +83,12 @@ typedef std::array<int,2> count_t;
 
 int main() {
 
-  init();
+  bool success=true;
   
+  init();
+  {
   print_test_header();
 
-  bool success=true;
   
   intrank_t me = rank_me();
   intrank_t n =  rank_n();
@@ -419,6 +420,7 @@ int main() {
   
   print_test_success(success);
   
+  }
   finalize();
 
   if(!success) return 4;

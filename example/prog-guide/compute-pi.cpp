@@ -19,7 +19,7 @@ int64_t hit()
 int64_t reduce_to_rank0(int64_t my_hits)
 {
     // wait for a collective reduction that sums all local values
-    return upcxx::allreduce(my_hits, plus<int64_t>()).wait();
+    return upcxx::reduce_all(my_hits, plus<int64_t>()).wait();
 }
 
 int main(int argc, char **argv)

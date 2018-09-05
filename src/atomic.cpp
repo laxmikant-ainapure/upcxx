@@ -131,7 +131,8 @@ atomic_domain<T>::atomic_domain(std::vector<atomic_op> const &ops, int flags) {
 
   if(atomic_gex_ops != 0) {
     // Create the gasnet atomic domain for the world team.
-    gex_AD_Create(reinterpret_cast<gex_AD_t*>(&ad_gex_handle), gasnet::world_team, 
+    gex_AD_Create(reinterpret_cast<gex_AD_t*>(&ad_gex_handle),
+                  gasnet::handle_of(upcxx::world()), 
                   get_gex_dt<T>(), atomic_gex_ops, flags);
   }
   else

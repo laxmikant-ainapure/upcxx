@@ -10,7 +10,7 @@ namespace backend {
 namespace gasnet {
   struct handle_cb;
   struct handle_cb_queue;
-  
+
   struct handle_cb_successor {
     handle_cb_queue *q_;
     handle_cb **pp_;
@@ -59,8 +59,8 @@ namespace gasnet {
     int burst(int burst_n); // defined in runtime.cpp
   };
   
-  ////////////////////////////////////////////////////////////////////
-  
+  //////////////////////////////////////////////////////////////////////////////
+
   inline bool handle_cb_queue::empty() const {
     return this->head_ == nullptr;
   }
@@ -86,5 +86,4 @@ namespace gasnet {
     }
   }
 }}}
-
 #endif

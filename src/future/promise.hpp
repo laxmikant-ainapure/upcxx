@@ -8,9 +8,6 @@
 #include <cstddef>
 
 namespace upcxx {
-  template<typename ...T>
-  class promise;
-  
   //////////////////////////////////////////////////////////////////////
   // detail::promise_like_t: generate type promise<T...> given some
   // future<T...>

@@ -82,7 +82,7 @@ namespace upcxx {
 
       void send_remote() {
         backend::send_am_master<progress_level::user>(
-          rank_s,
+          upcxx::world(), rank_s,
           upcxx::bind(
             [](CxStateRemote &st) {
               return st.template operator()<remote_cx_event>();

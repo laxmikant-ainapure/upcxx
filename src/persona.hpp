@@ -13,12 +13,13 @@
 namespace upcxx {
   class persona;
   class persona_scope;
+  
   namespace detail {
     struct persona_scope_raw;
     struct persona_scope_redundant;
     struct persona_tls;
   }
-  
+
   // This type is contained within `__thread` storage, so it must be:
   //   1. trivially destructible.
   //   2. constexpr constructible equivalent to zero-initialization.
@@ -301,17 +302,17 @@ namespace upcxx {
       template<typename Fn, bool known_active>
       void during(persona&, progress_level level, Fn &&fn, std::integral_constant<bool,known_active> known_active1 = {});
       
-      // Enqueue a promise to be fulfilled during user progress of the current
-      // "top" persona.
+      // Enqueue a promise to be fulfilled during user progress of a currently
+      // active persona.
       template<typename ...T>
-      void fulfill_during_user_of_top(promise<T...> &pro, std::tuple<T...> vals);
+      void fulfill_during_user_of_active(persona&, promise<T...> &pro, std::tuple<T...> vals);
       template<typename ...T>
-      void fulfill_during_user_of_top(promise<T...> &pro, std::intptr_t anon);
+      void fulfill_during_user_of_active(persona&, promise<T...> &pro, std::intptr_t anon);
       
       template<typename ...T>
-      void fulfill_during_user_of_top(promise<T...> &&pro, std::tuple<T...> vals);
+      void fulfill_during_user_of_active(persona&, promise<T...> &&pro, std::tuple<T...> vals);
       template<typename ...T>
-      void fulfill_during_user_of_top(promise<T...> &&pro, std::intptr_t anon);
+      void fulfill_during_user_of_active(persona&, promise<T...> &&pro, std::intptr_t anon);
       
       // Enqueue a lambda onto persona's progress level queue. Unlike
       // `during`, lambda will definitely not execute in calling context.
@@ -584,9 +585,12 @@ namespace upcxx {
   }
   
   template<typename ...T>
-  void detail::persona_tls::fulfill_during_user_of_top(
+  void detail::persona_tls::fulfill_during_user_of_active(
+      persona &per,
       promise<T...> &pro, std::tuple<T...> vals
     ) {
+    
+    UPCXX_ASSERT(per.active_with_caller(*this));
     
     // This is where we use the fact that promises can be enqueued as lpc's.
     // Of course they can only reside (intrusively) in exactly one lpc queue,
@@ -607,17 +611,20 @@ namespace upcxx {
       hdr->incref(1);
       
       if(future_header_promise<T...>::is_trivially_deletable)
-        tls.get_top_persona()->pros_deferred_trivial_.enqueue(&meta->base);
+        per.pros_deferred_trivial_.enqueue(&meta->base);
       else
-        tls.get_top_persona()->self_inbox_[user].enqueue(&meta->base);
+        per.self_inbox_[user].enqueue(&meta->base);
     }
   }
   
   template<typename ...T>
-  void detail::persona_tls::fulfill_during_user_of_top(
+  void detail::persona_tls::fulfill_during_user_of_active(
+      persona &per,
       promise<T...> &pro, std::intptr_t anon
     ) {
       
+    UPCXX_ASSERT(per.active_with_caller(*this));
+    
     // See blurb just above in other `fulfill_during_user_of_top`.
     
     constexpr int user = (int)progress_level::user;
@@ -630,24 +637,26 @@ namespace upcxx {
       hdr->incref(1);
       
       if(future_header_promise<T...>::is_trivially_deletable)
-        tls.get_top_persona()->pros_deferred_trivial_.enqueue(&meta->base);
+        per.pros_deferred_trivial_.enqueue(&meta->base);
       else
-        tls.get_top_persona()->self_inbox_[user].enqueue(&meta->base);
+        per.self_inbox_[user].enqueue(&meta->base);
     }
   }
   
   template<typename ...T>
-  void detail::persona_tls::fulfill_during_user_of_top(
+  void detail::persona_tls::fulfill_during_user_of_active(
+      persona &per,
       promise<T...> &&pro, std::tuple<T...> vals
     ) {
-    this->fulfill_during_user_of_top(static_cast<promise<T...>&>(pro), std::move(vals));
+    this->fulfill_during_user_of_active(per, static_cast<promise<T...>&>(pro), std::move(vals));
   }
   
   template<typename ...T>
-  void detail::persona_tls::fulfill_during_user_of_top(
+  void detail::persona_tls::fulfill_during_user_of_active(
+      persona &per,
       promise<T...> &&pro, std::intptr_t anon
     ) {
-    this->fulfill_during_user_of_top(static_cast<promise<T...>&>(pro), anon);
+    this->fulfill_during_user_of_active(per, static_cast<promise<T...>&>(pro), anon);
   }
   
   template<typename Fn, bool known_active>

@@ -24,6 +24,10 @@ namespace upcxx {
 
 #define UPCXX_ASSERT_DISPATCH(_1, _2, NAME, ...) NAME
 
+#ifndef UPCXX_ASSERT_ENABLED
+  #define UPCXX_ASSERT_ENABLED 0
+#endif
+
 // Assert that will only happen in debug-mode.
 #if UPCXX_ASSERT_ENABLED
   #define UPCXX_ASSERT(...) UPCXX_ASSERT_DISPATCH(__VA_ARGS__, UPCXX_ASSERT_2, UPCXX_ASSERT_1, _DUMMY)(__VA_ARGS__)

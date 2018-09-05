@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <deque>
 
+#include <upcxx/barrier.hpp>
 #include <upcxx/rpc.hpp>
 
 #include "util.hpp"
@@ -97,8 +98,8 @@ int main() {
   }
   
   intrank_t right = (rank_me + 1) % rank_n;
-  intrank_t left = (rank_me + 1 + rank_n) % rank_n;
-
+  intrank_t left = (rank_me - 1 + rank_n) % rank_n;
+  
   {
     future<> src;
     future<int> op;
