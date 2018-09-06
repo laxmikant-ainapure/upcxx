@@ -125,15 +125,15 @@ namespace {
 }
 
 template<typename T>
-atomic_domain<T>::atomic_domain(std::vector<atomic_op> const &ops, int flags) {
+atomic_domain<T>::atomic_domain(std::vector<atomic_op> const &ops, team &tm) {
   atomic_gex_ops = 0;
   for (auto next_op : ops) atomic_gex_ops |= to_gex_op_map[static_cast<int>(next_op)];
 
   if(atomic_gex_ops != 0) {
     // Create the gasnet atomic domain for the world team.
     gex_AD_Create(reinterpret_cast<gex_AD_t*>(&ad_gex_handle),
-                  gasnet::handle_of(upcxx::world()), 
-                  get_gex_dt<T>(), atomic_gex_ops, flags);
+                  gasnet::handle_of(tm), 
+                  get_gex_dt<T>(), atomic_gex_ops, /*flags=*/0);
   }
   else
     ad_gex_handle = 1;
