@@ -128,7 +128,9 @@ template<typename T>
 atomic_domain<T>::atomic_domain(std::vector<atomic_op> const &ops, team &tm) {
   atomic_gex_ops = 0;
   for (auto next_op : ops) atomic_gex_ops |= to_gex_op_map[static_cast<int>(next_op)];
-
+  
+  tm_gex_handle = reinterpret_cast<uintptr_t>(gasnet::handle_of(tm));
+  
   if(atomic_gex_ops != 0) {
     // Create the gasnet atomic domain for the world team.
     gex_AD_Create(reinterpret_cast<gex_AD_t*>(&ad_gex_handle),
@@ -163,7 +165,8 @@ detail::amo_done atomic_domain<T>::inject(
   
   gex_Event_t h = shim_gex_AD_OpNB<T>(
     reinterpret_cast<gex_AD_t>(this->ad_gex_handle), p,
-    gp.rank_, gp.raw_ptr_, op_gex, val1, val2, flags
+    gex_TM_TranslateJobrankToRank(reinterpret_cast<gex_TM_t>(this->tm_gex_handle), gp.rank_),
+    gp.raw_ptr_, op_gex, val1, val2, flags
   );
 
   cb->handle = reinterpret_cast<uintptr_t>(h);

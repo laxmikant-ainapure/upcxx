@@ -47,6 +47,7 @@ namespace upcxx {
       int atomic_gex_ops = 0;
       // The opaque gasnet atomic domain handle.
       std::uintptr_t ad_gex_handle = 0;
+      std::uintptr_t tm_gex_handle;
       
       // call to backend gasnet function
       detail::amo_done inject(
@@ -189,9 +190,11 @@ namespace upcxx {
       atomic_domain(atomic_domain &&that) {
         this->ad_gex_handle = that.ad_gex_handle;
         this->atomic_gex_ops = that.atomic_gex_ops;
+        this->tm_gex_handle = that.tm_gex_handle;
         // revert `that` to non-constructed state
         that.atomic_gex_ops = 0;
         that.ad_gex_handle = 0;
+        that.tm_gex_handle = 0;
       }
 
       // The constructor takes a vector of operations. Currently, flags is currently unsupported.
@@ -205,9 +208,11 @@ namespace upcxx {
                      "Move assignment is only allowed on a default-constructed atomic_domain");
         this->ad_gex_handle = that.ad_gex_handle;
         this->atomic_gex_ops = that.atomic_gex_ops;
+        this->tm_gex_handle = that.tm_gex_handle;
         // revert `that` to non-constructed state
         that.atomic_gex_ops = 0;
         that.ad_gex_handle = 0;
+        that.tm_gex_handle = 0;
         return *this;
       }
 
