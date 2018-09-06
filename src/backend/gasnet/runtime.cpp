@@ -473,7 +473,9 @@ tuple<intrank_t/*rank*/, uintptr_t/*raw*/> backend::globalize_memory(void const 
 }
 
 intrank_t backend::team_rank_from_world(team &tm, intrank_t rank) {
-  return gex_TM_TranslateJobrankToRank(gasnet::handle_of(tm), rank);
+  gex_Rank_t got = gex_TM_TranslateJobrankToRank(gasnet::handle_of(tm), rank);
+  UPCXX_ASSERT(got != GEX_RANK_INVALID);
+  return got;
 }
 
 intrank_t backend::team_rank_from_world(team &tm, intrank_t rank, intrank_t otherwise) {
