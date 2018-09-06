@@ -16,7 +16,7 @@ namespace upcxx {
   future<T> broadcast_nontrivial(
       T1 &&value, intrank_t root,
       team &tm = upcxx::world(),
-      Cxs cxs_ignored = Cxs{{}}
+      completions<future_cx<operation_cx_event>> cxs_ignored = {{}}
     ) {
     
     digest id = tm.next_collective_id(detail::internal_only());
@@ -64,11 +64,12 @@ namespace upcxx {
   future<> broadcast(
       T *buf, std::size_t n, intrank_t root,
       team &tm = upcxx::world(),
-      Cxs cxs_ignored = Cxs{{}}
+      completions<future_cx<operation_cx_event>> cxs_ignored = {{}}
     ) {
     static_assert(
       upcxx::is_definitely_trivially_serializable<T>::value,
-      "Only TriviallySerializable types permitted."
+      "Only TriviallySerializable types permitted for `upcxx::broadcast`. "
+      "Consider `upcxx::broadcast_nontrivial` instead."
     );
     
     struct my_cb final: backend::gasnet::handle_cb {
@@ -90,8 +91,14 @@ namespace upcxx {
   future<T> broadcast(
       T value, intrank_t root,
       team &tm = upcxx::world(),
-      Cxs cxs_ignored = Cxs{{}}
+      completions<future_cx<operation_cx_event>> cxs_ignored = {{}}
     ) {
+    
+    static_assert(
+      upcxx::is_definitely_trivially_serializable<T>::value,
+      "Only TriviallySerializable types permitted for `upcxx::broadcast`. "
+      "Consider `upcxx::broadcast_nontrivial` instead."
+    );
     
     struct my_cb final: backend::gasnet::handle_cb {
       promise<T> pro;

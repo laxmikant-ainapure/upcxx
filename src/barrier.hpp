@@ -10,6 +10,7 @@ namespace upcxx {
   void barrier(team &tm = upcxx::world());
   
   template<typename Cxs = completions<future_cx<operation_cx_event>>>
-  future<> barrier_async(team &tm = upcxx::world(), Cxs cxs_ignored = Cxs{{}});
+  future<> barrier_async(team &tm = upcxx::world(),
+                         completions<future_cx<operation_cx_event>> cxs_ignored = {{}});
 }
 #endif

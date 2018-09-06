@@ -229,7 +229,7 @@ namespace upcxx {
   future<T> reduce_one(
       T1 &&value, BinaryOp op, intrank_t root,
       team &tm = upcxx::world(),
-      Cxs cxs_ignored = Cxs{{}}
+      completions<future_cx<operation_cx_event>> cxs_ignored = {{}}
     ) {
     #if 1
       struct my_cb final: backend::gasnet::handle_cb {
@@ -277,7 +277,7 @@ namespace upcxx {
       T const *src, T *dst, std::size_t n,
       BinaryOp op, intrank_t root,
       team &tm = upcxx::world(),
-      Cxs cxs_ignored = Cxs{{}}
+      completions<future_cx<operation_cx_event>> cxs_ignored = {{}}
     ) {
     
     struct my_cb final: backend::gasnet::handle_cb {
@@ -319,7 +319,7 @@ namespace upcxx {
   future<T> reduce_one_nontrivial(
       T1 &&value, BinaryOp op, intrank_t root,
       team &tm = upcxx::world(),
-      Cxs cxs_ignored = Cxs{{}}
+      completions<future_cx<operation_cx_event>> cxs_ignored = {{}}
     ) {
     digest id = tm.next_collective_id(detail::internal_only());
     return detail::reduce_state<T,BinaryOp,/*one_not_all=*/true>::contribute(tm, root, id, op, std::forward<T1>(value));
@@ -334,7 +334,7 @@ namespace upcxx {
   future<T> reduce_all(
       T1 &&value, BinaryOp op,
       team &tm = upcxx::world(),
-      Cxs cxs_ignored = Cxs{{}}
+      completions<future_cx<operation_cx_event>> cxs_ignored = {{}}
     ) {
     static_assert(
       upcxx::is_definitely_trivially_serializable<T>::value,
@@ -355,7 +355,7 @@ namespace upcxx {
   future<T> reduce_all_nontrivial(
       T1 &&value, BinaryOp op,
       team &tm = upcxx::world(),
-      Cxs cxs_ignored = Cxs{{}}
+      completions<future_cx<operation_cx_event>> cxs_ignored = completions<future_cx<operation_cx_event>>{{}}
     ) {
     digest id = tm.next_collective_id(detail::internal_only());
     intrank_t root = id.w0 % tm.rank_n();
