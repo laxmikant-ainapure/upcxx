@@ -988,7 +988,7 @@ namespace upcxx {
       static void pack_elts(parcel_writer &w, Iter begin, std::size_t n, std::integral_constant<bool,elt_skippable>) {
         T *y = w.place_trivial_aligned<T>(n);
         while(n--) {
-          std::memcpy(y++, &*begin, sizeof(T));
+          std::memcpy((void*)y++, (void*)&*begin, sizeof(T));
           ++begin;
         }
       }

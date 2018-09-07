@@ -1176,7 +1176,7 @@ namespace {
         team_id tm_id = r.pop_trivial_aligned<team_id>();
         intrank_t rank_d_ub = r.pop_trivial_aligned<intrank_t>();
         
-        gasnet::bcast_am_master_eager(level, tm_id.here(), rank_d_ub, buf, buf_size, buf_align);
+        gasnet::bcast_am_master_eager(level, tm_id.here(), rank_d_ub, m->payload, buf_size, buf_align);
         
         if(0 == --m->eager_refs)
           std::free(m->payload);
