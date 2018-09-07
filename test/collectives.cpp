@@ -164,25 +164,29 @@ upcxx::future<> test_team(upcxx::team &tm) {
   { // do a vector reduce
     const int n = 1000;
     double *src = new double[n];
-    double *dst = new double[n];
+    double *dst_one = new double[n];
+    double *dst_all = new double[n];
     for(int i=0; i < n; i++) {
       src[i] = i + tm.rank_me();
-      dst[i] = 666;
+      dst_one[i] = 666;
+      dst_all[i] = 666;
     }
     
-    auto vec1_done = upcxx::reduce_one(src, dst, n, upcxx::op_fast_add, 0, tm);
-    // TODO: upcxx::reduce_all vector when that exists
+    auto vec1_done = upcxx::reduce_one(src, dst_one, n, upcxx::op_fast_add, 0, tm);
+    auto vec2_done = upcxx::reduce_all(src, dst_all, n, std::plus<double>(), tm);
     
     all_done = upcxx::when_all(all_done,
-        vec1_done.then([=,&tm]() {
-          if(tm.rank_me() == 0) {
-            for(int i=0; i < n; i++) {
-              double rn = tm.rank_n();
-              UPCXX_ASSERT_ALWAYS(dst[i] == i*rn + (rn*rn - rn)/2);
-            }
+        upcxx::when_all(vec1_done, vec2_done)
+        .then([=,&tm]() {
+          for(int i=0; i < n; i++) {
+            double rn = tm.rank_n();
+            if(tm.rank_me() == 0)
+              UPCXX_ASSERT_ALWAYS(dst_one[i] == i*rn + (rn*rn - rn)/2);
+            UPCXX_ASSERT_ALWAYS(dst_all[i] == i*rn + (rn*rn - rn)/2);
           }
           delete[] src;
-          delete[] dst;
+          delete[] dst_one;
+          delete[] dst_all;
         })
       );
   }

@@ -192,10 +192,10 @@ namespace upcxx {
     };
     
     ////////////////////////////////////////////////////////////////////////////
-    // Calls out to gex_Coll_ReduceToOneNB
+    // Calls out to gex_Coll_ReduceTo{One,All}NB
     
-    void reduce_one_trivial(
-        team &tm, intrank_t root,
+    void reduce_one_or_all_trivial_erased(
+        team &tm, intrank_t root_or_all/*-1 = all*/,
         const void *src, void *dst,
         std::size_t elt_sz, std::size_t elt_n,
         std::uintptr_t ty_id,
@@ -204,6 +204,96 @@ namespace upcxx {
         void *op_data,
         backend::gasnet::handle_cb *cb
       );
+    
+    template<typename T1, typename BinaryOp,
+             typename Cxs = completions<future_cx<operation_cx_event>>,
+             typename T = typename std::decay<T1>::type>
+    future<T> reduce_one_or_all_trivial(
+        T1 &&value, BinaryOp op, intrank_t root_or_all/*-1 = all*/,
+        team &tm = upcxx::world(),
+        completions<future_cx<operation_cx_event>> cxs_ignored = {{}}
+      ) {
+      
+      static_assert(
+        upcxx::is_definitely_trivially_serializable<T>::value,
+        "`upcxx::reduce_[all|one]<T>` only permitted for DefinitelyTriviallySerialize T. "
+        "Consider using `upcxx::reduce_[all|one]_nontrivial<T>` instead."
+      );
+      
+      struct my_cb final: backend::gasnet::handle_cb {
+        T in_out;
+        BinaryOp op;
+        promise<T> pro;
+        
+        my_cb(T1 &&in, BinaryOp op):
+          in_out(std::forward<T1>(in)),
+          op(std::move(op)) {
+        }
+        
+        void execute_and_delete(backend::gasnet::handle_cb_successor) override {
+          backend::fulfill_during_user(
+              std::move(pro), std::tuple<T>(std::move(in_out)),
+              backend::master
+            );
+          delete this;
+        }
+      };
+      
+      my_cb *cb = new my_cb(std::forward<T1>(value), std::move(op));
+      future<T> ans = cb->pro.get_future();
+      
+      reduce_one_or_all_trivial_erased(
+          tm, root_or_all,
+          &cb->in_out, &cb->in_out, sizeof(T), 1,
+          detail::reduce_op_best_id<BinaryOp,T>::ty_id,
+          detail::reduce_op_best_id<BinaryOp,T>::op_id,
+          detail::reduce_op_best_id<BinaryOp,T>::op_vecfn,
+          (void*)&cb->op,
+          cb
+        );
+      
+      return ans;
+    }
+    
+    template<typename T, typename BinaryOp,
+             typename Cxs = completions<future_cx<operation_cx_event>>>
+    future<> reduce_one_or_all_trivial(
+        T const *src, T *dst, std::size_t n,
+        BinaryOp op, intrank_t root_or_all/*-1 = all*/,
+        team &tm = upcxx::world(),
+        completions<future_cx<operation_cx_event>> cxs_ignored = {{}}
+      ) {
+      
+      struct my_cb final: backend::gasnet::handle_cb {
+        BinaryOp op;
+        promise<> pro;
+        
+        my_cb(BinaryOp op):
+          op(std::move(op)) {
+        }
+        
+        void execute_and_delete(backend::gasnet::handle_cb_successor) override {
+          backend::fulfill_during_user(std::move(pro), std::tuple<>(), backend::master);
+          delete this;
+        }
+      };
+      
+      my_cb *cb = new my_cb(std::move(op));
+      future<> ans = cb->pro.get_future();
+      
+      reduce_one_or_all_trivial_erased(
+          tm, root_or_all,
+          src, dst, sizeof(T), n,
+          detail::reduce_op_best_id<BinaryOp,T>::ty_id,
+          detail::reduce_op_best_id<BinaryOp,T>::op_id,
+          detail::reduce_op_best_id<BinaryOp,T>::op_vecfn,
+          (void*)&cb->op,
+          cb
+        );
+      
+      return ans;
+    }
+    
     
     ////////////////////////////////////////////////////////////////////////////
     // Non-GEX reduction implementation. Used for nontrivial types T.
@@ -231,44 +321,11 @@ namespace upcxx {
       team &tm = upcxx::world(),
       completions<future_cx<operation_cx_event>> cxs_ignored = {{}}
     ) {
-    #if 1
-      struct my_cb final: backend::gasnet::handle_cb {
-        T in_out;
-        BinaryOp op;
-        promise<T> pro;
-        
-        my_cb(T1 &&in, BinaryOp op):
-          in_out(std::forward<T1>(in)),
-          op(std::move(op)) {
-        }
-        
-        void execute_and_delete(backend::gasnet::handle_cb_successor) override {
-          backend::fulfill_during_user(
-              std::move(pro), std::tuple<T>(std::move(in_out)),
-              backend::master
-            );
-          delete this;
-        }
-      };
-      
-      my_cb *cb = new my_cb(std::forward<T1>(value), std::move(op));
-      future<T> ans = cb->pro.get_future();
-      
-      detail::reduce_one_trivial(
-          tm, root,
-          &cb->in_out, &cb->in_out, sizeof(T), 1,
-          detail::reduce_op_best_id<BinaryOp,T>::ty_id,
-          detail::reduce_op_best_id<BinaryOp,T>::op_id,
-          detail::reduce_op_best_id<BinaryOp,T>::op_vecfn,
-          (void*)&cb->op,
-          cb
-        );
-      
-      return ans;
-    #else
-      digest id = tm.next_collective_id(detail::internal_only());
-      return detail::reduce_state<T,BinaryOp,/*one_not_all=*/true>::contribute(tm, root, id, op, std::forward<T1>(value));
-    #endif
+    UPCXX_ASSERT(0 <= root && root < tm.rank_n());
+    
+    return detail::reduce_one_or_all_trivial<T1,BinaryOp,Cxs,T>(
+        std::forward<T1>(value), std::move(op), root, tm, std::move(cxs_ignored)
+      );
   }
   
   template<typename T, typename BinaryOp,
@@ -279,35 +336,11 @@ namespace upcxx {
       team &tm = upcxx::world(),
       completions<future_cx<operation_cx_event>> cxs_ignored = {{}}
     ) {
+    UPCXX_ASSERT(0 <= root && root < tm.rank_n());
     
-    struct my_cb final: backend::gasnet::handle_cb {
-      BinaryOp op;
-      promise<> pro;
-      
-      my_cb(BinaryOp op):
-        op(std::move(op)) {
-      }
-      
-      void execute_and_delete(backend::gasnet::handle_cb_successor) override {
-        backend::fulfill_during_user(std::move(pro), std::tuple<>(), backend::master);
-        delete this;
-      }
-    };
-    
-    my_cb *cb = new my_cb(std::move(op));
-    future<> ans = cb->pro.get_future();
-    
-    detail::reduce_one_trivial(
-        tm, root,
-        src, dst, sizeof(T), n,
-        detail::reduce_op_best_id<BinaryOp,T>::ty_id,
-        detail::reduce_op_best_id<BinaryOp,T>::op_id,
-        detail::reduce_op_best_id<BinaryOp,T>::op_vecfn,
-        (void*)&cb->op,
-        cb
+    return detail::reduce_one_or_all_trivial<T,BinaryOp,Cxs>(
+        src, dst, n, std::move(op), root, tm, std::move(cxs_ignored)
       );
-    
-    return ans;
   }
   
   //////////////////////////////////////////////////////////////////////////////
@@ -336,14 +369,24 @@ namespace upcxx {
       team &tm = upcxx::world(),
       completions<future_cx<operation_cx_event>> cxs_ignored = {{}}
     ) {
-    static_assert(
-      upcxx::is_definitely_trivially_serializable<T>::value,
-      "`upcxx::reduce_all<T>` only permitted for DefinitelyTriviallySerialize T. "
-      "Consider using `upcxx::reduce_all_nontrivial<T>` instead."
-    );
-    digest id = tm.next_collective_id(detail::internal_only());
-    intrank_t root = id.w0 % tm.rank_n();
-    return detail::reduce_state<T,BinaryOp,/*one_not_all=*/false>::contribute(tm, root, id, op, std::forward<T1>(value));
+    
+    return detail::reduce_one_or_all_trivial<T1,BinaryOp,Cxs,T>(
+        std::forward<T1>(value), std::move(op), /*all=*/-1, tm, std::move(cxs_ignored)
+      );
+  }
+  
+  template<typename T, typename BinaryOp,
+           typename Cxs = completions<future_cx<operation_cx_event>>>
+  future<> reduce_all(
+      T const *src, T *dst, std::size_t n,
+      BinaryOp op,
+      team &tm = upcxx::world(),
+      completions<future_cx<operation_cx_event>> cxs_ignored = {{}}
+    ) {
+    
+    return detail::reduce_one_or_all_trivial<T,BinaryOp,Cxs>(
+        src, dst, n, std::move(op), /*all=*/-1, tm, std::move(cxs_ignored)
+      );
   }
   
   //////////////////////////////////////////////////////////////////////////////

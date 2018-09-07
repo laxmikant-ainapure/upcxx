@@ -33,8 +33,8 @@ namespace upcxx {
   }
 }
 
-void upcxx::detail::reduce_one_trivial(
-    team &tm, intrank_t root,
+void upcxx::detail::reduce_one_or_all_trivial_erased(
+    team &tm, intrank_t root_or_all,
     const void *src, void *dst,
     std::size_t elt_sz, std::size_t elt_n,
     std::uintptr_t ty_id,
@@ -48,18 +48,25 @@ void upcxx::detail::reduce_one_trivial(
   
   #if 0
     if(&tm == &upcxx::world() && tm.rank_me()==0)
-      upcxx::say()<<"gex_Coll_ReduceToOneNB(dt="<<ty_id<<", op="<<op_id<<")";
+      upcxx::say()<<"gex_Coll_ReduceToXxxNB(dt="<<ty_id<<", op="<<op_id<<")";
   #endif
   
-  gex_Event_t e = gex_Coll_ReduceToOneNB(
-    gasnet::handle_of(tm),
-    root,
-    dst, src,
-    (gex_DT_t)ty_id, elt_sz, elt_n,
-    (gex_OP_t)op_id, op_vecfn, op_data,
-    /*flags*/0
-  );
-  
+  gex_Event_t e = root_or_all >= 0
+    ? gex_Coll_ReduceToOneNB(
+        gasnet::handle_of(tm), root_or_all,
+        dst, src,
+        (gex_DT_t)ty_id, elt_sz, elt_n,
+        (gex_OP_t)op_id, op_vecfn, op_data,
+        /*flags*/0
+      )
+    : gex_Coll_ReduceToAllNB(
+        gasnet::handle_of(tm),
+        dst, src,
+        (gex_DT_t)ty_id, elt_sz, elt_n,
+        (gex_OP_t)op_id, op_vecfn, op_data,
+        /*flags*/0
+      );
+
   cb->handle = reinterpret_cast<uintptr_t>(e);
   backend::gasnet::register_cb(cb);
   backend::gasnet::after_gasnet();
