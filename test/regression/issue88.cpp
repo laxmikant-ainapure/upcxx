@@ -1,7 +1,6 @@
 // See: https://bitbucket.org/berkeleylab/upcxx/issues/88/progress-internal-advances-the-state-of
 
-#include <upcxx/backend.hpp>
-#include <upcxx/rpc.hpp>
+#include <upcxx/upcxx.hpp>
 
 #include "../util.hpp"
 
