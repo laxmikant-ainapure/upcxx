@@ -21,7 +21,7 @@ namespace backend {
 namespace gasnet {
   static constexpr std::size_t am_size_rdzv_cutover_min = 256;
   extern std::size_t am_size_rdzv_cutover;
-
+  
   #if UPCXX_BACKEND_GASNET_SEQ
     extern handle_cb_queue master_hcbs;
   #endif
@@ -85,7 +85,7 @@ namespace gasnet {
   int/*refs_added*/ bcast_am_master_rdzv(
     team &tm,
     intrank_t rank_d_ub, // in range [0, 2*rank_n-1)
-    intrank_t rank_owner,
+    intrank_t wrank_owner, // world team coordinates
     void *payload_sender,
     std::atomic<std::int64_t> *refs_sender,
     size_t cmd_size,
@@ -375,8 +375,8 @@ namespace backend {
           w.size(), w.align()
         );
       
-      int64_t refs_now = rdzv_refs->fetch_add(refs_added-(1<<30), std::memory_order_acq_rel);
-      refs_now += refs_added-(1<<30);
+      int64_t refs_now = rdzv_refs->fetch_add(refs_added - (1<<30), std::memory_order_acq_rel);
+      refs_now += refs_added - (1<<30);
       if(0 == refs_now)
         upcxx::deallocate(buf);
     }
@@ -441,7 +441,6 @@ namespace gasnet {
   template<>
   inline void bcast_as_lpc::cleanup</*never_rdzv=*/true>(detail::lpc_base *me1) {
     bcast_as_lpc *me = static_cast<bcast_as_lpc*>(me1);
-    
     if(0 == --me->eager_refs)
       std::free(me->payload);
   }

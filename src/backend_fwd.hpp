@@ -153,6 +153,7 @@ namespace backend {
   void* localize_memory_nonnull(intrank_t rank, std::uintptr_t raw);
   
   std::tuple<intrank_t/*rank*/, std::uintptr_t/*raw*/> globalize_memory(void const *addr);
+  std::tuple<intrank_t/*rank*/, std::uintptr_t/*raw*/> globalize_memory(void const *addr, std::tuple<intrank_t,std::uintptr_t> otherwise);
   std::uintptr_t globalize_memory_nonnull(intrank_t rank, void const *addr);
 }}
 

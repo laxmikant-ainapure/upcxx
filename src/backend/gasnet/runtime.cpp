@@ -144,7 +144,7 @@ namespace {
   intptr_t allocs_live_n_ = 0;
   mspace segment_mspace_;
 }
-  
+
 ////////////////////////////////////////////////////////////////////////
 // from: upcxx/backend.hpp
 
@@ -280,7 +280,7 @@ void upcxx::init() {
       peer_me = 0;
     }
     else {
-      //upcxx::say()<<"True subset local team";
+      //upcxx::say()<<"True subset local team, peers="<<peer_n;
       backend::pshm_peer_lb = nbhd[0].gex_jobrank;
       backend::pshm_peer_ub = nbhd[0].gex_jobrank + peer_n;
     }
@@ -293,6 +293,7 @@ void upcxx::init() {
         ? GEX_FLAG_TM_SCRATCH_SIZE_MIN
         : GEX_FLAG_TM_SCRATCH_SIZE_RECOMMENDED
     );
+    
     void *scratch_buf = upcxx::allocate(scratch_sz, GASNET_PAGESIZE);
     
     gex_TM_Split(
@@ -383,9 +384,6 @@ void upcxx::finalize() {
       upcxx::progress();
   }
   
-  if(UPCXX_ASSERT_ENABLED && allocs_live_n_ != 0)
-    upcxx::say() << "Shared segment allocations live at finalize: "<<allocs_live_n_;
-  
   if(gasnet::handle_of(detail::the_local_team.value) !=
      gasnet::handle_of(detail::the_world_team.value))
     {/*TODO: add local team destruct once GEX has the API.*/}
@@ -393,13 +391,17 @@ void upcxx::finalize() {
   detail::the_local_team.value.destroy();
   detail::the_local_team.destruct();
   
-  detail::the_world_team.value.destroy();
-  detail::the_world_team.destruct();
+  // can't just destroy world, it needs special attention
+  detail::registry.erase(detail::the_world_team.value.id().dig_);
   
   if(UPCXX_ASSERT_ENABLED && !detail::registry.empty()) {
     upcxx::say()<<
       "WARNING: Objects remain ("<<detail::registry.size()<<") in registry at "
       "finalize (could be teams, dist_object's, or outstanding collectives).";
+  }
+  
+  if(UPCXX_ASSERT_ENABLED && allocs_live_n_ != 0) {
+    upcxx::say() << "Shared segment allocations live at finalize: "<<allocs_live_n_;
   }
   
   if(backend::initial_master_scope != nullptr)
@@ -470,6 +472,36 @@ tuple<intrank_t/*rank*/, uintptr_t/*raw*/> backend::globalize_memory(void const 
   );
 
   #undef bad_memory
+}
+
+tuple<intrank_t/*rank*/, uintptr_t/*raw*/>  backend::globalize_memory(
+    void const *addr,
+    tuple<intrank_t/*rank*/, uintptr_t/*raw*/> otherwise
+  ) {
+  intrank_t peer_n = pshm_peer_ub - pshm_peer_lb;
+  uintptr_t uaddr = reinterpret_cast<uintptr_t>(addr);
+
+  // key is a pointer to one past the last vbase less-or-equal to addr.
+  uintptr_t *key = std::upper_bound(
+      pshm_owner_vbase.get(),
+      pshm_owner_vbase.get() + peer_n,
+      uaddr
+    );
+
+  int key_ix = key - pshm_owner_vbase.get();
+  
+  if(key_ix <= 0)
+    return otherwise;
+  
+  intrank_t peer = pshm_owner_peer[key_ix-1];
+
+  if(uaddr - pshm_vbase[peer] <= pshm_size[peer])
+    return std::make_tuple(
+        pshm_peer_lb + peer,
+        uaddr - pshm_local_minus_remote[peer]
+      );
+  else
+    return otherwise;
 }
 
 intrank_t backend::team_rank_from_world(team &tm, intrank_t rank) {
@@ -600,10 +632,10 @@ void gasnet::send_am_rdzv(
   
   intrank_t rank_s = backend::rank_me;
   
-  if(backend::rank_is_local(rank_d)) {
-    backend::send_am_persona<progress_level::internal>(
-      tm, rank_d, persona_d,
-      [=]() {
+  backend::send_am_persona<progress_level::internal>(
+    tm, rank_d, persona_d,
+    [=]() {
+      if(backend::rank_is_local(rank_s)) {
         void *payload = backend::localize_memory_nonnull(rank_s, reinterpret_cast<std::uintptr_t>(buf_s));
         
         rpc_as_lpc *m = new rpc_as_lpc;
@@ -617,12 +649,7 @@ void gasnet::send_am_rdzv(
         auto &tls = detail::the_persona_tls;
         tls.enqueue(*tls.get_top_persona(), level, m, /*known_active=*/std::true_type());
       }
-    );
-  }
-  else {
-    backend::send_am_persona<progress_level::internal>(
-      tm, rank_d, persona_d,
-      [=]() {
+      else {
         rpc_as_lpc *m = rpc_as_lpc::build_rdzv_lz(cmd_size, cmd_align);
         m->rdzv_rank_s = rank_s;
         m->rdzv_rank_s_local = false;
@@ -644,8 +671,8 @@ void gasnet::send_am_rdzv(
           }
         );
       }
-    );
-  }
+    }
+  );
 }
 
 template void gasnet::send_am_rdzv<progress_level::internal>(team&, intrank_t, persona*, void*, size_t, size_t);
@@ -703,7 +730,7 @@ template<progress_level level>
 int gasnet::bcast_am_master_rdzv(
     upcxx::team &tm,
     intrank_t rank_d_ub, // in range [0, 2*rank_n-1)
-    intrank_t rank_owner, // self or a local peer
+    intrank_t wrank_owner, // self or a local peer (in world)
     void *payload_sender, // in my address space
     std::atomic<int64_t> *refs_sender, // in my address space
     size_t cmd_size,
@@ -712,12 +739,12 @@ int gasnet::bcast_am_master_rdzv(
   
   intrank_t rank_n = tm.rank_n();
   intrank_t rank_me = tm.rank_me();
-  intrank_t rank_sender = backend::rank_me;
+  intrank_t wrank_sender = backend::rank_me;
   void *payload_owner = reinterpret_cast<void*>(
-      backend::globalize_memory_nonnull(rank_owner, payload_sender)
+      backend::globalize_memory_nonnull(wrank_owner, payload_sender)
     );
   std::atomic<int64_t> *refs_owner = reinterpret_cast<std::atomic<int64_t>*>(
-      backend::globalize_memory_nonnull(rank_owner, refs_sender)
+      backend::globalize_memory_nonnull(wrank_owner, refs_sender)
     );
   
   int refs_added = 0;
@@ -738,12 +765,12 @@ int gasnet::bcast_am_master_rdzv(
     
     refs_added += 1;
     
-    if(backend::rank_is_local(sub_lb)) {
-      backend::send_am_master<progress_level::internal>(
-        tm, sub_lb,
-        [=]() {
-          void *payload_target = backend::localize_memory_nonnull(rank_owner, reinterpret_cast<std::uintptr_t>(payload_owner));
-          std::atomic<int64_t> *refs_target = (std::atomic<int64_t>*)backend::localize_memory_nonnull(rank_owner, reinterpret_cast<std::uintptr_t>(refs_owner));
+    backend::send_am_master<progress_level::internal>(
+      tm, sub_lb,
+      [=]() {
+        if(backend::rank_is_local(wrank_sender)) {
+          void *payload_target = backend::localize_memory_nonnull(wrank_owner, reinterpret_cast<std::uintptr_t>(payload_owner));
+          std::atomic<int64_t> *refs_target = (std::atomic<int64_t>*)backend::localize_memory_nonnull(wrank_owner, reinterpret_cast<std::uintptr_t>(refs_owner));
           
           parcel_reader r(payload_target);
           team_id tm_id = r.pop_trivial_aligned<team_id>();
@@ -754,7 +781,7 @@ int gasnet::bcast_am_master_rdzv(
           m->payload = payload_target;
           m->vtbl = &m->the_vtbl;
           m->is_rdzv = true;
-          m->rdzv_rank_s = rank_owner;
+          m->rdzv_rank_s = wrank_owner;
           m->rdzv_rank_s_local = true;
           m->rdzv_refs_s = refs_target;
           
@@ -762,10 +789,10 @@ int gasnet::bcast_am_master_rdzv(
           tls.enqueue(*tls.get_top_persona(), level, m, /*known_active=*/std::true_type());
           
           int refs_added = bcast_am_master_rdzv<level>(
-            tm_id.here(),
-            sub_ub, rank_owner, payload_target, refs_target,
-            cmd_size, cmd_align
-          );
+              tm_id.here(), sub_ub,
+              wrank_owner, payload_target, refs_target,
+              cmd_size, cmd_align
+            );
           
           int64_t refs_now = refs_target->fetch_add(refs_added, std::memory_order_relaxed);
           refs_now += refs_added;
@@ -773,20 +800,17 @@ int gasnet::bcast_am_master_rdzv(
           // prevents "unused variable" warnings when asserts are off.)
           if(refs_now == 0) UPCXX_ASSERT(refs_now != 0);
         }
-      );
-    }
-    else {
-      backend::send_am_master<progress_level::internal>(
-        tm, sub_lb,
-        [=]() {
+        else {
           bcast_as_lpc *m = rpc_as_lpc::build_rdzv_lz<bcast_as_lpc>(cmd_size, cmd_align);
-          m->rdzv_rank_s = rank_owner;
+          m->rdzv_rank_s = wrank_owner;
           m->rdzv_rank_s_local = false;
           m->rdzv_refs_s = refs_owner;
           
           rma_get(
-            m->payload, rank_owner, payload_owner, cmd_size,
+            m->payload, wrank_owner, payload_owner, cmd_size,
             [=]() {
+              intrank_t wrank_owner = m->rdzv_rank_s;
+              
               std::atomic<int64_t> *refs_owner = m->rdzv_refs_s;
               m->rdzv_refs_s = &m->rdzv_refs_here;
               
@@ -796,34 +820,35 @@ int gasnet::bcast_am_master_rdzv(
               
               auto &tls = detail::the_persona_tls;
               m->the_vtbl.execute_and_delete = command<detail::lpc_base*>::get_executor(r);
-              tls.enqueue(*tls.get_top_persona(), level, m, /*known_active=*/std::true_type());
+              UPCXX_ASSERT(&backend::master == tls.get_top_persona());
+              tls.enqueue(backend::master, level, m, /*known_active=*/std::true_type());
               
               m->rdzv_refs_here.store(1 + (1<<30), std::memory_order_relaxed);
               
               int refs_added = bcast_am_master_rdzv<level>(
-                tm_id.here(),
-                sub_ub, rank_owner, m->payload, &m->rdzv_refs_here,
-                cmd_size, cmd_align
-              );
+                  tm_id.here(), sub_ub,
+                  backend::rank_me, m->payload, &m->rdzv_refs_here,
+                  cmd_size, cmd_align
+                );
               
-              int64_t refs_now = m->rdzv_refs_here.fetch_add(refs_added-(1<<30), std::memory_order_relaxed);
-              refs_now += refs_added-(1<<30);
+              int64_t refs_now = m->rdzv_refs_here.fetch_add(refs_added - (1<<30), std::memory_order_relaxed);
+              refs_now += refs_added - (1<<30);
               // enqueued rpc shouldn't have run yet
               if(refs_now == 0) UPCXX_ASSERT(refs_now != 0);
               
               // Notify source rank it can free buffer.
               send_am_restricted(
-                upcxx::world(), rank_owner,
+                upcxx::world(), wrank_owner,
                 [=]() {
-                  if(0 == refs_owner->fetch_sub(1, std::memory_order_acq_rel))
+                  if(0 == -1 + refs_owner->fetch_add(-1, std::memory_order_acq_rel))
                     upcxx::deallocate(payload_owner);
                 }
               );
             }
           );
         }
-      );
-    }
+      }
+    );
     
     rank_d_ub = rank_d_mid;
   }
@@ -876,8 +901,7 @@ namespace gasnet {
         std::free(me->payload);
     }
     else {
-      int64_t refs_now = me->rdzv_refs_s->fetch_sub(1, std::memory_order_acq_rel);
-      refs_now -= 1;
+      int64_t refs_now = -1 + me->rdzv_refs_s->fetch_add(-1, std::memory_order_acq_rel);
       
       if(me->rdzv_rank_s_local) {
         if(0 == refs_now) {
@@ -888,9 +912,7 @@ namespace gasnet {
           
           send_am_restricted(
             upcxx::world(), me->rdzv_rank_s,
-            [=]() {
-              upcxx::deallocate(buf_s);
-            }
+            [=]() { upcxx::deallocate(buf_s); }
           );
         }
         
