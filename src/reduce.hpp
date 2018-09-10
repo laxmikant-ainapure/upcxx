@@ -37,8 +37,8 @@ namespace upcxx {
         }\
       };\
     }\
-    constexpr detail::op_wrap<detail::opfn_##name, /*fast_demanded=*/false> op_##name;\
-    constexpr detail::op_wrap<detail::opfn_##name, /*fast_demanded=*/true> op_fast_##name;
+    constexpr detail::op_wrap<detail::opfn_##name, /*fast_demanded=*/false> op_##name = {};\
+    constexpr detail::op_wrap<detail::opfn_##name, /*fast_demanded=*/true> op_fast_##name = {};
   
   UPCXX_INFIX_OP(+, add, false)
   UPCXX_INFIX_OP(*, mul, false)
@@ -62,10 +62,10 @@ namespace upcxx {
       }
     };
   }
-  constexpr detail::op_wrap<detail::opfn_min_not_max<true>, /*fast_demanded=*/false> op_min;
-  constexpr detail::op_wrap<detail::opfn_min_not_max<false>, /*fast_demanded=*/false> op_max;
-  constexpr detail::op_wrap<detail::opfn_min_not_max<true>, /*fast_demanded=*/true> op_fast_min;
-  constexpr detail::op_wrap<detail::opfn_min_not_max<false>, /*fast_demanded=*/true> op_fast_max;
+  constexpr detail::op_wrap<detail::opfn_min_not_max<true>, /*fast_demanded=*/false> op_min = {};
+  constexpr detail::op_wrap<detail::opfn_min_not_max<false>, /*fast_demanded=*/false> op_max = {};
+  constexpr detail::op_wrap<detail::opfn_min_not_max<true>, /*fast_demanded=*/true> op_fast_min = {};
+  constexpr detail::op_wrap<detail::opfn_min_not_max<false>, /*fast_demanded=*/true> op_fast_max = {};
   
   namespace detail {
     /* `detail::reduce_op_has_fast<Op,T>` matches Op and T and reports to bools:
@@ -123,7 +123,7 @@ namespace upcxx {
     template<typename OpFn>
     struct reduce_op_fast_op_id {
       static const std::uintptr_t op_id; // the GEX OP name for this operation (ex: op_id = GEX_OP_ADD when OpFn = opfn_add)
-      static constexpr nullptr_t op_vecfn = nullptr; // No vectorized user function necessary
+      static constexpr std::nullptr_t op_vecfn = nullptr; // No vectorized user function necessary
     };
     // reduce_op_fast_op_id implicitly unwraps `op_wrap<OpFn,...>`
     template<typename OpFn, bool fast_demanded>
