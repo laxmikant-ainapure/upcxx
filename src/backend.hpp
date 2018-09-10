@@ -13,6 +13,10 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace upcxx {
+  inline bool initialized() {
+    return backend::init_count != 0;
+  }
+  
   inline persona& master_persona() {
     return backend::master;
   }

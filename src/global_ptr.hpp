@@ -173,6 +173,13 @@ namespace upcxx {
   }
 
   template<typename T, typename U>
+  global_ptr<T> static_pointer_cast(global_ptr<U> ptr) {
+    return global_ptr<T>(detail::internal_only(),
+                         ptr.rank_,
+                         static_cast<T*>(ptr.raw_ptr_));
+  }
+
+  template<typename T, typename U>
   global_ptr<T> reinterpret_pointer_cast(global_ptr<U> ptr) {
     return global_ptr<T>(detail::internal_only(),
                          ptr.rank_,

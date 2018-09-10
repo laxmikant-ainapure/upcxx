@@ -49,6 +49,7 @@ namespace upcxx {
   class team;
   
   void init();
+  bool initialized();
   void finalize();
   
   intrank_t rank_n();
