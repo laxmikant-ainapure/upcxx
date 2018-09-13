@@ -600,7 +600,6 @@ namespace upcxx {
     // just assume its the one we're putting it in.
     
     constexpr int user = (int)progress_level::user;
-    persona_tls &tls = *this;
     
     auto *hdr = detail::promise_header_of(pro);
     promise_meta *meta = detail::promise_meta_of(pro);
@@ -628,7 +627,6 @@ namespace upcxx {
     // See blurb just above in other `fulfill_during_user_of_top`.
     
     constexpr int user = (int)progress_level::user;
-    persona_tls &tls = *this;
     
     auto *hdr = detail::promise_header_of(pro);
     promise_meta *meta = detail::promise_meta_of(pro);
