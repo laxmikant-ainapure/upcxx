@@ -89,6 +89,7 @@ namespace backend {
   extern int init_count;
   extern intrank_t rank_n;
   extern intrank_t rank_me;
+  extern bool verbose_noise;
   
   extern persona master;
   extern persona_scope *initial_master_scope;
@@ -113,24 +114,24 @@ namespace backend {
   template<typename Fn>
   void during_user(Fn &&fn, persona &active_per = current_persona());
   
-  template<typename ...T>
-  void fulfill_during_user(
+  template<progress_level level, typename ...T>
+  void fulfill_during(
       promise<T...> &pro, std::tuple<T...> vals,
       persona &active_per = current_persona()
     );
-  template<typename ...T>
-  void fulfill_during_user(
+  template<progress_level level, typename ...T>
+  void fulfill_during(
       promise<T...> &pro, std::intptr_t anon,
       persona &active_per = current_persona()
     );
   
-  template<typename ...T>
-  void fulfill_during_user(
+  template<progress_level level, typename ...T>
+  void fulfill_during(
       promise<T...> &&pro, std::tuple<T...> vals,
       persona &active_per = current_persona()
     );
-  template<typename ...T>
-  void fulfill_during_user(
+  template<progress_level level, typename ...T>
+  void fulfill_during(
       promise<T...> &&pro, std::intptr_t anon,
       persona &active_per = current_persona()
     );

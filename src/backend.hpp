@@ -55,39 +55,141 @@ namespace backend {
     during_level<progress_level::user>(std::forward<Fn>(fn), active_per);
   }
   
+  //////////////////////////////////////////////////////////////////////////////
+  // fulfill_during_<level=internal>
+  
   template<typename ...T>
-  void fulfill_during_user(
+  void fulfill_during_(
+      std::integral_constant<progress_level, progress_level::internal>,
       promise<T...> &pro, std::tuple<T...> vals,
       persona &active_per
     ) {
+  
+    struct fulfiller {
+      promise<T...> &pro;
+      std::tuple<T...> vals;
+      void operator()() {
+        pro.fulfill_result(std::move(vals));
+      }
+    };
+    
     auto &tls = detail::the_persona_tls;
-    tls.fulfill_during_user_of_active(active_per, pro, std::move(vals));
-  }
-  template<typename ...T>
-  void fulfill_during_user(
-      promise<T...> &pro, std::intptr_t anon,
-      persona &active_per
-    ) {
-    auto &tls = detail::the_persona_tls;
-    tls.fulfill_during_user_of_active(active_per, pro, anon);
+    tls.during(active_per, progress_level::internal, fulfiller{pro, std::move(vals)}, /*known_active=*/std::true_type());
   }
   
   template<typename ...T>
-  void fulfill_during_user(
+  void fulfill_during_(
+      std::integral_constant<progress_level, progress_level::internal>,
+      promise<T...> &pro, std::intptr_t anon,
+      persona &active_per
+    ) {
+  
+    auto &tls = detail::the_persona_tls;
+    tls.during(active_per, progress_level::internal, [=,&pro]() { pro.fulfill_anonymous(anon); }, /*known_active=*/std::true_type());
+  }
+  
+  template<typename ...T>
+  void fulfill_during_(
+      std::integral_constant<progress_level, progress_level::internal>,
       promise<T...> &&pro, std::tuple<T...> vals,
       persona &active_per
     ) {
+    struct fulfiller {
+      promise<T...> pro;
+      std::tuple<T...> vals;
+      void operator()() {
+        pro.fulfill_result(std::move(vals));
+      }
+    };
+    
     auto &tls = detail::the_persona_tls;
-    tls.fulfill_during_user_of_active(active_per, std::move(pro), std::move(vals));
+    tls.during(active_per, progress_level::internal, fulfiller{std::move(pro), std::move(vals)}, /*known_active=*/std::true_type());
   }
   template<typename ...T>
-  void fulfill_during_user(
+  void fulfill_during_(
+      std::integral_constant<progress_level, progress_level::internal>,
       promise<T...> &&pro, std::intptr_t anon,
       persona &active_per
     ) {
+    struct fulfiller {
+      promise<T...> pro;
+      std::intptr_t anon;
+      void operator()() {
+        pro.fulfill_anonymous(anon);
+      }
+    };
+    
     auto &tls = detail::the_persona_tls;
-    tls.fulfill_during_user_of_active(active_per, std::move(pro), anon);
+    tls.during(active_per, progress_level::internal, fulfiller{std::move(pro), anon}, /*known_active=*/std::true_type());
   }
+  
+  //////////////////////////////////////////////////////////////////////////////
+  // fulfill_during_<level=user>
+  
+  template<typename Pro, typename ...T>
+  void fulfill_during_(
+      std::integral_constant<progress_level, progress_level::user>,
+      Pro &&pro, std::tuple<T...> vals,
+      persona &active_per
+    ) {
+    auto &tls = detail::the_persona_tls;
+    tls.fulfill_during_user_of_active(active_per, std::forward<Pro>(pro), std::move(vals));
+  }
+  template<typename Pro>
+  void fulfill_during_(
+      std::integral_constant<progress_level, progress_level::user>,
+      Pro &&pro, std::intptr_t anon,
+      persona &active_per
+    ) {
+    auto &tls = detail::the_persona_tls;
+    tls.fulfill_during_user_of_active(active_per, std::forward<Pro>(pro), anon);
+  }
+  
+  //////////////////////////////////////////////////////////////////////////////
+  
+  template<progress_level level, typename ...T>
+  void fulfill_during(
+      promise<T...> &pro, std::tuple<T...> vals,
+      persona &active_per
+    ) {
+    fulfill_during_(
+        std::integral_constant<progress_level,level>(),
+        pro, std::move(vals), active_per
+      );
+  }
+  template<progress_level level, typename ...T>
+  void fulfill_during(
+      promise<T...> &pro, std::intptr_t anon,
+      persona &active_per
+    ) {
+    fulfill_during_(
+        std::integral_constant<progress_level,level>(),
+        pro, anon, active_per
+      );
+  }
+  
+  template<progress_level level, typename ...T>
+  void fulfill_during(
+      promise<T...> &&pro, std::tuple<T...> vals,
+      persona &active_per
+    ) {
+    fulfill_during_(
+        std::integral_constant<progress_level,level>(),
+        std::move(pro), std::move(vals), active_per
+      );
+  }
+  template<progress_level level, typename ...T>
+  void fulfill_during(
+      promise<T...> &&pro, std::intptr_t anon,
+      persona &active_per
+    ) {
+    fulfill_during_(
+        std::integral_constant<progress_level,level>(),
+        std::move(pro), anon, active_per
+      );
+  }
+  
+  //////////////////////////////////////////////////////////////////////////////
   
   inline bool rank_is_local(intrank_t r) {
     return std::uintptr_t(r) - std::uintptr_t(pshm_peer_lb) < std::uintptr_t(pshm_peer_n);

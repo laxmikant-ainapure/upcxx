@@ -2,6 +2,7 @@
 #include <upcxx/backend/gasnet/runtime_internal.hpp>
 
 #include <upcxx/os_env.hpp>
+#include <upcxx/reduce.hpp>
 #include <upcxx/team.hpp>
 
 #include <algorithm>
@@ -68,6 +69,8 @@ int backend::init_count = 0;
 intrank_t backend::rank_n = -1;
 intrank_t backend::rank_me; // leave undefined so valgrind can catch it.
 
+bool backend::verbose_noise = false;
+
 persona backend::master;
 persona_scope *backend::initial_master_scope = nullptr;
 
@@ -105,6 +108,9 @@ namespace {
     // unused
     constexpr void *gasnet_seq_thread_id = nullptr;
   #endif
+  
+  auto do_internal_progress = []() { upcxx::progress(progress_level::internal); };
+  auto operation_cx_as_internal_future = upcxx::completions<upcxx::future_cx<upcxx::operation_cx_event, progress_level::internal>>{{}};
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -166,6 +172,8 @@ void upcxx::init() {
   ok = gex_Client_Init(&client, &endpoint, &world_tm, "upcxx", nullptr, nullptr, 0);
   UPCXX_ASSERT_ALWAYS(ok == GASNET_OK);
   
+  backend::verbose_noise = (bool)os_env<int>("UPCXX_VERBOSE", 0);
+
   size_t segment_size = 128*(1<<20);
   std::string upcxx_segment_variable = os_env<std::string>("UPCXX_SEGMENT_MB", "128");
   std::transform(
@@ -263,7 +271,13 @@ void upcxx::init() {
   gex_TM_t local_tm;
   
   if((intrank_t)peer_n == backend::rank_n) {
-    //upcxx::say()<<"Whole world local team";
+    if(backend::verbose_noise && backend::rank_me == 0) {
+      std::cerr
+        <<std::string(70,'/')<<std::endl
+        <<"upcxx::init(): Whole world is in same local team."<<std::endl
+        <<std::string(70,'/')<<std::endl;
+    }
+    
     backend::pshm_peer_lb = 0;
     backend::pshm_peer_ub = backend::rank_n;
     peer_n = backend::rank_n;
@@ -272,7 +286,6 @@ void upcxx::init() {
   }
   else {
     if(!contiguous_nbhd) {
-      //upcxx::say()<<"Singleton subset local team";
       // Discontiguous rank-set is collapsed to singleton set of "me"
       backend::pshm_peer_lb = backend::rank_me;
       backend::pshm_peer_ub = backend::rank_me + 1;
@@ -280,9 +293,49 @@ void upcxx::init() {
       peer_me = 0;
     }
     else {
-      //upcxx::say()<<"True subset local team, peers="<<peer_n;
+      // True subset local team
       backend::pshm_peer_lb = nbhd[0].gex_jobrank;
       backend::pshm_peer_ub = nbhd[0].gex_jobrank + peer_n;
+    }
+    
+    if(backend::verbose_noise) {
+      struct local_team_stats {
+        int count;
+        int min_size, max_size;
+      };
+      
+      local_team_stats stats = {peer_me == 0 ? 1 : 0, (int)peer_n, (int)peer_n};
+      
+      gex_Event_Wait(gex_Coll_ReduceToOneNB(
+          world_tm, 0,
+          &stats, &stats,
+          GEX_DT_USER, sizeof(local_team_stats), 1,
+          GEX_OP_USER,
+          (gex_Coll_ReduceFn_t)[](const void *arg1, void *arg2_out, std::size_t n, const void*) {
+            const auto *in = (local_team_stats*)arg1;
+            auto *acc = (local_team_stats*)arg2_out;
+            for(std::size_t i=0; i != n; i++) {
+              acc[i].count += in[i].count;
+              acc[i].min_size = std::min(acc[i].min_size, in[i].min_size);
+              acc[i].max_size = std::max(acc[i].max_size, in[i].max_size);
+            }
+          },
+          nullptr, 0
+        )
+      );
+      
+      if(backend::rank_me == 0) {
+        std::cerr
+          <<std::string(70,'/')<<std::endl
+          <<"upcxx::init(): local team statistics:"<<std::endl
+          <<"  local teams = "<<stats.count<<std::endl
+          <<"  min rank_n = "<<stats.min_size<<std::endl
+          <<"  max rank_n = "<<stats.max_size<<std::endl;
+        if(stats.count == backend::rank_n) {
+          std::cerr<<"  WARNING: All local team's are singletons. Memory sharing between ranks will never succeed."<<std::endl;
+        }
+        std::cerr<<std::string(70,'/')<<std::endl;
+      }
     }
     
     size_t scratch_sz = gex_TM_Split(
@@ -384,25 +437,70 @@ void upcxx::finalize() {
       upcxx::progress();
   }
   
-  if(gasnet::handle_of(detail::the_local_team.value) !=
-     gasnet::handle_of(detail::the_world_team.value))
-    {/*TODO: add local team destruct once GEX has the API.*/}
+  struct popn_stats_t {
+    int64_t sum, min, max;
+  };
   
-  detail::the_local_team.value.destroy();
-  detail::the_local_team.destruct();
+  auto reduce_popn_to_rank0 = [](int64_t arg)->popn_stats_t {
+    // We could use `gex_Coll_ReduceToOne`, but this gives us a test of reductions
+    // using our "internal only" completions.
+    return upcxx::reduce_one(
+        popn_stats_t{arg, arg, arg},
+        [](popn_stats_t a, popn_stats_t b)->popn_stats_t {
+          return {a.sum + b.sum, std::min(a.min, b.min), std::max(a.max, b.max)};
+        },
+        /*root=*/0, upcxx::world(),
+        operation_cx_as_internal_future
+      ).wait(do_internal_progress);
+  };
+  
+  if(backend::verbose_noise) {
+    int64_t objs_local = detail::registry.size() - 2; // minus `world` and `local_team`
+    popn_stats_t objs = reduce_popn_to_rank0(objs_local);
+    
+    if(backend::rank_me == 0 && objs.sum != 0) {
+      std::cerr
+        <<std::string(70,'/')<<std::endl
+        <<"upcxx::finalize(): Objects remain within registries at finalize"<<std::endl
+        <<"(could be teams, dist_object's, or outstanding collectives)."<<std::endl
+        <<"  total = "<<objs.sum<<std::endl
+        <<"  per rank min = "<<objs.min<<std::endl
+        <<"  per rank max = "<<objs.max<<std::endl
+        <<std::string(70,'/')<<std::endl;
+    }
+  }
+  
+  if(backend::verbose_noise) {
+    int64_t live_local = allocs_live_n_;
+    
+    if(gasnet::handle_of(detail::the_local_team.value) !=
+       gasnet::handle_of(detail::the_world_team.value))
+       live_local -= 1; // minus local_team scratch
+    
+    popn_stats_t live = reduce_popn_to_rank0(live_local);
+    
+    if(backend::rank_me == 0 && live.sum != 0) {
+      std::cerr
+        <<std::string(70,'/')<<std::endl
+        <<"upcxx::finalize(): Shared segment allocations live at finalize:"<<std::endl
+        <<"  total = "<<live.sum<<std::endl
+        <<"  per rank min = "<<live.min<<std::endl
+        <<"  per rank max = "<<live.max<<std::endl
+        <<std::string(70,'/')<<std::endl;
+    }
+  }
+  
+  { // Tear down local_team
+    if(gasnet::handle_of(detail::the_local_team.value) !=
+       gasnet::handle_of(detail::the_world_team.value))
+      {/*TODO: add local team destruct once GEX has the API.*/}
+    
+    detail::the_local_team.value.destroy();
+    detail::the_local_team.destruct();
+  }
   
   // can't just destroy world, it needs special attention
   detail::registry.erase(detail::the_world_team.value.id().dig_);
-  
-  if(UPCXX_ASSERT_ENABLED && !detail::registry.empty()) {
-    upcxx::say()<<
-      "WARNING: Objects remain ("<<detail::registry.size()<<") in registry at "
-      "finalize (could be teams, dist_object's, or outstanding collectives).";
-  }
-  
-  if(UPCXX_ASSERT_ENABLED && allocs_live_n_ != 0) {
-    upcxx::say() << "Shared segment allocations live at finalize: "<<allocs_live_n_;
-  }
   
   if(backend::initial_master_scope != nullptr)
     delete backend::initial_master_scope;

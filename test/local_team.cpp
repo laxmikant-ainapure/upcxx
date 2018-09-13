@@ -38,7 +38,7 @@ int main() {
       UPCXX_ASSERT_ALWAYS(locals.from_world(locals[i], -0xbeef) == i);
       UPCXX_ASSERT_ALWAYS(upcxx::local_team_contains(locals[i]));
     }
-
+    
     { // Try and generate some non-local ranks, not entirely foolproof.
       std::unordered_set<int> some_remotes;
       for(int i=0; i < peer_n; i++)
@@ -49,7 +49,6 @@ int main() {
       for(int remote: some_remotes) {
         UPCXX_ASSERT_ALWAYS(locals.from_world(remote, -0xbeef) == -0xbeef);
         UPCXX_ASSERT_ALWAYS(!upcxx::local_team_contains(remote));
-
         UPCXX_ASSERT_ALWAYS(upcxx::world().from_world(remote, -0xdad) == remote);
       }
     }
@@ -60,18 +59,26 @@ int main() {
       global_ptr<int> p = upcxx::rpc(
           locals[(peer_me + i) % peer_n],
           [=](dist_object<global_ptr<int>> &dp) {
-            return global_ptr<int>(dp->local() + i);
+            return upcxx::to_global_ptr<int>(dp->local() + i);
           },
           dp
         ).wait();
 
-      UPCXX_ASSERT_ALWAYS(p == global_ptr<int>(p.local()));
+      UPCXX_ASSERT_ALWAYS(p == upcxx::to_global_ptr(p.local()));
+      UPCXX_ASSERT_ALWAYS(p == upcxx::try_global_ptr(p.local()));
       UPCXX_ASSERT_ALWAYS(p.is_local());
       UPCXX_ASSERT_ALWAYS(p.where() == locals[(peer_me + i) % peer_n]);
       
       *p.local() = upcxx::rank_me();
     }
-
+    
+    {
+      int hi;
+      UPCXX_ASSERT_ALWAYS(!upcxx::try_global_ptr(&hi));
+      // uncomment and watch it die via assert
+      //upcxx::to_global_ptr(&hi);
+    }
+    
     upcxx::barrier();
 
     for(int i=0; i < peer_n; i++) {

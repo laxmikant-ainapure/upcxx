@@ -38,22 +38,6 @@ namespace upcxx {
     global_ptr(std::nullptr_t nil = nullptr):
       global_ptr(detail::internal_only(), 0, nullptr) {
     }
-
-    explicit global_ptr(T *ptr) {
-      if(ptr == nullptr) {
-        raw_ptr_ = ptr;
-        rank_ = 0; // null pointer represented with rank 0
-      }
-      else {
-        intrank_t rank;
-        std::uintptr_t raw;
-        
-        std::tie(rank, raw) = backend::globalize_memory(ptr);
-
-        rank_ = rank;
-        raw_ptr_ = reinterpret_cast<T*>(raw);
-      }
-    }
     
     bool is_local() const {
       return backend::rank_is_local(rank_);
@@ -62,7 +46,10 @@ namespace upcxx {
     bool is_null() const {
       return raw_ptr_ == nullptr;
     }
-
+    operator bool() const {
+      return raw_ptr_ != nullptr;
+    }
+    
     T* local() const {
       return static_cast<T*>(
         backend::localize_memory(
@@ -120,32 +107,44 @@ namespace upcxx {
       *this = *this - 1;
       return old;
     }
-
-    bool operator==(global_ptr rhs) const {
-      return rank_ == rhs.rank_ && raw_ptr_ == rhs.raw_ptr_;
+    
+    friend bool operator==(global_ptr a, global_ptr b) {
+      return a.rank_ == b.rank_ && a.raw_ptr_ == b.raw_ptr_;
     }
-
-    bool operator!=(global_ptr rhs) const {
-      return rank_ != rhs.rank_ || raw_ptr_ != rhs.raw_ptr_;
+    friend bool operator==(global_ptr a, std::nullptr_t) {
+      return a.raw_ptr_ == nullptr;
     }
-
+    friend bool operator==(std::nullptr_t, global_ptr b) {
+      return nullptr == b.raw_ptr_;
+    }
+    
+    friend bool operator!=(global_ptr a, global_ptr b) {
+      return a.rank_ != b.rank_ || a.raw_ptr_ != b.raw_ptr_;
+    }
+    friend bool operator!=(global_ptr a, std::nullptr_t) {
+      return a.raw_ptr_ != nullptr;
+    }
+    friend bool operator!=(std::nullptr_t, global_ptr b) {
+      return nullptr != b.raw_ptr_;
+    }
+    
     // Comparison operators specify partial order
-    bool operator<(global_ptr rhs) const {
-      return raw_ptr_ < rhs.raw_ptr_;
-    }
-
-    bool operator<=(global_ptr rhs) const {
-      return raw_ptr_ <= rhs.raw_ptr_;
-    }
-
-    bool operator>(global_ptr rhs) const {
-      return raw_ptr_ > rhs.raw_ptr_;
-    }
-
-    bool operator>=(global_ptr rhs) const {
-      return raw_ptr_ >= rhs.raw_ptr_;
-    }
-
+    #define UPCXX_COMPARE_OP(op) \
+      friend bool operator op(global_ptr a, global_ptr b) {\
+        return a.raw_ptr_ op b.raw_ptr_;\
+      }\
+      friend bool operator op(global_ptr a, std::nullptr_t b) {\
+        return a.raw_ptr_ op b;\
+      }\
+      friend bool operator op(std::nullptr_t a, global_ptr b) {\
+        return a op b.raw_ptr_;\
+      }
+    UPCXX_COMPARE_OP(<)
+    UPCXX_COMPARE_OP(<=)
+    UPCXX_COMPARE_OP(>)
+    UPCXX_COMPARE_OP(>=)
+    #undef UPCXX_COMAPRE_OP
+    
   private:
     friend struct std::less<global_ptr<T>>;
     friend struct std::less_equal<global_ptr<T>>;
@@ -190,6 +189,33 @@ namespace upcxx {
   std::ostream& operator<<(std::ostream &os, global_ptr<T> ptr) {
     return os << "(gp: " << ptr.rank_ << ", " << ptr.raw_ptr_ << ")";
   }
+  
+  template<typename T>
+  global_ptr<T> to_global_ptr(T *p) {
+    if(p == nullptr)
+      return global_ptr<T>(nullptr);
+    else {
+      intrank_t rank;
+      std::uintptr_t raw;
+    
+      std::tie(rank, raw) = backend::globalize_memory((void*)p);
+    
+      return global_ptr<T>(detail::internal_only(), rank, reinterpret_cast<T*>(raw));
+    }
+  }
+  
+  template<typename T>
+  global_ptr<T> try_global_ptr(T *p) {
+    intrank_t rank;
+    std::uintptr_t raw;
+    
+    std::tie(rank, raw) =
+      p == nullptr
+        ? std::tuple<intrank_t, std::uintptr_t>(0, 0x0)
+        : backend::globalize_memory((void*)p, std::make_tuple(0, 0x0));
+    
+    return global_ptr<T>(detail::internal_only(), rank, reinterpret_cast<T*>(raw));
+  }   
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -112,7 +112,7 @@ namespace {
       rank_ub = mid;
     }
     
-    backend::fulfill_during_user(std::move(this->pro), /*anon*/1);
+    backend::fulfill_during<progress_level::user>(std::move(this->pro), /*anon*/1);
     detail::registry.erase(id);
     delete this;
   }

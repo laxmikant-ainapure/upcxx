@@ -5,8 +5,13 @@
 #include <upcxx/completion.hpp>
 #include <upcxx/rpc.hpp>
 #include <upcxx/team.hpp>
+#include <upcxx/utility.hpp>
 
 #include <type_traits>
+
+/* NOTE: Reductions have full completions support, unlike the other
+ * collectives, but this hasn't been verified as correct with a test.
+ */
 
 namespace upcxx {
   namespace detail {
@@ -192,6 +197,22 @@ namespace upcxx {
     };
     
     ////////////////////////////////////////////////////////////////////////////
+    
+    template<typename T>
+    struct reduce_scalar_event_values {
+      template<typename Event>
+      using tuple_t = typename std::conditional<
+          std::is_same<Event, operation_cx_event>::value,
+            std::tuple<T>,
+            void
+        >::type;
+    };
+    struct reduce_vector_event_values {
+      template<typename Event>
+      using tuple_t = std::tuple<>;
+    };
+    
+    ////////////////////////////////////////////////////////////////////////////
     // Calls out to gex_Coll_ReduceTo{One,All}NB
     
     void reduce_one_or_all_trivial_erased(
@@ -208,10 +229,15 @@ namespace upcxx {
     template<typename T1, typename BinaryOp,
              typename Cxs = completions<future_cx<operation_cx_event>>,
              typename T = typename std::decay<T1>::type>
-    future<T> reduce_one_or_all_trivial(
+    typename detail::completions_returner<
+        /*EventPredicate=*/detail::event_is_here,
+        /*EventValues=*/detail::reduce_scalar_event_values<T>,
+        Cxs
+      >::return_t
+    reduce_one_or_all_trivial(
         T1 &&value, BinaryOp op, intrank_t root_or_all/*-1 = all*/,
         team &tm = upcxx::world(),
-        completions<future_cx<operation_cx_event>> cxs_ignored = {{}}
+        Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
       ) {
       
       static_assert(
@@ -220,27 +246,44 @@ namespace upcxx {
         "Consider using `upcxx::reduce_[all|one]_nontrivial<T>` instead."
       );
       
+      UPCXX_ASSERT_ALWAYS(
+        (detail::completions_has_event<Cxs, operation_cx_event>::value),
+        "Not requesting operation completion is surely an error."
+      );
+      
+      using cxs_state_here_t = detail::completions_state<
+        /*EventPredicate=*/detail::event_is_here,
+        /*EventValues=*/detail::reduce_scalar_event_values<T>,
+        Cxs>;
+      
       struct my_cb final: backend::gasnet::handle_cb {
         T in_out;
         BinaryOp op;
-        promise<T> pro;
+        cxs_state_here_t cxs_st;
         
-        my_cb(T1 &&in, BinaryOp op):
+        my_cb(T1 &&in, BinaryOp op, cxs_state_here_t cxs_st):
           in_out(std::forward<T1>(in)),
-          op(std::move(op)) {
+          op(std::move(op)),
+          cxs_st(std::move(cxs_st)) {
         }
         
         void execute_and_delete(backend::gasnet::handle_cb_successor) override {
-          backend::fulfill_during_user(
-              std::move(pro), std::tuple<T>(std::move(in_out)),
-              backend::master
-            );
+          cxs_st.template operator()<operation_cx_event>(std::move(in_out));
           delete this;
         }
       };
       
-      my_cb *cb = new my_cb(std::forward<T1>(value), std::move(op));
-      future<T> ans = cb->pro.get_future();
+      my_cb *cb = new my_cb(
+          std::forward<T1>(value),
+          std::move(op),
+          cxs_state_here_t{std::move(cxs)}
+        );
+      
+      auto returner = detail::completions_returner<
+          /*EventPredicate=*/detail::event_is_here,
+          /*EventValues=*/detail::reduce_scalar_event_values<T>,
+          Cxs
+        >(cb->cxs_st);
       
       reduce_one_or_all_trivial_erased(
           tm, root_or_all,
@@ -252,34 +295,50 @@ namespace upcxx {
           cb
         );
       
-      return ans;
+      return returner();
     }
     
     template<typename T, typename BinaryOp,
              typename Cxs = completions<future_cx<operation_cx_event>>>
-    future<> reduce_one_or_all_trivial(
+    typename detail::completions_returner<
+        /*EventPredicate=*/detail::event_is_here,
+        /*EventValues=*/detail::reduce_vector_event_values,
+        Cxs
+      >::return_t
+    reduce_one_or_all_trivial(
         T const *src, T *dst, std::size_t n,
         BinaryOp op, intrank_t root_or_all/*-1 = all*/,
         team &tm = upcxx::world(),
-        completions<future_cx<operation_cx_event>> cxs_ignored = {{}}
+        Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
       ) {
+      
+      using cxs_state_here_t = detail::completions_state<
+        /*EventPredicate=*/detail::event_is_here,
+        /*EventValues=*/detail::reduce_vector_event_values,
+        Cxs>;
       
       struct my_cb final: backend::gasnet::handle_cb {
         BinaryOp op;
-        promise<> pro;
+        cxs_state_here_t cxs_st;
         
-        my_cb(BinaryOp op):
-          op(std::move(op)) {
+        my_cb(BinaryOp op, cxs_state_here_t cxs_st):
+          op(std::move(op)),
+          cxs_st(std::move(cxs_st)) {
         }
         
         void execute_and_delete(backend::gasnet::handle_cb_successor) override {
-          backend::fulfill_during_user(std::move(pro), std::tuple<>(), backend::master);
+          cxs_st.template operator()<operation_cx_event>();
           delete this;
         }
       };
       
-      my_cb *cb = new my_cb(std::move(op));
-      future<> ans = cb->pro.get_future();
+      my_cb *cb = new my_cb(std::move(op), cxs_state_here_t{std::move(cxs)});
+      
+      auto returner = detail::completions_returner<
+          /*EventPredicate=*/detail::event_is_here,
+          /*EventValues=*/detail::reduce_vector_event_values,
+          Cxs
+        >(cb->cxs_st);
       
       reduce_one_or_all_trivial_erased(
           tm, root_or_all,
@@ -291,22 +350,32 @@ namespace upcxx {
           cb
         );
       
-      return ans;
+      return returner();
     }
     
     
     ////////////////////////////////////////////////////////////////////////////
     // Non-GEX reduction implementation. Used for nontrivial types T.
     
-    template<typename T, typename Op, bool one_not_all>
+    template<typename T, typename Op, bool one_not_all, typename Cxs>
     struct reduce_state {
       intrank_t root; // root rank for reduction tree
       int incoming; // number of ranks sending us a contribution, counts down to zero.
       T accum; // accumulates contributions from local user and other ranks.
-      promise<T> answer;
+      
+      using cxs_state_t = detail::completions_state<
+        /*EventPredicate=*/detail::event_is_here,
+        /*EventValues=*/detail::reduce_scalar_event_values<T>,
+        Cxs>;
+      
+      upcxx::raw_storage<cxs_state_t> cxs_st_raw;
+      
+      ~reduce_state() {
+        cxs_st_raw.destruct();
+      }
       
       template<typename T1>
-      static future<T> contribute(team&, intrank_t root, digest id, Op const &op, T1 &&value);
+      static void contribute(team&, intrank_t root, digest id, Op const &op, T1 &&value, cxs_state_t *cxs_st);
     };
   }
   
@@ -316,46 +385,117 @@ namespace upcxx {
   template<typename T1, typename BinaryOp,
            typename Cxs = completions<future_cx<operation_cx_event>>,
            typename T = typename std::decay<T1>::type>
-  future<T> reduce_one(
+  typename detail::completions_returner<
+      /*EventPredicate=*/detail::event_is_here,
+      /*EventValues=*/detail::reduce_scalar_event_values<T>,
+      Cxs
+    >::return_t
+  reduce_one(
       T1 &&value, BinaryOp op, intrank_t root,
       team &tm = upcxx::world(),
-      completions<future_cx<operation_cx_event>> cxs_ignored = {{}}
+      Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
     ) {
     UPCXX_ASSERT(0 <= root && root < tm.rank_n());
     
     return detail::reduce_one_or_all_trivial<T1,BinaryOp,Cxs,T>(
-        std::forward<T1>(value), std::move(op), root, tm, std::move(cxs_ignored)
+        std::forward<T1>(value), std::move(op), root, tm, std::move(cxs)
       );
   }
   
   template<typename T, typename BinaryOp,
            typename Cxs = completions<future_cx<operation_cx_event>>>
-  future<> reduce_one(
+  typename detail::completions_returner<
+        /*EventPredicate=*/detail::event_is_here,
+        /*EventValues=*/detail::reduce_vector_event_values,
+        Cxs
+      >::return_t
+   reduce_one(
       T const *src, T *dst, std::size_t n,
       BinaryOp op, intrank_t root,
       team &tm = upcxx::world(),
-      completions<future_cx<operation_cx_event>> cxs_ignored = {{}}
+      Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
     ) {
     UPCXX_ASSERT(0 <= root && root < tm.rank_n());
     
     return detail::reduce_one_or_all_trivial<T,BinaryOp,Cxs>(
-        src, dst, n, std::move(op), root, tm, std::move(cxs_ignored)
+        src, dst, n, std::move(op), root, tm, std::move(cxs)
       );
   }
   
   //////////////////////////////////////////////////////////////////////////////
   // upcxx::reduce_one_nontrivial
   
+  namespace detail {
+    template<typename T1, typename BinaryOp,
+             typename Cxs,
+             typename T = typename std::decay<T1>::type>
+    typename detail::completions_returner<
+        /*EventPredicate=*/detail::event_is_here,
+        /*EventValues=*/detail::reduce_scalar_event_values<T>,
+        Cxs
+      >::return_t
+    reduce_one_nontrivial(
+        T1 &&value, BinaryOp op, intrank_t root,
+        team &tm,
+        Cxs cxs,
+        std::true_type trivial_yes
+      ) {
+      return reduce_one(std::forward<T1>(value), std::move(op), root, tm, std::move(cxs));
+    }
+    
+    template<typename T1, typename BinaryOp,
+             typename Cxs,
+             typename T = typename std::decay<T1>::type>
+    typename detail::completions_returner<
+        /*EventPredicate=*/detail::event_is_here,
+        /*EventValues=*/detail::reduce_scalar_event_values<T>,
+        Cxs
+      >::return_t
+    reduce_one_nontrivial(
+        T1 &&value, BinaryOp op, intrank_t root,
+        team &tm,
+        Cxs cxs,
+        std::false_type trivial_no
+      ) {
+      
+      using reduce_state = detail::reduce_state<T,BinaryOp,/*one_not_all=*/true,Cxs>;
+      
+      typename reduce_state::cxs_state_t cxs_st{std::move(cxs)};
+      
+      auto returner = detail::completions_returner<
+          /*EventPredicate=*/detail::event_is_here,
+          /*EventValues=*/detail::reduce_scalar_event_values<T>,
+          Cxs
+        >(cxs_st);
+        
+      digest id = tm.next_collective_id(detail::internal_only());
+      
+      reduce_state::contribute(
+          tm, root, id, std::move(op), std::forward<T1>(value), &cxs_st
+        );
+      
+      return returner();
+    }
+  }
+  
   template<typename T1, typename BinaryOp,
            typename Cxs = completions<future_cx<operation_cx_event>>,
            typename T = typename std::decay<T1>::type>
-  future<T> reduce_one_nontrivial(
+  typename detail::completions_returner<
+      /*EventPredicate=*/detail::event_is_here,
+      /*EventValues=*/detail::reduce_scalar_event_values<T>,
+      Cxs
+    >::return_t
+  reduce_one_nontrivial(
       T1 &&value, BinaryOp op, intrank_t root,
       team &tm = upcxx::world(),
-      completions<future_cx<operation_cx_event>> cxs_ignored = {{}}
+      Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
     ) {
-    digest id = tm.next_collective_id(detail::internal_only());
-    return detail::reduce_state<T,BinaryOp,/*one_not_all=*/true>::contribute(tm, root, id, op, std::forward<T1>(value));
+      
+    return detail::reduce_one_nontrivial(
+        std::forward<T1>(value), std::move(op), root, tm, std::move(cxs),
+        std::integral_constant<bool, upcxx::is_definitely_trivially_serializable<T>::value>()
+      );
   }
   
   //////////////////////////////////////////////////////////////////////////////
@@ -364,58 +504,127 @@ namespace upcxx {
   template<typename T1, typename BinaryOp,
            typename Cxs = completions<future_cx<operation_cx_event>>,
            typename T = typename std::decay<T1>::type>
-  future<T> reduce_all(
+  typename detail::completions_returner<
+      /*EventPredicate=*/detail::event_is_here,
+      /*EventValues=*/detail::reduce_scalar_event_values<T>,
+      Cxs
+    >::return_t
+  reduce_all(
       T1 &&value, BinaryOp op,
       team &tm = upcxx::world(),
-      completions<future_cx<operation_cx_event>> cxs_ignored = {{}}
+      Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
     ) {
-    
     return detail::reduce_one_or_all_trivial<T1,BinaryOp,Cxs,T>(
-        std::forward<T1>(value), std::move(op), /*all=*/-1, tm, std::move(cxs_ignored)
+        std::forward<T1>(value), std::move(op), /*all=*/-1, tm, std::move(cxs)
       );
   }
   
   template<typename T, typename BinaryOp,
            typename Cxs = completions<future_cx<operation_cx_event>>>
-  future<> reduce_all(
+  typename detail::completions_returner<
+      /*EventPredicate=*/detail::event_is_here,
+      /*EventValues=*/detail::reduce_vector_event_values,
+      Cxs
+    >::return_t
+  reduce_all(
       T const *src, T *dst, std::size_t n,
       BinaryOp op,
       team &tm = upcxx::world(),
-      completions<future_cx<operation_cx_event>> cxs_ignored = {{}}
+      Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
     ) {
-    
     return detail::reduce_one_or_all_trivial<T,BinaryOp,Cxs>(
-        src, dst, n, std::move(op), /*all=*/-1, tm, std::move(cxs_ignored)
+        src, dst, n, std::move(op), /*all=*/-1, tm, std::move(cxs)
       );
   }
   
   //////////////////////////////////////////////////////////////////////////////
   // upcxx::reduce_all_nontrivial
   
+  namespace detail {
+    template<typename T1, typename BinaryOp,
+             typename Cxs = completions<future_cx<operation_cx_event>>,
+             typename T = typename std::decay<T1>::type>
+    typename detail::completions_returner<
+        /*EventPredicate=*/detail::event_is_here,
+        /*EventValues=*/detail::reduce_scalar_event_values<T>,
+        Cxs
+      >::return_t
+    reduce_all_nontrivial(
+        T1 &&value, BinaryOp op,
+        team &tm,
+        Cxs cxs,
+        std::true_type trivial_yes
+      ) {
+      return reduce_all(std::forward<T1>(value), std::move(op), tm, std::move(cxs));
+    }
+    
+    template<typename T1, typename BinaryOp,
+             typename Cxs = completions<future_cx<operation_cx_event>>,
+             typename T = typename std::decay<T1>::type>
+    typename detail::completions_returner<
+        /*EventPredicate=*/detail::event_is_here,
+        /*EventValues=*/detail::reduce_scalar_event_values<T>,
+        Cxs
+      >::return_t
+    reduce_all_nontrivial(
+        T1 &&value, BinaryOp op,
+        team &tm,
+        Cxs cxs,
+        std::false_type trivial_no
+      ) {
+      using reduce_state = detail::reduce_state<T,BinaryOp,/*one_not_all=*/false,Cxs>;
+      
+      typename reduce_state::cxs_state_t cxs_st{std::move(cxs)};
+      
+      auto returner = detail::completions_returner<
+          /*EventPredicate=*/detail::event_is_here,
+          /*EventValues=*/detail::reduce_scalar_event_values<T>,
+          Cxs
+        >(cxs_st);
+      
+      digest id = tm.next_collective_id(detail::internal_only());
+      intrank_t root = id.w0 % tm.rank_n();
+      
+      reduce_state::contribute(
+          tm, root, id, std::move(op), std::forward<T1>(value), &cxs_st
+        );
+      
+      return returner();
+    }
+  }
+  
   template<typename T1, typename BinaryOp,
            typename Cxs = completions<future_cx<operation_cx_event>>,
            typename T = typename std::decay<T1>::type>
-  future<T> reduce_all_nontrivial(
+  typename detail::completions_returner<
+        /*EventPredicate=*/detail::event_is_here,
+        /*EventValues=*/detail::reduce_scalar_event_values<T>,
+        Cxs
+      >::return_t
+  reduce_all_nontrivial(
       T1 &&value, BinaryOp op,
       team &tm = upcxx::world(),
-      completions<future_cx<operation_cx_event>> cxs_ignored = completions<future_cx<operation_cx_event>>{{}}
+      Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
     ) {
-    digest id = tm.next_collective_id(detail::internal_only());
-    intrank_t root = id.w0 % tm.rank_n();
-    return detail::reduce_state<T,BinaryOp,/*one_not_all=*/false>::contribute(tm, root, id, op, std::forward<T1>(value));
+    return detail::reduce_all_nontrivial(
+        std::forward<T1>(value), std::move(op), tm, std::move(cxs),
+        std::integral_constant<bool, upcxx::is_definitely_trivially_serializable<T>::value>()
+      );
   }
   
   //////////////////////////////////////////////////////////////////////////////
   // reduce_state::contribute
   
   namespace detail {
-    template<typename T, typename Op, bool one_not_all>
+    template<typename T, typename Op, bool one_not_all, typename Cxs>
     template<typename T1>
-    future<T> reduce_state<T,Op,one_not_all>::contribute(
-        team &tm, intrank_t root, digest id, Op const &op, T1 &&value
+    void reduce_state<T,Op,one_not_all,Cxs>::contribute(
+        team &tm, intrank_t root, digest id, Op const &op, T1 &&value,
+        typename reduce_state::cxs_state_t *cxs_st
       ) {
       
       UPCXX_ASSERT(backend::master.active_with_caller());
+      detail::persona_scope_redundant master_as_top(backend::master, detail::the_persona_tls);
       
       intrank_t rank_n = tm.rank_n();
       
@@ -442,7 +651,7 @@ namespace upcxx {
         }
         incoming += 1; // add one for this rank
         
-        state = new reduce_state{root, incoming, std::forward<T1>(value)};
+        state = new reduce_state{root, incoming, std::forward<T1>(value), {}};
         it_and_inserted.first->second = state;
       }
       else {
@@ -451,7 +660,8 @@ namespace upcxx {
         state->accum = op(std::move(state->accum), std::forward<T1>(value));
       }
       
-      future<T> ans = state->answer.get_future();
+      if(cxs_st)
+        ::new(&state->cxs_st_raw) cxs_state_t{std::move(*cxs_st)};
       
       if(0 == --state->incoming) {
         // We have all of our expected contributions.
@@ -460,9 +670,9 @@ namespace upcxx {
           auto bound = upcxx::bind([=](T &value) {
                 auto it = detail::registry.find(id);
                 reduce_state *me = static_cast<reduce_state*>(it->second);
-                detail::registry.erase(it);
                 
-                backend::fulfill_during_user(std::move(me->answer), std::tuple<T>(std::move(value)));
+                detail::registry.erase(it);
+                me->cxs_st_raw.value.template operator()<operation_cx_event>(std::move(value));
                 delete me;
               },
               std::move(state->accum)
@@ -471,11 +681,7 @@ namespace upcxx {
           if(!one_not_all)
             backend::bcast_am_master<progress_level::user>(tm, bound);
           
-          backend::fulfill_during_user(
-              std::move(state->answer),
-              std::tuple<T>(std::move(std::get<0>(bound.b_))),
-              backend::master
-            );
+          state->cxs_st_raw.value.template operator()<operation_cx_event>(std::move(std::get<0>(bound.b_)));
           delete state;
           detail::registry.erase(id);
         }
@@ -493,27 +699,20 @@ namespace upcxx {
             tm, parent,
             upcxx::bind(
               [=](T &value, decltype(detail::globalize_fnptr(std::declval<Op>())) const &op) {
-                reduce_state::contribute(tm_id.here(), root, id, op, static_cast<T&&>(value));
+                reduce_state::contribute(tm_id.here(), root, id, op, static_cast<T&&>(value), nullptr);
               },
               state->accum, detail::globalize_fnptr(op)
             )
           );
           
           if(one_not_all) {
-            backend::fulfill_during_user(
-                std::move(state->answer),
-                // state->accum has been moved-out from, so this is really bogus,
-                // but still correct.
-                std::tuple<T>(std::move(state->accum)),
-                backend::master
-              );
+            // accum has been moved-out from, so this is a bogus (but valid) value
+            state->cxs_st_raw.value.template operator()<operation_cx_event>(std::move(state->accum));
             delete state;
             detail::registry.erase(id);
           }
         }
       }
-      
-      return ans;
     }
   }
 }

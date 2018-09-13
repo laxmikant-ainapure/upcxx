@@ -68,6 +68,13 @@ void upcxx::detail::reduce_one_or_all_trivial_erased(
       );
 
   cb->handle = reinterpret_cast<uintptr_t>(e);
-  backend::gasnet::register_cb(cb);
+  
+  { // We want completions to target master persona, so make it the "current" one
+    // while we register. This is safe because we've already asserted that it must
+    // be active.
+    detail::persona_scope_redundant master_on_top(backend::master, detail::the_persona_tls);
+    backend::gasnet::register_cb(cb);
+  }
+  
   backend::gasnet::after_gasnet();
 }

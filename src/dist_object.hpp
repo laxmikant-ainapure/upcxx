@@ -81,7 +81,7 @@ namespace upcxx {
       
       id_ = tm.next_collective_id(detail::internal_only());
       
-      backend::fulfill_during_user(
+      backend::fulfill_during<progress_level::user>(
           *detail::registered_promise<dist_object<T>&>(id_),
           std::tuple<dist_object<T>&>(*this),
           backend::master
@@ -94,7 +94,7 @@ namespace upcxx {
       
       id_ = tm.next_collective_id(detail::internal_only());
       
-      backend::fulfill_during_user(
+      backend::fulfill_during<progress_level::user>(
           *detail::registered_promise<dist_object<T>&>(id_),
           std::tuple<dist_object<T>&>(*this),
           backend::master

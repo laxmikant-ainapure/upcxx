@@ -14,6 +14,7 @@
 #if !NOBS_DISCOVERY // this header is a leaf-node wrt nobs discovery
   #if UPCXX_BACKEND_GASNET
     #include <gasnet.h>
+    #include <gasnet_coll.h>
   #else
     #error "You've either pulled in this header without first including" \
            "<upcxx/backend.hpp>, or you've made the assumption that" \
@@ -33,7 +34,7 @@ namespace gasnet {
     struct callback: handle_cb {
       promise<> pro;
       void execute_and_delete(handle_cb_successor) {
-        backend::fulfill_during_user(std::move(pro), std::tuple<>());
+        backend::fulfill_during<progress_level::user>(std::move(pro), std::tuple<>());
       }
     };
     

@@ -27,16 +27,16 @@ namespace upcxx {
         tm,
         upcxx::bind([=](T &value) {
             promise<T> *pro = detail::registered_promise<T>(id, /*anon=*/1);
-            backend::fulfill_during_user(*pro, std::tuple<T>(std::move(value)));
+            backend::fulfill_during<progress_level::user>(*pro, std::tuple<T>(std::move(value)));
           },
           value
         )
       );
       
-      backend::fulfill_during_user(*pro, std::tuple<T>(std::move(value)), backend::master);
+      backend::fulfill_during<progress_level::user>(*pro, std::tuple<T>(std::move(value)), backend::master);
     }
     
-    backend::fulfill_during_user(*pro, /*anon*/1, backend::master);
+    backend::fulfill_during<progress_level::user>(*pro, /*anon*/1, backend::master);
     
     future<T> ans = pro->get_future();
     
@@ -75,7 +75,7 @@ namespace upcxx {
     struct my_cb final: backend::gasnet::handle_cb {
       promise<> pro;
       void execute_and_delete(backend::gasnet::handle_cb_successor) override {
-        backend::fulfill_during_user(std::move(pro), /*anon*/1, backend::master);
+        backend::fulfill_during<progress_level::user>(std::move(pro), /*anon*/1, backend::master);
         delete this;
       }
     };
@@ -105,7 +105,7 @@ namespace upcxx {
       T val;
       my_cb(T val): val(std::move(val)) {}
       void execute_and_delete(backend::gasnet::handle_cb_successor) override {
-        backend::fulfill_during_user(std::move(pro), std::tuple<T>(std::move(val)), backend::master);
+        backend::fulfill_during<progress_level::user>(std::move(pro), std::tuple<T>(std::move(val)), backend::master);
         delete this;
       }
     };
