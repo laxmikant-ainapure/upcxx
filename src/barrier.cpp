@@ -1,6 +1,8 @@
 #include <upcxx/barrier.hpp>
 #include <upcxx/backend/gasnet/runtime_internal.hpp>
 
+#include <atomic>
+
 using namespace upcxx;
 using namespace std;
 
@@ -124,6 +126,8 @@ namespace {
 void upcxx::barrier(team &tm) {
   UPCXX_ASSERT(backend::master.active_with_caller());
   
+  std::atomic_thread_fence(std::memory_order_release);
+  
   int32_t dummy = 0;
   gex_Event_t e = gex_Coll_ReduceToAllNB(
       backend::gasnet::handle_of(tm), &dummy, &dummy, GEX_DT_I32, sizeof(int32_t), 1,
@@ -132,6 +136,8 @@ void upcxx::barrier(team &tm) {
   
   while(0 != gex_Event_Test(e))
     upcxx::progress();
+  
+  std::atomic_thread_fence(std::memory_order_acquire);
 }
 
 template<>
@@ -144,12 +150,15 @@ future<> upcxx::barrier_async<
   UPCXX_ASSERT(backend::master.active_with_caller());
   
   #if 1
+    std::atomic_thread_fence(std::memory_order_release);
+    
     static int32_t dummy = 0;
     gex_Event_t e = gex_Coll_ReduceToAllNB(
         backend::gasnet::handle_of(tm), &dummy, &dummy, GEX_DT_I32, sizeof(int32_t), 1,
         GEX_OP_OR, nullptr, nullptr, 0
       );
-    return backend::gasnet::register_handle_as_future(e);
+    return backend::gasnet::register_handle_as_future(e)
+      .then([]() { std::atomic_thread_fence(std::memory_order_acquire); });
   #else
     // do hand-rolled barrier
     digest id = tm.next_collective_id(detail::internal_only());

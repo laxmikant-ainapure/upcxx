@@ -6,6 +6,7 @@
 #include <upcxx/team.hpp>
 
 #include <algorithm>
+#include <atomic>
 #include <cstdlib>
 #include <cstring>
 #include <memory>
@@ -549,6 +550,8 @@ void backend::quiesce(team &tm, upcxx::quiescer q) {
     break;
   case quiescer::barrier_internal:
   case quiescer::barrier_user: {
+      std::atomic_thread_fence(std::memory_order_release);
+      
       int32_t dummy = 0;
       gex_Event_t e = gex_Coll_ReduceToAllNB(
           gasnet::handle_of(tm), &dummy, &dummy, GEX_DT_I32, sizeof(int32_t), 1,
@@ -562,6 +565,8 @@ void backend::quiesce(team &tm, upcxx::quiescer q) {
             : progress_level::user
         );
       }
+      
+      std::atomic_thread_fence(std::memory_order_acquire);
     } break;
   }
 }
