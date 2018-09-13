@@ -129,6 +129,33 @@ int main() {
       }
     );
   
+  auto nop = [](){};
+  #define THEM(member)\
+    static_assert(std::is_same<void, decltype(make_future().member)>::value, "Uh-oh");\
+    static_assert(std::is_same<int, decltype(ans0.member)>::value, "Uh-oh");\
+    static_assert(std::is_same<int, decltype(when_all(ans0).member)>::value, "Uh-oh");\
+    static_assert(std::is_same<tuple<int,int,float,int>, decltype(when_all(ans0, ans1, make_future<float>(3.14), ans2).member)>::value, "Uh-oh");
+  THEM(result())
+  THEM(wait(nop))
+  #undef THEM
+  
+  #define THEM(member)\
+    static_assert(std::is_same<void, decltype(make_future().member)>::value, "Uh-oh");\
+    static_assert(std::is_same<int&&, decltype(ans0.member)>::value, "Uh-oh");\
+    static_assert(std::is_same<int&&, decltype(when_all(ans0).member)>::value, "Uh-oh");\
+    static_assert(std::is_same<tuple<int&&,int&&,float&&,int&&>, decltype(when_all(ans0, ans1, make_future<float>(3.14), ans2).member)>::value, "Uh-oh");
+  THEM(result_moved())
+  THEM(wait_moved(nop))
+  #undef THEM
+  
+  static_assert(std::is_same<float, decltype(make_future(true,1,3.14f).result<2>())>::value, "Uh-oh");
+  static_assert(std::is_same<float&&, decltype(make_future(true,1,3.14f).result_moved<2>())>::value, "Uh-oh");
+  static_assert(std::is_same<float, decltype(make_future(true,1,3.14f).wait<2>(nop))>::value, "Uh-oh");
+  static_assert(std::is_same<float&&, decltype(make_future(true,1,3.14f).wait_moved<2>(nop))>::value, "Uh-oh");
+  
+  static_assert(std::is_same<tuple<bool,int>,decltype(make_future(true,1).result_tuple())>::value, "uh-oh");
+  static_assert(std::is_same<tuple<bool,int>,decltype(make_future(true,1).wait_tuple(nop))>::value, "uh-oh");
+  
   // drain progress queue
   while(!the_q.empty()) {
     promise<int> *p = the_q.top();

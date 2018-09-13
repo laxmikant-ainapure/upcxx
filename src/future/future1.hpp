@@ -76,6 +76,8 @@ namespace upcxx {
     typedef std::tuple<T...> results_type;
     typedef typename Kind::template with_types<T...> impl_type; // impl_type is a FutureImpl.
     
+    using results_rvals_type = decltype(std::declval<impl_type>().result_rvals());
+    
     impl_type impl_;
     
   public:
@@ -116,32 +118,34 @@ namespace upcxx {
       return impl_.ready();
     }
     
-    template<int i=0>
-    typename upcxx::tuple_element_or_void<i, results_type>::type result() const {
-      return (typename upcxx::tuple_element_or_void<i, results_type>::type)
-        upcxx::get_or_void<i>(impl_.result_lrefs_getter()());
+    template<int i=-1>
+    typename std::conditional<
+        (i<0 && sizeof...(T) > 1),
+          results_type,
+          typename upcxx::tuple_element_or_void<(i<0 ? 0 : i), results_type>::type
+      >::type
+    result() const {
+      auto lrefs_getter = impl_.result_lrefs_getter();
+      
+      return upcxx::get_or_void<(i < 0 && sizeof...(T) > 1) ? 0 : (i<0 ? 1 : i+1)>(
+          std::tuple_cat(std::make_tuple(lrefs_getter()), lrefs_getter())
+        );
     }
     
-    results_type results() const {
-      return results_type{const_cast<impl_type&>(impl_).result_rvals()};
-    }
     results_type result_tuple() const {
-      return results_type{const_cast<impl_type&>(impl_).result_rvals()};
+      return const_cast<impl_type&>(impl_).result_lrefs_getter()();
     }
     
-    template<int i=0>
-    auto result_moved()
-      -> decltype(upcxx::get_or_void<i>(impl_.result_rvals())) {
-      return upcxx::get_or_void<i>(impl_.result_rvals());
-    }
-    
-    auto results_moved()
-      -> decltype(impl_.result_rvals()) {
-      return impl_.result_rvals();
-    }
-    auto results_tuple_moved()
-      -> decltype(impl_.result_rvals()) {
-      return impl_.result_rvals();
+    template<int i=-1>
+    typename std::conditional<
+        (i<0 && sizeof...(T) > 1),
+          results_rvals_type,
+          typename upcxx::tuple_element_or_void<(i<0 ? 0 : i), results_rvals_type>::type
+      >::type
+    result_moved() {
+      return upcxx::get_or_void<(i < 0 && sizeof...(T) > 1) ? 0 : (i<0 ? 1 : i+1)>(
+          std::tuple_cat(std::make_tuple(impl_.result_rvals()), impl_.result_rvals())
+        );
     }
     
     template<typename Fn>
@@ -173,18 +177,48 @@ namespace upcxx {
     }
 
     #ifdef UPCXX_BACKEND
-    template<typename Fn=detail::future_wait_upcxx_progress_user>
+    template<int i=-1, typename Fn=detail::future_wait_upcxx_progress_user>
     auto wait(Fn &&progress = detail::future_wait_upcxx_progress_user{})
     #else
-    template<typename Fn>
+    template<int i=-1, typename Fn>
     auto wait(Fn &&progress)
     #endif
-      -> decltype(this->result()) {
+      -> decltype(this->template result<i>()) {
       
       while(!impl_.ready())
         progress();
       
-      return this->result();
+      return this->template result<i>();
+    }
+    
+    #ifdef UPCXX_BACKEND
+    template<typename Fn=detail::future_wait_upcxx_progress_user>
+    auto wait_tuple(Fn &&progress = detail::future_wait_upcxx_progress_user{})
+    #else
+    template<typename Fn>
+    auto wait_tuple(Fn &&progress)
+    #endif
+      -> decltype(this->result_tuple()) {
+      
+      while(!impl_.ready())
+        progress();
+      
+      return this->result_tuple();
+    }
+    
+    #ifdef UPCXX_BACKEND
+    template<int i=-1, typename Fn=detail::future_wait_upcxx_progress_user>
+    auto wait_moved(Fn &&progress = detail::future_wait_upcxx_progress_user{})
+    #else
+    template<int i=-1, typename Fn>
+    auto wait_moved(Fn &&progress)
+    #endif
+      -> decltype(this->template result_moved<i>()) {
+      
+      while(!impl_.ready())
+        progress();
+      
+      return this->template result_moved<i>();
     }
   };
 }
