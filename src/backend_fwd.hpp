@@ -35,6 +35,12 @@ namespace upcxx {
     user
   };
 
+  enum class quiescer {
+    none,
+    barrier_internal,
+    barrier_user
+  };
+  
   namespace detail {
     // internal_only: Type used to mark member functions of public types for
     // internal use only. To do so, just make one of the function's arguments
@@ -107,6 +113,8 @@ namespace backend {
       // personas carry no extra state
     #endif
   };
+  
+  void quiesce(team &tm, quiescer q);
   
   template<progress_level level, typename Fn>
   void during_level(Fn &&fn, persona &active_per = current_persona());

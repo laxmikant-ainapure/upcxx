@@ -96,7 +96,7 @@ namespace upcxx {
     
     team split(intrank_t color, intrank_t key);
     
-    void destroy();
+    void destroy(quiescer q = quiescer::barrier_user);
     
     ////////////////////////////////////////////////////////////////////////////
     // internal only

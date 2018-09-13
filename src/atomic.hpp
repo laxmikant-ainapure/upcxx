@@ -17,6 +17,12 @@ namespace upcxx {
   enum class atomic_op : int { load, store,
                                add, fetch_add,
                                sub, fetch_sub,
+                               mul, fetch_mul,
+                               min, fetch_min,
+                               max, fetch_max,
+                               bit_and, fetch_bit_and,
+                               bit_or, fetch_bit_or,
+                               bit_xor, fetch_bit_xor,
                                inc, fetch_inc,
                                dec, fetch_dec,
                                compare_exchange };
@@ -35,7 +41,7 @@ namespace upcxx {
         (sizeof(T) * CHAR_BIT == 32 || sizeof(T) * CHAR_BIT == 64);
       
       static_assert(is_atomic,
-          "Atomic domains only supported on non-const 32- and 64-bit integral types");
+          "Atomic domains only supported on non-const 32 and 64-bit integral types");
 
       // Our encoding is that if both fields are zero than this is a
       // non-constructed object. Otherwise, if atomic_gex_ops is zero then
@@ -47,7 +53,7 @@ namespace upcxx {
       int atomic_gex_ops = 0;
       // The opaque gasnet atomic domain handle.
       std::uintptr_t ad_gex_handle = 0;
-      std::uintptr_t tm_gex_handle;
+      team *parent_tm_;
       
       // call to backend gasnet function
       detail::amo_done inject(
@@ -190,17 +196,15 @@ namespace upcxx {
       atomic_domain(atomic_domain &&that) {
         this->ad_gex_handle = that.ad_gex_handle;
         this->atomic_gex_ops = that.atomic_gex_ops;
-        this->tm_gex_handle = that.tm_gex_handle;
+        this->parent_tm_ = that.parent_tm_;
         // revert `that` to non-constructed state
         that.atomic_gex_ops = 0;
         that.ad_gex_handle = 0;
-        that.tm_gex_handle = 0;
+        that.parent_tm_ = nullptr;
       }
 
       // The constructor takes a vector of operations. Currently, flags is currently unsupported.
       atomic_domain(std::vector<atomic_op> const &ops, team &tm = upcxx::world());
-
-      ~atomic_domain();
 
       atomic_domain &operator=(atomic_domain &&that) {
         // only allow assignment moves onto "dead" object
@@ -208,14 +212,18 @@ namespace upcxx {
                      "Move assignment is only allowed on a default-constructed atomic_domain");
         this->ad_gex_handle = that.ad_gex_handle;
         this->atomic_gex_ops = that.atomic_gex_ops;
-        this->tm_gex_handle = that.tm_gex_handle;
+        this->parent_tm_ = that.parent_tm_;
         // revert `that` to non-constructed state
         that.atomic_gex_ops = 0;
         that.ad_gex_handle = 0;
-        that.tm_gex_handle = 0;
+        that.parent_tm_ = nullptr;
         return *this;
       }
+      
+      ~atomic_domain();
 
+      void destroy(quiescer q = quiescer::barrier_user);
+      
       template<typename Cxs = FUTURE_CX>
       NOFETCH_RTYPE<Cxs> store(global_ptr<T> gptr, T val, std::memory_order order,
                                Cxs cxs = Cxs{{}}) {
@@ -242,30 +250,31 @@ namespace upcxx {
         return fop(atomic_op::fetch_dec, gptr, order, (T)0, (T)0, cxs);
       }
       template<typename Cxs = FUTURE_CX>
-      NOFETCH_RTYPE<Cxs> add(global_ptr<T> gptr, T val1, std::memory_order order,
-                             Cxs cxs = Cxs{{}}) {
-        return op(atomic_op::add, gptr, order, val1, (T)0, cxs);
-      }
-      template<typename Cxs = FUTURE_CX>
-      NOFETCH_RTYPE<Cxs> sub(global_ptr<T> gptr, T val1, std::memory_order order,
-                             Cxs cxs = Cxs{{}}) {
-        return op(atomic_op::sub, gptr, order, val1, (T)0, cxs);
-      }
-      template<typename Cxs = FUTURE_CX>
-      FETCH_RTYPE<Cxs> fetch_add(global_ptr<T> gptr, T val, std::memory_order order,
-                                 Cxs cxs = Cxs{{}}) {
-        return fop(atomic_op::fetch_add, gptr, order, val, (T)0, cxs);
-      }
-      template<typename Cxs = FUTURE_CX>
-      FETCH_RTYPE<Cxs> fetch_sub(global_ptr<T> gptr, T val, std::memory_order order,
-                                 Cxs cxs = Cxs{{}}) {
-        return fop(atomic_op::fetch_sub, gptr, order, val, (T)0, cxs);
-      }
-      template<typename Cxs = FUTURE_CX>
       FETCH_RTYPE<Cxs> compare_exchange(global_ptr<T> gptr, T val1, T val2, std::memory_order order,
                                         Cxs cxs = Cxs{{}}) {
         return fop(atomic_op::compare_exchange, gptr, order, val1, val2, cxs);
       }
+      
+      #define UPCXX_AD_METHODS(name)\
+        template<typename Cxs = FUTURE_CX>\
+        FETCH_RTYPE<Cxs> fetch_##name(global_ptr<T> gptr, T val, std::memory_order order,\
+                                      Cxs cxs = Cxs{{}}) {\
+          return fop(atomic_op::fetch_##name, gptr, order, val, (T)0, cxs);\
+        }\
+        template<typename Cxs = FUTURE_CX>\
+        FETCH_RTYPE<Cxs> name(global_ptr<T> gptr, T val, std::memory_order order,\
+                                Cxs cxs = Cxs{{}}) {\
+          return fop(atomic_op::name, gptr, order, val, (T)0, cxs);\
+        }
+      UPCXX_AD_METHODS(add)
+      UPCXX_AD_METHODS(sub)
+      UPCXX_AD_METHODS(mul)
+      UPCXX_AD_METHODS(min)
+      UPCXX_AD_METHODS(max)
+      UPCXX_AD_METHODS(bit_and)
+      UPCXX_AD_METHODS(bit_or)
+      UPCXX_AD_METHODS(bit_xor)
+      #undef UPCXX_AD_METHODS
   };
 } // namespace upcxx
 

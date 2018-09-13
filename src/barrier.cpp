@@ -1,8 +1,10 @@
 #include <upcxx/barrier.hpp>
+#include <upcxx/backend/gasnet/runtime_internal.hpp>
 
 using namespace upcxx;
 using namespace std;
 
+#if 0 // None of this hand-rolled barrier stuff is in use
 namespace {
   constexpr int radix_log2 = 4;
   constexpr int radix = 1<<radix_log2;
@@ -117,27 +119,20 @@ namespace {
     delete this;
   }
 }
+#endif // end hand-rolled barrier
 
-#if 0
-void upcxx::barrier() {
-  UPCXX_ASSERT(backend::master.active_with_caller());
-  
-  gasnet_barrier_notify(0, GASNET_BARRIERFLAG_ANONYMOUS);
-  
-  while(GASNET_OK != gasnet_barrier_try(0, GASNET_BARRIERFLAG_ANONYMOUS))
-    upcxx::progress();
-}
-#else
 void upcxx::barrier(team &tm) {
   UPCXX_ASSERT(backend::master.active_with_caller());
   
-  digest id = tm.next_collective_id(detail::internal_only());
-  barrier_state *st = barrier_state::lookup(tm, id);
-  future<> ans = st->pro.get_future();
-  st->receive(tm, id);
-  ans.wait();
+  int32_t dummy = 0;
+  gex_Event_t e = gex_Coll_ReduceToAllNB(
+      backend::gasnet::handle_of(tm), &dummy, &dummy, GEX_DT_I32, sizeof(int32_t), 1,
+      GEX_OP_OR, nullptr, nullptr, 0
+    );
+  
+  while(0 != gex_Event_Test(e))
+    upcxx::progress();
 }
-#endif
 
 template<>
 future<> upcxx::barrier_async<
@@ -148,9 +143,19 @@ future<> upcxx::barrier_async<
   ) {
   UPCXX_ASSERT(backend::master.active_with_caller());
   
-  digest id = tm.next_collective_id(detail::internal_only());
-  barrier_state *st = barrier_state::lookup(tm, id);
-  future<> ans = st->pro.get_future();
-  st->receive(tm, id);
-  return ans;
+  #if 1
+    static int32_t dummy = 0;
+    gex_Event_t e = gex_Coll_ReduceToAllNB(
+        backend::gasnet::handle_of(tm), &dummy, &dummy, GEX_DT_I32, sizeof(int32_t), 1,
+        GEX_OP_OR, nullptr, nullptr, 0
+      );
+    return backend::gasnet::register_handle_as_future(e);
+  #else
+    // do hand-rolled barrier
+    digest id = tm.next_collective_id(detail::internal_only());
+    barrier_state *st = barrier_state::lookup(tm, id);
+    future<> ans = st->pro.get_future();
+    st->receive(tm, id);
+    return ans;
+  #endif
 }

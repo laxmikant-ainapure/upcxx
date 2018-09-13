@@ -30,15 +30,43 @@ static_assert(
   
 namespace {
   // translate upc++ atomic operations into gex ids
-  // load, store, add, fetch_add, sub, fetch_sub, inc, fetch_inc, dec, fetch_dec, compare_exchange
   constexpr int to_gex_op_map[] = { 
-    GEX_OP_GET, GEX_OP_SET, GEX_OP_ADD, GEX_OP_FADD, GEX_OP_SUB, GEX_OP_FSUB, 
-    GEX_OP_INC, GEX_OP_FINC, GEX_OP_DEC, GEX_OP_FDEC, GEX_OP_CSWAP };
-
+    GEX_OP_GET, GEX_OP_SET,
+    GEX_OP_ADD, GEX_OP_FADD,
+    GEX_OP_SUB, GEX_OP_FSUB,
+    GEX_OP_MULT, GEX_OP_FMULT,
+    GEX_OP_MIN, GEX_OP_FMIN,
+    GEX_OP_MAX, GEX_OP_FMAX,
+    GEX_OP_AND, GEX_OP_FAND,
+    GEX_OP_OR, GEX_OP_FOR,
+    GEX_OP_XOR, GEX_OP_FXOR,
+    GEX_OP_INC, GEX_OP_FINC,
+    GEX_OP_DEC, GEX_OP_FDEC,
+    GEX_OP_CSWAP
+  };
+  
+  // check a handful of enum mappings to ensure no insert/delete errors
+  static_assert(to_gex_op_map[(int)upcxx::atomic_op::mul] == GEX_OP_MULT, "Uh-oh");
+  static_assert(to_gex_op_map[(int)upcxx::atomic_op::fetch_max] == GEX_OP_FMAX, "Uh-oh");
+  static_assert(to_gex_op_map[(int)upcxx::atomic_op::bit_and] == GEX_OP_AND, "Uh-oh");
+  static_assert(to_gex_op_map[(int)upcxx::atomic_op::fetch_bit_xor] == GEX_OP_FXOR, "Uh-oh");
+  static_assert(to_gex_op_map[(int)upcxx::atomic_op::compare_exchange] == GEX_OP_CSWAP, "Uh-oh");
+  
   // for error messages
   constexpr const char *atomic_op_str[] = {
-    "load", "store", "add", "fetch_add", "sub", "fetch_sub", "inc", "fetch_inc", 
-    "dec", "fetch_dec", "compare_exchange" };
+    "load", "store",
+    "add", "fetch_add",
+    "sub", "fetch_sub",
+    "mul", "fetch_mul",
+    "min", "fetch_min",
+    "max", "fetch_max",
+    "bit_and", "fetch_bit_and",
+    "bit_or", "fetch_bit_or",
+    "bit_xor", "fetch_bit_xor",
+    "inc", "fetch_inc", 
+    "dec", "fetch_dec",
+    "compare_exchange"
+  };
 
   constexpr int op_count = int(sizeof(atomic_op_str)/sizeof(atomic_op_str[0]));
   
@@ -129,7 +157,7 @@ atomic_domain<T>::atomic_domain(std::vector<atomic_op> const &ops, team &tm) {
   atomic_gex_ops = 0;
   for (auto next_op : ops) atomic_gex_ops |= to_gex_op_map[static_cast<int>(next_op)];
   
-  tm_gex_handle = reinterpret_cast<uintptr_t>(gasnet::handle_of(tm));
+  parent_tm_ = &tm;
   
   if(atomic_gex_ops != 0) {
     // Create the gasnet atomic domain for the world team.
@@ -142,9 +170,25 @@ atomic_domain<T>::atomic_domain(std::vector<atomic_op> const &ops, team &tm) {
 }
 
 template<typename T>
+void atomic_domain<T>::destroy(quiescer q) {
+  UPCXX_ASSERT(backend::master.active_with_caller());
+  
+  backend::quiesce(*parent_tm_, q);
+  
+  if(atomic_gex_ops) {
+    gex_AD_Destroy(reinterpret_cast<gex_AD_t>(ad_gex_handle));
+    atomic_gex_ops = 0;
+  }
+}
+
+template<typename T>
 atomic_domain<T>::~atomic_domain() {
-  // Destroy the gasnet atomic domain
-  if (atomic_gex_ops) gex_AD_Destroy(reinterpret_cast<gex_AD_t>(ad_gex_handle));
+  if(backend::init_count > 0) { // we don't assert on leaks after finalization
+    UPCXX_ASSERT_ALWAYS(
+      atomic_gex_ops == 0,
+      "ERROR: `upcxx::atomic_domain::destroy()` must be called collectively before destructor."
+    );
+  }
 }
 
 template<typename T>
@@ -165,8 +209,9 @@ detail::amo_done atomic_domain<T>::inject(
   
   gex_Event_t h = shim_gex_AD_OpNB<T>(
     reinterpret_cast<gex_AD_t>(this->ad_gex_handle), p,
-    gex_TM_TranslateJobrankToRank(reinterpret_cast<gex_TM_t>(this->tm_gex_handle), gp.rank_),
-    gp.raw_ptr_, op_gex, val1, val2, flags
+    gex_TM_TranslateJobrankToRank(gasnet::handle_of(*parent_tm_), gp.rank_),
+    gp.raw_ptr_, op_gex, val1, val2,
+    flags // | GEX_FLAG_RANK_IS_JOBRANK
   );
 
   cb->handle = reinterpret_cast<uintptr_t>(h);

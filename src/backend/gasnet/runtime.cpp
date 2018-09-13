@@ -543,6 +543,29 @@ void upcxx::deallocate(void *p) {
 //////////////////////////////////////////////////////////////////////
 // from: upcxx/backend.hpp
 
+void backend::quiesce(team &tm, upcxx::quiescer q) {
+  switch(q) {
+  case quiescer::none:
+    break;
+  case quiescer::barrier_internal:
+  case quiescer::barrier_user: {
+      int32_t dummy = 0;
+      gex_Event_t e = gex_Coll_ReduceToAllNB(
+          gasnet::handle_of(tm), &dummy, &dummy, GEX_DT_I32, sizeof(int32_t), 1,
+          GEX_OP_OR, nullptr, nullptr, 0
+        );
+      
+      while(0 != gex_Event_Test(e)) {
+        upcxx::progress(
+          q == quiescer::barrier_internal
+            ? progress_level::internal
+            : progress_level::user
+        );
+      }
+    } break;
+  }
+}
+
 tuple<intrank_t/*rank*/, uintptr_t/*raw*/> backend::globalize_memory(void const *addr) {
   intrank_t peer_n = pshm_peer_ub - pshm_peer_lb;
   uintptr_t uaddr = reinterpret_cast<uintptr_t>(addr);

@@ -128,13 +128,22 @@ void test_all_ops(team &tm, global_ptr<int64_t> target_counter, upcxx::atomic_do
 }
 
 void test_team(upcxx::team &tm) {
-  upcxx::atomic_domain<int64_t> ad_i64({upcxx::atomic_op::load, upcxx::atomic_op::store, 
-          upcxx::atomic_op::add, upcxx::atomic_op::fetch_add,
-          upcxx::atomic_op::sub, upcxx::atomic_op::fetch_sub,          
-          upcxx::atomic_op::inc, upcxx::atomic_op::fetch_inc,
-          upcxx::atomic_op::dec, upcxx::atomic_op::fetch_dec,
-          upcxx::atomic_op::compare_exchange}, tm);
-   
+  upcxx::atomic_domain<int64_t> ad_i64(
+      {upcxx::atomic_op::load, upcxx::atomic_op::store, 
+       upcxx::atomic_op::add, upcxx::atomic_op::fetch_add,
+       upcxx::atomic_op::sub, upcxx::atomic_op::fetch_sub,          
+       upcxx::atomic_op::mul, upcxx::atomic_op::fetch_mul,
+       upcxx::atomic_op::min, upcxx::atomic_op::fetch_min,
+       upcxx::atomic_op::max, upcxx::atomic_op::fetch_max,
+       upcxx::atomic_op::bit_and, upcxx::atomic_op::fetch_bit_and,
+       upcxx::atomic_op::bit_or, upcxx::atomic_op::fetch_bit_or,
+       upcxx::atomic_op::bit_xor, upcxx::atomic_op::fetch_bit_xor,
+       upcxx::atomic_op::inc, upcxx::atomic_op::fetch_inc,
+       upcxx::atomic_op::dec, upcxx::atomic_op::fetch_dec,
+       upcxx::atomic_op::compare_exchange},
+       tm
+    );
+  
   // uncomment to evaluate compile-time error checking
   //upcxx::atomic_domain<const int> ad_cint({upcxx::atomic_op::load});
 
@@ -146,18 +155,22 @@ void test_team(upcxx::team &tm) {
   upcxx::atomic_domain<uint32_t> ad_ui({upcxx::atomic_op::store}, tm);
   auto xui = upcxx::allocate<uint32_t>();
   ad_ui.store(xui, (uint32_t)0, memory_order_relaxed);
-
+  ad_ui.destroy();
+  
   upcxx::atomic_domain<int64_t> ad_l({upcxx::atomic_op::store}, tm);
   auto xl = upcxx::allocate<int64_t>();
   ad_l.store(xl, (int64_t)0, memory_order_relaxed);
+  ad_l.destroy();
   
   upcxx::atomic_domain<uint64_t> ad_ul({upcxx::atomic_op::store}, tm);
   auto xul = upcxx::allocate<uint64_t>();
   ad_ul.store(xul, (uint64_t)0, memory_order_relaxed);
+  ad_ul.destroy();
   
   upcxx::atomic_domain<int32_t> ad = std::move(ad_i);
   ad.store(xi, (int32_t)0, memory_order_relaxed);
-
+  ad.destroy();
+  
   // will fail with an error message about no move assignment on a non-default constructed domain
   //ad = std::move(ad_i);
   
@@ -178,6 +191,7 @@ void test_team(upcxx::team &tm) {
   test_fetch_add(tm, target_counter, false, ad_i64);
   test_fetch_add(tm, target_counter, true, ad_i64);
   test_put_get(tm, target_counter, ad_i64);
+  ad_i64.destroy();
   
   if(tm.rank_me() == target_rank(tm))
     upcxx::deallocate(counter);

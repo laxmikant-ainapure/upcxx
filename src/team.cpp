@@ -41,11 +41,13 @@ team::team(team &&that):
 }
 
 team::~team() {
-  if(this->handle != reinterpret_cast<uintptr_t>(GEX_TM_INVALID)) {
-    UPCXX_ASSERT_ALWAYS(
-      0 == detail::registry.count(id_),
-      "Error, team::destroy() must be called collectively before destructor."
-    );
+  if(backend::init_count > 0) { // we don't assert on leaks after finalization
+    if(this->handle != reinterpret_cast<uintptr_t>(GEX_TM_INVALID)) {
+      UPCXX_ASSERT_ALWAYS(
+        0 == detail::registry.count(id_),
+        "ERROR: team::destroy() must be called collectively before destructor."
+      );
+    }
   }
 }
 
@@ -86,10 +88,12 @@ team team::split(intrank_t color, intrank_t key) {
     );
 }
 
-void team::destroy() {
+void team::destroy(quiescer q) {
   UPCXX_ASSERT(backend::master.active_with_caller());
   
   if(this->handle != reinterpret_cast<uintptr_t>(GEX_TM_INVALID)) {
+    backend::quiesce(*this, q);
+    
     void *scratch = gex_TM_QueryCData(reinterpret_cast<gex_TM_t>(this->handle));
     upcxx::deallocate(scratch);
     
