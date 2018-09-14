@@ -129,21 +129,38 @@ int main() {
       }
     );
   
+  // drain progress queue
+  while(!the_q.empty()) {
+    promise<int> *p = the_q.top();
+    the_q.pop();
+    
+    p->fulfill_anonymous(1);
+    delete p;
+  }
+  
   auto nop = [](){};
   #define THEM(member)\
     static_assert(std::is_same<void, decltype(make_future().member)>::value, "Uh-oh");\
+    (void)make_future().member;\
     static_assert(std::is_same<int, decltype(ans0.member)>::value, "Uh-oh");\
+    (void)ans0.member;\
     static_assert(std::is_same<int, decltype(when_all(ans0).member)>::value, "Uh-oh");\
-    static_assert(std::is_same<tuple<int,int,float,int>, decltype(when_all(ans0, ans1, make_future<float>(3.14), ans2).member)>::value, "Uh-oh");
+    (void)when_all(ans0).member;\
+    static_assert(std::is_same<tuple<int,int,float,int>, decltype(when_all(ans0, ans1, make_future(3.14f), ans2).member)>::value, "Uh-oh");\
+    (void)when_all(ans0,ans1,make_future(3.14f),ans2).member;
   THEM(result())
   THEM(wait(nop))
   #undef THEM
   
   #define THEM(member)\
     static_assert(std::is_same<void, decltype(make_future().member)>::value, "Uh-oh");\
+    (void)make_future().member;\
     static_assert(std::is_same<int&&, decltype(ans0.member)>::value, "Uh-oh");\
+    (void)ans0.member;\
     static_assert(std::is_same<int&&, decltype(when_all(ans0).member)>::value, "Uh-oh");\
-    static_assert(std::is_same<tuple<int&&,int&&,float&&,int&&>, decltype(when_all(ans0, ans1, make_future<float>(3.14), ans2).member)>::value, "Uh-oh");
+    (void)when_all(ans0).member;\
+    static_assert(std::is_same<tuple<int&&,int&&,float&&,int&&>, decltype(when_all(ans0, ans1, make_future<float>(3.14), ans2).member)>::value, "Uh-oh");\
+    (void)when_all(ans0, ans1, make_future<float>(3.14), ans2).member;
   THEM(result_moved())
   THEM(wait_moved(nop))
   #undef THEM
@@ -155,15 +172,6 @@ int main() {
   
   static_assert(std::is_same<tuple<bool,int>,decltype(make_future(true,1).result_tuple())>::value, "uh-oh");
   static_assert(std::is_same<tuple<bool,int>,decltype(make_future(true,1).wait_tuple(nop))>::value, "uh-oh");
-  
-  // drain progress queue
-  while(!the_q.empty()) {
-    promise<int> *p = the_q.top();
-    the_q.pop();
-    
-    p->fulfill_anonymous(1);
-    delete p;
-  }
   
   UPCXX_ASSERT_ALWAYS(ans2.ready(), "Answer is not ready");
   cout << "fib("<<(2*ans1.result())<<") = "<<ans2.result()<<'\n';

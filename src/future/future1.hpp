@@ -117,7 +117,25 @@ namespace upcxx {
     bool ready() const {
       return impl_.ready();
     }
-    
+  
+  private:
+    template<typename Tup>
+    static Tup&& get_at_(Tup &&tup, std::integral_constant<int,-1>) {
+      return static_cast<Tup&&>(tup);
+    }
+    template<typename Tup>
+    static void get_at_(Tup &&tup, std::integral_constant<int,sizeof...(T)>) {
+      return;
+    }
+    template<typename Tup, int i>
+    static typename upcxx::tuple_element_or_void<i,Tup>::type
+    get_at_(Tup const &tup, std::integral_constant<int,i>) {
+      // Very odd that we need this cast since its exactly the same as the
+      // return type, but we need it.
+      return static_cast<typename std::tuple_element<i,Tup>::type>(std::get<i>(tup));
+    }
+  
+  public:
     template<int i=-1>
     typename std::conditional<
         (i<0 && sizeof...(T) > 1),
@@ -125,10 +143,14 @@ namespace upcxx {
           typename upcxx::tuple_element_or_void<(i<0 ? 0 : i), results_type>::type
       >::type
     result() const {
-      auto lrefs_getter = impl_.result_lrefs_getter();
-      
-      return upcxx::get_or_void<(i < 0 && sizeof...(T) > 1) ? 0 : (i<0 ? 1 : i+1)>(
-          std::tuple_cat(std::make_tuple(lrefs_getter()), lrefs_getter())
+      return get_at_(
+          impl_.result_lrefs_getter()(),
+          std::integral_constant<int, (
+              i >= (int)sizeof...(T) ? (int)sizeof...(T) :
+              i>=0 ? i :
+              sizeof...(T)>1 ? -1 :
+              0
+            )>()
         );
     }
     
@@ -143,8 +165,14 @@ namespace upcxx {
           typename upcxx::tuple_element_or_void<(i<0 ? 0 : i), results_rvals_type>::type
       >::type
     result_moved() {
-      return upcxx::get_or_void<(i < 0 && sizeof...(T) > 1) ? 0 : (i<0 ? 1 : i+1)>(
-          std::tuple_cat(std::make_tuple(impl_.result_rvals()), impl_.result_rvals())
+      return get_at_(
+          impl_.result_rvals(),
+          std::integral_constant<int, (
+              i >= (int)sizeof...(T) ? (int)sizeof...(T) :
+              i>=0 ? i :
+              sizeof...(T)>1 ? -1 :
+              0
+            )>()
         );
     }
     
