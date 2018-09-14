@@ -46,6 +46,12 @@ namespace upcxx {
     bool is_null() const {
       return raw_ptr_ == nullptr;
     }
+    
+    // This creates ambiguity with gp/int arithmetic like `my_gp + 1` since 
+    // the compiler can't decide if it wants to upconvert the 1 to ptrdiff_t
+    // or downconvert (to bool) the gp and use operator+(int,int). This is why
+    // our operator+/- have overloads for all the integral types (those smaller
+    // than `int` aren't necessary due to promotion).
     operator bool() const {
       return raw_ptr_ != nullptr;
     }
@@ -67,22 +73,24 @@ namespace upcxx {
       raw_ptr_ += diff;
       return *this;
     }
-    global_ptr operator+(std::ptrdiff_t diff) const {
-      global_ptr y = *this;
-      y += diff;
-      return y;
-    }
+    friend global_ptr operator+(global_ptr a, int b) { return a += (ptrdiff_t)b; }
+    friend global_ptr operator+(global_ptr a, long b) { return a += (ptrdiff_t)b; }
+    friend global_ptr operator+(global_ptr a, long long b) { return a += (ptrdiff_t)b; }
+    friend global_ptr operator+(global_ptr a, unsigned int b) { return a += (ptrdiff_t)b; }
+    friend global_ptr operator+(global_ptr a, unsigned long b) { return a += (ptrdiff_t)b; }
+    friend global_ptr operator+(global_ptr a, unsigned long long b) { return a += (ptrdiff_t)b; }
     
     global_ptr operator-=(std::ptrdiff_t diff) {
       raw_ptr_ -= diff;
       return *this;
     }
-    global_ptr operator-(std::ptrdiff_t diff) const {
-      global_ptr y = *this;
-      y -= diff;
-      return y;
-    }
-
+    friend global_ptr operator-(global_ptr a, int b) { return a -= (ptrdiff_t)b; }
+    friend global_ptr operator-(global_ptr a, long b) { return a -= (ptrdiff_t)b; }
+    friend global_ptr operator-(global_ptr a, long long b) { return a -= (ptrdiff_t)b; }
+    friend global_ptr operator-(global_ptr a, unsigned int b) { return a -= (ptrdiff_t)b; }
+    friend global_ptr operator-(global_ptr a, unsigned long b) { return a -= (ptrdiff_t)b; }
+    friend global_ptr operator-(global_ptr a, unsigned long long b) { return a -= (ptrdiff_t)b; }
+    
     std::ptrdiff_t operator-(global_ptr rhs) const {
       UPCXX_ASSERT(rank_ == rhs.rank_, "operator-(global_ptr,global_ptr): requires pointers to the same rank.");
       return raw_ptr_ - rhs.raw_ptr_;
