@@ -458,29 +458,16 @@ def main():
                                   ', '.join(INT_HEAPSZ_UNITS) + ', a real number > 0 and have a suffix of one of: ' + \
                                   ', '.join(FLOAT_HEAPSZ_UNITS) + ', or be a fraction of the main memory available on one node and have a suffix of one of: ' + \
                                   ', '.join(GASNET_MAX_HEAPSZ_UNITS) + '(no suffix means \'P\')')
-        else:
-            # look for segsize in executable
-            gasnet_segsize = get_gasnet_max_segsize(args.cmd)
-            if gasnet_segsize:
-              gasnet_max_segsize_strat = SegmentStrategy(get_gasnet_max_segsize(args.cmd),'')
-              if args.verbose:
-                 print('UPCXX_RUN: GASNet max_segsize could be read from the executable and was set to', gasnet_max_segsize_strat.num, 'bytes')
-              gasnet_max_segsize_strat = None
 
         if os.environ.get('UPCXX_SEGMENT_MB') is not None:
             provided_upcxx_segsize_strat = upcxx_memstr_parse(os.environ['UPCXX_SEGMENT_MB'])
             if provided_upcxx_segsize_strat == None:
                 print_error_and_abort('UPCXX_SEGMENT_MB setting is wrong. It must either be MAX, or be an integer > 0 without units.')
             else:
-                if gasnet_max_segsize_strat is not None:
-                    if os.environ.get('GASNET_MAX_SEGSIZE') is not None:
-                        print('WARNING: UPCXX_SEGMENT_MB and GASNET_MAX_SEGSIZE have both been provided and are set to UPCXX_SEGMENT_MB = '+ \
-                           os.environ.get('UPCXX_SEGMENT_MB') + ' and GASNET_MAX_SEGSIZE = ' + os.environ.get('GASNET_MAX_SEGSIZE') + '.',
-                          'Please make sure that the value of GASNET_MAX_SEGSIZE is sufficiently large to accomodate UPC++\'s shared segment')
-                    else:
-                        print('WARNING: UPCXX_SEGMENT_MB has been provided and GASNET_MAX_SEGSIZE has been read from the executable and are set to UPCXX_SEGMENT_MB = '+ \
-                           os.environ.get('UPCXX_SEGMENT_MB') + ' and GASNET_MAX_SEGSIZE = ' + str(gasnet_max_segsize_strat.num)+gasnet_max_segsize_strat.strategy + '.',
-                          'Please make sure that the value of GASNET_MAX_SEGSIZE is sufficiently large to accomodate UPC++\'s shared segment')
+                if os.environ.get('GASNET_MAX_SEGSIZE') is not None:
+                    print('WARNING: UPCXX_SEGMENT_MB and GASNET_MAX_SEGSIZE have both been provided and are set to UPCXX_SEGMENT_MB = '+ \
+                        os.environ.get('UPCXX_SEGMENT_MB') + ' and GASNET_MAX_SEGSIZE = ' + os.environ.get('GASNET_MAX_SEGSIZE') + '.',
+                       'Please make sure that the value of GASNET_MAX_SEGSIZE is sufficiently large to accomodate UPC++\'s shared segment')
                 else: 
                     print_error_and_abort('UPCXX_SEGMENT_MB has been provided but GASNET_MAX_SEGSIZE has not.' + \
                                           ' If UPCXX_SEGMENT_MB is provided, GASNET_MAX_SEGSIZE must also be set to an integer > 0 with a suffix of ' + \
