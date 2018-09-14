@@ -14,9 +14,13 @@ import argparse
 import subprocess
 import string
 import re
+import copy
 
-
-HEAPSZ_UNITS = ['m', 'mb', 'M', 'MB', 'g', 'gb', 'G', 'GB', 'T', 'TB']
+INT_HEAPSZ_UNITS = ['m', 'mb', 'M', 'MB','k','kb','K','KB']
+FLOAT_HEAPSZ_UNITS = ['g', 'gb', 'G', 'GB', 't','tb','T', 'TB']
+GASNET_MAX_HEAPSZ_UNITS = [r'/H',r'/P']
+MAX_HEAPSZ_UNITS_SPECIAL = [r'%']
+MAX_HEAPSZ_UNITS = MAX_HEAPSZ_UNITS_SPECIAL + GASNET_MAX_HEAPSZ_UNITS
 ONE_KB = 1024
 ONE_MB = ONE_KB * ONE_KB
 ONE_GB = ONE_MB * ONE_KB
@@ -26,6 +30,10 @@ ONE_TB = ONE_GB * ONE_KB
 # stores the arg parser usage string
 _parser = None
 
+class SegmentStrategy():
+    def __init__(self, num, strategy):
+        self.num = num
+        self.strategy = strategy
 
 def ranks_type(a):
     try:
@@ -45,26 +53,176 @@ def nodes_type(a):
         raise argparse.ArgumentTypeError('number of nodes must be an integer > 0')
     return v
 
+def upcxx_memstr_parse(s):
+    m = re.search('^([1-9]\d*|MAX|max)$', s)
+    if not m:
+      return None
+    elif s.upper() == 'MAX':
+      strat = SegmentStrategy(100,'%')
+    else:
+      strat = SegmentStrategy(int(m.group(1)),'')
+
+    return strat
+
+def gasnet_memstr_parse(s):
+    gasnet_max_heapsz_units = '|'.join(GASNET_MAX_HEAPSZ_UNITS)
+    int_heapsz_units = '|'.join(INT_HEAPSZ_UNITS)
+    float_heapsz_units = '|'.join(FLOAT_HEAPSZ_UNITS)
+
+    mfloat = re.search('^(([1-9]\d*|0)(\.\d+)?)(' + float_heapsz_units + ')$', s)
+    mint = re.search('^([1-9]\d*)('+ int_heapsz_units +')?$', s)
+    mfloat_max = re.search('^(([1-9]\d*|0)(\.\d+)?)(' + float_heapsz_units + ')('+ gasnet_max_heapsz_units + ')$', s)
+    mint_max = re.search('^([1-9]\d*)('+ int_heapsz_units +')('+ gasnet_max_heapsz_units + ')$', s)
+    m2 = re.search('^(0\.\d+)(' + gasnet_max_heapsz_units + ')$', s)
+    m3 = re.search('^(1(\.[0]*)*)(' + gasnet_max_heapsz_units + ')$' , s)
+    m4 = re.search('^(0\.\d+|1(\.[0]*)*)$', s)
+
+
+    if not mfloat and not mint and not mfloat_max and not mint_max and not m2 and not m3 and not m4:
+        return None
+
+    if mfloat:
+        num = float(mfloat.group(1))
+        if 'T' in mfloat.group(4).upper():
+            num *= ONE_TB
+        elif 'TB' in mfloat.group(4).upper():
+            num *= ONE_TB
+        else:
+            num *= ONE_GB
+
+        num=int(num)
+        strat = ''
+    elif mint:
+        num = int(mint.group(1))
+        if mint.group(2):
+          if 'K' in mint.group(2).upper():
+              num *= ONE_KB
+          elif 'KB' in mint.group(2).upper():
+              num *= ONE_KB
+          else:
+              num *= ONE_MB
+        else:
+            num *= ONE_MB
+
+        num=int(num)
+        strat = ''
+    elif mfloat_max:
+        num = float(mfloat_max.group(1))
+        if 'T' in mfloat_max.group(4).upper():
+            num *= ONE_TB
+        elif 'TB' in mfloat_max.group(4).upper():
+            num *= ONE_TB
+        else:
+            num *= ONE_GB
+
+        num=int(num)
+        strat = str(mfloat_max.group(5))
+    elif mint_max:
+        num = int(mint_max.group(1))
+        if 'K' in mint_max.group(2).upper():
+            num *= ONE_KB
+        elif 'KB' in mint_max.group(2).upper():
+            num *= ONE_KB
+        else:
+            num *= ONE_MB
+
+        num=int(num)
+        strat = str(mint_max.group(3))
+    elif m2:
+        num=float(m2.group(1))
+        strat = str(m2.group(2))   
+    elif m3:
+        num=float(m3.group(1))
+        strat = str(m3.group(3))   
+    elif m4:
+        num=float(m4.group(1))
+        strat = '/P'
+
+    return SegmentStrategy(num,strat)
+ 
 
 def memstr_parse(s):
-    heapsz_units = '|'.join(HEAPSZ_UNITS)
-    m = re.search('^([1-9]\d*)(' + heapsz_units + ')$', s)
-    if not m:
+    max_heapsz_units = '|'.join(GASNET_MAX_HEAPSZ_UNITS)
+    max_heapsz_units_special = '|'.join(MAX_HEAPSZ_UNITS_SPECIAL)
+    int_heapsz_units = '|'.join(INT_HEAPSZ_UNITS)
+    float_heapsz_units = '|'.join(FLOAT_HEAPSZ_UNITS)
+
+    mfloat = re.search('^(([1-9]\d*|0)(\.\d+)?)(' + float_heapsz_units + ')$', s)
+    mint = re.search('^([1-9]\d*)('+ int_heapsz_units +')?$', s)
+    mfloat_max = re.search('^(([1-9]\d*|0)(\.\d+)?)(' + float_heapsz_units + ')('+ max_heapsz_units + ')$', s)
+    mint_max = re.search('^([1-9]\d*)('+ int_heapsz_units +')('+ max_heapsz_units + ')$', s)
+    m2 = re.search('^(0\.\d+)(' + max_heapsz_units + ')$', s)
+    m3 = re.search('^(1(\.[0]*)*)(' + max_heapsz_units + ')$' , s)
+    m4 = re.search('^(([1-9]\d*|0)(\.\d+)?)('+ max_heapsz_units_special + ')$', s)
+
+    if not mfloat and not mint and not mfloat_max and not mint_max and not m2 and not m3 and not m4:
         return None
-    num = int(m.group(1))
-    if 'M' in m.group(2).upper():
-        num *= ONE_MB
-    else:
-        num *= ONE_GB
-    return num
-    
+
+    if mfloat:
+        num = float(mfloat.group(1))
+        if 'T' in mfloat.group(4).upper():
+            num *= ONE_TB
+        elif 'TB' in mfloat.group(4).upper():
+            num *= ONE_TB
+        else:
+            num *= ONE_GB
+
+        num=int(num)
+        strat = ''
+    elif mint:
+        num = int(mint.group(1))
+        if 'K' in mint.group(2).upper():
+            num *= ONE_KB
+        elif 'KB' in mint.group(2).upper():
+            num *= ONE_KB
+        else:
+            num *= ONE_MB
+
+        num=int(num)
+        strat = ''
+    elif mfloat_max:
+        num = float(mfloat_max.group(1))
+        if 'T' in mfloat_max.group(4).upper():
+            num *= ONE_TB
+        elif 'TB' in mfloat_max.group(4).upper():
+            num *= ONE_TB
+        else:
+            num *= ONE_GB
+
+        num=int(num)
+        strat = str(mfloat_max.group(5))
+    elif mint_max:
+        num = int(mint_max.group(1))
+        if 'K' in mint_max.group(2).upper():
+            num *= ONE_KB
+        elif 'KB' in mint_max.group(2).upper():
+            num *= ONE_KB
+        else:
+            num *= ONE_MB
+
+        num=int(num)
+        strat = str(mint_max.group(3))
+    elif m2:
+        num=float(m2.group(1))
+        strat = str(m2.group(2))   
+    elif m3:
+        num=float(m3.group(1))
+        strat = str(m3.group(3))   
+    elif m4:
+        num=float(m4.group(1))/100.0
+        strat = str(m4.group(4))   
+
+    return SegmentStrategy(num,strat)
+ 
 
 def heapsz_type(a):
-    num = memstr_parse(a)
-    if num is None:
+    strat = memstr_parse(a)
+    if strat is None:
         raise argparse.ArgumentTypeError('shared heap must be an integer > 0 and have a suffix of one of: ' + \
-                                         ', '.join(HEAPSZ_UNITS))
-    return num
+                                         ', '.join(INT_HEAPSZ_UNITS) + ', a real number > 0 and have a suffix of one of: ' + \
+                                         ', '.join(FLOAT_HEAPSZ_UNITS) + ', or be a fraction of the main memory available on one node and have a suffix of one of: ' + \
+                                         ', '.join(MAX_HEAPSZ_UNITS))
+    return strat
 
     
 def load_args():
@@ -75,10 +233,12 @@ def load_args():
     _parser.add_argument('-N', dest='nnodes', type=nodes_type, default=None, metavar='NUM',
                          help='Run on NUM of nodes.')
     _parser.add_argument('-shared-heap', dest='heapsz', type=heapsz_type,
-                         default=(os.environ.get('UPCXX_SEGMENT_MB') or '128') + 'MB',
+        #default=(os.environ.get('UPCXX_SEGMENT_MB') or '128') + 'MB',
                          help='Requests HEAPSZ size of shared memory per rank. ' + \
-                        'Units must be specified as ' + ', '.join(HEAPSZ_UNITS) + '.' +
-                        'Default is ${UPCXX_SEGMENT_MB} MBs if set, 128MB otherwise.')
+                        'Units must be specified as ' + re.sub('%','%%',r', '.join(INT_HEAPSZ_UNITS)) + ',' + \
+                        ' or as ' + re.sub('%','%%',r', '.join(FLOAT_HEAPSZ_UNITS)) + '.' + \
+                        ' A fraction of the node memory can alternatively be requested using N' + re.sub('%','%%', r', N'.join(MAX_HEAPSZ_UNITS)) + '.' + \
+                        ' Default is ${UPCXX_SEGMENT_MB} MBs if set, 128MB otherwise.')
     _parser.add_argument('-backtrace', dest='backtrace', default=False, action='store_true',
                          help='Enable backtraces. Compile with -g for full debugging information.')
     _parser.add_argument('-show', dest='show', default=False, action='store_true',
@@ -161,7 +321,7 @@ def get_gasnet_max_segsize(command):
         return eval(re.sub('\(_*u?int64_t\)', '', segsize))
     except:
         # FIXME: GASNET_MAX_SEGSIZE defaulting has changed and this script needs to be updated (issue 156)
-        return 1e30
+        return None #1e30
 
 
 def set_ssh_servers(ssh_servers, nranks, conduit):
@@ -248,16 +408,23 @@ def main():
         print('Ignoring -ssh-servers setting: only applies to UDP and IBV conduits, not', conduit)
         
     try:
-        gasnet_max_segsize = memstr_parse(os.environ['GASNET_MAX_SEGSIZE'])
-        if gasnet_max_segsize == None:
+        gasnet_max_segsize_strat = gasnet_memstr_parse(os.environ['GASNET_MAX_SEGSIZE'])
+        if gasnet_max_segsize_strat == None:
             print_error_and_abort('GASNET_MAX_SEGSIZE setting is wrong. It must be an integer, with a suffix of ' + \
-                                  ', '.join(HEAPSZ_UNITS))
+                              ', '.join(INT_HEAPSZ_UNITS) + ', a real number > 0 and have a suffix of one of: ' + \
+                              ', '.join(FLOAT_HEAPSZ_UNITS) + ', or be a fraction of the main memory available on one node and have a suffix of one of: ' + \
+                              ', '.join(GASNET_MAX_HEAPSZ_UNITS) + '(no suffix means \'P\')')
+
 
     except KeyError:
         # look for segsize in executable
-        gasnet_max_segsize = get_gasnet_max_segsize(args.cmd)
-        if args.verbose:
-            print('UPCXX_RUN: GASNet max_segsize defaults to', gasnet_max_segsize, 'bytes')
+        gasnet_segsize = get_gasnet_max_segsize(args.cmd)
+        if gasnet_segsize:
+          gasnet_max_segsize_strat = SegmentStrategy(get_gasnet_max_segsize(args.cmd),'')
+          if args.verbose:
+             print('UPCXX_RUN: GASNet max_segsize defaults to', gasnet_max_segsize_strat.num, 'bytes')
+        else:
+          gasnet_max_segsize_strat = None
 
     if args.cmd_args:
         cmd += args.cmd_args
@@ -300,15 +467,65 @@ def main():
         else:
             print_error_and_abort('Could not find spawner "' + spawner + '"')
 
-    os.environ['UPCXX_SEGMENT_MB'] = str(args.heapsz / ONE_MB)
-    if gasnet_max_segsize <= args.heapsz + 4 * ONE_MB:
-        old_segsize = gasnet_max_segsize
-        gasnet_max_segsize = args.heapsz + 4 * ONE_MB
-        if gasnet_max_segsize < 10 * ONE_MB:
-            gasnet_max_segsize = 10 * ONE_MB
-        print('WARNING: GASNET_MAX_SEGSIZE', old_segsize, 'is too low for a shared heap of %d;' % args.heapsz, 
-              'setting to', gasnet_max_segsize)
-        os.environ['GASNET_MAX_SEGSIZE'] = str(gasnet_max_segsize / ONE_MB) + 'M'
+
+    if args.heapsz is None:
+        if os.environ.get('UPCXX_SEGMENT_MB') is not None:
+            provided_upcxx_segsize_strat = upcxx_memstr_parse(os.environ['UPCXX_SEGMENT_MB'])
+            if provided_upcxx_segsize_strat == None:
+                print_error_and_abort('UPCXX_SEGMENT_MB setting is wrong. It must either be MAX, or be an integer > 0 without units.')
+            else:
+                if os.environ.get('GASNET_MAX_SEGSIZE') is not None:
+                    print('WARNING: UPCXX_SEGMENT_MB and GASNET_MAX_SEGSIZE have both been provided and are set to UPCXX_SEGMENT_MB = '+ \
+                           os.environ.get('UPCXX_SEGMENT_MB') + ' and GASNET_MAX_SEGSIZE = ' + os.environ.get('GASNET_MAX_SEGSIZE') + '.',
+                          'Please make sure that the value of GASNET_MAX_SEGSIZE is sufficiently large to accomodate UPC++\'s shared segment')
+                else:    
+                    print_error_and_abort('UPCXX_SEGMENT_MB has been provided but GASNET_MAX_SEGSIZE has not.' + \
+                                          ' If UPCXX_SEGMENT_MB is provided, GASNET_MAX_SEGSIZE must also be set to an integer > 0 with a suffix of ' + \
+                                          ', '.join(INT_HEAPSZ_UNITS) + ', a real number > 0 and have a suffix of one of: ' + \
+                                          ', '.join(FLOAT_HEAPSZ_UNITS) + ', or a fraction of the main memory available on one node and have a suffix of one of: ' + \
+                                          ', '.join(GASNET_MAX_HEAPSZ_UNITS) + '(no suffix means \'P\')')
+        else:
+            args.heapsz = SegmentStrategy(128*ONE_MB, '')
+            os.environ['UPCXX_SEGMENT_MB'] = str(args.heapsz.num / ONE_MB)
+            if os.environ.get('GASNET_MAX_SEGSIZE') is not None:
+                print('WARNING: GASNET_MAX_SEGSIZE has been provided and set to ' + str(gasnet_max_segsize_strat.num) + gasnet_max_segsize_strat.strategy + '.',
+                      'Please make sure that this value is sufficiently large to accomodate UPC++\'s shared segment (the default value is 128MB)')
+            else:
+                os.environ['GASNET_MAX_SEGSIZE'] = str(args.heapsz.num / ONE_MB) + 'MB/P'
+    elif args.heapsz.strategy == '':
+        os.environ['UPCXX_SEGMENT_MB'] = str(args.heapsz.num / ONE_MB)
+        os.environ['GASNET_MAX_SEGSIZE'] = str(args.heapsz.num / ONE_MB) + 'MB/P'
+        print('WARNING: setting GASNET_MAX_SEGSIZE to ', str(args.heapsz.num / ONE_MB) + 'MB/P')
+    elif args.heapsz.strategy == r'%':
+        os.environ['UPCXX_SEGMENT_MB'] = 'MAX'
+        if gasnet_max_segsize_strat.strategy != args.heapsz.strategy or gasnet_max_segsize_strat.num != args.heapsz.num:
+            old_strat = copy.deepcopy(gasnet_max_segsize_strat)
+            gasnet_max_segsize_strat.num = args.heapsz.num
+            gasnet_max_segsize_strat.strategy = 'H'
+            print('WARNING: GASNET_MAX_SEGSIZE', str(old_strat.num)+old_strat.strategy, 
+                  'is not appropriate for a shared heap of', str(100.0*args.heapsz.num)+args.heapsz.strategy+';', 
+                  'setting to', str(gasnet_max_segsize_strat.num) +'/H' )
+            os.environ['GASNET_MAX_SEGSIZE'] = str(gasnet_max_segsize_strat.num) + '/H'
+    elif args.heapsz.strategy.lower() == '/h':
+        os.environ['UPCXX_SEGMENT_MB'] = 'MAX'
+        if gasnet_max_segsize_strat.strategy != args.heapsz.strategy or gasnet_max_segsize_strat.num != args.heapsz.num:
+            old_strat = copy.deepcopy(gasnet_max_segsize_strat)
+            gasnet_max_segsize_strat.num = args.heapsz.num
+            gasnet_max_segsize_strat.strategy = 'H'
+            print('WARNING: GASNET_MAX_SEGSIZE', str(old_strat.num)+old_strat.strategy, 
+                  'is not appropriate for a shared heap of', str(args.heapsz.num)+args.heapsz.strategy+';', 
+                  'setting to', str(gasnet_max_segsize_strat.num) +'/H' )
+            os.environ['GASNET_MAX_SEGSIZE'] = str(gasnet_max_segsize_strat.num) + '/H'
+    elif args.heapsz.strategy.lower() == '/p':
+        os.environ['UPCXX_SEGMENT_MB'] = 'MAX'
+        if gasnet_max_segsize_strat.strategy != args.heapsz.strategy or gasnet_max_segsize_strat.num != args.heapsz.num:
+            old_strat = copy.deepcopy(gasnet_max_segsize_strat)
+            gasnet_max_segsize_strat.num = args.heapsz.num
+            gasnet_max_segsize_strat.strategy = 'P'
+            print('WARNING: GASNET_MAX_SEGSIZE', str(old_strat.num)+old_strat.strategy, 
+                  'is not appropriate for a shared heap of', str(args.heapsz.num)+args.heapsz.strategy+';', 
+                  'setting to', str(gasnet_max_segsize_strat.num) +'/P' )
+            os.environ['GASNET_MAX_SEGSIZE'] = str(gasnet_max_segsize_strat.num) + '/P'
 
     if args.backtrace:
         os.environ['GASNET_BACKTRACE'] = '1'
