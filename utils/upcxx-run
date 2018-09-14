@@ -315,15 +315,6 @@ def get_conduit(command):
     return None if not conduit else conduit.lower()
 
 
-def get_gasnet_max_segsize(command):
-    try:
-        segsize = get_key_in_exec(command, 'GASNetDefaultMaxSegsize:')
-        return eval(re.sub('\(_*u?int64_t\)', '', segsize))
-    except:
-        # FIXME: GASNET_MAX_SEGSIZE defaulting has changed and this script needs to be updated (issue 156)
-        return None #1e30
-
-
 def set_ssh_servers(ssh_servers, nranks, conduit):
     split_chars = ',|/|;|:| '
     if conduit != 'udp':
