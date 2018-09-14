@@ -46,11 +46,14 @@ namespace upcxx {
 
     template<typename Call, typename Cxs,
              typename = typename rpc_remote_results<Call>::type>
-    struct rpc_ff_return {
+    struct rpc_ff_return;
+    
+    template<typename Call, typename ...Cx, typename Results>
+    struct rpc_ff_return<Call, completions<Cx...>, Results> {
       using type = typename detail::completions_returner<
           /*EventPredicate=*/detail::event_is_here,
           /*EventValues=*/detail::rpc_ff_event_values,
-          Cxs
+          completions<Cx...>
         >::return_t;
     };
   }
@@ -188,11 +191,14 @@ namespace upcxx {
     // Computes return type for rpc.
     template<typename Call, typename Cxs,
              typename = typename rpc_remote_results<Call>::type>
-    struct rpc_return {
+    struct rpc_return;
+    
+    template<typename Call, typename ...Cx, typename Result>
+    struct rpc_return<Call, completions<Cx...>, Result> {
       using type = typename detail::completions_returner<
           /*EventPredicate=*/detail::event_is_here,
           /*EventValues=*/detail::rpc_event_values<Call>,
-          Cxs
+          completions<Cx...>
         >::return_t;
     };
   }

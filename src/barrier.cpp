@@ -158,7 +158,10 @@ future<> upcxx::barrier_async<
         GEX_OP_OR, nullptr, nullptr, 0
       );
     return backend::gasnet::register_handle_as_future(e)
-      .then([]() { std::atomic_thread_fence(std::memory_order_acquire); });
+      // TODO: Elide this callback on archs which have "free" acquire fences (x86_64)
+      .then([]() {
+        std::atomic_thread_fence(std::memory_order_acquire);
+      });
   #else
     // do hand-rolled barrier
     digest id = tm.next_collective_id(detail::internal_only());

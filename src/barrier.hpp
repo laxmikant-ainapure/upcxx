@@ -12,5 +12,11 @@ namespace upcxx {
   template<typename Cxs = completions<future_cx<operation_cx_event>>>
   future<> barrier_async(team &tm = upcxx::world(),
                          completions<future_cx<operation_cx_event>> cxs_ignored = {{}});
+  
+  // declare specialization for future completions
+  template<>
+  future<> barrier_async<
+      completions<future_cx<operation_cx_event>>
+    >(team &tm, completions<future_cx<operation_cx_event>> cxs_ignored);
 }
 #endif
