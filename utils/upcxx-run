@@ -18,9 +18,8 @@ import copy
 
 INT_HEAPSZ_UNITS = ['m', 'mb', 'M', 'MB','k','kb','K','KB']
 FLOAT_HEAPSZ_UNITS = ['g', 'gb', 'G', 'GB', 't','tb','T', 'TB']
-GASNET_MAX_HEAPSZ_UNITS = [r'/H',r'/P']
 MAX_HEAPSZ_UNITS_SPECIAL = [r'%']
-MAX_HEAPSZ_UNITS = MAX_HEAPSZ_UNITS_SPECIAL + GASNET_MAX_HEAPSZ_UNITS
+MAX_HEAPSZ_UNITS = MAX_HEAPSZ_UNITS_SPECIAL
 ONE_KB = 1024
 ONE_MB = ONE_KB * ONE_KB
 ONE_GB = ONE_MB * ONE_KB
@@ -72,11 +71,9 @@ def memstr_parse(s):
 
     mfloat = re.search('^(([1-9]\d*|0)(\.\d+)?)(' + float_heapsz_units + ')$', s)
     mint = re.search('^([1-9]\d*)('+ int_heapsz_units +')?$', s)
-    mfloat_max = re.search('^(([1-9]\d*|0)(\.\d+)?)(' + float_heapsz_units + ')('+ max_heapsz_units + ')$', s)
-    mint_max = re.search('^([1-9]\d*)('+ int_heapsz_units +')('+ max_heapsz_units + ')$', s)
     m4 = re.search('^(([1-9]\d*|0)(\.\d+)?)('+ max_heapsz_units_special + ')$', s)
 
-    if not mfloat and not mint and not mfloat_max and not mint_max and not m4:
+    if not mfloat and not mint and not m4:
         return None
 
     if mfloat:
@@ -101,28 +98,6 @@ def memstr_parse(s):
 
         num=int(num)
         strat = ''
-    elif mfloat_max:
-        num = float(mfloat_max.group(1))
-        if 'T' in mfloat_max.group(4).upper():
-            num *= ONE_TB
-        elif 'TB' in mfloat_max.group(4).upper():
-            num *= ONE_TB
-        else:
-            num *= ONE_GB
-
-        num=int(num)
-        strat = str(mfloat_max.group(5))
-    elif mint_max:
-        num = int(mint_max.group(1))
-        if 'K' in mint_max.group(2).upper():
-            num *= ONE_KB
-        elif 'KB' in mint_max.group(2).upper():
-            num *= ONE_KB
-        else:
-            num *= ONE_MB
-
-        num=int(num)
-        strat = str(mint_max.group(3))
     elif m4:
         num=float(m4.group(1))/100.0
         strat = str(m4.group(4))   
