@@ -273,7 +273,7 @@ def is_printable(text, printables=""):
     return set(str(text)) - set(string.printable + printables) == set()
 
 
-def print_info(command):
+def print_env_info(command):
     try:
         if sys.version_info[0] == 2:
             f = open(command, 'r')
@@ -348,6 +348,15 @@ def set_ssh_servers(ssh_servers, nranks, conduit):
 def main():
     args = load_args()
     
+    def print_verbose(*a):
+        if args.verbose:
+            print(a)
+
+    def print_info(*a):
+        if args.info:
+            print(a)
+
+
     if not args.info and not args.nranks:
         print_error_and_abort('Must specify the number of ranks, -n or -np')
 
@@ -359,7 +368,7 @@ def main():
         print_error_and_abort('"' + args.cmd + '" does not appear to be a UPC++/GASNet executable')
 
     if args.info:
-        print_info(args.cmd)
+        print_env_info(args.cmd)
         return 0
         
     spawner = None
@@ -402,8 +411,7 @@ def main():
         cmd += args.cmd_args
     
     if spawner:
-        if args.verbose:
-            print('UPCXX_RUN: Looking for spawner "' + spawner + '" in:')
+        print_verbose('UPCXX_RUN: Looking for spawner "' + spawner + '" in:')
         paths = []
         try:
             gasnet_prefix = os.environ['GASNET_PREFIX']
@@ -423,16 +431,14 @@ def main():
             pass
         spawner_path = None
         for path in paths:
-            if args.verbose:
-                print('UPCXX_RUN:    ' + path)
+            print_verbose('UPCXX_RUN:    ' + path)
             if os.path.exists(path):
                 if os.path.exists(path + '/' + spawner):
                     spawner_path = path + '/' + spawner
                     break
         if spawner_path:
             vflag = []
-            if args.verbose:
-                print('UPCXX_RUN: Found spawner "' + spawner_path + '"')
+            print_verbose('UPCXX_RUN: Found spawner "' + spawner_path + '"')
             if args.veryverbose:
                 vflag = ['-v']
             cmd = [spawner_path] + vflag + cmd
@@ -456,41 +462,45 @@ def main():
                 print_error_and_abort('UPCXX_SEGMENT_MB setting is wrong. It must either be MAX, or be an integer > 0 without units.')
             else:
                 if os.environ.get('GASNET_MAX_SEGSIZE') is not None:
-                    print('WARNING: UPCXX_SEGMENT_MB and GASNET_MAX_SEGSIZE have both been provided and are set to UPCXX_SEGMENT_MB = '+ \
+                    print_verbose('UPCXX_SEGMENT_MB and GASNET_MAX_SEGSIZE have both been provided and are set to UPCXX_SEGMENT_MB = '+ \
                         os.environ.get('UPCXX_SEGMENT_MB') + ' and GASNET_MAX_SEGSIZE = ' + os.environ.get('GASNET_MAX_SEGSIZE') + '.',
                        'Please make sure that the value of GASNET_MAX_SEGSIZE is sufficiently large to accomodate UPC++\'s shared segment')
-                else: 
-                    print_error_and_abort('UPCXX_SEGMENT_MB has been provided but GASNET_MAX_SEGSIZE has not.' + \
-                                          ' If UPCXX_SEGMENT_MB is provided, GASNET_MAX_SEGSIZE must also be set to an integer > 0 with a suffix of ' + \
+                elif os.environ.get('UPCXX_SEGMENT_MB') == "MAX": 
+                    print_error_and_abort('UPCXX_SEGMENT_MB has been set to MAX but GASNET_MAX_SEGSIZE has not been provided.' + \
+                                          ' If UPCXX_SEGMENT_MB is provided and set to MAX, GASNET_MAX_SEGSIZE must also be set to an integer > 0 with a suffix of ' + \
                                           ', '.join(INT_HEAPSZ_UNITS) + ', a real number > 0 and have a suffix of one of: ' + \
                                           ', '.join(FLOAT_HEAPSZ_UNITS) + ', or a fraction of the main memory available on one node and have a suffix of one of: ' + \
                                           ', '.join(GASNET_MAX_HEAPSZ_UNITS) + '(no suffix means \'P\')')
+                else:
+                    gasnet_max_segsize_strat = SegmentStrategy(provided_upcxx_segsize_strat.num * ONE_MB,'')
+                    print_verbose('GASNET_MAX_SEGSIZE is set to', str(gasnet_max_segsize_strat.num) +'MB/P' )
+                    os.environ['GASNET_MAX_SEGSIZE'] = str(gasnet_max_segsize_strat.num) + 'MB/P'
         else:
             args.heapsz = SegmentStrategy(128*ONE_MB, '')
             os.environ['UPCXX_SEGMENT_MB'] = str(args.heapsz.num / ONE_MB)
             if os.environ.get('GASNET_MAX_SEGSIZE') is not None:
-                print('WARNING: GASNET_MAX_SEGSIZE has been provided and set to ' + str(gasnet_max_segsize_strat.num) + gasnet_max_segsize_strat.strategy + '.',
+                print_verbose('GASNET_MAX_SEGSIZE has been provided and set to ' + str(gasnet_max_segsize_strat.num) + gasnet_max_segsize_strat.strategy + '.',
                       'Please make sure that this value is sufficiently large to accomodate UPC++\'s shared segment (the default value is 128MB)')
             else:
                 os.environ['GASNET_MAX_SEGSIZE'] = str(args.heapsz.num / ONE_MB) + 'MB/P'
     elif args.heapsz.strategy == '':
         os.environ['UPCXX_SEGMENT_MB'] = str(args.heapsz.num / ONE_MB)
         os.environ['GASNET_MAX_SEGSIZE'] = str(args.heapsz.num / ONE_MB) + 'MB/P'
-        print('WARNING: setting GASNET_MAX_SEGSIZE to ', str(args.heapsz.num / ONE_MB) + 'MB/P')
+        print_verbose('Setting GASNET_MAX_SEGSIZE to ', str(args.heapsz.num / ONE_MB) + 'MB/P')
     elif args.heapsz.strategy == r'%':
         os.environ['UPCXX_SEGMENT_MB'] = 'MAX'
         gasnet_max_segsize_strat = SegmentStrategy(args.heapsz.num,'/H')
-        print('WARNING: GASNET_MAX_SEGSIZE is set to', str(gasnet_max_segsize_strat.num) +'/H' )
+        print_verbose('GASNET_MAX_SEGSIZE is set to', str(gasnet_max_segsize_strat.num) +'/H' )
         os.environ['GASNET_MAX_SEGSIZE'] = str(gasnet_max_segsize_strat.num) + '/H'
     elif args.heapsz.strategy.lower() == '/h':
         os.environ['UPCXX_SEGMENT_MB'] = 'MAX'
         gasnet_max_segsize_strat = SegmentStrategy(args.heapsz.num,'/H')
-        print('WARNING: GASNET_MAX_SEGSIZE is set to', str(gasnet_max_segsize_strat.num) +'/H' )
+        print_verbose('GASNET_MAX_SEGSIZE is set to', str(gasnet_max_segsize_strat.num) +'/H' )
         os.environ['GASNET_MAX_SEGSIZE'] = str(gasnet_max_segsize_strat.num) + '/H'
     elif args.heapsz.strategy.lower() == '/p':
         os.environ['UPCXX_SEGMENT_MB'] = 'MAX'
         gasnet_max_segsize_strat = SegmentStrategy(args.heapsz.num,'/P')
-        print('WARNING: GASNET_MAX_SEGSIZE is set to', str(gasnet_max_segsize_strat.num) +'/P' )
+        print_verbose('GASNET_MAX_SEGSIZE is set to', str(gasnet_max_segsize_strat.num) +'/P' )
         os.environ['GASNET_MAX_SEGSIZE'] = str(gasnet_max_segsize_strat.num) + '/P'
 
     if args.backtrace:
