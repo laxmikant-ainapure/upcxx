@@ -162,7 +162,8 @@ void upcxx::init() {
   UPCXX_ASSERT_ALWAYS(ok == GASNET_OK);
   size_t segment_size = 128*(1<<20);
   std::string upcxx_segment_variable = os_env<std::string>("UPCXX_SEGMENT_MB", "128");
-  if ( std::stricmp(upcxx_segment_variable.c_str(),"MAX") {
+  std::transform(upcxx_segment_variable.begin(), upcxx_segment_variable.end(), upcxx_segment_variable.begin(), ::toupper);
+  if ( upcxx_segment_variable == "MAX") {
     segment_size = gasnet_getMaxLocalSegmentSize();
   }
   else {
