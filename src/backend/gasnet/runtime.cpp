@@ -160,11 +160,18 @@ void upcxx::init() {
     "upcxx", nullptr, nullptr, 0
   );
   UPCXX_ASSERT_ALWAYS(ok == GASNET_OK);
+  size_t segment_size = 128*(1<<20);
+  std::string upcxx_segment_variable = os_env<std::string>("UPCXX_SEGMENT_MB", "128");
+  std::transform(upcxx_segment_variable.begin(), upcxx_segment_variable.end(), upcxx_segment_variable.begin(), ::toupper);
+  if ( upcxx_segment_variable == "MAX") {
+    segment_size = gasnet_getMaxLocalSegmentSize();
+  }
+  else {
+    segment_size = size_t(os_env<double>("UPCXX_SEGMENT_MB", 128)*(1<<20));
+    // page size should always be a power of 2
+    segment_size = (segment_size + GASNET_PAGESIZE-1) & -GASNET_PAGESIZE;
+  }
 
-  size_t segment_size = size_t(os_env<double>("UPCXX_SEGMENT_MB", 128)*(1<<20));
-  // page size should always be a power of 2
-  segment_size = (segment_size + GASNET_PAGESIZE-1) & -GASNET_PAGESIZE;
-  
   backend::rank_n = gex_TM_QuerySize(gasnet::world_team);
   backend::rank_me = gex_TM_QueryRank(gasnet::world_team);
 
