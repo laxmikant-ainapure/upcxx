@@ -16,8 +16,8 @@ import string
 import re
 import copy
 
-INT_HEAPSZ_UNITS = ['m', 'mb', 'M', 'MB','k','kb','K','KB']
-FLOAT_HEAPSZ_UNITS = ['g', 'gb', 'G', 'GB', 't','tb','T', 'TB']
+INT_HEAPSZ_UNITS = ['m', 'mb', 'k','kb']
+FLOAT_HEAPSZ_UNITS = ['g', 'gb', 't','tb']
 MAX_HEAPSZ_UNITS_SPECIAL = [r'%']
 MAX_HEAPSZ_UNITS = MAX_HEAPSZ_UNITS_SPECIAL
 ONE_KB = 1024
@@ -77,6 +77,7 @@ def memstr_parse(s):
         return None
 
     if mfloat:
+        print('here')
         num = float(mfloat.group(1))
         if 'T' in mfloat.group(4).upper():
             num *= ONE_TB
@@ -88,6 +89,7 @@ def memstr_parse(s):
         num=int(num)
         strat = ''
     elif mint:
+        print('there')
         num = int(mint.group(1))
         #if mint.group(2):
         if 'K' in mint.group(2).upper():
@@ -102,6 +104,7 @@ def memstr_parse(s):
         num=int(num)
         strat = ''
     elif m4:
+        print('or there')
         num=float(m4.group(1))/100.0
         strat = str(m4.group(4))   
 
@@ -346,14 +349,14 @@ def main():
                         os.environ.get('UPCXX_SEGMENT_MB') + ' and GASNET_MAX_SEGSIZE = ' + os.environ.get('GASNET_MAX_SEGSIZE') + '.',
                        'Please make sure that the value of GASNET_MAX_SEGSIZE is sufficiently large to accomodate UPC++\'s shared segment')
                 elif os.environ.get('UPCXX_SEGMENT_MB') != "MAX": 
-                    gasnet_max_segsize_strat = SegmentStrategy(provided_upcxx_segsize_strat.num * ONE_MB,'')
+                    gasnet_max_segsize_strat = SegmentStrategy(provided_upcxx_segsize_strat.num ,'')
                     print_verbose('UPCXX_RUN: GASNET_MAX_SEGSIZE is set to', str(gasnet_max_segsize_strat.num) +'MB/P' )
                     os.environ['GASNET_MAX_SEGSIZE'] = str(gasnet_max_segsize_strat.num) + 'MB/P'
         else:
             args.heapsz = SegmentStrategy(128*ONE_MB, '')
             os.environ['UPCXX_SEGMENT_MB'] = str(args.heapsz.num / ONE_MB)
             if os.environ.get('GASNET_MAX_SEGSIZE') is not None:
-              print_verbose('UPCXX_RUN: GASNET_MAX_SEGSIZE has been provided and set to ' + str(gasnet_max_segsize_strat.num) + gasnet_max_segsize_strat.strategy + '.',
+              print_verbose('UPCXX_RUN: GASNET_MAX_SEGSIZE has been provided and set to ' + os.environ.get('GASNET_MAX_SEGSIZE') + '.',
                       'Please make sure that this value is sufficiently large to accomodate UPC++\'s shared segment (the default value is 128MB)')
             else:
                 os.environ['GASNET_MAX_SEGSIZE'] = str(args.heapsz.num / ONE_MB) + 'MB/P'
