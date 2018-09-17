@@ -77,7 +77,6 @@ def memstr_parse(s):
         return None
 
     if mfloat:
-        print('here')
         num = float(mfloat.group(1))
         if 'T' in mfloat.group(4).upper():
             num *= ONE_TB
@@ -89,7 +88,6 @@ def memstr_parse(s):
         num=int(num)
         strat = ''
     elif mint:
-        print('there')
         num = int(mint.group(1))
         #if mint.group(2):
         if 'K' in mint.group(2).upper():
@@ -98,13 +96,10 @@ def memstr_parse(s):
             num *= ONE_KB
         else:
             num *= ONE_MB
-        #else:
-        #    num *= ONE_MB
 
         num=int(num)
         strat = ''
     elif m4:
-        print('or there')
         num=float(m4.group(1))/100.0
         strat = str(m4.group(4))   
 
