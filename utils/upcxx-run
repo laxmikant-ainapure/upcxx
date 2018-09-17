@@ -247,15 +247,27 @@ def main():
     if not args.info and not args.nranks:
         print_error_and_abort('Must specify the number of ranks, -n or -np')
 
-    if os.path.basename(args.cmd) == args.cmd:
-        args.cmd = './' + args.cmd
+
+    executable = args.cmd
+    full_args = [args.cmd] + args.cmd_args
+    is_valid = False
+    for arg in [ str(x) for x in  full_args ]:
+        if os.path.isfile(arg):
+            conduit = get_conduit(arg)
+            if conduit:
+                is_valid = True
+                executable = arg
+                break
+
+    if os.path.basename(executable) == executable:
+        executable = './' + executable
     cmd = [args.cmd]
-    conduit = get_conduit(args.cmd)
-    if not conduit:
-        print_error_and_abort('"' + args.cmd + '" does not appear to be a UPC++/GASNet executable')
+
+    if not is_valid:
+        print_error_and_abort('"' + args.cmd + ' '.join(args.cmd_args) + '" does not appear to execute a UPC++/GASNet executable')
 
     if args.info:
-        print_env_info(args.cmd)
+        print_env_info(executable)
         return 0
         
     spawner = None
@@ -264,7 +276,7 @@ def main():
         args.verbose = True
 
     if args.verbose:
-        print('UPCXX_RUN:', args.cmd, 'is compiled with', conduit, 'conduit')
+        print('UPCXX_RUN:', executable, 'is compiled with', conduit, 'conduit')
 
     if args.sshservers and args.localhost:
         print_error_and_abort('Conflicting options: cannot specify both -ssh-servers and -localhost')
