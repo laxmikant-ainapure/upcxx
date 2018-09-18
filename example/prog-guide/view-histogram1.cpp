@@ -1,5 +1,6 @@
 #include "view-histogram1.hpp"
 #include <iostream>
+#include <cassert>
 
 int main() {
   upcxx::init();
@@ -22,12 +23,9 @@ int main() {
   for(auto const &kv: my_histo1)
     sum += int(kv.second);
   
-  sum = upcxx::reduce_all(sum, [](int a, int b) { return a + b; }).wait();
+  sum = upcxx::reduce_all(sum, upcxx::op_fast_add).wait();
   
-  UPCXX_ASSERT_ALWAYS(
-    sum == 2*1000*upcxx::rank_n(),
-    "sum: wanted="<<2*1000*upcxx::rank_n()<<", got="<<sum
-  );
+  assert(sum == 2*1000*upcxx::rank_n());
   
   if(upcxx::rank_me() == 0)
     std::cout << "SUCCESS\n";

@@ -1,3 +1,4 @@
+//SNIPPET
 #include <upcxx/upcxx.hpp>
 #include <cstdint>
 #include <map>
@@ -60,3 +61,4 @@ upcxx::future<> send_histo2_byview(histogram2 const &histo) {
     [=]() { delete all_done; }
   );
 }
+//SNIPPET

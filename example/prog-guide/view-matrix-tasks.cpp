@@ -60,13 +60,10 @@ int main() {
     for(int c=0; c < 1000; c++)
       sum += (int)my_matrix[r][c];
   
-  sum = upcxx::reduce_all(sum, [](int a, int b) { return a+b; }).wait();
+  sum = upcxx::reduce_all(sum, upcxx::op_fast_add).wait();
   
-  // 1000 elements with value=1, from 10 neighbors, across all ranks.
-  UPCXX_ASSERT_ALWAYS(
-    sum == 1000*10*upcxx::rank_n(),
-    "sum, wanted="<<1000*10*upcxx::rank_n()<<", got="<<sum
-  );
+  // 1000 elements with value=1, from 10 neighbors, across all processes.
+  assert(sum == 1000*10*upcxx::rank_n());
   
   if(upcxx::rank_me()==0)
     std::cout<<"SUCCESS\n";

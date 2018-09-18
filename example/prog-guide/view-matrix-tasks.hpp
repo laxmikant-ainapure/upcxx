@@ -1,3 +1,4 @@
+//SNIPPET
 #include <upcxx/upcxx.hpp>
 #include <array>
 #include <vector>
@@ -49,3 +50,4 @@ upcxx::future<> update_remote_matrix(
     upcxx::make_view(elts, elts + elt_n)
   );
 }
+//SNIPPET
