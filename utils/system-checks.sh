@@ -80,6 +80,10 @@ platform_sanity_checks() {
             COMPILER_BAD=1
         elif echo "$CXXVERS" | egrep 'Apple LLVM version ([8-9]\.|[1-9][0-9])' 2>&1 > /dev/null ; then
             COMPILER_GOOD=1
+        elif echo "$CXXVERS" | egrep 'PGI Compilers and Tools'  > /dev/null ; then
+            COMPILER_BAD=1
+        elif echo "$CXXVERS" | egrep 'IBM XL'  > /dev/null ; then
+            COMPILER_BAD=1
         elif echo "$CXXVERS" | egrep ' +\([^\)]+\) +[1-4]\.' 2>&1 > /dev/null ; then
             COMPILER_BAD=1
         elif echo "$CXXVERS" | egrep ' +\(ICC\) +(17\.0\.[2-9]|1[89]\.|2[0-9]\.)' 2>&1 > /dev/null ; then
