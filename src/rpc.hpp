@@ -187,7 +187,7 @@ namespace upcxx {
           /*Event != operation_cx_event:*/std::tuple<>
         >::type;
     };
-
+    
     // Computes return type for rpc.
     template<typename Call, typename Cxs,
              typename = typename rpc_remote_results<Call>::type>
@@ -203,61 +203,73 @@ namespace upcxx {
     };
   }
   
+  namespace detail {
+    template<typename Cxs, typename Fn, typename ...Arg>
+    auto rpc(team &tm, intrank_t recipient, Cxs cxs, Fn &&fn, Arg &&...args)
+      // computes our return type, but SFINAE's out if fn(args...) is ill-formed
+      -> typename detail::rpc_return<Fn(Arg...), Cxs>::type {
+      
+      static_assert(
+        upcxx::trait_forall<
+            is_definitely_serializable,
+            typename binding<Arg>::on_wire_type...
+          >::value,
+        "All rpc arguments must be DefinitelySerializable."
+      );
+        
+      using cxs_state_t = detail::completions_state<
+          /*EventPredicate=*/detail::event_is_here,
+          /*EventValues=*/detail::rpc_event_values<Fn&&(Arg&&...)>,
+          Cxs
+        >;
+      
+      cxs_state_t *state = new cxs_state_t{std::move(cxs)};
+      
+      auto returner = detail::completions_returner<
+          /*EventPredicate=*/detail::event_is_here,
+          /*EventValues=*/detail::rpc_event_values<Fn&&(Arg&&...)>,
+          Cxs
+        >{*state};
+
+      intrank_t initiator = backend::rank_me;
+      persona *initiator_persona = &upcxx::current_persona();
+      auto fn_bound = upcxx::bind(std::forward<Fn>(fn), std::forward<Arg>(args)...);
+      
+      backend::template send_am_master<progress_level::user>(
+        tm, recipient,
+        upcxx::bind(
+          [=](unpacked_of_t<decltype(fn_bound)> &fn_bound1) {
+            return upcxx::apply_as_future(std::move(fn_bound1))
+              .then(
+                // Wish we could just use a lambda here, but since it has
+                // to take variadic Arg... we have to call to an outlined
+                // class. I'm not sure if even C++14's allowance of `auto`
+                // lambda args would be enough.
+                detail::rpc_recipient_after<cxs_state_t>{
+                  initiator, initiator_persona, state
+                }
+              );
+          },
+          std::move(fn_bound)
+        )
+      );
+      
+      // send_am_master doesn't support async source-completion, so we know
+      // its trivially satisfied.
+      state->template operator()<source_cx_event>();
+      
+      return returner();
+    }
+  }
+  
   template<typename Cxs, typename Fn, typename ...Arg>
   auto rpc(team &tm, intrank_t recipient, Cxs cxs, Fn &&fn, Arg &&...args)
     // computes our return type, but SFINAE's out if fn(args...) is ill-formed
     -> typename detail::rpc_return<Fn(Arg...), Cxs>::type {
     
-    static_assert(
-      upcxx::trait_forall<
-          is_definitely_serializable,
-          typename binding<Arg>::on_wire_type...
-        >::value,
-      "All rpc arguments must be DefinitelySerializable."
-    );
-      
-    using cxs_state_t = detail::completions_state<
-        /*EventPredicate=*/detail::event_is_here,
-        /*EventValues=*/detail::rpc_event_values<Fn&&(Arg&&...)>,
-        Cxs
-      >;
-    
-    cxs_state_t *state = new cxs_state_t{std::move(cxs)};
-    
-    auto returner = detail::completions_returner<
-        /*EventPredicate=*/detail::event_is_here,
-        /*EventValues=*/detail::rpc_event_values<Fn&&(Arg&&...)>,
-        Cxs
-      >{*state};
-
-    intrank_t initiator = backend::rank_me;
-    persona *initiator_persona = &upcxx::current_persona();
-    auto fn_bound = upcxx::bind(std::forward<Fn>(fn), std::forward<Arg>(args)...);
-    
-    backend::template send_am_master<progress_level::user>(
-      tm, recipient,
-      upcxx::bind(
-        [=](unpacked_of_t<decltype(fn_bound)> &fn_bound1) {
-          return upcxx::apply_as_future(std::move(fn_bound1))
-            .then(
-              // Wish we could just use a lambda here, but since it has
-              // to take variadic Arg... we have to call to an outlined
-              // class. I'm not sure if even C++14's allowance of `auto`
-              // lambda args would be enough.
-              detail::rpc_recipient_after<cxs_state_t>{
-                initiator, initiator_persona, state
-              }
-            );
-        },
-        std::move(fn_bound)
-      )
-    );
-    
-    // send_am_master doesn't support async source-completion, so we know
-    // its trivially satisfied.
-    state->template operator()<source_cx_event>();
-    
-    return returner();
+    return detail::template rpc<Cxs, Fn&&, Arg&&...>(
+        tm, recipient, std::move(cxs), std::forward<Fn>(fn), std::forward<Arg>(args)...
+      );
   }
   
   template<typename Cxs, typename Fn, typename ...Arg>
@@ -265,35 +277,31 @@ namespace upcxx {
     // computes our return type, but SFINAE's out if fn(args...) is ill-formed
     -> typename detail::rpc_return<Fn(Arg...), Cxs>::type {
     
-    return rpc(world(), recipient, std::move(cxs), std::forward<Fn>(fn), std::forward<Arg>(args)...);
+    return detail::template rpc<Cxs, Fn&&, Arg&&...>(
+        world(), recipient, std::move(cxs), std::forward<Fn>(fn), std::forward<Arg>(args)...
+      );
   }
   
   // rpc: default completions variant
   template<typename Fn, typename ...Arg>
   auto rpc(team &tm, intrank_t recipient, Fn &&fn, Arg &&...args)
-    -> decltype(
-      upcxx::template rpc<completions<future_cx<operation_cx_event>>, Fn&&, Arg&&...>(
-        tm, recipient, operation_cx::as_future(),
-        static_cast<Fn&&>(fn), static_cast<Arg&&>(args)...
-      )
-    ) {
-    return upcxx::template rpc<completions<future_cx<operation_cx_event>>, Fn&&, Arg&&...>(
+    // computes our return type, but SFINAE's out if fn(args...) is ill-formed
+    -> typename detail::rpc_return<Fn(Arg...), completions<future_cx<operation_cx_event>>>::type {
+    
+    return detail::template rpc<completions<future_cx<operation_cx_event>>, Fn&&, Arg&&...>(
       tm, recipient, operation_cx::as_future(),
-      static_cast<Fn&&>(fn), static_cast<Arg&&>(args)...
+      std::forward<Fn>(fn), std::forward<Arg>(args)...
     );
   }
   
   template<typename Fn, typename ...Arg>
   auto rpc(intrank_t recipient, Fn &&fn, Arg &&...args)
-    -> decltype(
-      upcxx::template rpc<completions<future_cx<operation_cx_event>>, Fn&&, Arg&&...>(
-        world(), recipient, operation_cx::as_future(),
-        static_cast<Fn&&>(fn), static_cast<Arg&&>(args)...
-      )
-    ) {
-    return upcxx::template rpc<completions<future_cx<operation_cx_event>>, Fn&&, Arg&&...>(
+    // computes our return type, but SFINAE's out if fn(args...) is ill-formed
+    -> typename detail::rpc_return<Fn(Arg...), completions<future_cx<operation_cx_event>>, typename detail::rpc_remote_results<Fn(Arg...)>::type>::type {
+    
+    return detail::template rpc<completions<future_cx<operation_cx_event>>, Fn&&, Arg&&...>(
       world(), recipient, operation_cx::as_future(),
-      static_cast<Fn&&>(fn), static_cast<Arg&&>(args)...
+      std::forward<Fn>(fn), std::forward<Arg>(args)...
     );
   }
 }
