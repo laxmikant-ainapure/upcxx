@@ -60,7 +60,7 @@ int main() {
     for(int c=0; c < 1000; c++)
       sum += (int)my_matrix[r][c];
   
-  sum = upcxx::allreduce(sum, [](int a, int b) { return a+b; }).wait();
+  sum = upcxx::reduce_all(sum, [](int a, int b) { return a+b; }).wait();
   
   // 1000 elements with value=1, from 10 neighbors, across all ranks.
   UPCXX_ASSERT_ALWAYS(

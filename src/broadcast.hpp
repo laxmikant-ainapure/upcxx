@@ -2,75 +2,117 @@
 #define _b91be200_fd4d_41f5_a326_251161564ec7
 
 #include <upcxx/backend.hpp>
-#include <upcxx/dist_object.hpp>
-#include <upcxx/rpc.hpp>
+#include <upcxx/completion.hpp>
+#include <upcxx/bind.hpp>
+#include <upcxx/team.hpp>
 
 namespace upcxx {
-  namespace detail {
-    // We take a dist_id instead of dist_object because even if we
-    // arrive before this rank constructed its object, we can still
-    // send the rpc_ff's down the tree.
-    template<typename T>
-    void broadcast_receive(
-        T const &value,
-        intrank_t rank_ub, // in range [0, 2*rank_n-1)
-        dist_id<promise<T>> id
-      ) {
-      
-      intrank_t rank_me = upcxx::rank_me();
-      intrank_t rank_n = upcxx::rank_n();
-      
-      // Send to top-half of [rank_me,peer_ub), then set interval to
-      // lower-half and repeat.
-      while(true) {
-        intrank_t mid = rank_me + (rank_ub-rank_me)/2;
-        
-        // Send-to-self is stop condition.
-        if(mid == rank_me)
-          break;
-        
-        intrank_t translate = rank_n <= mid ? rank_n : 0;
-        
-        // Sub-interval bounds. Lower must be in [0,rank_n).
-        intrank_t sub_lb = mid - translate;
-        intrank_t sub_ub = rank_ub - translate;
-        
-        rpc_ff(sub_lb,
-          [=](T const &value) {
-            broadcast_receive(value, sub_ub, id);
-          },
-          value
-        );
-        
-        rank_ub = mid;
-      }
-      
-      id.when_here().then(
-        [=](dist_object<promise<T>> &state) {
-          state->fulfill_result(value);
-        }
-      );
-    }
-  }
+  //////////////////////////////////////////////////////////////////////////////
+  // upcxx::broadcast_nontrivial
   
   template<typename T1,
+           typename Cxs = completions<future_cx<operation_cx_event>>,
            typename T = typename std::decay<T1>::type>
-  future<T> broadcast(
-      T1 &&value, intrank_t root
+  future<T> broadcast_nontrivial(
+      T1 &&value, intrank_t root,
+      team &tm = upcxx::world(),
+      completions<future_cx<operation_cx_event>> cxs_ignored = {{}}
     ) {
-    intrank_t rank_n = upcxx::rank_n();
-    intrank_t rank_me = upcxx::rank_me();
     
-    dist_object<promise<T>> *state = new dist_object<promise<T>>({});
+    digest id = tm.next_collective_id(detail::internal_only());
+    promise<T> *pro = detail::registered_promise<T>(id, /*anon=*/1);
     
-    if(rank_me == root)
-      detail::broadcast_receive(value, root + rank_n, state->id());
+    if(tm.rank_me() == root) {
+      backend::bcast_am_master<progress_level::user>(
+        tm,
+        upcxx::bind([=](T &value) {
+            promise<T> *pro = detail::registered_promise<T>(id, /*anon=*/1);
+            backend::fulfill_during<progress_level::user>(*pro, std::tuple<T>(std::move(value)));
+          },
+          value
+        )
+      );
+      
+      backend::fulfill_during<progress_level::user>(*pro, std::tuple<T>(std::move(value)), backend::master);
+    }
     
-    future<T> ans = (*state)->get_future();
+    backend::fulfill_during<progress_level::user>(*pro, /*anon*/1, backend::master);
     
-    // Cleanup dist_object after we've received our value.
-    ans.then([state](T&) { delete state; });
+    future<T> ans = pro->get_future();
     
+    ans.then([=](T&) {
+      delete pro;
+      detail::registry.erase(id);
+    });
+    
+    return ans;
+  }
+  
+  //////////////////////////////////////////////////////////////////////////////
+  // upcxx::broadcast
+  
+  namespace detail {
+    // Calls GEX broadcast
+    void broadcast_trivial(
+      team &tm, intrank_t root, void *buf, std::size_t size,
+      backend::gasnet::handle_cb *cb
+    );
+  }
+  
+  template<typename T,
+           typename Cxs = completions<future_cx<operation_cx_event>>>
+  future<> broadcast(
+      T *buf, std::size_t n, intrank_t root,
+      team &tm = upcxx::world(),
+      completions<future_cx<operation_cx_event>> cxs_ignored = {{}}
+    ) {
+    static_assert(
+      upcxx::is_definitely_trivially_serializable<T>::value,
+      "Only TriviallySerializable types permitted for `upcxx::broadcast`. "
+      "Consider `upcxx::broadcast_nontrivial` instead."
+    );
+    
+    struct my_cb final: backend::gasnet::handle_cb {
+      promise<> pro;
+      void execute_and_delete(backend::gasnet::handle_cb_successor) override {
+        backend::fulfill_during<progress_level::user>(std::move(pro), /*anon*/1, backend::master);
+        delete this;
+      }
+    };
+    
+    my_cb *cb = new my_cb;
+    future<> ans = cb->pro.get_future();
+    detail::broadcast_trivial(tm, root, (void*)buf, n*sizeof(T), cb);
+    return ans;
+  }
+  
+  template<typename T,
+           typename Cxs = completions<future_cx<operation_cx_event>>>
+  future<T> broadcast(
+      T value, intrank_t root,
+      team &tm = upcxx::world(),
+      completions<future_cx<operation_cx_event>> cxs_ignored = {{}}
+    ) {
+    
+    static_assert(
+      upcxx::is_definitely_trivially_serializable<T>::value,
+      "Only TriviallySerializable types permitted for `upcxx::broadcast`. "
+      "Consider `upcxx::broadcast_nontrivial` instead."
+    );
+    
+    struct my_cb final: backend::gasnet::handle_cb {
+      promise<T> pro;
+      T val;
+      my_cb(T val): val(std::move(val)) {}
+      void execute_and_delete(backend::gasnet::handle_cb_successor) override {
+        backend::fulfill_during<progress_level::user>(std::move(pro), std::tuple<T>(std::move(val)), backend::master);
+        delete this;
+      }
+    };
+    
+    my_cb *cb = new my_cb(std::move(value));
+    future<T> ans = cb->pro.get_future();
+    detail::broadcast_trivial(tm, root, (void*)&cb->val, sizeof(T), cb);
     return ans;
   }
 }

@@ -77,6 +77,10 @@ For copyright notice and licensing agreement, see [LICENSE.txt](LICENSE.txt)
 
 ### 2018.??.??: PENDING
 
+* Team construction and collectives are nearly fully implemented. They currently
+  lack support for any completions other than the default
+  `operation_cx::as_future()`.
+
 This release of UPC++ v1.0 supports most of the functionality specified in the 
 [UPC++ 1.0 Draft ?? Specification](docs/spec.pdf).
 

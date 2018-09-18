@@ -83,11 +83,12 @@ typedef std::array<int,2> count_t;
 
 int main() {
 
-  init();
+  bool success=true;
   
+  init();
+  {
   print_test_header();
 
-  bool success=true;
   
   intrank_t me = rank_me();
   intrank_t n =  rank_n();
@@ -97,7 +98,7 @@ int main() {
   // Ring of ghost halos transfered between adjacent ranks using the three
   // different communication protocols
   patch_t* myPatchPtr = (patch_t*)allocate(sizeof(patch_t));
-  dist_object<global_ptr<lli> > mesh(global_ptr<lli>((lli*)myPatchPtr));
+  dist_object<global_ptr<lli> > mesh(to_global_ptr<lli>((lli*)myPatchPtr));
   dist_object<count_t>  counters(count_t({{0,0}}));
 
   count_t& mycount = *counters;// read from me, write to me
@@ -419,6 +420,7 @@ int main() {
   
   print_test_success(success);
   
+  }
   finalize();
 
   if(!success) return 4;

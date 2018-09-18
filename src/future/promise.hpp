@@ -8,9 +8,6 @@
 #include <cstddef>
 
 namespace upcxx {
-  template<typename ...T>
-  class promise;
-  
   //////////////////////////////////////////////////////////////////////
   // detail::promise_like_t: generate type promise<T...> given some
   // future<T...>
@@ -57,10 +54,12 @@ namespace upcxx {
     }
     
   public:
-    promise():
+    promise(std::intptr_t anons=0):
       detail::future_impl_shref<detail::future_header_ops_promise, T...>(
         &(new detail::future_header_promise<T...>)->base_header_result
       ) {
+      UPCXX_ASSERT(anons >= 0);
+      detail::promise_meta_of(*this)->countdown += anons;
     }
     
     promise(const promise&) = delete;

@@ -1,5 +1,6 @@
 #include <upcxx/dist_object.hpp>
 #include <upcxx/backend.hpp>
+#include <upcxx/barrier.hpp>
 #include <upcxx/rpc.hpp>
 
 #include "util.hpp"

@@ -2,7 +2,7 @@
 #define _1e7a65b7_b8d1_4def_98a3_76038c9431cf
 
 #include <upcxx/future/core.hpp>
-#ifdef UPCXX_BACKEND
+#if UPCXX_BACKEND
   #include <upcxx/backend_fwd.hpp>
 #endif
 
@@ -76,6 +76,8 @@ namespace upcxx {
     typedef std::tuple<T...> results_type;
     typedef typename Kind::template with_types<T...> impl_type; // impl_type is a FutureImpl.
     
+    using results_rvals_type = decltype(std::declval<impl_type>().result_rvals());
+    
     impl_type impl_;
     
   public:
@@ -115,33 +117,63 @@ namespace upcxx {
     bool ready() const {
       return impl_.ready();
     }
-    
-    template<int i=0>
-    typename upcxx::tuple_element_or_void<i, results_type>::type result() const {
-      return (typename upcxx::tuple_element_or_void<i, results_type>::type)
-        upcxx::get_or_void<i>(impl_.result_lrefs_getter()());
+  
+  private:
+    template<typename Tup>
+    static Tup&& get_at_(Tup &&tup, std::integral_constant<int,-1>) {
+      return static_cast<Tup&&>(tup);
+    }
+    template<typename Tup>
+    static void get_at_(Tup &&tup, std::integral_constant<int,sizeof...(T)>) {
+      return;
+    }
+    template<typename Tup, int i>
+    static typename upcxx::tuple_element_or_void<i,Tup>::type
+    get_at_(Tup const &tup, std::integral_constant<int,i>) {
+      // Very odd that we need this cast since its exactly the same as the
+      // return type, but we need it.
+      return static_cast<typename std::tuple_element<i,Tup>::type>(std::get<i>(tup));
+    }
+  
+  public:
+    template<int i=-1>
+    typename std::conditional<
+        (i<0 && sizeof...(T) > 1),
+          results_type,
+          typename upcxx::tuple_element_or_void<(i<0 ? 0 : i), results_type>::type
+      >::type
+    result() const {
+      return get_at_(
+          impl_.result_lrefs_getter()(),
+          std::integral_constant<int, (
+              i >= (int)sizeof...(T) ? (int)sizeof...(T) :
+              i>=0 ? i :
+              sizeof...(T)>1 ? -1 :
+              0
+            )>()
+        );
     }
     
-    results_type results() const {
-      return results_type{const_cast<impl_type&>(impl_).result_rvals()};
-    }
     results_type result_tuple() const {
-      return results_type{const_cast<impl_type&>(impl_).result_rvals()};
+      return const_cast<impl_type&>(impl_).result_lrefs_getter()();
     }
     
-    template<int i=0>
-    auto result_moved()
-      -> decltype(upcxx::get_or_void<i>(impl_.result_rvals())) {
-      return upcxx::get_or_void<i>(impl_.result_rvals());
-    }
-    
-    auto results_moved()
-      -> decltype(impl_.result_rvals()) {
-      return impl_.result_rvals();
-    }
-    auto results_tuple_moved()
-      -> decltype(impl_.result_rvals()) {
-      return impl_.result_rvals();
+    template<int i=-1>
+    typename std::conditional<
+        (i<0 && sizeof...(T) > 1),
+          results_rvals_type,
+          typename upcxx::tuple_element_or_void<(i<0 ? 0 : i), results_rvals_type>::type
+      >::type
+    result_moved() {
+      return get_at_(
+          impl_.result_rvals(),
+          std::integral_constant<int, (
+              i >= (int)sizeof...(T) ? (int)sizeof...(T) :
+              i>=0 ? i :
+              sizeof...(T)>1 ? -1 :
+              0
+            )>()
+        );
     }
     
     template<typename Fn>
@@ -173,18 +205,48 @@ namespace upcxx {
     }
 
     #ifdef UPCXX_BACKEND
-    template<typename Fn=detail::future_wait_upcxx_progress_user>
+    template<int i=-1, typename Fn=detail::future_wait_upcxx_progress_user>
     auto wait(Fn &&progress = detail::future_wait_upcxx_progress_user{})
     #else
-    template<typename Fn>
+    template<int i=-1, typename Fn>
     auto wait(Fn &&progress)
     #endif
-      -> decltype(this->result()) {
+      -> decltype(this->template result<i>()) {
       
       while(!impl_.ready())
         progress();
       
-      return this->result();
+      return this->template result<i>();
+    }
+    
+    #ifdef UPCXX_BACKEND
+    template<typename Fn=detail::future_wait_upcxx_progress_user>
+    auto wait_tuple(Fn &&progress = detail::future_wait_upcxx_progress_user{})
+    #else
+    template<typename Fn>
+    auto wait_tuple(Fn &&progress)
+    #endif
+      -> decltype(this->result_tuple()) {
+      
+      while(!impl_.ready())
+        progress();
+      
+      return this->result_tuple();
+    }
+    
+    #ifdef UPCXX_BACKEND
+    template<int i=-1, typename Fn=detail::future_wait_upcxx_progress_user>
+    auto wait_moved(Fn &&progress = detail::future_wait_upcxx_progress_user{})
+    #else
+    template<int i=-1, typename Fn>
+    auto wait_moved(Fn &&progress)
+    #endif
+      -> decltype(this->template result_moved<i>()) {
+      
+      while(!impl_.ready())
+        progress();
+      
+      return this->template result_moved<i>();
     }
   };
 }

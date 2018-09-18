@@ -38,7 +38,7 @@ namespace upcxx {
   // Signalling actions tagged by the event they react to.
 
   // Future completion
-  template<typename Event>
+  template<typename Event, progress_level level = progress_level::user>
   struct future_cx {
     using event_t = Event;
   };
@@ -75,7 +75,7 @@ namespace upcxx {
       fn_(std::move(fn)) {
     }
   };
-
+  
   // RPC completion. Arguments are bound into fn_.
   template<typename Event, typename Fn>
   struct rpc_cx {
@@ -300,14 +300,14 @@ namespace upcxx {
       void operator()() {}
     };
     
-    template<typename Event, typename ...T>
-    struct cx_state<future_cx<Event>, std::tuple<T...>> {
+    template<typename Event, progress_level level, typename ...T>
+    struct cx_state<future_cx<Event,level>, std::tuple<T...>> {
       promise<T...> pro_;
       
-      cx_state(future_cx<Event>) {}
+      cx_state(future_cx<Event,level>) {}
       
       void operator()(T ...vals) {
-        backend::fulfill_during_user(std::move(pro_), std::tuple<T...>(std::forward<T>(vals)...));
+        backend::fulfill_during<level>(std::move(pro_), std::tuple<T...>(std::forward<T>(vals)...));
       }
     };
 
@@ -322,7 +322,7 @@ namespace upcxx {
       }
       
       void operator()(T ...vals) {
-        backend::fulfill_during_user(pro_, std::tuple<T...>(std::forward<T>(vals)...));
+        backend::fulfill_during<progress_level::user>(pro_, std::tuple<T...>(std::forward<T>(vals)...));
       }
     };
     // event is empty
@@ -336,7 +336,7 @@ namespace upcxx {
       }
       
       void operator()() {
-        backend::fulfill_during_user(pro_, 1);
+        backend::fulfill_during<progress_level::user>(pro_, 1);
       }
     };
     // promise and event are empty
@@ -350,7 +350,7 @@ namespace upcxx {
       }
       
       void operator()() {
-        backend::fulfill_during_user(pro_, 1);
+        backend::fulfill_during<progress_level::user>(pro_, 1);
       }
     };
     
@@ -685,11 +685,11 @@ namespace upcxx {
     struct completions_returner_head;
     
     template<template<typename> class EventPredicate,
-             typename EventValues, typename CxH_event, typename ...CxT,
+             typename EventValues, typename CxH_event, progress_level level, typename ...CxT,
              typename ...TailReturn_tuplees>
     struct completions_returner_head<
         EventPredicate, EventValues,
-        completions<future_cx<CxH_event>, CxT...>,
+        completions<future_cx<CxH_event,level>, CxT...>,
         std::tuple<TailReturn_tuplees...>
       > {
       
@@ -717,11 +717,11 @@ namespace upcxx {
     };
 
     template<template<typename> class EventPredicate,
-             typename EventValues, typename CxH_event, typename ...CxT,
+             typename EventValues, typename CxH_event, progress_level level, typename ...CxT,
              typename TailReturn_not_tuple>
     struct completions_returner_head<
         EventPredicate, EventValues,
-        completions<future_cx<CxH_event>, CxT...>,
+        completions<future_cx<CxH_event,level>, CxT...>,
         TailReturn_not_tuple
       > {
       
@@ -749,10 +749,10 @@ namespace upcxx {
     };
 
     template<template<typename> class EventPredicate,
-             typename EventValues, typename CxH_event, typename ...CxT>
+             typename EventValues, typename CxH_event, progress_level level, typename ...CxT>
     struct completions_returner_head<
         EventPredicate, EventValues,
-        completions<future_cx<CxH_event>, CxT...>,
+        completions<future_cx<CxH_event,level>, CxT...>,
         void
       > {
       

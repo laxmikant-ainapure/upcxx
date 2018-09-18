@@ -22,7 +22,7 @@ int main() {
   for(auto const &kv: my_histo1)
     sum += int(kv.second);
   
-  sum = upcxx::allreduce(sum, [](int a, int b) { return a + b; }).wait();
+  sum = upcxx::reduce_all(sum, [](int a, int b) { return a + b; }).wait();
   
   UPCXX_ASSERT_ALWAYS(
     sum == 2*1000*upcxx::rank_n(),

@@ -5,6 +5,7 @@
 #include <upcxx/bind.hpp>
 #include <upcxx/completion.hpp>
 #include <upcxx/future.hpp>
+#include <upcxx/team.hpp>
 
 namespace upcxx {
   //////////////////////////////////////////////////////////////////////
@@ -45,18 +46,21 @@ namespace upcxx {
 
     template<typename Call, typename Cxs,
              typename = typename rpc_remote_results<Call>::type>
-    struct rpc_ff_return {
+    struct rpc_ff_return;
+    
+    template<typename Call, typename ...Cx, typename Results>
+    struct rpc_ff_return<Call, completions<Cx...>, Results> {
       using type = typename detail::completions_returner<
           /*EventPredicate=*/detail::event_is_here,
           /*EventValues=*/detail::rpc_ff_event_values,
-          Cxs
+          completions<Cx...>
         >::return_t;
     };
   }
   
   // defaulted completions
   template<typename Fn, typename ...Arg>
-  auto rpc_ff(intrank_t recipient, Fn &&fn, Arg &&...args)
+  auto rpc_ff(team &tm, intrank_t recipient, Fn &&fn, Arg &&...args)
     // computes our return type, but SFINAE's out if fn(args...) is ill-formed
     -> typename detail::rpc_ff_return<Fn(Arg...), completions<>>::type {
 
@@ -69,14 +73,22 @@ namespace upcxx {
     );
       
     backend::template send_am_master<progress_level::user>(
-      recipient,
+      tm, recipient,
       upcxx::bind(std::forward<Fn>(fn), std::forward<Arg>(args)...)
     );
+  }
+  
+  template<typename Fn, typename ...Arg>
+  auto rpc_ff(intrank_t recipient, Fn &&fn, Arg &&...args)
+    // computes our return type, but SFINAE's out if fn(args...) is ill-formed
+    -> typename detail::rpc_ff_return<Fn(Arg...), completions<>>::type {
+    
+    return rpc_ff(world(), recipient, std::forward<Fn>(fn), std::forward<Arg>(args)...);
   }
 
   // explicit completions
   template<typename Cxs, typename Fn, typename ...Arg>
-  auto rpc_ff(intrank_t recipient, Cxs cxs, Fn &&fn, Arg &&...args)
+  auto rpc_ff(team &tm, intrank_t recipient, Cxs cxs, Fn &&fn, Arg &&...args)
     // computes our return type, but SFINAE's out if fn(args...) is ill-formed
     -> typename detail::rpc_ff_return<Fn(Arg...), Cxs>::type {
 
@@ -101,7 +113,7 @@ namespace upcxx {
       >{state};
     
     backend::template send_am_master<progress_level::user>(
-      recipient,
+      tm, recipient,
       upcxx::bind(std::forward<Fn>(fn), std::forward<Arg>(args)...)
     );
     
@@ -111,7 +123,15 @@ namespace upcxx {
     
     return returner();
   }
-
+  
+  template<typename Cxs, typename Fn, typename ...Arg>
+  auto rpc_ff(intrank_t recipient, Cxs cxs, Fn &&fn, Arg &&...args)
+    // computes our return type, but SFINAE's out if fn(args...) is ill-formed
+    -> typename detail::rpc_ff_return<Fn(Arg...), Cxs>::type {
+  
+    return rpc_ff(world(), recipient, std::move(cxs), std::forward<Fn>(fn), std::forward<Arg>(args)...);
+  }
+  
   //////////////////////////////////////////////////////////////////////
   // rpc
   
@@ -134,6 +154,7 @@ namespace upcxx {
       template<typename ...Arg>
       void operator()(Arg &&...args) {
         backend::template send_am_persona<progress_level::user>(
+          upcxx::world(),
           initiator_,
           initiator_persona_,
           upcxx::bind(operation_satisfier{state_}, std::forward<Arg>(args)...)
@@ -170,17 +191,20 @@ namespace upcxx {
     // Computes return type for rpc.
     template<typename Call, typename Cxs,
              typename = typename rpc_remote_results<Call>::type>
-    struct rpc_return {
+    struct rpc_return;
+    
+    template<typename Call, typename ...Cx, typename Result>
+    struct rpc_return<Call, completions<Cx...>, Result> {
       using type = typename detail::completions_returner<
           /*EventPredicate=*/detail::event_is_here,
           /*EventValues=*/detail::rpc_event_values<Call>,
-          Cxs
+          completions<Cx...>
         >::return_t;
     };
   }
   
   template<typename Cxs, typename Fn, typename ...Arg>
-  auto rpc(intrank_t recipient, Cxs cxs, Fn &&fn, Arg &&...args)
+  auto rpc(team &tm, intrank_t recipient, Cxs cxs, Fn &&fn, Arg &&...args)
     // computes our return type, but SFINAE's out if fn(args...) is ill-formed
     -> typename detail::rpc_return<Fn(Arg...), Cxs>::type {
     
@@ -211,7 +235,7 @@ namespace upcxx {
     auto fn_bound = upcxx::bind(std::forward<Fn>(fn), std::forward<Arg>(args)...);
     
     backend::template send_am_master<progress_level::user>(
-      recipient,
+      tm, recipient,
       upcxx::bind(
         [=](unpacked_of_t<decltype(fn_bound)> &fn_bound1) {
           return upcxx::apply_as_future(std::move(fn_bound1))
@@ -235,18 +259,40 @@ namespace upcxx {
     
     return returner();
   }
-
+  
+  template<typename Cxs, typename Fn, typename ...Arg>
+  auto rpc(intrank_t recipient, Cxs cxs, Fn &&fn, Arg &&...args)
+    // computes our return type, but SFINAE's out if fn(args...) is ill-formed
+    -> typename detail::rpc_return<Fn(Arg...), Cxs>::type {
+    
+    return rpc(world(), recipient, std::move(cxs), std::forward<Fn>(fn), std::forward<Arg>(args)...);
+  }
+  
   // rpc: default completions variant
   template<typename Fn, typename ...Arg>
-  auto rpc(intrank_t recipient, Fn &&fn, Arg &&...args)
+  auto rpc(team &tm, intrank_t recipient, Fn &&fn, Arg &&...args)
     -> decltype(
       upcxx::template rpc<completions<future_cx<operation_cx_event>>, Fn&&, Arg&&...>(
-        recipient, operation_cx::as_future(),
+        tm, recipient, operation_cx::as_future(),
         static_cast<Fn&&>(fn), static_cast<Arg&&>(args)...
       )
     ) {
     return upcxx::template rpc<completions<future_cx<operation_cx_event>>, Fn&&, Arg&&...>(
-      recipient, operation_cx::as_future(),
+      tm, recipient, operation_cx::as_future(),
+      static_cast<Fn&&>(fn), static_cast<Arg&&>(args)...
+    );
+  }
+  
+  template<typename Fn, typename ...Arg>
+  auto rpc(intrank_t recipient, Fn &&fn, Arg &&...args)
+    -> decltype(
+      upcxx::template rpc<completions<future_cx<operation_cx_event>>, Fn&&, Arg&&...>(
+        world(), recipient, operation_cx::as_future(),
+        static_cast<Fn&&>(fn), static_cast<Arg&&>(args)...
+      )
+    ) {
+    return upcxx::template rpc<completions<future_cx<operation_cx_event>>, Fn&&, Arg&&...>(
+      world(), recipient, operation_cx::as_future(),
       static_cast<Fn&&>(fn), static_cast<Arg&&>(args)...
     );
   }

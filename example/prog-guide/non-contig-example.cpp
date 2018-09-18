@@ -58,9 +58,9 @@ int main() {
   intrank_t nebrLo = (me + n - 1) % n;
 
   spatch_t* myPatchSPtr = (spatch_t*)allocate(sizeof(spatch_t));
-  dist_object<global_ptr<float> > smesh(global_ptr<float>((float*)myPatchSPtr));
+  dist_object<global_ptr<float> > smesh(to_global_ptr<float>((float*)myPatchSPtr));
   dpatch_t* myPatchDPtr = (dpatch_t*)allocate(sizeof(dpatch_t));
-  dist_object<global_ptr<float> > dmesh(global_ptr<float>((float*)myPatchDPtr));
+  dist_object<global_ptr<float> > dmesh(to_global_ptr<float>((float*)myPatchDPtr));
   
   future<global_ptr<float>> dgpf = dmesh.fetch(nebrHi);
   future<global_ptr<float>> sgpf = smesh.fetch(nebrLo);
@@ -87,7 +87,7 @@ int main() {
     //size the landing vector and return the global_ptr
     future<global_ptr<particle_t> > hiVectorF = rpc(nebrHi, [](){
         dParticles = new uvector(38); 
-        return global_ptr<particle_t>(&((dParticles)->front()));});
+        return to_global_ptr<particle_t>(&((dParticles)->front()));});
  
     hiVectorF.wait();
     

@@ -6,9 +6,10 @@
 #include <upcxx/future.hpp>
 #include <upcxx/rpc.hpp>
 #include <upcxx/utility.hpp>
+#include <upcxx/team.hpp>
 
 #include <cstdint>
-#include <unordered_map>
+#include <functional>
 
 namespace upcxx {
   template<typename T>
@@ -16,32 +17,6 @@ namespace upcxx {
   
   template<typename T>
   class dist_object;
-  
-  namespace detail {
-    // Maps from `dist_id<T>` to `promise<dist_object<T>&>*`. Master
-    // persona only.
-    extern std::unordered_map<digest, void*> dist_master_promises;
-    
-    // Collective counter for generating names, should be replaced by
-    // per-team counters.
-    extern std::uint64_t dist_master_id_bump;
-    
-    // Get the promise pointer from the master map.
-    template<typename T>
-    promise<dist_object<T>&>* dist_promise(digest id) {
-      promise<dist_object<T>&> *pro;
-      auto it = dist_master_promises.find(id);
-      
-      if(it == dist_master_promises.end()) {
-        pro = new promise<dist_object<T>&>;
-        detail::dist_master_promises[id] = static_cast<void*>(pro);
-      }
-      else
-        pro = static_cast<promise<dist_object<T>&>*>(it->second);
-      
-      return pro;
-    }
-  }
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -54,24 +29,24 @@ namespace upcxx {
     
   //public:
     dist_object<T>& here() const {
-      return detail::dist_promise<T>(dig_)->get_future().result();
+      return detail::registered_promise<dist_object<T>&>(dig_)->get_future().result();
     }
     
     future<dist_object<T>&> when_here() const {
-      return detail::dist_promise<T>(dig_)->get_future();
+      return detail::registered_promise<dist_object<T>&>(dig_)->get_future();
     }
     
-    #define COMPARATOR(op) \
+    #define UPCXX_COMPARATOR(op) \
       friend bool operator op(dist_id a, dist_id b) {\
         return a.dig_ op b.dig_; \
       }
-    COMPARATOR(==)
-    COMPARATOR(!=)
-    COMPARATOR(<)
-    COMPARATOR(<=)
-    COMPARATOR(>)
-    COMPARATOR(>=)
-    #undef COMPARATOR
+    UPCXX_COMPARATOR(==)
+    UPCXX_COMPARATOR(!=)
+    UPCXX_COMPARATOR(<)
+    UPCXX_COMPARATOR(<=)
+    UPCXX_COMPARATOR(>)
+    UPCXX_COMPARATOR(>=)
+    #undef UPCXX_COMPARATOR
   };
   
   template<typename T>
@@ -94,23 +69,46 @@ namespace std {
 namespace upcxx {
   template<typename T>
   class dist_object {
+    upcxx::team *tm_;
     digest id_;
     T value_;
     
   public:
-    dist_object(T value):
+    template<typename ...U>
+    dist_object(upcxx::team &tm, U &&...arg):
+      tm_(&tm),
+      value_(std::forward<U>(arg)...) {
+      
+      id_ = tm.next_collective_id(detail::internal_only());
+      
+      backend::fulfill_during<progress_level::user>(
+          *detail::registered_promise<dist_object<T>&>(id_),
+          std::tuple<dist_object<T>&>(*this),
+          backend::master
+        );
+    }
+    
+    dist_object(upcxx::team &tm, T value):
+      tm_(&tm),
       value_(std::move(value)) {
       
-      // TODO: use team's collective digest generator
-      id_ = {0, detail::dist_master_id_bump};
-      detail::dist_master_id_bump += 1;
+      id_ = tm.next_collective_id(detail::internal_only());
       
-      detail::dist_promise<T>(id_)->fulfill_result(*this); // future cascade, might delete this instance!
+      backend::fulfill_during<progress_level::user>(
+          *detail::registered_promise<dist_object<T>&>(id_),
+          std::tuple<dist_object<T>&>(*this),
+          backend::master
+        );
+    }
+    
+    dist_object(T value):
+      dist_object(upcxx::world(), std::move(value)) {
     }
     
     dist_object(dist_object const&) = delete;
     
     dist_object(dist_object &&that):
+      tm_(that.tm_),
       id_(that.id_),
       value_(std::move(that.value_)) {
       
@@ -121,26 +119,27 @@ namespace upcxx {
       pro->fulfill_result(*this);
       
       void *pro_void = static_cast<void*>(pro);
-      std::swap(pro_void, detail::dist_master_promises[id_]);
+      std::swap(pro_void, detail::registry[id_]);
       
       delete static_cast<promise<dist_object<T>&>*>(pro_void);
     }
     
     ~dist_object() {
       if(id_ != digest{~0ull, ~0ull}) {
-        auto it = detail::dist_master_promises.find(id_);
+        auto it = detail::registry.find(id_);
         delete static_cast<promise<dist_object<T>&>*>(it->second);
-        detail::dist_master_promises.erase(it);
+        detail::registry.erase(it);
       }
     }
     
     T* operator->() const { return const_cast<T*>(&value_); }
     T& operator*() const { return const_cast<T&>(value_); }
     
+    upcxx::team& team() const { return *tm_; }
     dist_id<T> id() const { return dist_id<T>{id_}; }
     
     future<T> fetch(intrank_t rank) {
-      return upcxx::rpc(rank, [](dist_object<T> &o) { return *o; }, *this);
+      return upcxx::rpc(*tm_, rank, [](dist_object<T> &o) { return *o; }, *this);
     }
   };
 }
