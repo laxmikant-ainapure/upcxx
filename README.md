@@ -31,10 +31,13 @@ The current release is known to work on the following configurations:
   Free Software Foundation GCC (e.g., as installed by Homebrew or Fink)
   version 5.1.0 or newer should also work (smp and udp conduits)
 
-* Linux/x86-64 with gcc-5.1.0 or newer, or with clang-3.7.0 or newer when using
-  libstdc++ from gcc-5.1.0.  If your system compilers do not meet these
-  requirements, please see the note in [docs/local-gcc.md](docs/local-gcc.md)
-  regarding use of non-system compilers. (smp, udp and ibv conduits)
+* Linux/x86-64 with one of the following compilers:    
+   - Gnu g++ 5.1.0 or newer    
+   - clang 3.7.0 or newer (with libstdc++ from gcc-5.1.0 or newer)    
+   - Intel C++ 17.0.2 or newer (with libstdc++ from gcc-5.1.0 or newer)    
+  If your system compilers do not meet these requirements, please see the note
+  in [docs/local-gcc.md](docs/local-gcc.md) regarding use of non-system
+  compilers. (smp, udp and ibv conduits)
 
 * Linux/ppc64le with gcc-5.1.0 or newer (and see the note immediately above if
   you use a non-system compiler).
