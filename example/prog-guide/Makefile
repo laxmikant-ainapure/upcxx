@@ -23,18 +23,23 @@ LIBS = $(shell $(ENV) $(UPCXX_INSTALL)/bin/upcxx-meta LIBS)
 PTHREAD_FLAGS = -pthread
 OPENMP_FLAGS = -fopenmp
 
-EXTRA_FLAGS =
+EXTRA_FLAGS = -g
 
 # Programs to build, assuming each has a corresponding *.cpp file
 EXAMPLES = \
-  compute-pi \
-  compute-pi-multi-examples \
+  dmap-test \
+  dmap-async-insert-test \
+  dmap-async-find-test \
+  dmap-quiescence-test \
+  dmap-atomics-test \
+  dmap-conjoined-test \
+  dmap-promises-test \
+  rb1d-av \
   hello-world \
-  non-contig-example \
-  persona-example \
   view-histogram1 \
   view-histogram2 \
-  view-matrix-tasks
+  view-matrix-tasks \
+  non-contig-example 
 
 all: $(EXAMPLES)
 
