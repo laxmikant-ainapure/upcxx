@@ -13,9 +13,10 @@ int64_t reduce_to_rank0(int64_t my_hits)
   upcxx::barrier();
   // once a memory location is accessed with atomics, it should only be
   // subsequently accessed using atomics to prevent unexpected results
+  int64_t result = 0;
   if (upcxx::rank_me() == 0) {
-    return ad_i64.load(hits_ptr, memory_order_relaxed).wait();
-  } else {
-    return 0;
+    result = ad_i64.load(hits_ptr, memory_order_relaxed).wait();
   }
+  ad_i64.destroy(); // required before destruction of this local-scope atomic_domain
+  return result;
 }
