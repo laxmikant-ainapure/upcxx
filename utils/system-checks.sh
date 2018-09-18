@@ -60,6 +60,8 @@ platform_sanity_checks() {
         ARCH_BAD=
         if test x86_64 = "$ARCH" ; then
             ARCH_GOOD=1
+        elif test ppc64le = "$ARCH" ; then
+            ARCH_GOOD=1
         elif expr "$ARCH" : 'i.86' >/dev/null 2>&1 ; then
             ARCH_BAD=1
         fi
@@ -104,9 +106,12 @@ platform_sanity_checks() {
             COMPILER_GOOD=1
         fi
 
-        RECOMMEND='We recommend Linux or macOS on x86_64 with one of the following C++ compilers: 
-         g++ 5.1.0 or newer, LLVM/clang 3.7.0 or newer, Xcode/clang 8.0.0 or newer, Intel C 17.0.2 or newer'
-
+        RECOMMEND='We recommend one of the following C++ compilers (or any later versions):
+           Linux on x86_64:   g++ 5.1.0, LLVM/clang 3.7.0, Intel C 17.0.2
+           Linux on ppc64le:  g++ 5.1.0
+           macOS on x86_64:   g++ 5.1.0, Xcode/clang 8.0.0
+           Cray XC systems:   PrgEnv-gnu with gcc/5.2.0 environment module loaded
+                              PrgEnv-intel with Intel C 17.0.2 and gcc/5.2.0 environment module loaded'
         if test -n "$ARCH_BAD" ; then
             echo "ERROR: This version of UPC++ does not support the '$ARCH' architecture."
             echo "ERROR: $RECOMMEND"
