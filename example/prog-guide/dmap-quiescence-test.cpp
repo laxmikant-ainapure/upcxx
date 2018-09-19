@@ -17,7 +17,7 @@ int main(int argc, char *argv[])
   // distributed object to keep track of number of inserts expected at this process
   upcxx::dist_object<long> n_inserts = 0;
   // keep track of how many inserts have been made to each target process
-  std::unique_ptr<long[]> inserts_per_rank(new long[upcxx::rank_n()]);
+  std::unique_ptr<long[]> inserts_per_rank(new long[upcxx::rank_n()]());
   // insert all key-value pairs into the hash map
   for (long i = 0; i < N; i++) {
     auto key = to_string(rgen_keys());
