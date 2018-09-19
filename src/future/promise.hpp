@@ -68,7 +68,11 @@ namespace upcxx {
     promise& operator=(promise &&) = default;
     
     void require_anonymous(std::intptr_t n) {
-      UPCXX_ASSERT(detail::promise_meta_of(*this)->countdown + n > 0);
+      UPCXX_ASSERT(detail::promise_meta_of(*this)->countdown > 0,
+        "Called `require_anonymous()` on a ready promise.");
+      UPCXX_ASSERT(detail::promise_meta_of(*this)->countdown + n > 0,
+        "Calling `require_anonymous("<<n<<")` would put this promise in a ready or negative state.");
+      
       detail::promise_meta_of(*this)->countdown += n;
     }
     
@@ -80,6 +84,10 @@ namespace upcxx {
     template<typename ...U>
     void fulfill_result(U &&...values) {
       auto *hdr = reinterpret_cast<detail::future_header_promise<T...>*>(this->hdr_);
+      UPCXX_ASSERT(
+        !hdr->base_header_result.results_constructed(),
+        "Attempted to call `fulfill_result` multiple times on the same promise."
+      );
       hdr->base_header_result.construct_results(std::forward<U>(values)...);
       hdr->fulfill(1);
     }
@@ -88,6 +96,10 @@ namespace upcxx {
     template<typename ...U>
     void fulfill_result(std::tuple<U...> &&values) {
       auto *hdr = reinterpret_cast<detail::future_header_promise<T...>*>(this->hdr_);
+      UPCXX_ASSERT(
+        !hdr->base_header_result.results_constructed(),
+        "Attempted to call `fulfill_result` multiple times on the same promise."
+      );
       hdr->base_header_result.construct_results(std::move(values));
       hdr->fulfill(1);
     }

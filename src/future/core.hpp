@@ -376,6 +376,10 @@ namespace upcxx {
         hdr->enter_ready(hdr);
       }
       
+      bool results_constructed() const {
+        return this->base_header.status_ == status_results_yes;
+      }
+      
       template<typename ...U>
       void construct_results(U &&...values) {
         UPCXX_ASSERT(this->base_header.status_ == status_results_no);
@@ -454,6 +458,8 @@ namespace upcxx {
         UPCXX_ASSERT(this->base_header.status_ == status_not_ready);
         this->base_header.enter_ready(&this->base_header);
       }
+      
+      bool results_constructed() const { return false; }
       
       void construct_results() {}
       void construct_results(std::tuple<>) {}
@@ -552,7 +558,9 @@ namespace upcxx {
       }
       
       void fulfill(std::intptr_t n) {
-        UPCXX_ASSERT(this->pro_meta.countdown - n >= 0);
+        UPCXX_ASSERT(this->pro_meta.countdown > 0, "Attempted to fulfill an already ready promise.");
+        UPCXX_ASSERT(this->pro_meta.countdown - n >= 0, "Attempted to over-fulfill a promise to a negative state.");
+        
         this->pro_meta.countdown -= n;
         if(0 == this->pro_meta.countdown)
           this->base_header_result.readify();
