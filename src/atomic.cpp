@@ -31,7 +31,7 @@ static_assert(
 namespace {
   // translate upc++ atomic operations into gex ids
   constexpr int to_gex_op_map[] = { 
-    GEX_OP_GET, GEX_OP_SET,
+    GEX_OP_GET, GEX_OP_SET, GEX_OP_CSWAP,
     GEX_OP_ADD, GEX_OP_FADD,
     GEX_OP_SUB, GEX_OP_FSUB,
     GEX_OP_MULT, GEX_OP_FMULT,
@@ -41,8 +41,7 @@ namespace {
     GEX_OP_OR, GEX_OP_FOR,
     GEX_OP_XOR, GEX_OP_FXOR,
     GEX_OP_INC, GEX_OP_FINC,
-    GEX_OP_DEC, GEX_OP_FDEC,
-    GEX_OP_CSWAP
+    GEX_OP_DEC, GEX_OP_FDEC
   };
   
   // check a handful of enum mappings to ensure no insert/delete errors
@@ -54,7 +53,7 @@ namespace {
   
   // for error messages
   constexpr const char *atomic_op_str[] = {
-    "load", "store",
+    "load", "store", "compare_exchange",
     "add", "fetch_add",
     "sub", "fetch_sub",
     "mul", "fetch_mul",
@@ -64,8 +63,7 @@ namespace {
     "bit_or", "fetch_bit_or",
     "bit_xor", "fetch_bit_xor",
     "inc", "fetch_inc", 
-    "dec", "fetch_dec",
-    "compare_exchange"
+    "dec", "fetch_dec"
   };
 
   constexpr int op_count = int(sizeof(atomic_op_str)/sizeof(atomic_op_str[0]));

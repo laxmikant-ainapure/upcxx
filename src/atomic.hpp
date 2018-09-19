@@ -14,7 +14,7 @@
 
 namespace upcxx {
   // All supported atomic operations.
-  enum class atomic_op : int { load, store,
+  enum class atomic_op : int { load, store, compare_exchange,
                                add, fetch_add,
                                sub, fetch_sub,
                                mul, fetch_mul,
@@ -24,8 +24,7 @@ namespace upcxx {
                                bit_or, fetch_bit_or,
                                bit_xor, fetch_bit_xor,
                                inc, fetch_inc,
-                               dec, fetch_dec,
-                               compare_exchange };
+                               dec, fetch_dec };
   
   namespace detail {
     enum class amo_done : int { none, operation };
@@ -205,7 +204,8 @@ namespace upcxx {
 
       // The constructor takes a vector of operations. Currently, flags is currently unsupported.
       atomic_domain(std::vector<atomic_op> const &ops, team &tm = upcxx::world());
-
+      
+      #if 0 // disabling move-assignment, for now
       atomic_domain &operator=(atomic_domain &&that) {
         // only allow assignment moves onto "dead" object
         UPCXX_ASSERT(atomic_gex_ops == 0,
@@ -219,6 +219,7 @@ namespace upcxx {
         that.parent_tm_ = nullptr;
         return *this;
       }
+      #endif
       
       ~atomic_domain();
 
