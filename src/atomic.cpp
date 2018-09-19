@@ -209,9 +209,8 @@ detail::amo_done atomic_domain<T>::inject(
   
   gex_Event_t h = shim_gex_AD_OpNB<T>(
     reinterpret_cast<gex_AD_t>(this->ad_gex_handle), p,
-    gex_TM_TranslateJobrankToRank(gasnet::handle_of(*parent_tm_), gp.rank_),
-    gp.raw_ptr_, op_gex, val1, val2,
-    flags // | GEX_FLAG_RANK_IS_JOBRANK
+    gp.rank_, gp.raw_ptr_, op_gex, val1, val2,
+    flags | GEX_FLAG_RANK_IS_JOBRANK
   );
 
   cb->handle = reinterpret_cast<uintptr_t>(h);
