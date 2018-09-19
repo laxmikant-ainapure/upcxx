@@ -14,7 +14,7 @@ int main(int argc, char *argv[])
   mt19937_64 rgen_keys(upcxx::rank_me()), rgen_vals(upcxx::rank_me() + upcxx::rank_n());
 //SNIPPET
   // keep track of how many inserts have been made to each target process
-  std::unique_ptr<int64_t[]> inserts_per_rank(new int64_t[upcxx::rank_n()]);
+  std::unique_ptr<int64_t[]> inserts_per_rank(new int64_t[upcxx::rank_n()]());
   // insert all key-value pairs into the hash map
   for (long i = 0; i < N; i++) {
     auto key = to_string(rgen_keys());
