@@ -20,6 +20,7 @@ int main () {
 	const int me = upcxx::rank_me();
 
   //create landing zones  
+
 	vector<upcxx::global_ptr<int>> ptrs(n); 
 	ptrs[me] = upcxx::new_array<int>(n);
 
@@ -35,26 +36,24 @@ int main () {
 	upcxx::barrier(); 
 	
 	
-	int tn = 10;
-	vector<thread*> ts(tn);
   int done_count = 0;
 
   //declare an agreed upon persona for the progress thread
   upcxx::persona progress_persona;
 
+  //create the progress thread
   thread progress_thread( [&]() {
         //capture the progress_persona
         upcxx::persona_scope scope(progress_persona);
 		    // progress thread drains progress until all work has been performed
-		    while(done_count != n*tn)
+		    while(done_count != n)
 			    upcxx::progress();
       });
 
- 
 
-	for(int tid=0; tid < tn; tid++) {
-		ts[tid] = new thread([&,tid]() {
-	  	// each thread launches n rputs to each rank
+  //create another thread to issue the rputs
+  thread submit_thread( [&]() {  
+	  	// launch a rput to each rank
 	  	for (int i = 0; i < n ; i++ ) {
 	  		upcxx::rput(
 	  			&me, ptrs[(me + i)%n] + i, 1,
@@ -76,12 +75,8 @@ int main () {
 	  	
       upcxx::discharge();
 	  });
-  }
 
-	for(int tid=1; tid < tn; tid++) {
-		ts[tid]->join();
-		delete ts[tid];
-	}
+  submit_thread.join();
   progress_thread.join();
 
 	upcxx::barrier();
