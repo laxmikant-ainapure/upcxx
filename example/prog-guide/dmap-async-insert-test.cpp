@@ -9,18 +9,16 @@ int main(int argc, char *argv[])
   upcxx::init();
   const long N = 100000;
   DistrMap dmap;
-  // generators for random keys and values
-  mt19937_64 rgen_keys(upcxx::rank_me()), rgen_vals(upcxx::rank_me() + upcxx::rank_n());
 //SNIPPET
-  auto next_key = to_string(rgen_keys());
-  auto next_val = to_string(rgen_vals());
-  // insert all key, value pairs into the hash map, wait for operation to complete
+  // initialize key and value for first insertion
+  string key = to_string(upcxx::rank_me()) + ":" + to_string(0);
+  string val = key;
   for (long i = 0; i < N; i++) {
-    upcxx::future<> fut = dmap.insert(next_key, next_val);
-    // perform computation while waiting for RPC to complete
+    upcxx::future<> fut = dmap.insert(key, val);
+    // compute new key while waiting for RPC to complete
     if (i < N - 1) {
-      next_key = to_string(rgen_keys());
-      next_val = to_string(rgen_vals());
+      key = to_string(upcxx::rank_me()) + ":" + to_string(i + 1);
+      val = key;
     }
     // wait for operation to complete before next insert
     fut.wait();
@@ -28,17 +26,14 @@ int main(int argc, char *argv[])
 //SNIPPET
   // barrier to ensure all insertions have completed
   upcxx::barrier();
-  // now try to fetch keys inserted by neighbor
-  int nb = (upcxx::rank_me() + 1) % upcxx::rank_n();
-  mt19937_64 rgen_nb_keys(nb), rgen_nb_vals(nb + upcxx::rank_n());
   for (long i = 0; i < N; i++) {
-    auto key = rgen_nb_keys();
-    auto expected_val = rgen_nb_vals();
+    string key = to_string((upcxx::rank_me() + 1) % upcxx::rank_n()) + ":" + to_string(i);
+    string val = dmap.find(key).wait();
     // attach callback, which itself returns a future 
-    upcxx::future<> fut = dmap.find(to_string(key)).then(
+    upcxx::future<> fut = dmap.find(key).then(
       // lambda to check the return value
-      [expected_val](string val) {
-        assert(val == to_string(expected_val));
+      [key](string val) {
+        assert(val == key);
       });
     // wait for future and its callback to complete
     fut.wait();

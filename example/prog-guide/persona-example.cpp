@@ -7,6 +7,7 @@
 
 using namespace std;
 
+//SNIPPET
 // choose a point at random
 int64_t hit()
 {
@@ -98,3 +99,5 @@ int main(int argc, char **argv)
     upcxx::finalize();
     return 0;
 }
+//SNIPPET
+
