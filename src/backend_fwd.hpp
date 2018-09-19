@@ -35,10 +35,10 @@ namespace upcxx {
     user
   };
 
-  enum class quiescer {
+  enum class entry_barrier {
     none,
-    barrier_internal,
-    barrier_user
+    internal,
+    user
   };
   
   namespace detail {
@@ -114,7 +114,7 @@ namespace backend {
     #endif
   };
   
-  void quiesce(team &tm, quiescer q);
+  void quiesce(team &tm, entry_barrier eb);
   
   template<progress_level level, typename Fn>
   void during_level(Fn &&fn, persona &active_per = current_persona());

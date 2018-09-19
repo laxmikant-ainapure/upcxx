@@ -168,10 +168,10 @@ atomic_domain<T>::atomic_domain(std::vector<atomic_op> const &ops, team &tm) {
 }
 
 template<typename T>
-void atomic_domain<T>::destroy(quiescer q) {
+void atomic_domain<T>::destroy(entry_barrier eb) {
   UPCXX_ASSERT(backend::master.active_with_caller());
   
-  backend::quiesce(*parent_tm_, q);
+  backend::quiesce(*parent_tm_, eb);
   
   if(atomic_gex_ops) {
     gex_AD_Destroy(reinterpret_cast<gex_AD_t>(ad_gex_handle));

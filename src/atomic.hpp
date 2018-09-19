@@ -223,7 +223,7 @@ namespace upcxx {
       
       ~atomic_domain();
 
-      void destroy(quiescer q = quiescer::barrier_user);
+      void destroy(entry_barrier eb = entry_barrier::user);
       
       template<typename Cxs = FUTURE_CX>
       NOFETCH_RTYPE<Cxs> store(global_ptr<T> gptr, T val, std::memory_order order,

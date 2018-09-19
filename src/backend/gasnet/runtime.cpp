@@ -544,12 +544,12 @@ void upcxx::deallocate(void *p) {
 //////////////////////////////////////////////////////////////////////
 // from: upcxx/backend.hpp
 
-void backend::quiesce(team &tm, upcxx::quiescer q) {
-  switch(q) {
-  case quiescer::none:
+void backend::quiesce(team &tm, upcxx::entry_barrier eb) {
+  switch(eb) {
+  case entry_barrier::none:
     break;
-  case quiescer::barrier_internal:
-  case quiescer::barrier_user: {
+  case entry_barrier::internal:
+  case entry_barrier::user: {
       std::atomic_thread_fence(std::memory_order_release);
       
       int32_t dummy = 0;
@@ -560,7 +560,7 @@ void backend::quiesce(team &tm, upcxx::quiescer q) {
       
       while(0 != gex_Event_Test(e)) {
         upcxx::progress(
-          q == quiescer::barrier_internal
+          eb == entry_barrier::internal
             ? progress_level::internal
             : progress_level::user
         );

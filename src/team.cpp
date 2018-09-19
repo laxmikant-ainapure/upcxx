@@ -88,11 +88,11 @@ team team::split(intrank_t color, intrank_t key) {
     );
 }
 
-void team::destroy(quiescer q) {
+void team::destroy(entry_barrier eb) {
   UPCXX_ASSERT(backend::master.active_with_caller());
   
   if(this->handle != reinterpret_cast<uintptr_t>(GEX_TM_INVALID)) {
-    backend::quiesce(*this, q);
+    backend::quiesce(*this, eb);
     
     void *scratch = gex_TM_QueryCData(reinterpret_cast<gex_TM_t>(this->handle));
     upcxx::deallocate(scratch);
