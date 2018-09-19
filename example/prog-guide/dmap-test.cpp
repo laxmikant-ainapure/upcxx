@@ -26,6 +26,8 @@ int main(int argc, char *argv[])
     // check that value is correct
     assert(val == to_string(rgen_nb_vals()));
   }
+  upcxx::barrier(); // wait for finds to complete globally
+  if (!upcxx::rank_me()) cout << "SUCCESS" << endl;
   upcxx::finalize();
   return 0;
 }

@@ -43,6 +43,8 @@ int main(int argc, char *argv[])
     // wait for future and its callback to complete
     fut.wait();
   }
+  upcxx::barrier(); // wait for finds to complete globally
+  if (!upcxx::rank_me()) cout << "SUCCESS" << endl;
   upcxx::finalize();
   return 0;
 }
