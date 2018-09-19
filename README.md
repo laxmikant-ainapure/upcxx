@@ -36,6 +36,9 @@ The current release is known to work on the following configurations:
   requirements, please see the note in [docs/local-gcc.md](docs/local-gcc.md)
   regarding use of non-system compilers. (smp, udp and ibv conduits)
 
+* Linux/ppc64le with gcc-5.1.0 or newer (and see the note immediately above if
+  you use a non-system compiler).
+
 * Cray XC with the PrgEnv-gnu or PrgEnv-intel environment modules, as well as
   gcc/5.2.0 (or later) loaded. (smp and aries conduits)
 
