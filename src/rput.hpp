@@ -272,13 +272,13 @@ namespace upcxx {
       "RMA operations only work on DefinitelyTriviallySerializable types."
     );
     
-    UPCXX_ASSERT_ALWAYS((
-      detail::completions_has_event<Cxs, operation_cx_event>::value |
-      detail::completions_has_event<Cxs, remote_cx_event>::value,
+    UPCXX_ASSERT_ALWAYS(
+      (detail::completions_has_event<Cxs, operation_cx_event>::value |
+       detail::completions_has_event<Cxs, remote_cx_event>::value),
       "Not requesting either operation or remote completion is surely an "
       "error. You'll have know way of ever knowing when the target memory is "
       "safe to read or write again."
-    ));
+    );
     
     namespace gasnet = upcxx::backend::gasnet;
     
@@ -356,13 +356,13 @@ namespace upcxx {
       "RMA operations only work on DefinitelyTriviallySerializable types."
     );
     
-    UPCXX_ASSERT_ALWAYS((
-      detail::completions_has_event<Cxs, operation_cx_event>::value |
-      detail::completions_has_event<Cxs, remote_cx_event>::value,
+    UPCXX_ASSERT_ALWAYS(
+      (detail::completions_has_event<Cxs, operation_cx_event>::value |
+       detail::completions_has_event<Cxs, remote_cx_event>::value),
       "Not requesting either operation or remote completion is surely an "
       "error. You'll have know way of ever knowing when the target memory is "
       "safe to read or write again."
-    ));
+    );
     
     namespace gasnet = upcxx::backend::gasnet;
     
