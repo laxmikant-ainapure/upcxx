@@ -40,6 +40,8 @@ EXAMPLES = \
   view-histogram2 \
   view-matrix-tasks \
   non-contig-example 
+  persona-example-rputs \
+  persona-example	
 
 all: $(EXAMPLES)
 
@@ -49,7 +51,9 @@ all: $(EXAMPLES)
 
 # Example-specific variable specializations.
 persona-example: UPCXX_THREADMODE = par
-persona-example: EXTRA_FLAGS += $(OPENMP_FLAGS)
+persona-example: EXTRA_FLAGS += $(PTHREAD_FLAGS)
+persona-example-rputs: UPCXX_THREADMODE = par
+persona-example-rputs: EXTRA_FLAGS += $(PTHREAD_FLAGS)
 view-matrix-tasks: EXTRA_FLAGS += $(PTHREAD_FLAGS)
 
 clean:
