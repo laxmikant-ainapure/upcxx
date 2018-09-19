@@ -39,7 +39,7 @@ EXAMPLES = \
   view-histogram1 \
   view-histogram2 \
   view-matrix-tasks \
-  non-contig-example 
+  non-contig-example \
   persona-example-rputs \
   persona-example	
 
