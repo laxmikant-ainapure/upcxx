@@ -1,7 +1,7 @@
-### UPC\+\+: a PGAS extension for C\+\+ ###
+# UPC\+\+: a PGAS library for C\+\+ #
 
-UPC++ is a parallel programming extension for developing C++ applications with
-the partitioned global address space (PGAS) model.  UPC++ has three main
+UPC++ is a parallel programming library for developing C++ applications with
+the Partitioned Global Address Space (PGAS) model.  UPC++ has three main
 objectives:
 
 * Provide an object-oriented PGAS programming model in the context of the
@@ -31,16 +31,19 @@ The current release is known to work on the following configurations:
   Free Software Foundation GCC (e.g., as installed by Homebrew or Fink)
   version 5.1.0 or newer should also work (smp and udp conduits)
 
-* Linux/x86-64 with gcc-5.1.0 or newer, or with clang-3.7.0 or newer when using
-  libstdc++ from gcc-5.1.0.  If your system compilers do not meet these
-  requirements, please see the note in [docs/local-gcc.md](docs/local-gcc.md)
-  regarding use of non-system compilers. (smp, udp and ibv conduits)
+* Linux/x86_64 with one of the following compilers:    
+    - Gnu g++ 5.1.0 or newer    
+    - clang 3.7.0 or newer (with libstdc++ from gcc-5.1.0 or newer)    
+    - Intel C++ 17.0.2 or newer (with libstdc++ from gcc-5.1.0 or newer)    
+  If your system compilers do not meet these requirements, please see the note
+  in [docs/local-gcc.md](docs/local-gcc.md) regarding use of non-system
+  compilers. (smp, udp and ibv conduits)
 
 * Linux/ppc64le with gcc-5.1.0 or newer (and see the note immediately above if
   you use a non-system compiler).
 
-* Cray XC with the PrgEnv-gnu or PrgEnv-intel environment modules, as well as
-  gcc/5.2.0 (or later) loaded. (smp and aries conduits)
+* Cray XC x86_64 with the PrgEnv-gnu or PrgEnv-intel environment modules, 
+  as well as gcc/5.2.0 (or later) loaded. (smp and aries conduits)
 
 Miscellaneous software requirements:
 
@@ -59,18 +62,25 @@ Miscellaneous software requirements:
 For instructions on installing UPC++ and compiling programs, look at
 [INSTALL.md](INSTALL.md).
 
+## Debugging
+
+For recommendations on debugging, see [docs/debugging.md](docs/debugging.md)
+
+Please report any problems in the [issue tracker](https://bitbucket.org/berkeleylab/upcxx/issues).
+
+## Testing
+
+To run a UPC++ correctness test, see [docs/testing.md](docs/testing.md)
+
 ## Using UPC++ with MPI
 
 For guidance on using UPC++ and MPI in the same application, see
 [docs/hybrid.md](docs/hybrid.md).
 
-## Debugging
+## Implementation-defined behavior
 
-For recommendations on debugging, see [docs/debugging.md](docs/debugging.md)
-
-## Testing
-
-To run a test script, see [docs/testing.md](docs/testing.md)
+[docs/implementation-defined.md](docs/implementation-defined.md) documents 
+implementation-defined behaviors of this implementation.
 
 ## Legal terms
 
@@ -78,33 +88,44 @@ For copyright notice and licensing agreement, see [LICENSE.txt](LICENSE.txt)
 
 ## ChangeLog
 
-### 2018.??.??: PENDING
-
-* Team construction and collectives are nearly fully implemented. They currently
-  lack support for any completions other than the default
-  `operation_cx::as_future()`.
+### 2018.09.26: Release 2018.9.0
 
 This release of UPC++ v1.0 supports most of the functionality specified in the 
-[UPC++ 1.0 Draft ?? Specification](docs/spec.pdf).
+[UPC++ 1.0 Draft 8 Specification](docs/spec.pdf).
 
-New features/enhancements:
+New features/enhancements: (see specification and programmer's guide for full details)
 
+* Subset teams and team-aware APIs are added and implemented
+* Non-Blocking Collective operations, with team support: barrier, broadcast, reduce
+* New atomic operations: mul, min, max, bit_{and,or,xor}
+* `future::{wait,result}*` return types are now "smarter", allowing more concise syntax
 * New `upcxx` compiler wrapper makes it easier to build UPC++ programs
-* UPC++ now supports the GCC compiler on macOS (e.g., as installed by Homebrew or Fink)
-* rput_{strided,(ir)regular) now provide asynchronous source completion
+* `upcxx-run`: improved functionality and handling of -shared-heap arguments
+* New supported platforms:
+    - GNU g++ compiler on macOS (e.g., as installed by Homebrew or Fink)
+    - PrgEnv-intel version 17.0.2 or later on Cray XC x86_64 systems
+    - Intel C++ version 17.0.2 or later on x86_64/Linux
+* `rput_{strided,(ir)regular}` now provide asynchronous source completion
+* Performance improvements to futures, promises and LPCs
 * UPC++ library now contains ident strings that can be used to query version info
   from a compiled executable, using the UNIX `ident` tool.
 
 The following features from the specification are not yet implemented:
 
-...
+* Non-Blocking collectives currently support only the default future-based completion
+* `atomic_domain<float>` and `atomic_domain<double>` are not yet implemented
+* `team_id::when_here()` is unimplemented
 
 Notable bug fixes:
 
-* issue #49: stability and portability issues caused by C++ thread_local
+* issue #49: stability and portability issues caused by C++ `thread_local`
 * issue #141: missing promise move assignment operator
 
-Please report any problems in the [issue tracker](https://bitbucket.org/berkeleylab/upcxx/issues).
+Breaking changes:
+
+* `global_ptr<T>(T*)` "up-cast" constructor has been replaced with `to_global_ptr<T>(T*)`
+* `atomic_domain` now requires a call to new collective `destroy()` before destructor
+* `allreduce` has been renamed to `reduce_all`
 
 ### 2018.05.10: Release 2018.3.2
 
@@ -113,7 +134,7 @@ This is a re-release of version 2018.3.0 (see below) that corrects a packaging e
 ### 2018.03.31: Release 2018.3.0
 
 This release of UPC++ v1.0 supports most of the functionality specified in the 
-[UPC++ 1.0 Draft 6 Specification](docs/spec.pdf).
+[UPC++ 1.0 Draft 6 Specification](https://bitbucket.org/upcxx/upcxx/downloads/upcxx-spec-V1.0-Draft6.pdf).
 
 New features/enhancements:
 
@@ -173,8 +194,6 @@ The following features from that specification are not yet implemented:
 
 This release is not performant, and may be unstable or buggy.
 
-Please report any problems in the [issue tracker](https://bitbucket.org/berkeleylab/upcxx/issues).
-
 ### 2017.09.30: Release 2017.9.0
 
 The initial public release of UPC++ v1.0. This release supports most of the
@@ -192,8 +211,6 @@ The following features from that specification are not yet implemented:
  * Non-contiguous transfers
 
 This release is not performant, and may be unstable or buggy.
-
-Please report any problems in the [issue tracker](https://bitbucket.org/berkeleylab/upcxx/issues).
 
 ### 2017.09.01: Release v1.0-pre
 
