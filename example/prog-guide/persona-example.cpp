@@ -6,6 +6,10 @@
 #include <random>
 #include <thread>
 
+#if !UPCXX_BACKEND_GASNET_PAR
+  #error "UPCXX_BACKEND=gasnet_par required."
+#endif
+
 using namespace std;
 
 int main(int argc, char *argv[])
@@ -74,8 +78,7 @@ int main(int argc, char *argv[])
               });
         }
 
-        //block here until the progress thread has executed all the lpcs
-        //the call to progress is required to make sure that the rpcs are executed
+        //block here until the progress thread has executed all rpcs and lpcs
         while(thread_barrier.load(memory_order_acquire) != 1){
           sched_yield();
           upcxx::progress();
