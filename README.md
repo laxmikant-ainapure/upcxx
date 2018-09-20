@@ -31,10 +31,10 @@ The current release is known to work on the following configurations:
   Free Software Foundation GCC (e.g., as installed by Homebrew or Fink)
   version 5.1.0 or newer should also work (smp and udp conduits)
 
-* Linux/x86-64 with one of the following compilers:    
-   - Gnu g++ 5.1.0 or newer    
-   - clang 3.7.0 or newer (with libstdc++ from gcc-5.1.0 or newer)    
-   - Intel C++ 17.0.2 or newer (with libstdc++ from gcc-5.1.0 or newer)    
+* Linux/x86_64 with one of the following compilers:    
+    - Gnu g++ 5.1.0 or newer    
+    - clang 3.7.0 or newer (with libstdc++ from gcc-5.1.0 or newer)    
+    - Intel C++ 17.0.2 or newer (with libstdc++ from gcc-5.1.0 or newer)    
   If your system compilers do not meet these requirements, please see the note
   in [docs/local-gcc.md](docs/local-gcc.md) regarding use of non-system
   compilers. (smp, udp and ibv conduits)
@@ -42,8 +42,8 @@ The current release is known to work on the following configurations:
 * Linux/ppc64le with gcc-5.1.0 or newer (and see the note immediately above if
   you use a non-system compiler).
 
-* Cray XC with the PrgEnv-gnu or PrgEnv-intel environment modules, as well as
-  gcc/5.2.0 (or later) loaded. (smp and aries conduits)
+* Cray XC x86_64 with the PrgEnv-gnu or PrgEnv-intel environment modules, 
+  as well as gcc/5.2.0 (or later) loaded. (smp and aries conduits)
 
 Miscellaneous software requirements:
 
@@ -102,8 +102,9 @@ New features/enhancements: (see specification and programmer's guide for full de
 * New `upcxx` compiler wrapper makes it easier to build UPC++ programs
 * `upcxx-run`: improved functionality and handling of -shared-heap arguments
 * New supported platforms:
-    * GNU g++ compiler on macOS (e.g., as installed by Homebrew or Fink)
-    * Intel C++ version 17.0.2 or later on x86_64/Linux
+    - GNU g++ compiler on macOS (e.g., as installed by Homebrew or Fink)
+    - PrgEnv-intel version 17.0.2 or later on Cray XC x86_64 systems
+    - Intel C++ version 17.0.2 or later on x86_64/Linux
 * `rput_{strided,(ir)regular}` now provide asynchronous source completion
 * Performance improvements to futures, promises and LPCs
 * UPC++ library now contains ident strings that can be used to query version info
