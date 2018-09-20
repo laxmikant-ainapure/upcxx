@@ -36,6 +36,7 @@ int main () {
 	upcxx::barrier(); 
 	
 	
+  atomic<int> thread_barrier(0);
   int done_count = 0;
 
   //declare an agreed upon persona for the progress thread
@@ -48,6 +49,10 @@ int main () {
 		    // progress thread drains progress until all work has been performed
 		    while(done_count != n)
 			    upcxx::progress();
+
+        cout<<"Progress thread on process "<<upcxx::rank_me()<<" is done"<<endl; 
+        //unlock the other threads
+        thread_barrier += 1;
       });
 
 
@@ -73,7 +78,11 @@ int main () {
 	  		);
 	  	}
 	  	
-      upcxx::discharge();
+      //block here until the progress thread has executed all lpcs
+      while(thread_barrier.load(memory_order_acquire) != 1){
+        sched_yield();
+        upcxx::progress();
+      }
 	  });
 
   submit_thread.join();

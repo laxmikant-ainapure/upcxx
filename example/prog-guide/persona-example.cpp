@@ -33,7 +33,7 @@ int main(int argc, char *argv[])
   //SNIPPET
   // now try to fetch keys inserted by neighbor
   // note that in this example, keys and values are assumed to be the same
-  int num_threads = 10;
+  const int num_threads = 10;
   thread * threads[num_threads];
 
   upcxx::persona progress_persona;
