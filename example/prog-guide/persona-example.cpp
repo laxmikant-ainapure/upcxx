@@ -34,19 +34,19 @@ int main(int argc, char *argv[])
 
   upcxx::persona progress_persona;
   atomic<int> thread_barrier(0);
-  atomic<int> lpc_count(N);
+  int lpc_count = N;
 
   //liberate the master persona to allow the progress thread to use it
   upcxx::liberate_master_persona();
 
-  //Create a thread to execute the assertions while waiting on prom_find
+  //Create a thread to execute the assertions while lpc_count is greater than 0
   thread progress_thread( [&]() {
       //capture the master persona
       upcxx::persona_scope scope(upcxx::master_persona());
       //capture the progress_persona as well
       upcxx::persona_scope progress_scope(progress_persona);
       // wait until all assertions in lpcs are complete
-      while(lpc_count.load(memory_order_acquire) > 0) { 
+      while(lpc_count > 0) { 
         sched_yield();
         upcxx::progress();
       }
