@@ -622,7 +622,7 @@ namespace upcxx {
 
       template<bool skippable>
       static void unpack(parcel_reader &r, void *into, std::integral_constant<bool,skippable>) {
-        reflect_upon(packing_unpack_reflector</*constructed=*/true>{r}, *(T*)into);
+        reflect_upon(packing_unpack_reflector</*constructed=*/true>{r}, *::new(into) T);
       }
     };
     
