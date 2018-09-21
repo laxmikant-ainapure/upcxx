@@ -111,12 +111,9 @@ int main() {
   reset(myPatch, me);
   
 
-
-  when_all(fneighbor_hi, fneighbor_lo).wait();
+  global_ptr<lli> hi,lo;
+  std::tie(hi,lo) = when_all(fneighbor_hi, fneighbor_lo).wait();
  
-  global_ptr<lli> hi=fneighbor_hi.result();
-  global_ptr<lli> lo=fneighbor_lo.result();
-
   // irregular test 1
   {
     lli srcTest[]= {me, me+1, me+2, me+3, me+4, me+5};
