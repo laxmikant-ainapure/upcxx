@@ -31,7 +31,6 @@ int main(int argc, char *argv[])
   upcxx::future<> fut_all = upcxx::make_future();
   for (long i = 0; i < N; i++) {
     string key = to_string((upcxx::rank_me() + 1) % upcxx::rank_n()) + ":" + to_string(i);
-    string val = dmap.find(key).wait();
     // attach callback, which itself returns a future 
     upcxx::future<> fut = dmap.find(key).then(
       // lambda to check the return value

@@ -28,7 +28,8 @@ public:
   // find a key and return assoctiated value in a future
   template <typename Func>
   void find(const std::string &key, upcxx::persona & persona, Func func) {
-    //the value returned by the RPC is passed as an argument to the LPC used in the completion object
+    // the value returned by the RPC is passed as an argument to the LPC 
+    // used in the completion object
     auto cx = upcxx::source_cx::as_buffered() | upcxx::operation_cx::as_lpc(persona,func);
     upcxx::rpc(get_target_rank(key),cx,
         // lambda to find the key in the local map

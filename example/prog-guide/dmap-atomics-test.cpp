@@ -28,8 +28,8 @@ int main(int argc, char *argv[])
   upcxx::dist_object<upcxx::global_ptr<int64_t> > n_inserts(upcxx::new_<int64_t>(0));
   // get pointers for all other processes and use atomics to update remote counters
   for (long i = 0; i < upcxx::rank_n(); i++) {
-    if (inserts_per_rank) {
-      auto remote_n_inserts = n_inserts.fetch(i).wait();
+    if (inserts_per_rank[i]) {
+      upcxx::global_ptr<int64_t> remote_n_inserts = n_inserts.fetch(i).wait();
       // use atomics to increment the remote process's expected count of inserts
       ad.add(remote_n_inserts, inserts_per_rank[i], memory_order_relaxed).wait();
     }
@@ -48,7 +48,6 @@ int main(int argc, char *argv[])
   upcxx::future<> fut_all = upcxx::make_future();
   for (long i = 0; i < N; i++) {
     string key = to_string((upcxx::rank_me() + 1) % upcxx::rank_n()) + ":" + to_string(i);
-    string val = dmap.find(key).wait();
     // attach callback, which itself returns a future 
     upcxx::future<> fut = dmap.find(key).then(
       // lambda to check the return value
