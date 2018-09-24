@@ -105,6 +105,7 @@ New features/enhancements: (see specification and programmer's guide for full de
     - GNU g++ compiler on macOS (e.g., as installed by Homebrew or Fink)
     - PrgEnv-intel version 17.0.2 or later on Cray XC x86_64 systems
     - Intel C++ version 17.0.2 or later on x86_64/Linux
+    - GNU g++ compiler on ppc64le/Linux
 * `rput_{strided,(ir)regular}` now provide asynchronous source completion
 * Performance improvements to futures, promises and LPCs
 * UPC++ library now contains ident strings that can be used to query version info
