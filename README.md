@@ -116,6 +116,7 @@ The following features from the specification are not yet implemented:
 * Non-Blocking collectives currently support only the default future-based completion
 * `atomic_domain<float>` and `atomic_domain<double>` are not yet implemented
 * `team_id::when_here()` is unimplemented
+* User-defined Serialization interface
 
 Notable bug fixes:
 
