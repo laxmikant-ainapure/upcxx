@@ -78,7 +78,7 @@ platform_sanity_checks() {
         CCVERS=`$CC --version 2>&1`
         COMPILER_BAD=
         COMPILER_GOOD=
-        if echo "$CXXVERS" | egrep 'Apple LLVM version [1-7]' 2>&1 > /dev/null ; then
+        if echo "$CXXVERS" | egrep 'Apple LLVM version [1-7]\.' 2>&1 > /dev/null ; then
             COMPILER_BAD=1
         elif echo "$CXXVERS" | egrep 'Apple LLVM version ([8-9]\.|[1-9][0-9])' 2>&1 > /dev/null ; then
             COMPILER_GOOD=1
