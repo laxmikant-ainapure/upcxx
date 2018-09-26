@@ -125,7 +125,7 @@ def load_args():
                          help='Run on NUM of nodes.')
     _parser.add_argument('-shared-heap', dest='heapsz', type=heapsz_type,
                          help='Requests HEAPSZ size of shared memory per process. ' + \
-                        'HEAPSZ must include a unit suffix matching the pattern"[KMGT]B?" (case-insensitive).')
+                             'HEAPSZ must include a unit suffix matching the pattern"[KMGT]B?" or be "[0-100]%" (case-insensitive).')
     _parser.add_argument('-backtrace', dest='backtrace', default=False, action='store_true',
                          help='Enable backtraces. Compile with -g for full debugging information.')
     _parser.add_argument('-show', dest='show', default=False, action='store_true',
@@ -373,6 +373,8 @@ def main():
         print_verbose('UPCXX_RUN: GASNET_MAX_SEGSIZE is set to', str(args.heapsz.num / ONE_MB) + 'MB/P')
     elif args.heapsz.strategy == r'%':
         os.environ['UPCXX_SEGMENT_MB'] = 'MAX'
+        if args.heapsz.num > 1.0 or args.heapsz.num <= 0.0:
+            print_error_and_abort('shared-heap value has to be greater than 0% and cannot exceed 100%')
         gasnet_max_segsize_strat = SegmentStrategy(args.heapsz.num,'/H')
         print_verbose('UPCXX_RUN: GASNET_MAX_SEGSIZE is set to', str(gasnet_max_segsize_strat.num) +'/H' )
         os.environ['GASNET_MAX_SEGSIZE'] = str(gasnet_max_segsize_strat.num) + '/H'
