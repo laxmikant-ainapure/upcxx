@@ -40,7 +40,7 @@ def ranks_type(a):
     except ValueError:
         raise argparse.ArgumentTypeError('invalid format (' + a + ') - must be an integer')
     if v <= 0:
-        raise argparse.ArgumentTypeError('number of ranks must be an integer > 0')
+        raise argparse.ArgumentTypeError('number of processes must be an integer > 0')
     return v
 
 def nodes_type(a):
@@ -120,11 +120,11 @@ def load_args():
     global _parser
     _parser = argparse.ArgumentParser(description='A portable parallel job launcher for UPC++ programs, v2018.3.3')
     _parser.add_argument('-n', '-np', dest='nranks', type=ranks_type, default=None, metavar='NUM',
-                         help='Spawn NUM number of UPC++ ranks. Required.')
+                         help='Spawn NUM number of UPC++ processes. Required.')
     _parser.add_argument('-N', dest='nnodes', type=nodes_type, default=None, metavar='NUM',
                          help='Run on NUM of nodes.')
     _parser.add_argument('-shared-heap', dest='heapsz', type=heapsz_type,
-                         help='Requests HEAPSZ size of shared memory per rank. ' + \
+                         help='Requests HEAPSZ size of shared memory per process. ' + \
                         'HEAPSZ must include a unit suffix matching the pattern"[KMGT]B?" (case-insensitive).')
     _parser.add_argument('-backtrace', dest='backtrace', default=False, action='store_true',
                          help='Enable backtraces. Compile with -g for full debugging information.')
@@ -216,7 +216,7 @@ def set_ssh_servers(ssh_servers, nranks, conduit):
         num_servers = 0
 
     if conduit == 'udp' and num_servers > 0 and num_servers < nranks:
-        print_error_and_abort('For UDP conduit, need to specify at least one host per rank in ' + \
+        print_error_and_abort('For UDP conduit, need to specify at least one host per process in ' + \
                               '-ssh-servers or environment variable GASNET_SSH_SERVERS, or use -localhost parameter')
         
     # FIXME: this leaves all the checking to gasnet. This has the disadvantage that the error
@@ -245,7 +245,7 @@ def main():
 
 
     if not args.info and not args.nranks:
-        print_error_and_abort('Must specify the number of ranks, -n or -np')
+        print_error_and_abort('Must specify the number of processes, -n or -np')
 
 
     executable = args.cmd
