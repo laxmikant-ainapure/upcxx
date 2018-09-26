@@ -17,7 +17,6 @@ public:
 //SNIPPET  
   // insert a key, value pair into the hash table, track completion with promises
   void insert(const std::string &key, const std::string &val, upcxx::promise<> &prom) {
-    // the RPC returns an empty upcxx::future by default
     upcxx::rpc(get_target_rank(key),
                // completion is a promise
                upcxx::operation_cx::as_promise(prom),
@@ -28,7 +27,7 @@ public:
                }, local_map, key, val);
   }
 //SNIPPET  
-  // find a key and return assoctiated value in a future
+  // find a key and return associated value in a future
   upcxx::future<std::string> find(const std::string &key) {
     return upcxx::rpc(get_target_rank(key),
                       // lambda to find the key in the local map

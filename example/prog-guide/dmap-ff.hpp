@@ -26,7 +26,7 @@ public:
                   }, local_map, key, val);
   }
 //SNIPPET  
-  // find a key and return assoctiated value in a future
+  // find a key and return associated value in a future
   upcxx::future<std::string> find(const std::string &key) {
     return upcxx::rpc(get_target_rank(key),
                       // lambda to find the key in the local map

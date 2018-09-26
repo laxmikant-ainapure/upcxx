@@ -1,8 +1,8 @@
-//SNIPPET
 #include <upcxx/upcxx.hpp>
 #include <array>
 #include <vector>
 
+//SNIPPET
 // Number of worker threads/personas.
 constexpr int worker_n = 8;
 

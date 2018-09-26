@@ -1,9 +1,9 @@
-//SNIPPET
 #include <upcxx/upcxx.hpp>
 #include <cstdint>
 #include <string>
 #include <unordered_map>
 
+//SNIPPET
 // Hash a key to its owning rank.
 upcxx::intrank_t owner_of(std::string const &key) {
   std::uint64_t h = 0x1234abcd5678cdef;
@@ -34,7 +34,7 @@ upcxx::future<> send_histo1_byval(histogram1 const &histo) {
       
       [](histogram1 const &histo) {
         // Pain point: UPC++ already traversed the key-values once to build the
-        // `histo` container. Now we traverse again within the container.
+        // `histo` container. Now we traverse again within the RPC body.
         
         for(auto const &kv: histo)
           my_histo1[kv.first] += kv.second;

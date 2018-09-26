@@ -25,7 +25,7 @@ public:
                       }, local_map, key, val);
   }
 //SNIPPET  
-  // find a key and return assoctiated value in a future
+  // find a key and return associated value in a future
   template <typename Func>
   void find(const std::string &key, upcxx::persona & persona, Func func) {
     // the value returned by the RPC is passed as an argument to the LPC 

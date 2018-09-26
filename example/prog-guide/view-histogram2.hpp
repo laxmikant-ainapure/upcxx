@@ -1,9 +1,9 @@
-//SNIPPET
 #include <upcxx/upcxx.hpp>
 #include <cstdint>
 #include <map>
 #include <string>
 
+//SNIPPET
 // Hash a key to its owning rank.
 upcxx::intrank_t owner_of(std::string const &key) {
   std::uint64_t h = 0x1234abcd5678cdef;
