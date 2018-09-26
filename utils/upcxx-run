@@ -125,7 +125,7 @@ def load_args():
                          help='Run on NUM of nodes.')
     _parser.add_argument('-shared-heap', dest='heapsz', type=heapsz_type,
                          help='Requests HEAPSZ size of shared memory per process. ' + \
-                             'HEAPSZ must include a unit suffix matching the pattern"[KMGT]B?" or be "[0-100]%" (case-insensitive).')
+                             'HEAPSZ must include a unit suffix matching the pattern "[KMGT]B?" or be "[0-100]%%" (case-insensitive).')
     _parser.add_argument('-backtrace', dest='backtrace', default=False, action='store_true',
                          help='Enable backtraces. Compile with -g for full debugging information.')
     _parser.add_argument('-show', dest='show', default=False, action='store_true',
