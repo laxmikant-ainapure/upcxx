@@ -14,23 +14,32 @@
 
 namespace upcxx {
   namespace detail {
-    enum class rma_put_source_mode { now, defer, handle };
+    enum class rma_put_mode { op_now, src_now, src_defer, src_handle };
+    enum class rma_put_done: int { none=0, source=1, operation=2 };
     
-    // rma_put_nb: Does the actual gasnet non-blocking put
-    template<rma_put_source_mode src_mode>
-    void rma_put_nb(
+    // Does the actual gasnet PUT
+    template<rma_put_mode mode>
+    rma_put_done rma_put(
       intrank_t rank_d, void *buf_d,
       const void *buf_s, std::size_t size,
       backend::gasnet::handle_cb *source_cb,
       backend::gasnet::handle_cb *operation_cb
     );
-
-    // rma_put_b: Does the actual gasnet blocking put
-    void rma_put_b(
-      intrank_t rank_d, void *buf_d,
-      const void *buf_s, std::size_t size
-    );
-
+    
+    constexpr rma_put_done rma_put_done_lbound(rma_put_mode mode) {
+      return mode == rma_put_mode::op_now ? rma_put_done::operation :
+             mode == rma_put_mode::src_now ? rma_put_done::source :
+             rma_put_done::none;
+    }
+    
+    constexpr bool rma_put_done_ge(
+        rma_put_mode mode,
+        rma_put_done a, 
+        rma_put_done b
+      ) {
+      return (int)a >= (int)b || (int)rma_put_done_lbound(mode) >= (int)b;
+    }
+    
     ////////////////////////////////////////////////////////////////////
     // rput_event_values: Value for completions_state's EventValues
     // template argument. rput events always report no values.
@@ -67,7 +76,7 @@ namespace upcxx {
     // rput_cb_operation: rput_cbs_{byref|byval} inherits this to hold
     // operation-completion details.
     template<typename FinalType, typename CxStateHere, typename CxStateRemote,
-             bool static_scope = completions_is_event_sync<
+             bool definitely_static_scope = completions_is_event_sync<
                  typename CxStateHere::completions_t,
                  operation_cx_event
                >::value
@@ -86,9 +95,12 @@ namespace upcxx {
       >:
       backend::gasnet::handle_cb {
       
-      static constexpr auto source_mode = rma_put_source_mode::handle;
+      static constexpr auto mode = rma_put_mode::src_handle;
 
       backend::gasnet::handle_cb* source_cb() {
+        return this;
+      }
+      backend::gasnet::handle_cb* source_else_operation_cb() {
         return this;
       }
       
@@ -112,11 +124,14 @@ namespace upcxx {
         FinalType, CxStateHere, CxStateRemote,
         sync, /*use_handle=*/false
       > {
-      static constexpr auto source_mode =
-        sync ? rma_put_source_mode::now : rma_put_source_mode::defer;
-
+      static constexpr auto mode =
+        sync ? rma_put_mode::src_now : rma_put_mode::src_defer;
+      
       backend::gasnet::handle_cb* source_cb() {
         return nullptr;
+      }
+      backend::gasnet::handle_cb* source_else_operation_cb() {
+        return static_cast<FinalType*>(this)->operation_cb();
       }
     };
 
@@ -134,7 +149,7 @@ namespace upcxx {
         auto *cbs = static_cast<FinalType*>(this);
         
         backend::send_am_master<progress_level::user>(
-          cbs->rank_d,
+          upcxx::world(), cbs->rank_d,
           upcxx::bind(
             [](CxStateRemote &st) {
               return st.template operator()<remote_cx_event>();
@@ -144,6 +159,7 @@ namespace upcxx {
         );
       }
     };
+    
     template<typename FinalType, typename CxStateHere, typename CxStateRemote>
     struct rput_cb_remote<FinalType, CxStateHere, CxStateRemote, /*has_remote=*/false> {
       void send_remote() {/*nop*/}
@@ -153,48 +169,31 @@ namespace upcxx {
     // completion.
     template<typename FinalType, typename CxStateHere, typename CxStateRemote>
     struct rput_cb_operation<
-        FinalType, CxStateHere, CxStateRemote, /*static_scope=*/true
+        FinalType, CxStateHere, CxStateRemote, /*definitely_static_scope=*/true
       >:
       rput_cb_remote<FinalType, CxStateHere, CxStateRemote> {
 
-      static constexpr bool static_scope = true;
+      static constexpr bool definitely_static_scope = true;
       
-      void initiate(
-          intrank_t rank_d, void *buf_d, const void *buf_s, std::size_t size
-        ) {
-        auto *cbs = static_cast<FinalType*>(this);
-        
-        rma_put_b(rank_d, buf_d, buf_s, size);
-        
-        this->send_remote(); // may nop depending on rput_cb_remote case.
-        
-        cbs->state_here.template operator()<source_cx_event>();
-        cbs->state_here.template operator()<operation_cx_event>();
+      backend::gasnet::handle_cb* operation_cb() {
+        return nullptr;
       }
     };
 
-    // rput_cb_operation: Case where the user does care about the operation
-    // actually completing. We inherit from rput_cb_remote which will
-    // dispatch to either sending remote completion events or nop.
+    // rput_cb_operation: Case with non-blocking operation completion. We
+    // inherit from rput_cb_remote which will dispatch to either sending remote
+    // completion events or nop.
     template<typename FinalType, typename CxStateHere, typename CxStateRemote>
     struct rput_cb_operation<
-        FinalType, CxStateHere, CxStateRemote, /*static_scope=*/false
+        FinalType, CxStateHere, CxStateRemote, /*definitely_static_scope=*/false
       >:
       rput_cb_remote<FinalType, CxStateHere, CxStateRemote>,
       backend::gasnet::handle_cb {
 
-      static constexpr bool static_scope = false;
+      static constexpr bool definitely_static_scope = false;
       
       backend::gasnet::handle_cb* operation_cb() {
         return this;
-      }
-      void initiate(
-          intrank_t rank, void *buf_d, const void *buf_s, std::size_t size
-        ) {
-        auto *cbs = static_cast<FinalType*>(this);
-        
-        rma_put_nb</*source_mode=*/FinalType::source_mode>
-          (rank, buf_d, buf_s, size, cbs->source_cb(), this);
       }
       
       void execute_and_delete(backend::gasnet::handle_cb_successor) {
@@ -273,13 +272,15 @@ namespace upcxx {
       "RMA operations only work on DefinitelyTriviallySerializable types."
     );
     
-    UPCXX_ASSERT_ALWAYS((
-      detail::completions_has_event<Cxs, operation_cx_event>::value |
-      detail::completions_has_event<Cxs, remote_cx_event>::value,
+    UPCXX_ASSERT_ALWAYS(
+      (detail::completions_has_event<Cxs, operation_cx_event>::value |
+       detail::completions_has_event<Cxs, remote_cx_event>::value),
       "Not requesting either operation or remote completion is surely an "
       "error. You'll have know way of ever knowing when the target memory is "
       "safe to read or write again."
-    ));
+    );
+    
+    namespace gasnet = upcxx::backend::gasnet;
     
     using cxs_here_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_here,
@@ -289,25 +290,51 @@ namespace upcxx {
       /*EventPredicate=*/detail::event_is_remote,
       /*EventValues=*/detail::rput_event_values,
       Cxs>;
-
-    detail::rput_cbs_byval<T, cxs_here_t, cxs_remote_t> cbs_static{
+    
+    using cbs_t = detail::rput_cbs_byval<T, cxs_here_t, cxs_remote_t>;
+    using detail::rma_put_done;
+    using detail::rma_put_done_ge;
+    
+    cbs_t cbs_static(
       gp_d.rank_,
       cxs_here_t{std::move(cxs)},
       cxs_remote_t{std::move(cxs)},
-      std::move(value_s),
-    };
+      std::move(value_s)
+    );
     
-    auto *cbs = decltype(cbs_static)::static_scope
+    cbs_t *cbs = cbs_t::definitely_static_scope
       ? &cbs_static
-      : new decltype(cbs_static){std::move(cbs_static)};
+      : new cbs_t(std::move(cbs_static));
     
     auto returner = detail::completions_returner<
         /*EventPredicate=*/detail::event_is_here,
         /*EventValues=*/detail::rput_event_values,
         Cxs
-      >{cbs->state_here};
+      >(cbs->state_here);
 
-    cbs->initiate(gp_d.rank_, gp_d.raw_ptr_, &cbs->value, sizeof(T));
+    auto done = detail::rma_put</*mode=*/cbs_t::mode>(
+      gp_d.rank_, gp_d.raw_ptr_, &cbs->value, sizeof(T),
+      cbs->source_cb(), cbs->operation_cb()
+    );
+    
+    if(rma_put_done_ge(cbs_t::mode, done, rma_put_done::source))
+      cbs->state_here.template operator()<source_cx_event>();
+    
+    if(rma_put_done_ge(cbs_t::mode, done, rma_put_done::operation)) {
+      cbs->send_remote();
+      cbs->state_here.template operator()<operation_cx_event>();
+      
+      if(!cbs_t::definitely_static_scope)
+        delete cbs;
+    }
+    else {
+      gasnet::register_cb(
+        rma_put_done_ge(cbs_t::mode, done, rma_put_done::source)
+          ? cbs->operation_cb()
+          : cbs->source_else_operation_cb()
+      );
+      gasnet::after_gasnet();
+    }
     
     return returner();
   }
@@ -329,13 +356,15 @@ namespace upcxx {
       "RMA operations only work on DefinitelyTriviallySerializable types."
     );
     
-    UPCXX_ASSERT_ALWAYS((
-      detail::completions_has_event<Cxs, operation_cx_event>::value |
-      detail::completions_has_event<Cxs, remote_cx_event>::value,
+    UPCXX_ASSERT_ALWAYS(
+      (detail::completions_has_event<Cxs, operation_cx_event>::value |
+       detail::completions_has_event<Cxs, remote_cx_event>::value),
       "Not requesting either operation or remote completion is surely an "
       "error. You'll have know way of ever knowing when the target memory is "
       "safe to read or write again."
-    ));
+    );
+    
+    namespace gasnet = upcxx::backend::gasnet;
     
     using cxs_here_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_here,
@@ -345,24 +374,45 @@ namespace upcxx {
       /*EventPredicate=*/detail::event_is_remote,
       /*EventValues=*/detail::rput_event_values,
       Cxs>;
-
-    detail::rput_cbs_byref<cxs_here_t, cxs_remote_t> cbs_static{
+    
+    using cbs_t = detail::rput_cbs_byref<cxs_here_t, cxs_remote_t>;
+    using detail::rma_put_done;
+    using detail::rma_put_done_ge;
+    
+    cbs_t cbs(
       gp_d.rank_,
-      cxs_here_t{std::move(cxs)},
-      cxs_remote_t{std::move(cxs)}
-    };
-
-    auto *cbs = decltype(cbs_static)::static_scope
-      ? &cbs_static
-      : new decltype(cbs_static){std::move(cbs_static)};
+      cxs_here_t(std::move(cxs)),
+      cxs_remote_t(std::move(cxs))
+    );
     
     auto returner = detail::completions_returner<
         /*EventPredicate=*/detail::event_is_here,
         /*EventValues=*/detail::rput_event_values,
         Cxs
-      >{cbs->state_here};
+      >(cbs.state_here);
     
-    cbs->initiate(gp_d.rank_, gp_d.raw_ptr_, buf_s, n*sizeof(T));
+    rma_put_done done = detail::rma_put</*mode=*/cbs_t::mode>(
+      gp_d.rank_, gp_d.raw_ptr_, buf_s, n*sizeof(T),
+      cbs.source_cb(), cbs.operation_cb()
+    );
+    
+    if(rma_put_done_ge(cbs_t::mode, done, rma_put_done::source))
+      cbs.state_here.template operator()<source_cx_event>();
+    
+    if(rma_put_done_ge(cbs_t::mode, done, rma_put_done::operation)) {
+      cbs.send_remote();
+      cbs.state_here.template operator()<operation_cx_event>();
+    }
+    else {
+      cbs_t *cbs_dy = new cbs_t(std::move(cbs));
+      
+      gasnet::register_cb(
+        rma_put_done_ge(cbs_t::mode, done, rma_put_done::source)
+          ? cbs_dy->operation_cb()
+          : cbs_dy->source_else_operation_cb()
+      );
+      gasnet::after_gasnet();
+    }
     
     return returner();
   }

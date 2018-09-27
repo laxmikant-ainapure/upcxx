@@ -30,7 +30,10 @@ to override this behavior. Additional environment variables allowing finer
 control over how UPC\+\+ is configured can be found in the
 "Advanced Installer Configuration" section below.
 
-**Installation: Mac**
+**Installation: Apple macOS**
+
+On macOS, UPC++ defaults to using the Apple LLVM clang compiler that is part
+of the Xcode Command Line Tools.
 
 The Xcode Command Line Tools need to be installed *before* invoking `install`,
 i.e.:
@@ -39,16 +42,19 @@ i.e.:
 xcode-select --install
 ```
 
+Alternatively, the `CC` and `CXX` environment variables can be set to an alternative
+compiler installation for a supported compiler before running `./install`.
+
 **Installation: Cray XC**
 
 To run on the compute nodes of a Cray XC, the `CROSS` environment variable needs
 to be set before the install command is invoked,
-i.e. `CROSS=cray-aries-slurm`. Additionally, because UPC\+\+ does not currently
-support the Intel compilers (usually the default for these systems), either GCC
-or Clang must be loaded, e.g.:
+i.e. `CROSS=cray-aries-slurm`. Additionally, if the Intel compilers are being
+used (usually the default for these systems), the gcc/5.2.0 or newer module
+must be loaded, e.g.:
 
 ```bash
-module switch PrgEnv-intel PrgEnv-gnu
+module load gcc/7.1.0
 cd <upcxx-source-path>
 CROSS=cray-aries-slurm ./install <upcxx-install-path>
 ```
@@ -71,27 +77,46 @@ environment variables:
   publicly available GASNet-EX tarball.
 * `GASNET_CONFIGURE_ARGS`: List of additional command line arguments passed to
   GASNet's configure phase.
-* `UPCXX_LPC_INBOX=[lockfree|locked|syncfree]`. The implementation to use for
-  the internal `lpc` queues of personas.
-    * `lockfree`: (default) Highest performance: one atomic instruction per
-       enqueue.
-    * `locked`: Simple mutex-based linked list. Lower performance, but also
-       lower risk with respect to potential bugs in implementation.
-    * `syncfree`: Thread unsafe queues. Will not function correctly in a
-      multi-threaded context.
 
-# Compiling Against UPC\+\+ #
+# Compiling Against UPC\+\+ on the Command Line #
+
+With UPC\+\+ installed, the easiest way to build a UPC++ application from the
+command line is to use the `upcxx` compiler wrapper, installed in 
+`<upcxx-install-path>/bin/upcxx`. This arguments to this wrapper work
+just like the C++ compiler used to install UPC++ (analogous to the
+`mpicxx` compiler wrapper often provided for MPI/C++ programs).
+
+For example, to build an application consisting of `my-app1.cpp` and
+`my-app2.cpp`:
+
+```bash
+export PATH="<upcxx-install-path>/bin/:$PATH"
+upcxx -O -c my-app1.cpp my-app2.cpp
+upcxx -O -o my-app my-app1.o my-app2.o -lm
+```
+
+Be sure that all commands used to build one executable consistently pass either
+a -O option to select the optimized/production version of UPC++ (for
+performance runs), or a -g option to select the debugging version of UPC++
+(for tracking down bugs in your application).
+
+To select a non-default network backend or thread-safe version of the library, 
+you'll need to set the `UPCXX_GASNET_CONDUIT` or `UPCXX_THREADMODE` variables
+prior to invoking compilation. See the `UPC++ Backends` section below.
+
+# Compiling Against UPC\+\+ in Makefiles #
 
 With UPC\+\+ installed, the application's build process can query for the
 appropriate compiler flags to enable building against upcxx by invoking the
 `<upcxx-install-path>/bin/upcxx-meta <what>` script, where `<what>` indicates
 which form of flags are desired. Valid values are:
 
-* `PPFLAGS`: Preprocessor flags which will put the upcxx headers in the
+* `CPPFLAGS`: Preprocessor flags which will put the upcxx headers in the
   compiler's search path and define macros required by those headers.
+* `CXXFLAGS`: (optional) Compiler flags which set debug/optimization settings.
 * `LDFLAGS`: Linker flags usually belonging at the front of the link command
   line (before the list of object files).
-* `LIBFLAGS`: Linker flags belonging at the end of the link command line. These
+* `LIBS`: Linker flags belonging at the end of the link command line. These
   will make libupcxx and its dependencies available to the linker.
 
 For example, to build an application consisting of `my-app1.cpp` and
@@ -99,9 +124,9 @@ For example, to build an application consisting of `my-app1.cpp` and
 
 ```bash
 upcxx="<upcxx-install-path>/bin/upcxx-meta"
-<c++ compiler> -std=c++11 $($upcxx PPFLAGS) -c my-app1.cpp
-<c++ compiler> -std=c++11 $($upcxx PPFLAGS) -c my-app2.cpp
-<c++ compiler> $($upcxx LDFLAGS) my-app1.o my-app2.o $($upcxx LIBFLAGS)
+<c++ compiler> -std=c++11 $($upcxx CPPFLAGS) $($upcxx CXXFLAGS) -c my-app1.cpp
+<c++ compiler> -std=c++11 $($upcxx CPPFLAGS) $($upcxx CXXFLAGS) -c my-app2.cpp
+<c++ compiler> $($upcxx LDFLAGS) my-app1.o my-app2.o $($upcxx LIBS)
 ```
 
 The `<c++ compiler>` used to build the application must be the same as the one

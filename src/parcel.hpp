@@ -362,14 +362,14 @@ namespace upcxx {
     template<typename T>
     T* put_trivial_aligned(const T &x) {
       T *y = place_trivial_aligned<T>();
-      std::memcpy(y, &x, sizeof(T));
+      std::memcpy((void*)y, &x, sizeof(T));
       return y;
     }
     // Push and initialize an array of T given its values.
     template<typename T>
     T* put_trivial_aligned(const T *x, std::size_t n) {
       T *y = place_trivial_aligned<T>(n);
-      std::memcpy(y, x, n*sizeof(T));
+      std::memcpy((void*)y, x, n*sizeof(T));
       return y;
     }
 
@@ -426,7 +426,7 @@ namespace upcxx {
     template<typename T>
     T pop_trivial_unaligned() {
       raw_storage<T> tmp;
-      std::memcpy(&tmp.value, pop(sizeof(T), 1), sizeof(T));
+      std::memcpy((void*)&tmp.value, pop(sizeof(T), 1), sizeof(T));
       return tmp.value;
     }
     // Pops a T array (as char*) that was pushed without alignemnt. The returned

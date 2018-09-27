@@ -986,9 +986,9 @@ namespace upcxx {
 
       template<typename Iter, bool elt_skippable>
       static void pack_elts(parcel_writer &w, Iter begin, std::size_t n, std::integral_constant<bool,elt_skippable>) {
-        T *y = w.put_trivial_aligned<T>(n);
+        T *y = w.place_trivial_aligned<T>(n);
         while(n--) {
-          std::memcpy(y++, &*begin, sizeof(T));
+          std::memcpy((void*)y++, (void*)&*begin, sizeof(T));
           ++begin;
         }
       }
@@ -1392,8 +1392,7 @@ namespace upcxx {
 
   template<typename T, typename Alloc>
   struct packing<std::forward_list<T,Alloc>>:
-    detail::packing_container<std::forward_list<T,Alloc>> {
-    using unpacked_t = std::forward_list<unpacked_of_t<T>,Alloc>;
+    packing_not_supported<std::forward_list<T,Alloc>> {
   };
 
 

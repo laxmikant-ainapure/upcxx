@@ -7,7 +7,7 @@
 #include <upcxx/rget.hpp>
 #include <tuple>
 #include <type_traits>
-#include <typeinfo>
+#include <vector>
 
 //  I'm not sure we will have a Vector-Index-Strided interface that is
 //  not GASNet-based, so if an application wants to make use of the VIS

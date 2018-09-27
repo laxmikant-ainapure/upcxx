@@ -43,7 +43,7 @@ namespace upcxx {
       typedef future_header_ops_result_ready header_ops;
       
       future_header* steal_header() {
-        return new future_header_result<T...>{0, std::move(results_)};
+        return &(new future_header_result<T...>(0, std::move(results_)))->base_header;
       }
     };
     
@@ -92,10 +92,10 @@ namespace upcxx {
       void cleanup_ready() {}
       
       future_header* cleanup_ready_get_header() {
-        return new future_header_result<T...>{
-          /*not_ready=*/false,
-          /*values=*/std::tuple<T...>{std::move(results_)}
-        };
+        return &(new future_header_result<T...>(
+            /*not_ready=*/false,
+            /*values=*/std::tuple<T...>{std::move(results_)}
+          ))->base_header;
       }
     };
     
@@ -118,10 +118,10 @@ namespace upcxx {
       void cleanup_ready() {}
       
       future_header* cleanup_ready_get_header() {
-        return new future_header_result<>{
-          /*not_ready=*/false,
-          /*value=*/std::tuple<>{}
-        };
+        return &(new future_header_result<>(
+            /*not_ready=*/false,
+            /*value=*/std::tuple<>{}
+          ))->base_header;
       }
     };
   }

@@ -65,9 +65,15 @@ export OPTLEV=${OPTLEV:=0}
 cd test
 
 echo "Setting up upcxx... (this may take a while)"
-nobs exe hello_upcxx.cpp &> .run-tests.err
+
+UPCXX_BACKEND=gasnet_seq nobs exe hello_upcxx.cpp &> .run-tests.err
 check_result $? "Setup"
 rm .run-tests.err
+
+UPCXX_BACKEND=gasnet_par nobs exe hello_upcxx.cpp &> .run-tests.err
+check_result $? "Setup"
+rm .run-tests.err
+
 
 run_test() {
     echo "Running test $1"
@@ -81,18 +87,19 @@ run_test() {
 run_test "atomics.cpp"
 run_test "collectives.cpp"
 run_test "dist_object.cpp"
-run_test "future.cpp"
+#run_test "future.cpp"
 run_test "local_team.cpp"
-run_test "lpc_barrier.cpp"
+#run_test "lpc_barrier.cpp"
 run_test "rpc_barrier.cpp"
 run_test "rpc_ff_ring.cpp"
-run_test "rput.cpp" "par"
+run_test "rput.cpp" 
 run_test "vis.cpp"
 run_test "vis_stress.cpp"
 run_test "uts/uts_ranks.cpp"
-THREADS="$RANKS" run_test "uts/uts_threads.cpp"
+#THREADS="$RANKS" run_test "uts/uts_threads.cpp"
 run_test "view.cpp"
 
+UPCXX_BACKEND=gasnet_par run_test "rput_thread.cpp"
 UPCXX_BACKEND=gasnet_par run_test "uts/uts_hybrid.cpp"
 
 echo -e "\e[92mAll tests succeded\e[0m"

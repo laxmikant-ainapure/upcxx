@@ -46,22 +46,22 @@ namespace upcxx {
       return *this;
     }
 
-    friend constexpr bool operator==(deserializing_iterator a, deserializing_iterator b) {
+    friend bool operator==(deserializing_iterator a, deserializing_iterator b) {
       return a.r_.head() == b.r_.head();
     }
-    friend constexpr bool operator!=(deserializing_iterator a, deserializing_iterator b) {
+    friend bool operator!=(deserializing_iterator a, deserializing_iterator b) {
       return a.r_.head() != b.r_.head();
     }
-    friend constexpr bool operator<(deserializing_iterator a, deserializing_iterator b) {
+    friend bool operator<(deserializing_iterator a, deserializing_iterator b) {
       return a.r_.head() < b.r_.head();
     }
-    friend constexpr bool operator>(deserializing_iterator a, deserializing_iterator b) {
+    friend bool operator>(deserializing_iterator a, deserializing_iterator b) {
       return a.r_.head() > b.r_.head();
     }
-    friend constexpr bool operator<=(deserializing_iterator a, deserializing_iterator b) {
+    friend bool operator<=(deserializing_iterator a, deserializing_iterator b) {
       return a.r_.head() <= b.r_.head();
     }
-    friend constexpr bool operator>=(deserializing_iterator a, deserializing_iterator b) {
+    friend bool operator>=(deserializing_iterator a, deserializing_iterator b) {
       return a.r_.head() >= b.r_.head();
     }
   };

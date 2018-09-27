@@ -4,12 +4,7 @@
 #include <cstddef>
 #include <iterator>
 
-#include <upcxx/diagnostic.hpp>
-#include <upcxx/allocate.hpp>
-#include <upcxx/future.hpp>
-#include <upcxx/wait.hpp>
-#include <upcxx/vis.hpp>
-#include <upcxx/dist_object.hpp>
+#include <upcxx/upcxx.hpp>
 
 #include "util.hpp"
 
@@ -75,7 +70,7 @@ template<typename Irreg, typename value_t>
 bool check(Irreg start, Irreg end, value_t value);
 
 template<typename Reg, typename value_t>
-bool check(Reg start, Reg end, std::size_t count, value_t value);
+bool check(Reg start, Reg end, std::size_t count, value_t value, const char* name);
 
 template<typename Reg, typename value_t>
 void vset(Reg start, Reg end, std::size_t count, value_t value);
@@ -88,11 +83,12 @@ typedef std::array<int,2> count_t;
 
 int main() {
 
-  init();
+  bool success=true;
   
+  init();
+  {
   print_test_header();
 
-  bool success=true;
   
   intrank_t me = rank_me();
   intrank_t n =  rank_n();
@@ -102,7 +98,7 @@ int main() {
   // Ring of ghost halos transfered between adjacent ranks using the three
   // different communication protocols
   patch_t* myPatchPtr = (patch_t*)allocate(sizeof(patch_t));
-  dist_object<global_ptr<lli> > mesh(global_ptr<lli>((lli*)myPatchPtr));
+  dist_object<global_ptr<lli> > mesh(to_global_ptr<lli>((lli*)myPatchPtr));
   dist_object<count_t>  counters(count_t({{0,0}}));
 
   count_t& mycount = *counters;// read from me, write to me
@@ -115,12 +111,9 @@ int main() {
   reset(myPatch, me);
   
 
-
-  when_all(fneighbor_hi, fneighbor_lo).wait();
+  global_ptr<lli> hi,lo;
+  std::tie(hi,lo) = when_all(fneighbor_hi, fneighbor_lo).wait();
  
-  global_ptr<lli> hi=fneighbor_hi.result();
-  global_ptr<lli> lo=fneighbor_lo.result();
-
   // irregular test 1
   {
     lli srcTest[]= {me, me+1, me+2, me+3, me+4, me+5};
@@ -142,6 +135,8 @@ int main() {
 
     //mycount[0]++;  //reading from myself
     fsource.wait();
+    srcTest[0]=-65; srcTest[5]=-2345653; //scramble some source entries.
+    svec.clear();// invalidate iterator
     foperation.wait();
 
     while(mycount[1]!=1)  progress(); // wait to see my lo neighbor has modified my count
@@ -203,19 +198,22 @@ int main() {
   vset(rr1, rr1_end, B, token);
   
   barrier();  
-
-  auto r1 = rput_regular(rs1, rs1_end, B , rd1, rd1_end, B);
-
+ 
+  std::tie(fsource,foperation) = rput_regular(rs1, rs1_end, B , rd1, rd1_end, B,
+                                 source_cx::as_future()|operation_cx::as_future());
+  fsource.wait();
+  vset(rs1, rs1_end, B, token); // clobber source data locations
+  
   auto r1_empty = rput_regular(rs1, rs1, B, rd1, rd1, B,
                                source_cx::as_lpc(default_persona(),[&](){ mycount[0]++;}) |
                                operation_cx::as_future());
   r1_empty.wait();
-  r1.wait();
+  foperation.wait();
   barrier();
   
-  success = success && check(rr1, rr1_end, B, (lli)nebrHi);
+  success = success && check(rr1, rr1_end, B, (lli)nebrHi, "Regular");
   sm = sum(myPatch);
-  correctAnswer = (me*(N-B)+B*nebrHi)*M;
+  correctAnswer = (token*B+me*(N-2*B)+B*nebrHi)*M;
   if(sm != correctAnswer)
     {
       std::cout<<" Regular expected sum:"<<correctAnswer<<" actual sum: "<<sm<<"\n";
@@ -225,25 +223,32 @@ int main() {
   
   reset(myPatch, me);
   barrier();
-  
+  auto s1 = IterR<lli*>(myPtr,N);
+  auto s1_end = s1; s1_end+=M*N;
+  auto c1 = IterR<lli*>(myPtr+N-B,N);
+  auto c1_end = c1; c1_end+=M*N;
+ 
   // strided put
-  auto s1 = rput_strided<2>(myPtr+N-B, {{sizeof(lli),N*sizeof(lli)}},
+  std::tie(fsource,foperation) = rput_strided<2>(myPtr+N-B, {{sizeof(lli),N*sizeof(lli)}},
                             hi, {{sizeof(lli),N*sizeof(lli)}}, {{B,M}},
                             source_cx::as_lpc(default_persona(),[&](){ mycount[0]++;}) |
+                                                 source_cx::as_future() |                     
                             operation_cx::as_future() |
                             remote_cx::as_rpc([](dist_object<count_t>& c){
                                 (*c)[1]++;},counters));
 
-
-  s1.wait();
+  fsource.wait();
+  vset(c1, c1_end, B, token); // clobber source data locations
+  foperation.wait();
   while(mycount[0] !=2 || mycount[1] != 2) progress();
   // mycount[1] == 2 means that the rput to me should be completed
-  // seeing mycount[0] == 2 means that the operation_cx::as_lpc has fired
+  // seeing mycount[0] == 2 means that the source_cx::as_lpc has fired
   
   std::cout<<"\nStrided put testing \n";
-  success = success && check(fr1, fr1_end, (lli)nebrLo); // this is moving the same data as in the irregular case
+  success = success && check(s1, s1_end, B, (lli)nebrLo, "Strided"); // this is moving the same data as in the irregular case
   sm = sum(myPatch);
-  correctAnswer = (me*(N-B)+B*nebrLo)*M;
+  correctAnswer = (token*B + me*(N-2*B)+B*nebrLo)*M;
+
   if(sm != correctAnswer)
     {
       std::cout<<" Stride expected sum:"<<correctAnswer<<" actual sum: "<<sm<<"\n";
@@ -318,7 +323,7 @@ int main() {
   auto g1 = rget_regular(rd1, rd1_end, B, rs1, rs1_end, B);
   g1.wait();
   sm=sum(myPatch);
-  success = success && check(rr1, rr1_end, B, (lli)nebrLo);
+  success = success && check(rr1, rr1_end, B, (lli)nebrLo, "Regular");
   correctAnswer = (me*(N-B)+B*nebrLo)*M;
   if(sm != correctAnswer)
     {
@@ -412,6 +417,7 @@ int main() {
   
   print_test_success(success);
   
+  }
   finalize();
 
   if(!success) return 4;
@@ -458,7 +464,7 @@ bool check(Irreg start, Irreg end, value_t value)
         {
           if(*v != value)
             {
-              std::cout<<"Frag expected value:"<<value<<" seeing:"<<*v;
+              std::cout<<"Irregular expected value:"<<value<<" seeing:"<<*v;
               return false;
             }
         }
@@ -469,7 +475,7 @@ bool check(Irreg start, Irreg end, value_t value)
 
 
 template<typename Reg, typename value_t>
-bool check(Reg start, Reg end, std::size_t count, value_t value)
+bool check(Reg start, Reg end, std::size_t count, value_t value, const char* name)
 {
   while(!(start == end))
     {
@@ -479,7 +485,7 @@ bool check(Reg start, Reg end, std::size_t count, value_t value)
         {
           if(*v != value)
             {
-              std::cout<<"Regular expected value:"<<value<<" seeing:"<<*v;
+              std::cout<<name <<" expected value:"<<value<<" seeing:"<<*v;
               return false;
             }
         }

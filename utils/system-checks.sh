@@ -36,13 +36,13 @@ platform_sanity_checks() {
         else
             KERNEL_GOOD=
         fi
-        if test -n "$CRAY_PRGENVINTEL" ; then
-            echo 'ERROR: UPC++ on Cray XC currently requires PrgEnv-gnu. Please do: `module switch PrgEnv-intel PrgEnv-gnu`'
+        if test -n "$CRAY_PRGENVCRAY" ; then
+            echo 'ERROR: UPC++ on Cray XC currently requires PrgEnv-gnu or PrgEnv-intel. Please do: `module switch PrgEnv-cray PrgEnv-gnu` or `module switch PrgEnv-cray PrgEnv-intel`'
             exit 1
-        elif test -n "$CRAY_PRGENVCRAY" ; then
-            echo 'ERROR: UPC++ on Cray XC currently requires PrgEnv-gnu. Please do: `module switch PrgEnv-cray PrgEnv-gnu`'
+        elif test -n "$CRAY_PRGENVINTEL" && ( test -z "$GCC_VERSION" || expr "$GCC_VERSION" : "^[234]" > /dev/null ) ; then
+            echo 'ERROR: UPC++ on Cray XC with PrgEnv-intel must also have the gcc module loaded (version 5.x or newer). Please do: `module load gcc`'
             exit 1
-        elif test -n "$CRAY_PRGENVGNU" ; then
+        elif test -n "$CRAY_PRGENVGNU" || test -n "$CRAY_PRGENVINTEL" ; then
             CC=${CC:-cc}
             CXX=${CXX:-CC}
 	    if test -z "$CROSS" && test -z "$GASNET" ; then
@@ -60,15 +60,17 @@ platform_sanity_checks() {
         ARCH_BAD=
         if test x86_64 = "$ARCH" ; then
             ARCH_GOOD=1
+        elif test ppc64le = "$ARCH" ; then
+            ARCH_GOOD=1
         elif expr "$ARCH" : 'i.86' >/dev/null 2>&1 ; then
             ARCH_BAD=1
         fi
 
         if test -z "$UPCXX_INSTALL_QUIET" ; then
             type -p ${CXX%% *}
-            $CXX --version
+            $CXX --version 2>&1 | grep -v 'warning #10315'
             type -p ${CC%% *}
-            $CC --version
+            $CC --version 2>&1 | grep -v 'warning #10315'
             echo " "
         fi
 
@@ -76,13 +78,24 @@ platform_sanity_checks() {
         CCVERS=`$CC --version 2>&1`
         COMPILER_BAD=
         COMPILER_GOOD=
-        if echo "$CXXVERS" | egrep 'Apple LLVM version [1-7]' 2>&1 > /dev/null ; then
+        if echo "$CXXVERS" | egrep 'Apple LLVM version [1-7]\.' 2>&1 > /dev/null ; then
             COMPILER_BAD=1
         elif echo "$CXXVERS" | egrep 'Apple LLVM version ([8-9]\.|[1-9][0-9])' 2>&1 > /dev/null ; then
             COMPILER_GOOD=1
-        elif echo "$CXXVERS" | egrep ' +\([^\)]+\) +[1-4]\.' 2>&1 > /dev/null ; then
+        elif echo "$CXXVERS" | egrep 'PGI Compilers and Tools'  > /dev/null ; then
             COMPILER_BAD=1
-        elif echo "$CXXVERS" | egrep ' +\([^\)]+\) +([5-9]\.|[1-9][0-9])' 2>&1 > /dev/null ; then
+        elif echo "$CXXVERS" | egrep 'IBM XL'  > /dev/null ; then
+            COMPILER_BAD=1
+        elif echo "$CXXVERS" | egrep 'Free Software Foundation' 2>&1 > /dev/null &&
+	     echo "$CXXVERS" | head -1 | egrep ' +\([^\)]+\) +[1-4]\.' 2>&1 > /dev/null ; then
+            COMPILER_BAD=1
+        elif echo "$CXXVERS" | egrep ' +\(ICC\) +(17\.0\.[2-9]|1[89]\.|2[0-9]\.)' 2>&1 > /dev/null ; then
+	    # Ex: icpc (ICC) 18.0.1 20171018
+            COMPILER_GOOD=1
+        elif echo "$CXXVERS" | egrep ' +\(ICC\) ' 2>&1 > /dev/null ; then
+	    :
+        elif echo "$CXXVERS" | egrep 'Free Software Foundation' 2>&1 > /dev/null &&
+             echo "$CXXVERS" | head -1 | egrep ' +\([^\)]+\) +([5-9]\.|[1-9][0-9])' 2>&1 > /dev/null ; then
             # Ex: g++ (Ubuntu 5.4.0-6ubuntu1~16.04.4) 5.4.0 20160609
             #     g++-7 (Homebrew GCC 7.2.0) 7.2.0
             #     foo (GCC) 7.2.0
@@ -93,9 +106,12 @@ platform_sanity_checks() {
             COMPILER_GOOD=1
         fi
 
-        RECOMMEND='We recommend Linux or macOS on x86_64 with one of the following C++ compilers: 
-         g++ 5.1.0 or newer, LLVM/clang 3.7.0 or newer, Xcode/clang 8.0.0 or newer'
-
+        RECOMMEND='We recommend one of the following C++ compilers (or any later versions):
+           Linux on x86_64:   g++ 5.1.0, LLVM/clang 3.7.0, Intel C 17.0.2
+           Linux on ppc64le:  g++ 5.1.0
+           macOS on x86_64:   g++ 5.1.0, Xcode/clang 8.0.0
+           Cray XC systems:   PrgEnv-gnu with gcc/5.2.0 environment module loaded
+                              PrgEnv-intel with Intel C 17.0.2 and gcc/5.2.0 environment module loaded'
         if test -n "$ARCH_BAD" ; then
             echo "ERROR: This version of UPC++ does not support the '$ARCH' architecture."
             echo "ERROR: $RECOMMEND"
@@ -117,8 +133,7 @@ platform_sanity_checks() {
 platform_settings() {
    KERNEL=`uname -s 2> /dev/null`
    case "$KERNEL" in
-     CYGWIN_NT*) # workaround issue #58: gcc bug with TLS initializers
-       export LDFLAGS="-Wl,--image-base,0x10000000 $LDFLAGS"
+     *)
        ;;
    esac
 }

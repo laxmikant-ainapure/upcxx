@@ -3,6 +3,7 @@
 #include <map>
 #include <string>
 
+//SNIPPET
 // Hash a key to its owning rank.
 upcxx::intrank_t owner_of(std::string const &key) {
   std::uint64_t h = 0x1234abcd5678cdef;
@@ -60,3 +61,4 @@ upcxx::future<> send_histo2_byview(histogram2 const &histo) {
     [=]() { delete all_done; }
   );
 }
+//SNIPPET

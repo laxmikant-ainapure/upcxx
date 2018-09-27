@@ -2,54 +2,70 @@
 #include <upcxx/backend/gasnet/runtime_internal.hpp>
 
 namespace gasnet = upcxx::backend::gasnet;
+namespace detail = upcxx::detail;
 
-template<upcxx::detail::rma_put_source_mode source_mode>
-void upcxx::detail::rma_put_nb(
+template<detail::rma_put_mode mode>
+detail::rma_put_done detail::rma_put(
     upcxx::intrank_t rank_d, void *buf_d,
     const void *buf_s, std::size_t size,
     gasnet::handle_cb *source_cb,
     gasnet::handle_cb *operation_cb
   ) {
 
-  gex_Event_t src_h{GEX_EVENT_INVALID}, *src_ph;
+  if(mode != rma_put_mode::op_now) {
+    gex_Event_t src_h = GEX_EVENT_INVALID, *src_ph;
 
-  switch(source_mode) {
-  case rma_put_source_mode::handle:
-    src_ph = &src_h;
-    break;
-  case rma_put_source_mode::defer:
-    src_ph = GEX_EVENT_DEFER;
-    break;
-  default: // rma_put_source_mode::now:
-    src_ph = GEX_EVENT_NOW;
-    break;
+    switch(mode) {
+    case rma_put_mode::src_handle:
+      src_ph = &src_h;
+      break;
+    case rma_put_mode::src_defer:
+      src_ph = GEX_EVENT_DEFER;
+      break;
+    case rma_put_mode::src_now:
+    default:
+      src_ph = GEX_EVENT_NOW;
+      break;
+    }
+    
+    gex_Event_t op_h = gex_RMA_PutNB(
+      gasnet::handle_of(upcxx::world()), rank_d,
+      buf_d, const_cast<void*>(buf_s), size,
+      src_ph,
+      /*flags*/0
+    );
+    
+    operation_cb->handle = reinterpret_cast<uintptr_t>(op_h);
+    
+    if(mode == rma_put_mode::src_handle)
+      source_cb->handle = reinterpret_cast<uintptr_t>(src_h);
+    
+    if(0 == gex_Event_Test(op_h))
+      return rma_put_done::operation;
+    
+    if(mode == rma_put_mode::src_now)
+      return rma_put_done::source;
+    
+    if(mode == rma_put_mode::src_handle && 0 == gex_Event_Test(src_h))
+      return rma_put_done::source;
+    
+    return rma_put_done::none;
   }
-  
-  gex_Event_t op_h = gex_RMA_PutNB(
-    gasnet::world_team, rank_d,
-    buf_d, const_cast<void*>(buf_s), size,
-    src_ph,
-    /*flags*/0
-  );
-
-  if(source_mode == rma_put_source_mode::handle)
-    source_cb->handle = reinterpret_cast<uintptr_t>(src_h);
-  
-  operation_cb->handle = reinterpret_cast<uintptr_t>(op_h);
-  
-  gasnet::handle_cb *first =
-    source_mode == rma_put_source_mode::handle
-      ? source_cb
-      : operation_cb;
-  gasnet::register_cb(first);
-
-  gasnet::after_gasnet();
+  else {
+    (void)gex_RMA_PutBlocking(
+      gasnet::handle_of(upcxx::world()), rank_d,
+      buf_d, const_cast<void*>(buf_s), size,
+      /*flags*/0
+    );
+    
+    return rma_put_done::operation;
+  }
 }
 
-// instantiate all three cases of rma_put_nb
+// instantiate all four cases of rma_put
 template
-void upcxx::detail::rma_put_nb<
-  /*source_mode=*/upcxx::detail::rma_put_source_mode::handle
+detail::rma_put_done detail::rma_put<
+  /*mode=*/detail::rma_put_mode::src_handle
   >(
     upcxx::intrank_t rank_d, void *buf_d,
     const void *buf_s, std::size_t size,
@@ -58,8 +74,8 @@ void upcxx::detail::rma_put_nb<
   );
 
 template
-void upcxx::detail::rma_put_nb<
-  /*source_mode=*/upcxx::detail::rma_put_source_mode::defer
+detail::rma_put_done detail::rma_put<
+  /*mode=*/detail::rma_put_mode::src_defer
   >(
     upcxx::intrank_t rank_d, void *buf_d,
     const void *buf_s, std::size_t size,
@@ -68,8 +84,8 @@ void upcxx::detail::rma_put_nb<
   );
 
 template
-void upcxx::detail::rma_put_nb<
-  /*source_mode=*/upcxx::detail::rma_put_source_mode::now
+detail::rma_put_done detail::rma_put<
+  /*mode=*/detail::rma_put_mode::src_now
   >(
     upcxx::intrank_t rank_d, void *buf_d,
     const void *buf_s, std::size_t size,
@@ -77,16 +93,12 @@ void upcxx::detail::rma_put_nb<
     gasnet::handle_cb *operation_cb
   );
 
-void upcxx::detail::rma_put_b(
+template
+detail::rma_put_done detail::rma_put<
+  /*mode=*/detail::rma_put_mode::op_now
+  >(
     upcxx::intrank_t rank_d, void *buf_d,
-    const void *buf_s, std::size_t size
-  ) {
-  
-  (void)gex_RMA_PutBlocking(
-    gasnet::world_team, rank_d,
-    buf_d, const_cast<void*>(buf_s), size,
-    /*flags*/0
+    const void *buf_s, std::size_t size,
+    gasnet::handle_cb *source_cb,
+    gasnet::handle_cb *operation_cb
   );
-
-  gasnet::after_gasnet();
-}

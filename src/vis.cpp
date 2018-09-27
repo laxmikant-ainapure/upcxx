@@ -1,8 +1,10 @@
 #include <upcxx/vis.hpp>
 #include <upcxx/backend/gasnet/runtime_internal.hpp>
-#if UPCXX_BACKEND_GASNET 
-#include <gasnet_vis.h> //
+#if UPCXX_BACKEND_GASNET && !NOBS_DISCOVERY
+  #include <gasnet_vis.h>
 #endif
+
+#include <cstddef>
 
 namespace gasnet = upcxx::backend::gasnet;
 
@@ -21,28 +23,29 @@ void upcxx::detail::rma_put_irreg_nb(
                                     backend::gasnet::handle_cb *operation_cb)
 {
 
-  // this call will eventually get a source completion signature.
-  gex_Event_t op_h = gex_VIS_VectorPutNB(gasnet::world_team,
+  gex_Flags_t flags = 0;
+  if(source_cb!=NULL) // user has requested source completion event
+    flags = GEX_FLAG_ENABLE_LEAF_LC;
+  
+  gex_Event_t op_h = gex_VIS_VectorPutNB(gasnet::handle_of(upcxx::world()),
                                          rank_d,
                                          _dstcount,
                                          reinterpret_cast<const gex_Memvec_t*>(_dstlist),
                                          _srccount,
                                          reinterpret_cast<const gex_Memvec_t*>(_srclist),
-                                         /* flags */ 0);
+                                         flags);
 
-
+  operation_cb->handle = reinterpret_cast<uintptr_t>(op_h);
   if(source_cb!=NULL) // user has asked for source completion
     {
-      source_cb->handle = reinterpret_cast<uintptr_t>(op_h);
-      gasnet::register_cb(source_cb);
-
-      //  we rely on upcxx source completion pushing the operation completion into the queue, which will
-      //  be automatically triggered since EVENT INVALID is always ready..I think.  bvs
-      operation_cb->handle = reinterpret_cast<uintptr_t>(GEX_EVENT_INVALID);
-    } else {
-    operation_cb->handle = reinterpret_cast<uintptr_t>(op_h);
-    gasnet::register_cb(operation_cb);
-  }
+      gex_Event_t VISput_LC = gex_Event_QueryLeaf(op_h, GEX_EC_LC);
+      source_cb->handle = reinterpret_cast<uintptr_t>(VISput_LC);
+      gasnet::register_cb(source_cb);// it appears to matter in what order I register_cb
+    }
+  else
+    {
+      gasnet::register_cb(operation_cb);
+    }
   gasnet::after_gasnet();
 }
 
@@ -57,7 +60,7 @@ void upcxx::detail::rma_get_irreg_nb(
                                     backend::gasnet::handle_cb *operation_cb)
 {
 
-  gex_Event_t op_h = gex_VIS_VectorGetNB(gasnet::world_team,
+  gex_Event_t op_h = gex_VIS_VectorGetNB(gasnet::handle_of(upcxx::world()),
                                          _dstcount,
                                          reinterpret_cast<const gex_Memvec_t*>(_dstlist),
                                          rank_s,
@@ -79,23 +82,26 @@ void upcxx::detail::rma_put_reg_nb(
                     backend::gasnet::handle_cb *operation_cb)
 {
   gex_Event_t op_h;
-
+  gex_Flags_t flags = 0;
+  if(source_cb!=NULL) // user has requested source completion event
+    flags = GEX_FLAG_ENABLE_LEAF_LC;
  
-  op_h = gex_VIS_IndexedPutNB(gasnet::world_team,
+  op_h = gex_VIS_IndexedPutNB(gasnet::handle_of(upcxx::world()),
                               rank_d,
                               _dstcount, _dstlist, _dstlen,
                               _srccount, _srclist, _srclen,
-                              /*flags*/ 0);
-  
-  if(source_cb!=NULL)
+                              flags);
+  operation_cb->handle = reinterpret_cast<uintptr_t>(op_h);
+  if(source_cb!=NULL) // user has asked for source completion
     {
-      source_cb->handle = reinterpret_cast<uintptr_t>(op_h);
-      gasnet::register_cb(source_cb);
-      operation_cb->handle =  reinterpret_cast<uintptr_t>(GEX_EVENT_INVALID);
-    } else {
-    operation_cb->handle = reinterpret_cast<uintptr_t>(op_h);
-    gasnet::register_cb(operation_cb);
-  }
+      gex_Event_t VISput_LC = gex_Event_QueryLeaf(op_h, GEX_EC_LC);
+      source_cb->handle = reinterpret_cast<uintptr_t>(VISput_LC);
+      gasnet::register_cb(source_cb);// it appears to matter in what order I register_cb
+    }
+  else
+    {
+      gasnet::register_cb(operation_cb);
+    }
   gasnet::after_gasnet();
 }
 
@@ -107,7 +113,7 @@ void upcxx::detail::rma_get_reg_nb(
 {
   gex_Event_t op_h;
 
-  op_h = gex_VIS_IndexedGetNB(gasnet::world_team,
+  op_h = gex_VIS_IndexedGetNB(gasnet::handle_of(upcxx::world()),
                               _dstcount, _dstlist, _dstlen,
                               rank_s,
                               _srccount, _srclist, _srclen,
@@ -127,23 +133,28 @@ void upcxx::detail::rma_put_strided_nb(
                         backend::gasnet::handle_cb *source_cb,
                         backend::gasnet::handle_cb *operation_cb)
 {
-  gex_Event_t op_h = gex_VIS_StridedPutNB(gasnet::world_team,
+  gex_Flags_t flags = 0;
+  if(source_cb!=NULL) // user has requested source completion event
+    flags = GEX_FLAG_ENABLE_LEAF_LC;
+  
+  gex_Event_t op_h = gex_VIS_StridedPutNB(gasnet::handle_of(upcxx::world()),
                                           rank_d,
                                           _dstaddr, _dststrides,
                                           const_cast<void*>(_srcaddr), _srcstrides,
                                           _elemsz,
                                           _count, _stridelevels,
-                                          /*flag */ 0);
-   if(source_cb!=NULL)
+                                          flags);
+  operation_cb->handle = reinterpret_cast<uintptr_t>(op_h);
+  if(source_cb!=NULL) // user has asked for source completion
     {
-      source_cb->handle = reinterpret_cast<uintptr_t>(op_h);
-      gasnet::register_cb(source_cb);
-      operation_cb->handle =  reinterpret_cast<uintptr_t>(GEX_EVENT_INVALID);
-    } else {
-
-     operation_cb->handle = reinterpret_cast<uintptr_t>(op_h);
-     gasnet::register_cb(operation_cb);
-   }
+      gex_Event_t VISput_LC = gex_Event_QueryLeaf(op_h, GEX_EC_LC);
+      source_cb->handle = reinterpret_cast<uintptr_t>(VISput_LC);
+      gasnet::register_cb(source_cb);// it appears to matter in what order I register_cb
+    }
+  else
+    {
+      gasnet::register_cb(operation_cb);
+    }
   gasnet::after_gasnet();
 
 }
@@ -156,7 +167,7 @@ void upcxx::detail::rma_get_strided_nb(
                         const std::size_t _count[], std::size_t _stridelevels,
                         backend::gasnet::handle_cb *operation_cb)
 {
-  gex_Event_t op_h = gex_VIS_StridedGetNB(gasnet::world_team,
+  gex_Event_t op_h = gex_VIS_StridedGetNB(gasnet::handle_of(upcxx::world()),
                                           _dstaddr, _dststrides,
                                           _rank_s,
                                           const_cast<void*>(_srcaddr), _srcstrides,

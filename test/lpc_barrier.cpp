@@ -22,10 +22,7 @@ thread_local int thread_me = -100;
 persona *peer_persona[thread_n];
 
 void thread_progress() {
-  bool worked = false;
-  upcxx::detail::persona_foreach_active([&](upcxx::persona &p) {
-    worked |= 0 != upcxx::detail::persona_burst(p, upcxx::progress_level::user);
-  });
+  bool worked = 0 != upcxx::detail::the_persona_tls.persona_only_progress();
   
   static thread_local int nothings = 0;
   

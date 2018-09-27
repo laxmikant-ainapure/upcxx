@@ -18,7 +18,9 @@ namespace upcxx {
     // Calls gasnet get(). Fills in `cb->handle` and registers `cb` with
     // backend.
     
-    void rma_get_nb(
+    enum class rma_get_done { none, operation };
+    
+    rma_get_done rma_get_nb(
       void *buf_d,
       intrank_t rank_s,
       const void *buf_s,
@@ -80,7 +82,7 @@ namespace upcxx {
 
       void send_remote() {
         backend::send_am_master<progress_level::user>(
-          rank_s,
+          upcxx::world(), rank_s,
           upcxx::bind(
             [](CxStateRemote &st) {
               return st.template operator()<remote_cx_event>();
@@ -168,6 +170,8 @@ namespace upcxx {
       Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
     ) {
 
+    namespace gasnet = upcxx::backend::gasnet;
+    
     static_assert(
       is_definitely_trivially_serializable<T>::value,
       "RMA operations only work on DefinitelyTriviallySerializable types."
@@ -188,7 +192,9 @@ namespace upcxx {
       /*EventPredicate=*/detail::event_is_remote,
       /*EventValues=*/detail::rget_byval_event_values<T>,
       Cxs>;
-
+    
+    using detail::rma_get_done;
+    
     auto *cb = new detail::rget_cb_byval<T,cxs_here_t,cxs_remote_t>{
       gp_s.rank_,
       cxs_here_t{std::move(cxs)},
@@ -201,7 +207,23 @@ namespace upcxx {
         Cxs
       >{cb->state_here};
     
-    detail::rma_get_nb(&cb->buffer, gp_s.rank_, gp_s.raw_ptr_, sizeof(T), cb);
+    rma_get_done done = detail::rma_get_nb(
+      &cb->buffer, gp_s.rank_, gp_s.raw_ptr_, sizeof(T), cb
+    );
+    
+    gasnet::handle_cb_queue &cb_q = gasnet::get_handle_cb_queue();
+    
+    switch(done) {
+    case rma_get_done::none:
+      cb_q.enqueue(cb);
+      gasnet::after_gasnet();
+      break;
+      
+    case rma_get_done::operation:
+    default:
+      cb_q.execute_outside(cb);
+      break;
+    }
     
     return returner();
   }
@@ -219,6 +241,8 @@ namespace upcxx {
       Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
     ) {
 
+    namespace gasnet = upcxx::backend::gasnet;
+    
     static_assert(
       is_definitely_trivially_serializable<T>::value,
       "RMA operations only work on DefinitelyTriviallySerializable types."
@@ -239,20 +263,37 @@ namespace upcxx {
       /*EventPredicate=*/detail::event_is_remote,
       /*EventValues=*/detail::rget_byref_event_values,
       Cxs>;
-
-    auto *cb = new detail::rget_cb_byref<cxs_here_t,cxs_remote_t>{
+    
+    detail::rget_cb_byref<cxs_here_t,cxs_remote_t> cb(
       gp_s.rank_,
       cxs_here_t{std::move(cxs)},
       cxs_remote_t{std::move(cxs)}
-    };
-
+    );
+    
+    using detail::rma_get_done;
+    
     auto returner = detail::completions_returner<
         /*EventPredicate=*/detail::event_is_here,
         /*EventValues=*/detail::rget_byref_event_values,
         Cxs
-      >{cb->state_here};
+      >{cb.state_here};
     
-    detail::rma_get_nb(buf_d, gp_s.rank_, gp_s.raw_ptr_, n*sizeof(T), cb);
+    rma_get_done done = detail::rma_get_nb(
+      buf_d, gp_s.rank_, gp_s.raw_ptr_, n*sizeof(T), &cb
+    );
+    
+    switch(done) {
+    case rma_get_done::none:
+      gasnet::register_cb(new decltype(cb)(std::move(cb)));
+      gasnet::after_gasnet();
+      break;
+      
+    case rma_get_done::operation:
+    default:
+      cb.send_remote();
+      cb.state_here.template operator()<operation_cx_event>();
+      break;
+    }
     
     return returner();
   }

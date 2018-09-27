@@ -43,7 +43,7 @@ namespace upcxx {
   template<typename T>
   struct constant_function {
     T value_;
-    constant_function(T value): value_{std::move(value)} {}
+    constant_function(T value): value_(std::move(value)) {}
     
     template<typename ...Arg>
     T operator()(Arg &&...args) const {
@@ -91,13 +91,13 @@ namespace upcxx {
       
     public:
       function_ref():
-        invoker_{the_nop_invoker},
-        fn_{nullptr} {
+        invoker_(the_nop_invoker),
+        fn_(nullptr) {
       }
       template<typename Fn>
       function_ref(Fn &&fn):
-        invoker_{the_invoker<typename std::remove_reference<Fn>::type>},
-        fn_{reinterpret_cast<void*>(const_cast<Fn*>(&fn))} {
+        invoker_(the_invoker<typename std::remove_reference<Fn>::type>),
+        fn_(reinterpret_cast<void*>(const_cast<Fn*>(&fn))) {
       }
       function_ref(const function_ref&) = default;
       function_ref& operator=(const function_ref&) = default;
@@ -114,7 +114,7 @@ namespace upcxx {
   // raw_storage<T>: Like std::aligned_storage, except more convenient to work
   // with. The typed value exists in the `value` member, but isnt implicitly
   // constructed. Construction should be done by user with placement new like:
-  //   `new(&raw.value) T{...}`.
+  //   `::new(&raw.value) T{...}`.
   // Also, the value won't be implicilty destructed either. That too is the user's
   // responsibility.
   
@@ -127,7 +127,7 @@ namespace upcxx {
     ~raw_storage() {};
     
     // Copy/assignment happen on the flat bytes of T.
-    raw_storage(raw_storage const &that): raw{that.raw} {}
+    raw_storage(raw_storage const &that): raw(that.raw) {}
     raw_storage& operator=(raw_storage const &that) {
       this->raw = that.raw;
       return *this;
@@ -140,7 +140,7 @@ namespace upcxx {
 
     // Move value out into a temporary and destruct it.
     T value_and_destruct() {
-      T ans{std::move(value)};
+      T ans(std::move(value));
       value.~T();
       return ans;
     }

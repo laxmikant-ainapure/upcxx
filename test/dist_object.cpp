@@ -1,5 +1,6 @@
 #include <upcxx/dist_object.hpp>
 #include <upcxx/backend.hpp>
+#include <upcxx/barrier.hpp>
 #include <upcxx/rpc.hpp>
 
 #include "util.hpp"
@@ -8,6 +9,8 @@
 
 using namespace std;
 using namespace upcxx;
+
+bool got_ff = false;
 
 int main() {
   upcxx::init();
@@ -39,6 +42,21 @@ int main() {
     );
     
     f.wait();
+    
+    upcxx::rpc_ff(nebr,
+        upcxx::bind(
+          [=](dist_object<int> &his1, dist_object<int> &his2) {
+            UPCXX_ASSERT_ALWAYS(*his1 == 100 + upcxx::rank_me(), "incorrect value for neighbor 1");
+            UPCXX_ASSERT_ALWAYS(*his2 == 200 + upcxx::rank_me(), "incorrect value for neighbor 2");
+            got_ff = true;
+          },
+          obj1
+        ),
+        obj2
+      );
+    
+    while(!got_ff)
+      upcxx::progress();
     
     upcxx::barrier(); // ensures dist_object lifetime
   }

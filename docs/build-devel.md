@@ -10,14 +10,6 @@ Requirements:
   - Python 2.x >= 2.7.5
   - C++11 compiler: (gcc >= 4.9) or (clang >= ???) or (icc >= ???)
 
-## Immediate Deficiencies ##
-
-The build system is good enough for our near-term needs. Current deficiencies
-which will need to be resolved before release:
-
-  1. Can only build fully linked executables. Need a way to produce upcxx
-     library artifact and associated metadata.
-
 ## Workflow ##
 
 The first thing to do when beginning a session of upcxx hacking is to source the
@@ -172,3 +164,27 @@ configure/build errors or uncaught Python exceptions. For gasnet errors, gasnet
 might tell you to refer to some generated temporary file (likely in `/tmp/...`)
 which won't exist since `nobs` cleans up all of its temporaries before exiting.
 To prevent `/tmp` cleanup, run `nobs` with `NOBS_DEBUG=1` set.
+
+
+## Internal-Only Configuration Notes ##
+
+This serves as the place to document all the build-time and run-time tunables
+that aren't hardened enough to be part of the user-facing docs.
+
+### Compile Time Environment Variables ###
+
+These are honored by `./install --single` but not the regular (non-single)
+installation (which overwrites them in a parameter sweep loop).
+
+* `OPTLEV=[0|1|2|3]`: Sets this optimization level for code generation. This
+  value is passed as `-O${OPTLEV}` to the compiler.
+
+* `DBGSYM=[0|1]`: Enables debugging symbols in executable (`-g` flag presence).
+
+* `ASSERT=[0|1]`: Enables function of `UPCXX_ASSERT`.
+
+* `UPCXX_MPSC_QUEUE=[atomic|biglock]`: The implementation to use for multi-
+  producer single-consumer queues in the runtime (`upcxx::detail::intru_queue`).
+    * `atomic`: (default) Highest performance: one atomic exchange per enqueue.
+    * `biglock`: Naive global-mutex protected linked list. Low performance, but
+      least risk with respect to potential bugs in implementation.

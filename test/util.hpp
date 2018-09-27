@@ -3,6 +3,7 @@
 
 #ifdef UPCXX_BACKEND
   #include <upcxx/backend_fwd.hpp>
+  #include <upcxx/barrier.hpp>
 #endif
 
 #include <iostream>

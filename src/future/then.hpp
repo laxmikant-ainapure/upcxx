@@ -15,7 +15,7 @@ namespace upcxx {
      * to encourage code sharing by the compiler.
      */
     struct future_body_then_base: future_body {
-      future_body_then_base(void *storage): future_body{storage} {}
+      future_body_then_base(void *storage): future_body(storage) {}
       
       // future_body_then::leave_active calls this after lambda evaluation
       template<typename Kind, typename ...T>
@@ -28,22 +28,22 @@ namespace upcxx {
         
         // drop one reference for lambda execution if impure,
         // another for active queue.
-        if(0 == hdr->refs_drop(pure ? 1 : 2)) {
+        if(0 == hdr->decref(pure ? 1 : 2)) {
           // we died
-          ::operator delete(storage);
+          operator delete(storage);
           delete hdr;
         }
         else {
           future_header *proxied_hdr = proxied.impl_.steal_header();
           
           if(Kind::template with_types<T...>::header_ops::is_trivially_ready_result) {
-            ::operator delete(storage); // body dead
+            operator delete(storage); // body dead
             // we know proxied_hdr is its own result
             hdr->enter_ready(proxied_hdr);
           }
           else {
             hdr->enter_proxying(
-              new(storage) future_body_proxy<T...>(storage),
+              ::new(storage) future_body_proxy<T...>(storage),
               proxied_hdr
             );
           }
@@ -60,9 +60,9 @@ namespace upcxx {
           void *storage, future_header_dependent *hdr,
           FuArg arg, Fn fn
         ):
-        future_body_then_base{storage},
-        dep_{hdr, std::move(arg)},
-        fn_{std::move(fn)} {
+        future_body_then_base(storage),
+        dep_(hdr, std::move(arg)),
+        fn_(std::move(fn)) {
       }
       
       // then's can't be destructed early so we inherit the stub
@@ -93,9 +93,9 @@ namespace upcxx {
           void *storage, future_header_dependent *hdr,
           FuArg arg, Fn fn
         ):
-        future_body_then_base{storage},
-        dep_{hdr, std::move(arg)},
-        fn_{std::move(fn)} {
+        future_body_then_base(storage),
+        dep_(hdr, std::move(arg)),
+        fn_(std::move(fn)) {
       }
       
       // then_pure's can be destructed early so we override stub
@@ -130,19 +130,19 @@ namespace upcxx {
       > {
       
       template<typename Arg1, typename Fn1>
-      future1<future_kind_shref<future_header_ops_general>, FnRetT...>
+      future1<future_kind_shref<future_header_ops_dependent>, FnRetT...>
       operator()(Arg1 &&arg, Fn1 &&fn) {
         future_header_dependent *hdr = new future_header_dependent;
-        hdr->ref_n_ += 1; // another for function execution
+        hdr->incref(1); // another for function execution
         
         union body_union_t {
           future_body_then<Arg,Fn> then;
           future_body_proxy<FnRetT...> proxy;
         };
-        void *storage = ::operator new(sizeof(body_union_t));
+        void *storage = future_body::operator new(sizeof(body_union_t));
         
         future_body_then<Arg,Fn> *body =
-          new(storage) future_body_then<Arg,Fn>(
+          ::new(storage) future_body_then<Arg,Fn>(
             storage, hdr,
             std::forward<Arg1>(arg),
             std::forward<Fn1>(fn)
@@ -152,7 +152,7 @@ namespace upcxx {
         if(hdr->status_ == future_header::status_active)
           hdr->entered_active();
         
-        return future_impl_shref<future_header_ops_general, FnRetT...>(hdr);
+        return future_impl_shref<future_header_ops_dependent, FnRetT...>(hdr);
       }
     };
     
@@ -216,7 +216,7 @@ namespace upcxx {
       > {
       
       template<typename Arg1, typename Fn1>
-      future1<future_kind_shref<future_header_ops_general>, FnRetT...>
+      future1<future_kind_shref<future_header_ops_dependent>, FnRetT...>
       operator()(Arg1 &&arg, Fn1 &&fn) {
         future_header_dependent *hdr = new future_header_dependent;
         
@@ -224,9 +224,9 @@ namespace upcxx {
           future_body_then_pure<Arg,Fn> then;
           future_body_proxy<FnRetT...> proxy;
         };
-        void *body_mem = ::operator new(sizeof(body_union_t));
+        void *body_mem = future_body::operator new(sizeof(body_union_t));
         
-        hdr->body_ = new(body_mem) future_body_then_pure<Arg,Fn>(
+        hdr->body_ = ::new(body_mem) future_body_then_pure<Arg,Fn>(
           body_mem, hdr,
           std::forward<Arg1>(arg),
           std::forward<Fn1>(fn)
@@ -235,7 +235,7 @@ namespace upcxx {
         if(hdr->status_ == future_header::status_active)
           hdr->entered_active();
         
-        return future_impl_shref<future_header_ops_general, FnRetT...>(hdr);
+        return future_impl_shref<future_header_ops_dependent, FnRetT...>(hdr);
       }
     };
     

@@ -1,161 +1,44 @@
 #ifndef _4281eee2_6d52_49d0_8126_75b21f8cb178
 #define _4281eee2_6d52_49d0_8126_75b21f8cb178
 
+#include <upcxx/future/fwd.hpp>
+
 #include <upcxx/diagnostic.hpp>
+#include <upcxx/lpc.hpp>
 #include <upcxx/utility.hpp>
 
-namespace upcxx {
-  //////////////////////////////////////////////////////////////////////
-  // Forwards of internal types.
-  
-  namespace detail {
-    struct future_header;
-    template<typename ...T>
-    struct future_header_result;
-    struct future_header_dependent;
-    
-    template<typename FuArg>
-    struct future_dependency;
-    
-    struct future_body;
-    struct future_body_proxy_;
-    template<typename ...T>
-    struct future_body_proxy;
-    template<typename FuArg>
-    struct future_body_pure;
-    template<typename FuArg, typename Fn>
-    struct future_body_then;
-    
-    // classes of all-static functions for working with headers
-    struct future_header_ops_general;
-    struct future_header_ops_result;
-    struct future_header_ops_result_ready;
-    
-    // future implementations
-    template<typename HeaderOps, typename ...T>
-    struct future_impl_shref;
-    template<typename ...T>
-    struct future_impl_result;
-    template<typename ArgTuple, typename ...T>
-    struct future_impl_when_all;
-    template<typename FuArg, typename Fn, typename ...T>
-    struct future_impl_mapped;
-    
-    // future1 implementation mappers
-    template<typename HeaderOps>
-    struct future_kind_shref {
-      template<typename ...T>
-      using with_types = future_impl_shref<HeaderOps,T...>;
-    };
-    
-    struct future_kind_result {
-      template<typename ...T>
-      using with_types = future_impl_result<T...>;
-    };
-    
-    template<typename ...FuArg>
-    struct future_kind_when_all {
-      template<typename ...T>
-      using with_types = future_impl_when_all<std::tuple<FuArg...>, T...>;
-    };
-    
-    template<typename FuArg, typename Fn>
-    struct future_kind_mapped {
-      template<typename ...T>
-      using with_types = future_impl_mapped<FuArg,Fn,T...>;
-    };
-  }
-  
-  //////////////////////////////////////////////////////////////////////
-  // future1: The type given to users.
-  // implemented in: upcxx/future/future1.hpp
-  
-  template<typename Kind, typename ...T>
-  struct future1;
-  
-  //////////////////////////////////////////////////////////////////////
-  // future: An alias for future1 using a shared reference implementation.
-  
-  template<typename ...T>
-  using future = future1<
-    detail::future_kind_shref<detail::future_header_ops_general>,
-    T...
-  >;
-  
-  //////////////////////////////////////////////////////////////////////
-  // future_is_trivially_ready: Trait for detecting trivially ready
-  // futures. Specializations provided in each future implementation.
-  
-  template<typename Future>
-  struct future_is_trivially_ready/*{
-    static constexpr bool value;
-  }*/;
-  
-  //////////////////////////////////////////////////////////////////////
-  // Future/continuation function-application support
-  // implemented in: upcxx/future/apply.hpp
-  
-  namespace detail {
-    // Apply function to tupled arguments lifting return to future.
-    // Defined in: future/apply.hpp
-    template<typename Fn, typename ArgTup>
-    struct apply_tupled_as_future/*{
-      typedef future1<Kind,U...> return_type;
-      return_type operator()(Fn &&fn, std::tuple<T...> &&arg);
-    }*/;
-    
-    // Apply function to results of future with return lifted to future.
-    template<typename Fn, typename Arg>
-    struct apply_futured_as_future/*{
-      typedef future1<Kind,U...> return_type;
-      return_type operator()(Fn fn, future1<Kind,T...> arg);
-    }*/;
-    
-    template<typename Fn, typename Arg>
-    using apply_futured_as_future_return_t = typename apply_futured_as_future<Fn,Arg>::return_type;
-  }
+#include <cstddef>
+#include <new>
 
-  //////////////////////////////////////////////////////////////////////
-  // detail::future_from_tuple: Generate future1 type from a Kind and
-  // result types in a tuple.
-  
+/* Place this macro in a class definition to give it overrides of operator
+ * new/delete that just call the language provided defaults. This might seem
+ * pointless now, but if we ever customize our own allocator we'll need
+ * something like this slapped on all of our classes (except it won't just
+ * call the std defaults). The reason we're doing this here (and now) is because
+ * there is code in "./core.cpp" that wants to delete `void*` storage which it
+ * *knows* must have been allocated for a `future_body`. Without these stubs,
+ * calling `future_body::operator delete(x)` would be invalid. Adding these
+ * stubs seems better than dumbing down offending code to always call the generic
+ * deallocate, which if we get custom allocation might be slower or just wrong.
+ */
+#ifndef UPCXX_OPNEW_AS_STD // pretty sure not defined anywhere, just thinking ahead.
+  #define UPCXX_OPNEW_AS_STD \
+    static void* operator new(std::size_t size) {\
+      return ::operator new(size);\
+    }\
+    static void operator delete(void *p) {\
+      ::operator delete(p);\
+    }
+#endif
+
+namespace upcxx {
   namespace detail {
-    template<typename Kind, typename Tup>
-    struct future_from_tuple;
-    template<typename Kind, typename ...T>
-    struct future_from_tuple<Kind, std::tuple<T...>> {
-      using type = future1<Kind, T...>;
-    };
-    
-    template<typename Kind, typename Tup>
-    using future_from_tuple_t = typename future_from_tuple<Kind,Tup>::type;
-  }
+    //////////////////////////////////////////////////////////////////////
+    // future headers...
   
-  //////////////////////////////////////////////////////////////////////
-  // detail::future_then()(a,b): implementats `a.then(b)`
-  // detail::future_then_pure()(a,b): implementats `a.then_pure(b)`
-  // implemented in: upcxx/future/then.hpp
-  
-  namespace detail {
-    template<
-      typename Arg, typename Fn,
-      typename FnRet = apply_futured_as_future_return_t<Fn,Arg>,
-      bool arg_trivial = future_is_trivially_ready<Arg>::value>
-    struct future_then;
-    
-    template<
-      typename Arg, typename Fn,
-      typename FnRet = apply_futured_as_future_return_t<Fn,Arg>,
-      bool arg_trivial = future_is_trivially_ready<Arg>::value,
-      bool fnret_trivial = future_is_trivially_ready<FnRet>::value>
-    struct future_then_pure;
-  }
-  
-  //////////////////////////////////////////////////////////////////////
-  // future headers...
-  
-  namespace detail {
     struct future_header {
+      UPCXX_OPNEW_AS_STD
+      
       // Our refcount. A negative value indicates a static lifetime.
       int ref_n_;
       
@@ -211,21 +94,27 @@ namespace upcxx {
         future_body *body_;
       };
       
+      // Called by enter_ready() if we have successors.
+      void entered_ready_with_sucs(future_header *result, dependency_link *sucs_head);
+      
       // Tell this header to enter the ready state, will adopt `result`
       // as its result header (assumes its refcount is already incremented).
-      void enter_ready(future_header *result);
-      
-      // The "nil" future, not to be used. Only exists so that future_impl_shref's don't
-      // have to test for nullptr, instead they'll just see its negative ref_n_.
-      static future_header the_nil;
-      
+      void enter_ready(future_header *result) {
+        // caller gave us a reference in result->ref_n_
+        this->result_ = result;
+        this->status_ = future_header::status_ready;
+        
+        if(this->sucs_head_ != nullptr)
+          this->entered_ready_with_sucs(result, this->sucs_head_);
+      }
+
       // Modify the refcount, but do not take action.
-      void refs_add(int n) {
+      void incref(int n) {
         int ref_n = this->ref_n_;
         int trash;
         (ref_n >= 0 ? this->ref_n_ : trash) = ref_n + n;
       }
-      int refs_drop(int n) { // returns new refcount
+      int decref(int n) { // returns new refcount
         int ref_n = this->ref_n_;
         bool write_back = ref_n >= 0;
         ref_n -= (ref_n >= 0 ? n : 0);
@@ -242,6 +131,20 @@ namespace upcxx {
       static future_header* drop_for_proxied(future_header *a);
     };
     
+    struct future_header_nil {
+      // The "nil" future, not to be used. Only exists so that future_impl_shref's don't
+      // have to test for nullptr, instead they'll just see its negative ref_n_.
+      static constexpr future_header the_nil = {
+        /*ref_n_*/-1,
+        /*status_*/future_header::status_active + 666,
+        /*sucs_head_*/nullptr,
+        {/*result_*/nullptr}
+      };
+      
+      static constexpr future_header* nil() {
+        return const_cast<future_header*>(&the_nil);
+      }
+    };
     
     ////////////////////////////////////////////////////////////////////
     // future_header_dependent: dependent headers are those that...
@@ -251,7 +154,7 @@ namespace upcxx {
     //   future_header_result<T...> holding the result.
     
     struct future_header_dependent final: future_header {
-      // For our potential members ship in the singly-linked "active queue".
+      // For our potential membership in the singly-linked "active queue".
       future_header_dependent *active_next_;
       
       future_header_dependent() {
@@ -270,10 +173,10 @@ namespace upcxx {
       
       // Override refcount arithmetic with more efficient form since we
       // know future_header_dependents are never statically allocated.
-      void refs_add(int n) {
+      void incref(int n) {
         this->ref_n_ += n;
       }
-      int refs_drop(int n) {
+      int decref(int n) {
         return (this->ref_n_ -= n);
       }
     };
@@ -285,41 +188,91 @@ namespace upcxx {
     
     struct future_header_ops_general {
       static constexpr bool is_trivially_ready_result = false;
+      static constexpr bool is_possibly_dependent = true;
       
       template<typename ...T>
-      static void decref_header(future_header *hdr);
+      static void incref(future_header *hdr);
+      
+      template<typename ...T, bool maybe_nil=true>
+      static void dropref(future_header *hdr, std::integral_constant<bool,maybe_nil> = {});
+      
       template<typename ...T>
-      static void delete_header(future_header *hdr);
+      static void delete1(future_header *hdr);
     };
     
     
     ////////////////////////////////////////////////////////////////////
     // future_header_ops_result: Header operations given this header is
-    // an instance of future_header_result<T...>.
+    // an instance of `future_header_result<T...>`.
     
     struct future_header_ops_result: future_header_ops_general {
       static constexpr bool is_trivially_ready_result = false;
+      static constexpr bool is_possibly_dependent = false;
       
       template<typename ...T>
-      static void decref_header(future_header *hdr);
+      static void incref(future_header *hdr);
+      
+      template<typename ...T, bool maybe_nil=true>
+      static void dropref(future_header *hdr, std::integral_constant<bool,maybe_nil> = {});
+      
       template<typename ...T>
-      static void delete_header(future_header *hdr);
+      static void delete1(future_header *hdr);
     };
     
     
     ////////////////////////////////////////////////////////////////////
     // future_header_ops_result: Header operations given this header is
-    // an instance of future_header_result<T...> and is ready.
+    // an instance of `future_header_result<T...>` and is ready.
     
     struct future_header_ops_result_ready: future_header_ops_result {
       static constexpr bool is_trivially_ready_result = true;
+      static constexpr bool is_possibly_dependent = false;
       
       template<typename ...T>
-      static void decref_header(future_header *hdr);
+      static void incref(future_header *hdr);
+      
+      template<typename ...T, bool maybe_nil=true>
+      static void dropref(future_header *hdr, std::integral_constant<bool,maybe_nil> = {});
+      
       template<typename ...T>
-      static void delete_header(future_header *hdr);
+      static void delete1(future_header *hdr);
     };
     
+    ////////////////////////////////////////////////////////////////////
+    // future_header_ops_promise: Header operations given this header is
+    // an instance of `future_header_promise<T...>`.
+    
+    struct future_header_ops_promise: future_header_ops_general {
+      static constexpr bool is_trivially_ready_result = false;
+      static constexpr bool is_possibly_dependent = false;
+      
+      template<typename ...T>
+      static void incref(future_header *hdr);
+      
+      template<typename ...T, bool maybe_nil=true>
+      static void dropref(future_header *hdr, std::integral_constant<bool,maybe_nil> = {});
+      
+      template<typename ...T>
+      static void delete1(future_header *hdr);
+    };
+    
+    ////////////////////////////////////////////////////////////////////
+    // future_header_ops_dependent: Header operations given this header is
+    // an instance of `future_header_dependent`.
+    
+    struct future_header_ops_dependent: future_header_ops_general {
+      static constexpr bool is_trivially_ready_result = false;
+      static constexpr bool is_possibly_dependent = true;
+      
+      template<typename ...T>
+      static void incref(future_header *hdr);
+      
+      template<typename ...T, bool maybe_nil=true>
+      static void dropref(future_header *hdr, std::integral_constant<bool,maybe_nil> = {});
+      
+      template<typename ...T>
+      static void delete1(future_header *hdr);
+    };
     
     ////////////////////////////////////////////////////////////////////
     // future_body: Companion objects to headers that hold the
@@ -327,10 +280,12 @@ namespace upcxx {
     
     // Base type for all future bodies.
     struct future_body {
-      // The memory block holding this body. Managed by ::operator new/delete().
+      UPCXX_OPNEW_AS_STD
+      
+      // The memory block holding this body. Managed by future_body::operator new/delete().
       void *storage_;
       
-      future_body(void *storage): storage_{storage} {}
+      future_body(void *storage): storage_(storage) {}
       
       // Tell this body to destruct itself (but not delete storage) given
       // that it hasn't had "leave_active" called. Default implementation
@@ -347,122 +302,151 @@ namespace upcxx {
       // Our link in the proxied-for future's successor list.
       future_header::dependency_link link_;
       
-      future_body_proxy_(void *storage): future_body{storage} {}
+      future_body_proxy_(void *storage): future_body(storage) {}
       
       void leave_active(future_header_dependent *owner_hdr);
     };
     
     template<typename ...T>
     struct future_body_proxy final: future_body_proxy_ {
-      future_body_proxy(void *storage): future_body_proxy_{storage} {}
+      future_body_proxy(void *storage): future_body_proxy_(storage) {}
       
       void destruct_early() {
         this->link_.unlink();
-        future_header_ops_general::template decref_header<T...>(this->link_.dep);
+        future_header_ops_general::template dropref<T...>(this->link_.dep);
         this->~future_body_proxy();
       }
     };
-    
     
     ////////////////////////////////////////////////////////////////////
     // future_header_result<T...>: Header containing the result values
     
     template<typename ...T>
-    struct future_header_result final: future_header {
-      static constexpr int status_results_yes = status_active + 1;
-      static constexpr int status_results_no = status_active + 2;
+    struct future_header_result {
+      UPCXX_OPNEW_AS_STD
       
-      union { std::tuple<T...> results_; };
+      future_header base_header;
       
+      static constexpr int status_results_yes = future_header::status_active + 1;
+      static constexpr int status_results_no = future_header::status_active + 2;
+      
+      using results_t = std::tuple<T...>;
+      using results_raw_t = typename std::aligned_storage<sizeof(results_t), alignof(results_t)>::type;
+      results_raw_t results_raw_;
+      
+    public:
       future_header_result():
-        future_header{
+        base_header{
           /*ref_n_*/1,
           /*status_*/status_results_no,
           /*sucs_head_*/nullptr,
-          {/*result_*/this}
+          {/*result_*/&this->base_header}
         } {
       }
       
       template<typename ...U>
       future_header_result(bool not_ready, std::tuple<U...> values):
-        future_header{
+        base_header{
           /*ref_n_*/1,
-          /*status_*/not_ready ? status_results_yes : status_ready,
+          /*status_*/not_ready ? status_results_yes : future_header::status_ready,
           /*sucs_head_*/nullptr,
-          {/*result_*/this}
-        },
-        results_{std::move(values)} {
+          {/*result_*/&this->base_header}
+        } {
+        ::new(&results_raw_) results_t(std::move(values));
       }
-      
-    private:
-      // force outsiders to use delete_me() and delete_me_ready()
-      ~future_header_result() {}
     
     public:
       // static_cast `hdr` to future_header_result<T...> and retrieve
       // results tuple.
       static std::tuple<T...>& results_of(future_header *hdr) {
-        return static_cast<future_header_result<T...>*>(hdr)->results_;
+        return *reinterpret_cast<std::tuple<T...>*>(
+          reinterpret_cast<std::uintptr_t>(
+            &reinterpret_cast<future_header_result<T...>*>(hdr)->results_raw_
+          ) + 0 // silences bogus strict-aliasing warning with some GCC's
+        );
       }
       
       void readify() {
-        UPCXX_ASSERT(this->status_ == status_results_yes);
-        this->enter_ready(this);
+        UPCXX_ASSERT(this->base_header.status_ == status_results_yes);
+        this->base_header.enter_ready(&this->base_header);
+      }
+      
+      static void readify(future_header *hdr) {
+        UPCXX_ASSERT(hdr->status_ == status_results_yes);
+        hdr->enter_ready(hdr);
+      }
+      
+      bool results_constructed() const {
+        return this->base_header.status_ == status_results_yes;
       }
       
       template<typename ...U>
       void construct_results(U &&...values) {
-        UPCXX_ASSERT(this->status_ == status_results_no);
-        new(&this->results_) std::tuple<T...>{std::forward<U>(values)...};
-        this->status_ = status_results_yes;
+        UPCXX_ASSERT(this->base_header.status_ == status_results_no);
+        ::new(&this->results_raw_) std::tuple<T...>(std::forward<U>(values)...);
+        this->base_header.status_ = status_results_yes;
       }
       
       template<typename ...U>
       void construct_results(std::tuple<U...> &&values) {
-        UPCXX_ASSERT(this->status_ == status_results_no);
-        new(&this->results_) std::tuple<T...>{std::move(values)};
-        this->status_ = status_results_yes;
+        UPCXX_ASSERT(this->base_header.status_ == status_results_no);
+        ::new(&this->results_raw_) std::tuple<T...>(std::move(values));
+        this->base_header.status_ = status_results_yes;
       }
       
+      static constexpr bool is_trivially_deletable = upcxx::trait_forall<std::is_trivially_destructible, T...>::value;
+
       void delete_me_ready() {
-        typedef std::tuple<T...> results_t;
-        results_.~results_t();
-        delete this;
+        results_of(&this->base_header).~results_t();
+        operator delete(this);
       }
       
       void delete_me() {
-        if(this->status_ == status_results_yes ||
-           this->status_ == status_ready) {
-          typedef std::tuple<T...> results_t;
-          results_.~results_t();
+        if(this->base_header.status_ == status_results_yes ||
+           this->base_header.status_ == future_header::status_ready) {
+          results_of(&this->base_header).~results_t();
         }
-        delete this;
+        operator delete(this);
+      }
+      
+      // Override refcount arithmetic to take advantage of the fact that we
+      // don't have any value-carrying futures statically allocated.
+      void incref(int n) {
+        this->base_header.ref_n_ += n;
+      }
+      int decref(int n) {
+        return (this->base_header.ref_n_ -= n);
       }
     };
     
     template<>
-    struct future_header_result<> final: future_header {
+    struct future_header_result<> {
+      UPCXX_OPNEW_AS_STD
+      
       static future_header the_always;
       
       enum {
-        status_not_ready = status_active + 1
+        status_not_ready = future_header::status_active + 1
       };
       
+      future_header base_header;
+      
+    public:  
       future_header_result():
-        future_header{
+        base_header{
           /*ref_n_*/1,
           /*status_*/status_not_ready,
           /*sucs_head_*/nullptr,
-          {/*result_*/this}
+          {/*result_*/&this->base_header}
         } {
       }
       
       future_header_result(bool not_ready, std::tuple<>):
-        future_header{
+        base_header{
           /*ref_n_*/1,
-          /*status_*/not_ready ? status_not_ready : status_ready,
+          /*status_*/not_ready ? status_not_ready : future_header::status_ready,
           /*sucs_head_*/nullptr,
-          {/*result_*/this}
+          {/*result_*/&this->base_header}
         } {
       }
       
@@ -471,44 +455,205 @@ namespace upcxx {
       }
       
       void readify() {
-        UPCXX_ASSERT(this->status_ == status_not_ready);
-        this->enter_ready(this);
+        UPCXX_ASSERT(this->base_header.status_ == status_not_ready);
+        this->base_header.enter_ready(&this->base_header);
       }
+      
+      bool results_constructed() const { return false; }
       
       void construct_results() {}
       void construct_results(std::tuple<>) {}
       
-      void delete_me_ready() { delete this; }
-      void delete_me() { delete this; }
+      static constexpr bool is_trivially_deletable = true;
+      
+      void delete_me_ready() { operator delete(this); }
+      void delete_me() { operator delete(this); }
+      
+      // Inherit generic header refcount ops
+      void incref(int n) {
+        this->base_header.incref(n);
+      }
+      int decref(int n) {
+        return this->base_header.decref(n);
+      }
     };
     
+    
+    ////////////////////////////////////////////////////////////////////
+    // future_header_promise
+    
+    // future_header_promise's are viable lpc's, but they need additional info
+    // stashed in their vtable, hence this derived vtable type. When executed
+    // as an lpc, a promise will fulfill all deferred decrements and drop a
+    // reference (since sitting in a lpc queue should hold a reference to keep
+    // it alive).
+    struct promise_vtable: lpc_vtable {
+      // this byte distance between the address of the `promise_meta` and the
+      // encompassing `future_header`.
+      std::ptrdiff_t meta_offset_from_header;
+      
+      constexpr promise_vtable(
+          std::ptrdiff_t meta_offset_from_header,
+          void(*fulfill_deferred_and_drop)(lpc_base*)
+        ):
+        lpc_vtable{/*execute_and_delete=*/fulfill_deferred_and_drop},
+        meta_offset_from_header(meta_offset_from_header) {
+      }
+      
+      // The two possible lpc actions. promises where the T... are all trivially
+      // destructible can share the same action since the deallocation via
+      // `operator delete` does the (nop) destruction.
+      static void fulfill_deferred_and_drop_trivial(lpc_base*);
+      
+      template<typename ...T>
+      static void fulfill_deferred_and_drop_nontrivial(lpc_base*);
+    };
+    
+    // Promise specific state.
+    struct promise_meta {
+      // We derive from `lpc_base` but have to use "first member of standard
+      // layout" instead of proper inheritance because we need this type to
+      // be standard layout so that the containing header is also standard layout
+      // so we can ultimately use `offsetof` to know the offset of this type
+      // in the header.
+      lpc_base base;
+      
+      // The dependency counter. 1 point for the result values, the rest for
+      // the anonymous dependencies.
+      std::intptr_t countdown = 1;
+      
+      // Counts fulfilled dependencies which are to be applied when this promise
+      // is executed as an lpc. This field is zero if and only if this promise
+      // is not already linked in as an lpc somewhere.
+      std::intptr_t deferred_decrements = 0;
+      
+      promise_meta(promise_vtable const *vtbl) {
+        base.vtbl = vtbl;
+      } 
+    };
+    
+    // The future header of a promise.
+    template<typename ...T>
+    struct future_header_promise {
+      UPCXX_OPNEW_AS_STD
+      
+      // We "inherit" from future_header_result<T...> use "first member of standard
+      // layout" since real inheritance would break standard layout.
+      future_header_result<T...> base_header_result;
+      
+      // Promise specific state data.
+      promise_meta pro_meta;
+      
+      future_header_promise();
+      
+      static constexpr bool is_trivially_deletable = future_header_result<T...>::is_trivially_deletable;
+      
+      // Override refcount arithmetic with more efficient form since we
+      // know `future_header_promise`'s are never statically allocated.
+      void incref(int n) {
+        this->base_header_result.base_header.ref_n_ += n;
+      }
+      int decref(int n) {
+        return (this->base_header_result.base_header.ref_n_ -= n);
+      }
+      
+      void fulfill(std::intptr_t n) {
+        UPCXX_ASSERT(this->pro_meta.countdown > 0, "Attempted to fulfill an already ready promise.");
+        UPCXX_ASSERT(this->pro_meta.countdown - n >= 0, "Attempted to over-fulfill a promise to a negative state.");
+        
+        this->pro_meta.countdown -= n;
+        if(0 == this->pro_meta.countdown)
+          this->base_header_result.readify();
+      }
+    };
+    
+    // This builds the promise_vtable corresponding to future_header_promise<T...>.
+    template<typename ...T>
+    struct the_promise_vtable {
+      static constexpr promise_vtable vtbl{
+        /*meta_offset_from_header*/
+        offsetof(future_header_promise<T...>, pro_meta),
+        /*fulfill_deferred_and_drop*/
+        future_header_promise<T...>::is_trivially_deletable
+          ? promise_vtable::fulfill_deferred_and_drop_trivial
+          : promise_vtable::fulfill_deferred_and_drop_nontrivial<T...>
+      };
+    };
+    
+    template<typename ...T>
+    constexpr promise_vtable the_promise_vtable<T...>::vtbl;
+    
+    template<typename ...T>
+    future_header_promise<T...>::future_header_promise():
+      base_header_result(),
+      pro_meta(&the_promise_vtable<T...>::vtbl) {
+    }
+    
+    inline void promise_vtable::fulfill_deferred_and_drop_trivial(lpc_base *m) {
+      promise_meta *meta = reinterpret_cast<promise_meta*>(m);
+      promise_vtable const *vtbl = static_cast<promise_vtable const*>(meta->base.vtbl);
+      auto *hdr = (future_header*)((char*)meta - vtbl->meta_offset_from_header);
+      meta->countdown -= meta->deferred_decrements;
+      meta->deferred_decrements = 0;
+      
+      if(0 == meta->countdown) {
+        // just like future_header_result::readify()
+        UPCXX_ASSERT(hdr->status_ == future_header::status_active + 1);
+        hdr->enter_ready(hdr);
+      }
+      
+      if(0 == hdr->decref(1))
+        future_header_promise<>::operator delete(hdr);
+    }
+    
+    template<typename ...T>
+    void promise_vtable::fulfill_deferred_and_drop_nontrivial(lpc_base *m) {
+      promise_meta *meta = reinterpret_cast<promise_meta*>(m);
+      auto *hdr = (future_header_promise<T...>*)((char*)meta - offsetof(future_header_promise<T...>, pro_meta));
+      meta->countdown -= meta->deferred_decrements;
+      meta->deferred_decrements = 0;
+      
+      if(0 == meta->countdown)
+        hdr->base_header_result.readify();
+      
+      future_header_ops_promise::template dropref<T...>(&hdr->base_header_result.base_header, std::false_type());
+    }
     
     ////////////////////////////////////////////////////////////////////
     // future_header_ops_general implementation
     
     template<typename ...T>
-    void future_header_ops_general::delete_header(future_header *hdr) {
+    void future_header_ops_general::incref(future_header *hdr) {
+      hdr->incref(1);
+    }
+    
+    template<typename ...T, bool maybe_nil>
+    void future_header_ops_general::dropref(future_header *hdr, std::integral_constant<bool,maybe_nil>) {
+      if(0 == hdr->decref(1))
+        delete1<T...>(hdr);
+    }
+    
+    template<typename ...T>
+    void future_header_ops_general::delete1(future_header *hdr) {
       // Common case is deleting a ready future.
       if(hdr->status_ == future_header::status_ready) {
         future_header *result = hdr->result_;
         
         if(result == hdr)
-          static_cast<future_header_result<T...>*>(hdr)->delete_me_ready();
+          reinterpret_cast<future_header_result<T...>*>(hdr)->delete_me_ready();
         else {
           // Drop ref to our result.
-          if(0 == result->refs_drop(1))
-            static_cast<future_header_result<T...>*>(result)->delete_me_ready();
+          future_header_ops_result_ready::dropref<T...>(result, std::false_type());
           // Since we're ready we have no body, just delete the header.
           delete static_cast<future_header_dependent*>(hdr);
         }
       }
       // Future dying prematurely.
       else {
-        future_header *result = hdr->result_;
-        
-        if(result == hdr) {
+        if(hdr->result_ == hdr) {
           // Not ready but is its own result, must be a promise.
-          static_cast<future_header_result<T...>*>(hdr)->delete_me();
+          // Don't need to cast to `future_header_promise` since `delete_me` covers this.
+          reinterpret_cast<future_header_result<T...>*>(hdr)->delete_me();
         }
         else {
           // Only case that requires polymorphic destruction.
@@ -516,48 +661,107 @@ namespace upcxx {
           future_body *body = hdr1->body_;
           void *storage = body->storage_;
           body->destruct_early();
-          ::operator delete(storage);
+          future_body::operator delete(storage);
           delete hdr1;
         }
       }
     }
 
-    template<typename ...T>
-    void future_header_ops_general::decref_header(future_header *hdr) {
-      if(0 == hdr->refs_drop(1))
-        delete_header<T...>(hdr);
-    }
-    
-    
     ////////////////////////////////////////////////////////////////////
     // future_header_ops_result implementation
     
     template<typename ...T>
-    void future_header_ops_result::delete_header(future_header *hdr) {
-      static_cast<future_header_result<T...>*>(hdr)->delete_me();
-    } 
-    
-    template<typename ...T>
-    void future_header_ops_result::decref_header(future_header *hdr) {
-      if(0 == hdr->refs_drop(1))
-        static_cast<future_header_result<T...>*>(hdr)->delete_me();
+    void future_header_ops_result::incref(future_header *hdr) {
+      reinterpret_cast<future_header_result<T...>*>(hdr)->incref(1);
     }
     
+    template<typename ...T, bool maybe_nil>
+    void future_header_ops_result::dropref(future_header *hdr, std::integral_constant<bool,maybe_nil>) {
+      if(0 == hdr->decref(1))
+        reinterpret_cast<future_header_result<T...>*>(hdr)->delete_me();
+    }
+    
+    template<typename ...T>
+    void future_header_ops_result::delete1(future_header *hdr) {
+      reinterpret_cast<future_header_result<T...>*>(hdr)->delete_me();
+    } 
     
     ////////////////////////////////////////////////////////////////////
     // future_header_ops_result_ready implementation
     
     template<typename ...T>
-    void future_header_ops_result_ready::delete_header(future_header *hdr) {
-      static_cast<future_header_result<T...>*>(hdr)->delete_me_ready();
-    } 
-    
-    template<typename ...T>
-    void future_header_ops_result_ready::decref_header(future_header *hdr) {
-      if(0 == hdr->refs_drop(1))
-        static_cast<future_header_result<T...>*>(hdr)->delete_me_ready();
+    void future_header_ops_result_ready::incref(future_header *hdr) {
+      reinterpret_cast<future_header_result<T...>*>(hdr)->incref(1);
     }
     
+    template<typename ...T, bool maybe_nil>
+    void future_header_ops_result_ready::dropref(future_header *hdr, std::integral_constant<bool,maybe_nil>) {
+      if(0 == hdr->decref(1))
+        reinterpret_cast<future_header_result<T...>*>(hdr)->delete_me_ready();
+    }
+    
+    template<typename ...T>
+    void future_header_ops_result_ready::delete1(future_header *hdr) {
+      reinterpret_cast<future_header_result<T...>*>(hdr)->delete_me_ready();
+    } 
+    
+    ////////////////////////////////////////////////////////////////////
+    // future_header_ops_promise implementation
+    
+    template<typename ...T>
+    void future_header_ops_promise::incref(future_header *hdr) {
+      reinterpret_cast<future_header_promise<T...>*>(hdr)->incref(1);
+    }
+    
+    template<typename ...T, bool maybe_nil>
+    void future_header_ops_promise::dropref(future_header *hdr, std::integral_constant<bool,maybe_nil>) {
+      auto *pro = reinterpret_cast<future_header_promise<T...>*>(hdr);
+      
+      if((maybe_nil ? hdr != &future_header_nil::the_nil : true) && 0 == pro->decref(1))
+        pro->base_header_result.delete_me();
+    }
+    
+    template<typename ...T>
+    void future_header_ops_promise::delete1(future_header *hdr) {
+      reinterpret_cast<future_header_result<T...>*>(hdr)->delete_me();
+    } 
+    
+    ////////////////////////////////////////////////////////////////////
+    // future_header_ops_dependent implementation
+    
+    template<typename ...T>
+    void future_header_ops_dependent::incref(future_header *hdr) {
+      static_cast<future_header_dependent*>(hdr)->incref(1);
+    }
+    
+    template<typename ...T, bool maybe_nil>
+    void future_header_ops_dependent::dropref(future_header *hdr, std::integral_constant<bool,maybe_nil>) {
+      future_header_dependent *dep = static_cast<future_header_dependent*>(hdr);
+      
+      if((maybe_nil ? hdr != &future_header_nil::the_nil : true) && 0 == dep->decref(1))
+        delete1<T...>(hdr);
+    }
+    
+    template<typename ...T>
+    void future_header_ops_dependent::delete1(future_header *hdr) {
+      // Common case is deleting a ready future.
+      if(hdr->status_ == future_header::status_ready) {
+        future_header *result = hdr->result_;
+        // Drop ref to our result.
+        future_header_ops_result_ready::dropref<T...>(result, /*maybe_nil=*/std::false_type());
+        // Since we're ready we have no body, just delete the header.
+        delete static_cast<future_header_dependent*>(hdr);
+      }
+      // Future dying prematurely.
+      else {
+        future_header_dependent *hdr1 = static_cast<future_header_dependent*>(hdr);
+        future_body *body = hdr1->body_;
+        void *storage = body->storage_;
+        body->destruct_early();
+        future_body::operator delete(storage);
+        delete hdr1;
+      }
+    }
     
     ////////////////////////////////////////////////////////////////////
     
@@ -614,7 +818,7 @@ namespace upcxx {
         if(a->status_ == status_proxying)
           a_body->link_.unlink();
         // proxy bodies are trivially destructible
-        ::operator delete(a_body->storage_);
+        future_body::operator delete(a_body->storage_);
         // proxying headers are dependents
         delete static_cast<future_header_dependent*>(a);
       }
@@ -623,4 +827,5 @@ namespace upcxx {
     }
   } // namespace detail
 }
+
 #endif

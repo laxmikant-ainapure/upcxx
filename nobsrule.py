@@ -13,13 +13,14 @@ from nobs import errorlog
 from nobs import os_extra
 from nobs import subexec
 
-cxx_exts = ('.cpp','.cxx','.c++','.C','.C++')
+cxx_exts = ('.cpp','.cxx','.c++','.cc','.C','.C++')
 c_exts = ('.c',)
-header_exts = ('.h','.hpp','.hxx','.h++')
+header_exts = ('.h','.hpp','.hxx','.h++','.hh')
 
 crawlable_dirs = [
   here('src'),
-  here('test')
+  here('test'),
+  here('bench')
 ]
 
 """
@@ -63,11 +64,6 @@ def upcxx_backend_id():
   return env("UPCXX_BACKEND",
              otherwise="gasnet_seq",
              universe=("gasnet_seq","gasnet_par"))
-
-def upcxx_lpc_inbox_id():
-  return env('UPCXX_LPC_INBOX',
-             otherwise='lockfree',
-             universe=('locked','lockfree','syncfree'))
 
 @cached # only execute once per nobs invocation
 def _pthread():
@@ -135,7 +131,7 @@ def gasnet_user(cxt):
   value = env('GASNET', None)
   
   if not value:
-    default_gasnetex_url_b64 = 'aHR0cHM6Ly9nYXNuZXQubGJsLmdvdi9FWC9HQVNOZXQtMjAxOC4zLjAudGFyLmd6'
+    default_gasnetex_url_b64 = 'aHR0cHM6Ly9nYXNuZXQubGJsLmdvdi9FWC9HQVNOZXQtMjAxOC45LjAudGFyLmd6'
     import base64
     value = base64.b64decode(default_gasnetex_url_b64)
   
@@ -194,7 +190,7 @@ def gasnet_debug(cxt):
   """
   Whether to build GASNet in debug mode.
   """
-  return cxt.cg_dbgsym()
+  return cxt.cg_dbgsym() and cxt.cg_optlev_default() == 0
 
 @rule(cli='gasnet_install_to')
 def gasnet_install_to(cxt):
@@ -287,11 +283,18 @@ def lang_c11(cxt):
   return ['-std=c11']
 
 @rule()
+@coroutine
 def lang_cxx11(cxt):
   """
   String list to engage C++11 language dialect for the C++ compiler.
   """
-  return ['-std=c++11']
+  cxx = yield cxt.cxx()
+  _,out,_ = yield version_of(cxx)
+  
+  if '(ICC)' in out.split():
+    yield ['-std=c++14']
+  else:
+    yield ['-std=c++11']
 
 @rule(path_arg='src')
 @coroutine
@@ -303,7 +306,8 @@ def comp_lang(cxt, src):
   
   if ext in cxx_exts:
     cxx = yield cxt.cxx()
-    yield cxx + cxt.lang_cxx11()
+    cxx11 = yield cxt.lang_cxx11()
+    yield cxx + cxx11
   elif ext in c_exts:
     cc = yield cxt.cc()
     yield cc + cxt.lang_c11()
@@ -826,10 +830,12 @@ def install(cxt, main_src, install_path):
   libname, libset = yield cxt.library(main_src)
   cc = yield cxt.cc()
   cxx = yield cxt.cxx()
+  cxx11 = yield cxt.lang_cxx11()
   
   install_libset(install_path, libname, libset, meta_extra={
-    'CC': ' '.join(cc),
-    'CXX': ' '.join(cxx)
+    'CC': cc,
+    'CXX': cxx,
+    'CXXFLAGS': cxx11
   })
   
   yield None
@@ -869,25 +875,8 @@ class gasnet_source:
       else: # kind == 'tarball-url'
         url = value
         tgz = me.mktemp()
+        yield download(url, to=tgz)
         
-        @async.launched
-        def download():
-          import urllib
-          try:
-            urllib.urlretrieve(url, tgz)
-          except IOError as e:
-            if e.args[0] == 'socket error':
-              raise errorlog.LoggedError(
-'Internet troubles.',
-'Socket error "%s" when attempting to download "%s".\n'%(e.args[1].strerror, url)
-              )
-            else:
-              raise
-        
-        print>>sys.stderr, 'Downloading %s' % url
-        yield download()
-        print>>sys.stderr, 'Finished    %s' % url
-      
       untar_dir = me.mkpath(key=None)
       os.makedirs(untar_dir)
       
@@ -1008,7 +997,7 @@ class gasnet_configured:
   """
   Returns a configured gasnet build directory.
   """
-  version_bump = 3
+  version_bump = 4
   
   @traced
   def get_gasnet_user(me, cxt):
@@ -1017,11 +1006,17 @@ class gasnet_configured:
   @traced
   @coroutine
   def get_config(me, cxt):
+    flags = ['-O%d'%cxt.cg_optlev_default()] + (['-g'] if cxt.cg_dbgsym() else []) 
+    
     cc = yield cxt.cc()
+    cc = cc + flags
+    
     cc_ver = version_of(cc)
     me.depend_fact(key='CC', value=cc_ver)
     
     cxx = yield cxt.cxx()
+    cxx = cxx + flags
+    
     cxx_ver = version_of(cxx)
     me.depend_fact(key='CXX', value=cxx_ver)
     
@@ -1616,15 +1611,34 @@ def install_libset(install_path, name, libset, meta_extra={}):
         assert y == metas.get(x,y) # libraries provided conflicting values for same meta-varaible
         metas[x] = y
     
+    def flat(*xs):
+      if len(xs) == 1:
+        if xs[0] is None:
+          return ''
+        elif type(xs[0]) in (tuple, list):
+          return flat(*xs[0])
+        else:
+          return str(xs[0])
+      else:
+        return ' '.join([x for x in [flat(x) for x in xs] if x != ''])
+    
+    for k,v in dict(
+        CPPFLAGS = libset_ppflags(installed_libset),
+        CXXFLAGS = libset_cgflags(installed_libset),
+        LDFLAGS = libset_ldflags(installed_libset),
+        LIBS = libset_libflags(installed_libset)
+      ).items():
+      metas[k] = flat(metas.get(k), v)
+    
     meta_path = join(install_path, 'bin', name+'-meta')
     meta_contents = \
 '''#!/bin/sh
-PPFLAGS="''' + ' '.join(libset_ppflags(installed_libset)) + '''"
-LDFLAGS="''' + ' '.join(libset_ldflags(installed_libset)) + '''"
-LIBFLAGS="''' + ' '.join(libset_libflags(installed_libset)) + '''"
 ''' + '\n'.join(
-  ["%s='%s'"%(k,v) for k,v in sorted(metas.items()) if v is not None]
+  ["%s='%s'"%(k,flat(v)) for k,v in sorted(metas.items()) if flat(v) != '']
 ) + '''
+PPFLAGS="$CPPFLAGS"
+LIBFLAGS="$LIBS"
+
 [ "$1" != "" ] && eval echo '$'"$1"
 '''
     install_contents(meta_contents, meta_path, 0755)
@@ -1655,12 +1669,15 @@ def env(name, otherwise, universe=None):
   """
   try:
     got = os.environ[name]
-    try: got = int(got)
-    except ValueError: pass
+    if got == '':
+      got = otherwise
+    else:
+      try: got = int(got)
+      except ValueError: pass
   except KeyError:
     got = otherwise
   
-  if universe is not None and got not in universe:
+  if universe is not None and got != otherwise and got not in universe:
     raise errorlog.LoggedError('%s must be one of: %s'%(name, ', '.join(universe)))
   
   return got
@@ -1696,3 +1713,22 @@ def output_of(cmd_args):
     return (p.returncode, stdout, stderr)
   except OSError as e:
     return (e.errno, None, None)
+
+def download(url, to):
+  @async.launched
+  def doit():
+    import urllib
+    try:
+      urllib.urlretrieve(url, to)
+    except IOError as e:
+      if e.args[0] == 'socket error':
+        raise errorlog.LoggedError(
+  'Internet troubles.',
+  'Socket error "%s" when attempting to download "%s".\n'%(e.args[1].strerror, url)
+        )
+      else:
+        raise
+  
+  print>>sys.stderr, 'Downloading %s' % url
+  yield doit()
+  print>>sys.stderr, 'Finished    %s' % url

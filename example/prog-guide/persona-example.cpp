@@ -1,100 +1,103 @@
-#include <mutex>
-#include <list>
 #include <iostream>
+#include <random>
+#include "dmap-lpc.hpp"
+
 #include <cstdlib>
 #include <random>
-#include <upcxx/upcxx.hpp> 
+#include <thread>
+
+#if !UPCXX_BACKEND_GASNET_PAR
+  #error "UPCXX_BACKEND=gasnet_par required."
+#endif
 
 using namespace std;
 
-// choose a point at random
-int64_t hit()
+int main(int argc, char *argv[])
 {
-    double x = static_cast<double>(rand()) / RAND_MAX;
-    double y = static_cast<double>(rand()) / RAND_MAX;
-    if (x*x + y*y <= 1.0) return 1;
-    else return 0;
-}
+  upcxx::init();
+  const long N = 100000;
+  DistrMap dmap;
 
-int done = 0;
+  // insert all key, value pairs into the hash map, wait for operation to complete
+  for (long i = 0; i < N; i++) {
+    //use the key as value as well for simplicity
+    string key = to_string(upcxx::rank_me()) + ":" + to_string(i);
+    string val = key;
+    upcxx::future<> fut = dmap.insert(key, val);
+    // wait for operation to complete before next insert
+    fut.wait();
+  }
+  // barrier to ensure all insertions have completed
+  upcxx::barrier();
 
-int main(int argc, char **argv)
-{
-    upcxx::init();
-    srand(upcxx::rank_me());
-
-    if (upcxx::rank_me() == 0) {
-        // the number of trials to run on each rank
-        int64_t trials_per_rank = 100000;
-        if (argc == 2) trials_per_rank = atoi(argv[1]);
-        int64_t hits = 0;
-        int64_t my_hits = 0;
-
-        upcxx::persona scheduler_persona;
-        mutex scheduler_lock;
-        list<upcxx::future<int64_t> > remote_rpcs;
-        {
-            // Scope block delimits domain of persona scope instance
-            auto scope = upcxx::persona_scope(scheduler_lock, scheduler_persona);
-            // All following upcxx actions will use scheduler_persona as current
-            for (int rank = 1; rank < upcxx::rank_n(); rank++) {
-                // launch computations on remote ranks and store the
-                // returned future in the list of remote rpcs
-                remote_rpcs.push_back( 
-                    upcxx::rpc(rank,
-                               [](int64_t my_trials) {
-                                   int64_t my_hits = 0;
-                                   for (int64_t i = 0; i < my_trials; i++) {
-                                       my_hits += hit();
-                                   }
-                                   done = 1;
-                                   return my_hits;
-                               },
-                               trials_per_rank));
-            }
-            // scope destructs :
-            // - scheduler_persona dropped from active set if it
-            //   wasn't active before the scope's construction
-            // - Previously current persona revived
-            // - Lock released
+  //SNIPPET
+  // try to fetch keys inserted by neighbor
+  // note that in this example, keys and values are assumed to be the same
+  const int num_threads = 10;
+  thread * threads[num_threads];
+  // declare an agreed upon persona for the progress thread
+  upcxx::persona progress_persona;
+  atomic<int> thread_barrier(0);
+  int lpc_count = N;
+  // liberate the master persona to allow the progress thread to use it
+  upcxx::liberate_master_persona();
+  // create a thread to execute the assertions while lpc_count is greater than 0
+  thread progress_thread( [&]() {
+      // push the master persona onto this thread's stack
+      upcxx::persona_scope scope(upcxx::master_persona());
+      // push the progress_persona as well
+      upcxx::persona_scope progress_scope(progress_persona);
+      // wait until all assertions in LPCs are complete
+      while(lpc_count > 0) { 
+        sched_yield();
+        upcxx::progress();
+      }
+      cout<<"Progress thread on process "<<upcxx::rank_me()<<" is done"<<endl; 
+      // unlock the other threads
+      thread_barrier += 1;
+      });
+  // launch multiple threads to perform find operations
+  for (int tid=0; tid<num_threads; tid++) {
+    threads[tid] = new thread( [&,tid] () {
+        // split the work across threads
+        long num_asserts = N / num_threads;
+        long i_beg = tid * num_asserts;
+        long i_end = tid==num_threads-1?N:(tid+1)*num_asserts;
+        for (long i = i_beg; i < i_end; i++) {
+          string key = to_string((upcxx::rank_me() + 1) % upcxx::rank_n()) + ":" + to_string(i);
+          // attach callback, which itself runs a LPC on progress_persona on completion
+          dmap.find(key, progress_persona, 
+              [key,&lpc_count](string val) {
+                assert(val == key);
+                lpc_count--;
+              });
         }
-        #pragma omp parallel sections default(shared)
-        {
-            // This is the computational thread of rank 0
-            #pragma omp section
-            {
-                // do the computation
-                for (int64_t i = 0; i < trials_per_rank; i++) {
-                    my_hits += hit();
-                }
-            } // end omp section
-            // Launch another thread to make progress and track completion
-            // of the operations
-            #pragma omp section
-            {
-                auto scope = upcxx::persona_scope(scheduler_lock, scheduler_persona);
-                while (!remote_rpcs.empty()) {
-                    upcxx::progress();
-                    auto it = find_if(remote_rpcs.begin(), remote_rpcs.end(),
-                                      [](upcxx::future<int64_t> & f) {return f.ready();});
-                    if (it != remote_rpcs.end()) {
-                        auto &fut = *it;
-                        // accumulate the result
-                        hits += fut.result();
-                        // remove the future from the list
-                        remote_rpcs.erase(it);
-                    }
-                } 
-            } // end omp section
-        } // end omp parallel sections
-        hits += my_hits;
-        // the total number of trials over all ranks
-        int64_t trials = upcxx::rank_n() * trials_per_rank;
-        cout << "pi estimated as " << 4.0 * hits / trials << endl;
-    } else {
-        // other ranks progress until quiescence is reached (i.e. done == 1)
-        while (!done) upcxx::progress();
-    }
+        // block here until the progress thread has executed all RPCs and LPCs
+        while(thread_barrier.load(memory_order_acquire) != 1){
+          sched_yield();
+          upcxx::progress();
+        }
+        });
+  }
+
+  // wait until all threads are done
+  progress_thread.join();
+  for (int tid=0; tid<num_threads; tid++) {
+    threads[tid]->join();
+    delete threads[tid];
+  }
+  {
+    // push the master persona onto the initial thread's persona stack
+    // before calling barrier and finalize
+    upcxx::persona_scope scope(upcxx::master_persona());
+    // wait until all processes are done
+    upcxx::barrier();
+    if (upcxx::rank_me() == 0 )
+      cout<<"SUCCESS"<<endl;
     upcxx::finalize();
-    return 0;
+  }
+  //SNIPPET
+  return 0;
 }
+
+

@@ -1,4 +1,5 @@
 #include <upcxx/allocate.hpp>
+#include <upcxx/barrier.hpp>
 #include <upcxx/global_ptr.hpp>
 #include <upcxx/rput.hpp>
 #include <upcxx/rget.hpp>
@@ -44,26 +45,18 @@ int main() {
     nebr_thing = fut.wait();
   }
   
-  future<> done_g, done_s;
+  future<> done_g;
+  bool done_s = false;
   
   int value = 100+me;
-  #if 1
-    done_g = upcxx::make_future();
-    done_s = upcxx::rput(
-      &value, nebr_thing, 1,
-      source_cx::as_future() |
-      remote_cx::as_rpc([=]() { got_rpc++; })
-    );
-  #else
-    std::tie(done_g, done_s) = upcxx::rput(
-      &value, nebr_thing, 1,
-      operation_cx::as_blocking() |
-      operation_cx::as_future() |
-      source_cx::as_future() |
-      remote_cx::as_rpc([=]() { got_rpc++; })
-    );
-  #endif
-
+  
+  done_g = upcxx::rput(
+    &value, nebr_thing, 1,
+    operation_cx::as_future() |
+    source_cx::as_lpc(upcxx::master_persona(), [&done_s]() { done_s=true; }) |
+    remote_cx::as_rpc([=]() { got_rpc++; })
+  );
+  
   int buf;
   done_g = done_g.then([&]() {
     promise<int> *pro1 = new promise<int>;
@@ -89,7 +82,7 @@ int main() {
   
   done_g.wait();
   
-  while(got_rpc != 2)
+  while(!done_s || got_rpc != 2)
     upcxx::progress();
   
   //upcxx::barrier();

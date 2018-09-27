@@ -2,6 +2,7 @@
 #include <array>
 #include <vector>
 
+//SNIPPET
 // Number of worker threads/personas.
 constexpr int worker_n = 8;
 
@@ -49,3 +50,4 @@ upcxx::future<> update_remote_matrix(
     upcxx::make_view(elts, elts + elt_n)
   );
 }
+//SNIPPET

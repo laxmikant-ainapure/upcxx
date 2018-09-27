@@ -19,12 +19,9 @@ int main() {
   for(auto const &kv: my_histo2)
     sum += int(kv.second);
   
-  sum = upcxx::allreduce(sum, [](int a, int b) { return a + b; }).wait();
+  sum = upcxx::reduce_all(sum, upcxx::op_fast_add).wait();
   
-  UPCXX_ASSERT_ALWAYS(
-    sum == 1000*upcxx::rank_n(),
-    "sum: wanted=1000, got="<<sum
-  );
+  assert(sum == 1000*upcxx::rank_n());
   
   if(upcxx::rank_me() == 0)
     std::cout << "SUCCESS\n";
