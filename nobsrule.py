@@ -13,7 +13,8 @@ from nobs import errorlog
 from nobs import os_extra
 from nobs import subexec
 
-cxx_exts = ('.cpp','.cxx','.c++','.cc','.C','.C++')
+# DOB: Do not use '.C' below because the ambiguity with '.c' breaks nobs on case-insensitive filesystems (NTFS)
+cxx_exts = ('.cpp','.cxx','.c++','.cc','.C++')
 c_exts = ('.c',)
 header_exts = ('.h','.hpp','.hxx','.h++','.hh')
 
