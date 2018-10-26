@@ -263,9 +263,9 @@ namespace upcxx {
           return fop(atomic_op::fetch_##name, gptr, order, val, (T)0, cxs);\
         }\
         template<typename Cxs = FUTURE_CX>\
-        FETCH_RTYPE<Cxs> name(global_ptr<T> gptr, T val, std::memory_order order,\
+        NOFETCH_RTYPE<Cxs> name(global_ptr<T> gptr, T val, std::memory_order order,\
                                 Cxs cxs = Cxs{{}}) {\
-          return fop(atomic_op::name, gptr, order, val, (T)0, cxs);\
+          return op(atomic_op::name, gptr, order, val, (T)0, cxs);\
         }
       UPCXX_AD_METHODS(add)
       UPCXX_AD_METHODS(sub)
