@@ -47,11 +47,35 @@ void test_fetch_add(team &tm, global_ptr<int64_t> target_counter, bool use_atomi
       auto prev = rget(target_counter).wait();
       rput(prev + 1, target_counter).wait();
     } else {
-      // This should cause an assert failure
-      //auto prev = dom.fsub(target_counter, (int64_t)1).wait();
-      auto prev = dom.fetch_add(target_counter, (int64_t)1, memory_order_relaxed).wait();
-      UPCXX_ASSERT_ALWAYS(prev >= 0 && prev < tm.rank_n() * ITERS, 
+     switch (i%4) { 
+      case 0: {
+        // This should cause an assert failure
+        //auto prev = dom.fetch_sub(target_counter, (int64_t)1, memory_order_relaxed).wait();
+        auto prev = dom.fetch_add(target_counter, (int64_t)1, memory_order_relaxed).wait();
+        UPCXX_ASSERT_ALWAYS(prev >= 0 && prev < tm.rank_n() * ITERS, 
               "atomic::fetch_add result out of range");
+        break;
+      }
+      case 1: {
+        upcxx::promise<int64_t> p;
+        dom.fetch_add(target_counter, (int64_t)1, memory_order_relaxed, upcxx::operation_cx::as_promise(p));
+        auto prev = p.finalize().wait();
+        UPCXX_ASSERT_ALWAYS(prev >= 0 && prev < tm.rank_n() * ITERS, 
+              "atomic::fetch_add result out of range");
+        break;
+      }
+      case 2: {
+        upcxx::future<> f = dom.add(target_counter, (int64_t)1, memory_order_relaxed);
+        f.wait();
+        break;
+      }
+      case 3: {
+        upcxx::promise<> p; 
+        dom.add(target_counter, (int64_t)1, memory_order_relaxed, upcxx::operation_cx::as_promise(p));
+        p.finalize().wait();
+        break;
+      }
+     }
     }
   }
   
