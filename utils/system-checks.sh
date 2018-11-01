@@ -45,7 +45,8 @@ platform_sanity_checks() {
         elif test -n "$CRAY_PRGENVGNU" || test -n "$CRAY_PRGENVINTEL" ; then
             CC=${CC:-cc}
             CXX=${CXX:-CC}
-	    if test -z "$CROSS" ; then
+	    # second condition eliminates build warnings in CI for: GASNET=build_or_inst_dir install -single
+	    if [[ -z "$CROSS" && ( -z "$GASNET" || -f "$GASNET" || -f "$GASNET"/configure ) ]] ; then
 	      echo 'WARNING: To build for Cray XC compute nodes, you should set the CROSS variable (e.g. CROSS=cray-aries-slurm)'
 	    fi
         elif test "$KERNEL" = "Darwin" ; then # default to XCode clang
