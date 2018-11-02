@@ -136,7 +136,7 @@ This is a re-release of version 2018.3.0 (see below) that corrects a packaging e
 ### 2018.03.31: Release 2018.3.0
 
 This release of UPC++ v1.0 supports most of the functionality specified in the 
-[UPC++ 1.0 Draft 6 Specification](https://bitbucket.org/upcxx/upcxx/downloads/upcxx-spec-V1.0-Draft6.pdf).
+[UPC++ 1.0 Draft 6 Specification](https://bitbucket.org/berkeleylab/upcxx/downloads/upcxx-spec-V1.0-Draft6.pdf).
 
 New features/enhancements:
 
@@ -171,7 +171,7 @@ Please report any problems in the [issue tracker](https://bitbucket.org/berkeley
 ### 2018.01.31: Release 2018.1.0 BETA
 
 This is a BETA preview release of UPC++ v1.0. This release supports most of the
-functionality specified in the [UPC++ 1.0 Draft 5 Specification](https://bitbucket.org/upcxx/upcxx/downloads/upcxx-spec-V1.0-Draft5.pdf).
+functionality specified in the [UPC++ 1.0 Draft 5 Specification](https://bitbucket.org/berkeleylab/upcxx/downloads/upcxx-spec-V1.0-Draft5.pdf).
 
 New features/enhancements:
 
@@ -199,7 +199,7 @@ This release is not performant, and may be unstable or buggy.
 ### 2017.09.30: Release 2017.9.0
 
 The initial public release of UPC++ v1.0. This release supports most of the
-functionality specified in the [UPC++ 1.0 Draft 4 Specification](https://bitbucket.org/upcxx/upcxx/downloads/upcxx-spec-V1.0-Draft4.pdf).
+functionality specified in the [UPC++ 1.0 Draft 4 Specification](https://bitbucket.org/berkeleylab/upcxx/downloads/upcxx-spec-V1.0-Draft4.pdf).
 
 The following features from that specification are not yet implemented:
 
