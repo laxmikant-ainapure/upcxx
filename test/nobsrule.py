@@ -10,6 +10,7 @@ REQUIRES_GASNET = [
 ]
 
 REQUIRES_PTHREAD = [
+  'hello-threads.cpp',
   'lpc_barrier.cpp',
   'rput_thread.cpp',
   'uts/uts_threads.cpp',
