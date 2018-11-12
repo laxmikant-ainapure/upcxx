@@ -24,7 +24,7 @@ int main(int argc, char **argv) {
   upcxx::barrier();
  
   // alloc my cell 
-  upcxx::global_ptr<long> gp = upcxx::new_<long>(0);
+  upcxx::global_ptr<long> gp = upcxx::new_array<long>(iters);
 
   // send the address to the right
   upcxx::rpc(peer,[gp](){ gp_peer = gp; }).wait();
@@ -35,6 +35,9 @@ int main(int argc, char **argv) {
       std::cerr << self << ": ERROR gp_peer.is_null()" << std::endl;
       abort(); 
   }
+
+  upcxx::barrier();
+  if (!self) std::cout << "Blocking barrier..." << std::endl;
 
   for (long i=0; i<iters; i++) {
 
@@ -52,10 +55,34 @@ int main(int argc, char **argv) {
     upcxx::barrier(); // wait for global validation
 
   }
+
+  upcxx::barrier();
+  if (!self) std::cout << "Non-blocking barrier..." << std::endl;
+
+  int quiesce = 0;
+  for (long i=0; i<iters; i++) {
+
+    upcxx::rput(i, gp_peer+i).wait(); // write cells to the left
+
+    upcxx::barrier_async().then([=,&quiesce](){
+      long curval = *(gp.local()+i);
+      if (curval != i) {
+        std::cerr << self << ": ERROR iter=" << i << "  curval=" << curval << std::endl;
+        abort(); 
+      }
+      quiesce++;
+    });
+
+    upcxx::progress();
+  }
+
+  while (quiesce != iters) upcxx::progress();
  
+  upcxx::barrier();
+
   print_test_success();
 
-  upcxx::delete_(gp);
+  upcxx::delete_array(gp);
   upcxx::finalize();
   return 0;
 }
