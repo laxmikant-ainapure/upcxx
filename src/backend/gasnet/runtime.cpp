@@ -550,13 +550,10 @@ void backend::quiesce(team &tm, upcxx::entry_barrier eb) {
     break;
   case entry_barrier::internal:
   case entry_barrier::user: {
-      std::atomic_thread_fence(std::memory_order_release);
+      // memory fencing is handled inside gex_Coll_BarrierNB + gex_Event_Test
+      //std::atomic_thread_fence(std::memory_order_release);
       
-      int32_t dummy = 0;
-      gex_Event_t e = gex_Coll_ReduceToAllNB(
-          gasnet::handle_of(tm), &dummy, &dummy, GEX_DT_I32, sizeof(int32_t), 1,
-          GEX_OP_OR, nullptr, nullptr, 0
-        );
+      gex_Event_t e = gex_Coll_BarrierNB( gasnet::handle_of(tm), 0);
       
       while(0 != gex_Event_Test(e)) {
         upcxx::progress(
@@ -566,7 +563,7 @@ void backend::quiesce(team &tm, upcxx::entry_barrier eb) {
         );
       }
       
-      std::atomic_thread_fence(std::memory_order_acquire);
+      //std::atomic_thread_fence(std::memory_order_acquire);
     } break;
   }
 }
