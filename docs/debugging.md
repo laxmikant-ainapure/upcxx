@@ -3,13 +3,13 @@
 General recommendations for debugging UPC++ programs:
 
 1. Whenever debugging your UPC++ program, **ALWAYS** build in debug mode, 
-i.e. compile with `export UPCXX_CODEMODE=debug`.  This enables thousands of
+i.e. compile with `export UPCXX_CODEMODE=debug` (or equivalently, `upcxx -g`).  This enables thousands of
 sanity checks system-wide that can greatly accelerate narrowing down the
-problem. Just remember to switch back to production mode `UPCXX_CODEMODE=O3`
+problem. Just remember to switch back to production mode `UPCXX_CODEMODE=O3` (`upcxx -O`)
 for building performance tests!
 
 2. If your problem is a simple enough that a crash stack might help to solve it, 
-set `export GASNET_BACKTRACE=1` at run-time and you will get a backtrace from
+set `export GASNET_BACKTRACE=1` at run-time (or equivalently, `upcxx-run -backtrace`) and you will get a backtrace from
 any rank crash.
 
 3. Otherwise, if the problem occurs with a single rank, you can spawn
