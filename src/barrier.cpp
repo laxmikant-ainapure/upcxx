@@ -125,19 +125,16 @@ namespace {
 
 void upcxx::barrier(team &tm) {
   UPCXX_ASSERT(backend::master.active_with_caller());
+ 
+  // memory fencing is handled inside gex_Coll_BarrierNB + gex_Event_Test
+  //std::atomic_thread_fence(std::memory_order_release);
   
-  std::atomic_thread_fence(std::memory_order_release);
-  
-  int32_t dummy = 0;
-  gex_Event_t e = gex_Coll_ReduceToAllNB(
-      backend::gasnet::handle_of(tm), &dummy, &dummy, GEX_DT_I32, sizeof(int32_t), 1,
-      GEX_OP_OR, nullptr, nullptr, 0
-    );
+  gex_Event_t e = gex_Coll_BarrierNB(backend::gasnet::handle_of(tm), 0);
   
   while(0 != gex_Event_Test(e))
     upcxx::progress();
   
-  std::atomic_thread_fence(std::memory_order_acquire);
+  //std::atomic_thread_fence(std::memory_order_acquire);
 }
 
 template<>
@@ -150,18 +147,11 @@ future<> upcxx::barrier_async<
   UPCXX_ASSERT(backend::master.active_with_caller());
   
   #if 1
-    std::atomic_thread_fence(std::memory_order_release);
+    // memory fencing is handled inside gex_Coll_BarrierNB + gex_Event_Test
+    //std::atomic_thread_fence(std::memory_order_release);
     
-    static int32_t dummy = 0;
-    gex_Event_t e = gex_Coll_ReduceToAllNB(
-        backend::gasnet::handle_of(tm), &dummy, &dummy, GEX_DT_I32, sizeof(int32_t), 1,
-        GEX_OP_OR, nullptr, nullptr, 0
-      );
-    return backend::gasnet::register_handle_as_future(e)
-      // TODO: Elide this callback on archs which have "free" acquire fences (x86_64)
-      .then([]() {
-        std::atomic_thread_fence(std::memory_order_acquire);
-      });
+    gex_Event_t e = gex_Coll_BarrierNB(backend::gasnet::handle_of(tm), 0);
+    return backend::gasnet::register_handle_as_future(e);
   #else
     // do hand-rolled barrier
     digest id = tm.next_collective_id(detail::internal_only());
