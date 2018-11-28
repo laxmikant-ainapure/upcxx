@@ -38,6 +38,10 @@
 # define OPNEW 0
 #endif
 
+#ifndef OPNEW_INLINE
+# define OPNEW_INLINE 0
+#endif
+
 #if OPNEW == 0 // std
 
 #elif OPNEW == 1 // ltalloc
