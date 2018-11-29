@@ -13,7 +13,7 @@ of the following headers in `./common/`:
     through the following environment variables:\
       
       - `report_file`: Path to file to create or append with report data.
-        Defaults to `report.out`.
+        A value of "-" (single hyphen) indicates stdout. Defaults to `report.out`.
       
       - `report_args`: Python keyword argument assignments qualifying this
         running instance of the benchmark (e.g. `mood="happy", ranks=100` or

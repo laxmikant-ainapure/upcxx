@@ -18,32 +18,33 @@ namespace bench {
   // Writes a report file consisting of emitted rows. This may not be entered
   // concurrently, so you will need to funnel your report data to a single rank
   // to write the report. Constructor reads env vars:
-  //  "report_file": location to append data points (default="bench.out").
+  //  "report_file": location to append data points, special value "-" indicates
+  //    stdout (default="report.out").
   //  "report_args": python formatted string of keyword argument assignments
   //    to be passed as additional independent variable assignments to the `emit`
   //    function.
   class report {
     std::string args, app, filename;
-    std::ofstream f;
+    std::ostream *f;
     
   public:
     report(const char *appstr/* = typically pass __FILE__*/);
     ~report();
     
     void blank() {
-      f << std::endl;
+      *f << std::endl;
     }
     
     // Given a list of dependent variable names and a row, emit a line data-point line.
     template<typename ...T>
     void emit(std::initializer_list<char const*> dependent_vars, row<T...> const &x) {
-      f << "emit([";
+      *f << "emit([";
       for(auto dep: dependent_vars)
-        f << '"' << dep << "\",";
-      f << ']';
-      f << ", app=\"" << app << '"';
-      x.print_name_eq_val(f, true);
-      f << ',' << args << ")" << std::endl;
+        *f << '"' << dep << "\",";
+      *f << ']';
+      *f << ", app=\"" << app << '"';
+      x.print_name_eq_val(*f, true);
+      *f << ',' << args << ")" << std::endl;
     }
   };
   
@@ -65,19 +66,26 @@ namespace bench {
     #if UPCXX_BACKEND
       args = "ranks=" + std::to_string(upcxx::rank_n()) + "," + args;
     #endif
-    
-    f.open(filename, std::ofstream::app);
-    
-    // write the current time as a comment
-    std::time_t t = std::time(0);
-    std::tm now = *std::localtime(&t);
-    char buf[128];
-    std::strftime(buf, sizeof(buf), "%Y-%m-%d %X", &now);
-    f << "# Opened for append at "<<buf<<std::endl;
+
+    if(filename == "-")
+      f = &std::cout;
+    else {
+      f = new std::ofstream(filename, std::ofstream::app);
+      
+      // write the current time as a comment
+      std::time_t t = std::time(0);
+      std::tm now = *std::localtime(&t);
+      char buf[128];
+      std::strftime(buf, sizeof(buf), "%Y-%m-%d %X", &now);
+      *f << "# Opened for append at "<<buf<<std::endl;
+    }
   }
 
   inline report::~report() {
-    std::cerr << "Report written to '" << filename << "'." << std::endl;
+    if(f != &std::cout) {
+      std::cerr << "Report written to '" << filename << "'." << std::endl;
+      delete f;
+    }
   }
 }
 
