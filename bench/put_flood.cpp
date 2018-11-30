@@ -407,6 +407,8 @@ int main() {
   } // rank_me()==0
   
   upcxx::barrier();
+
+  if (!upcxx::rank_me())  std::cout << "SUCCESS" << std::endl;
   
   #if USE_GPROF
     _mcleanup();

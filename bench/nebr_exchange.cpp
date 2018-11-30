@@ -424,6 +424,7 @@ int main() {
     }
   }
   
+  if (!upcxx::rank_me())  std::cout << "SUCCESS" << std::endl;
   upcxx::finalize();
   return 0;
 }
