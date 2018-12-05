@@ -248,7 +248,7 @@ namespace upcxx {
         rank_d{rank_d},
         state_here{std::move(here)},
         state_remote{std::move(remote)},
-        value{std::move(value)} {
+        value(std::move(value)) {
       }
     };
   }
