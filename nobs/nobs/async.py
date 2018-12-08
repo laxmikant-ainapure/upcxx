@@ -224,10 +224,14 @@ def _everything():
       threadpools.add(me)
       
       if size is None:
-        from multiprocessing import cpu_count
-        size = cpu_count()
-      elif size < 0:
-        size = 1000
+        try: size = int(os.environ.get('UPCXX_NOBS_THREADS',''))
+        except: size = 4
+      
+      from multiprocessing import cpu_count
+      cpus = cpu_count()
+      
+      if size <= 0 or cpus < size:
+        size = cpus
       
       me._pending_n = 0
       me._dead_n = size
