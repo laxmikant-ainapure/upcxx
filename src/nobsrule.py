@@ -23,6 +23,7 @@ def required_libraries(cxt, src):
   elif src in [
       # Compiling anything that includes this requires gasnet.
       here('backend/gasnet/runtime_internal.hpp'),
+      here('backend/gasnet/upc_link.h'),
       
       # We pretend that anyone including "backend/gasnet/runtime.hpp" needs
       # gasnet pp-stuff, but that isn't really the case. This is just to

@@ -88,6 +88,19 @@ For copyright notice and licensing agreement, see [LICENSE.txt](LICENSE.txt)
 
 ## ChangeLog
 
+### PENDING: Release 2019.XX.XX
+
+New features/enhancements: (see specification and programmer's guide for full details)
+
+* There is now an offline installer package for UPC++, for systems lacking connectivity
+* upcxx::barrier performance has been improved
+* Experimental interoperability support for Berkeley UPC
+
+Notable bug fixes:
+
+* issue #177: Completion broken for non-fetching binary AMOs
+* issue #183: bench/{put_flood,nebr_exchange} were failing to compile
+
 ### 2018.09.26: Release 2018.9.0
 
 This release of UPC++ v1.0 supports most of the functionality specified in the 
