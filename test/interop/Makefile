@@ -28,7 +28,7 @@ UPCXX_CMD = $(shell echo $(UPCXX)) $(OPTLVL) $(UPCXX_FLAGS)
 
 export UPCXX_GASNET_CONDUIT
 
-TARGETS = main_upc main_upcxx
+TARGETS = main_upc main_upcxx alloc
 
 TEST_OBJS = test_upc.o test_upcxx.o
 
@@ -52,20 +52,28 @@ main_upc: main_upc.o $(TEST_OBJS)
 main_upcxx: main_upcxx.o $(TEST_OBJS)
 	$(UPCC_CMD) -link-with='$(UPCXX_CMD)' -extern-main $^ -o $@
 
+alloc.o: ../alloc.cpp
+	$(UPCXX_CMD) -c $< -DUPC_INTEROP
+
+alloc: alloc.o test_upc.o
+	$(UPCC_CMD) -link-with='$(UPCXX_CMD)' -extern-main $^ -o $@
+
 clean: force
 	rm -f *.o $(TARGETS)
 
 UPCXX_RUN ?= upcxx-run
-TEST_NODES = 2
-TEST_PROCS = 8
-TEST_UPC_SZ = 64
-TEST_UPCXX_SZ = 16
+TEST_NODES ?= 2
+TEST_PROCS ?= 8
+TEST_UPC_SZ ?= 64
+TEST_UPCXX_SZ ?= 32
+TEST_ARGS_alloc ?= 10 32
+export TEST_ARGS_alloc
 
 run: force $(TARGETS)
 	@for exe in $(TARGETS) ; do \
 	  set -x ; \
-	  env GASNET_MAX_SEGSIZE=$(TEST_UPC_SZ)MB UPC_SHARED_HEAP_SIZE=$(TEST_UPC_SZ)MB UPCXX_SEGMENT_MB=$(TEST_UPCXX_SZ) \
-	  $(UPCXX_RUN) -N $(TEST_NODES) -n $(TEST_PROCS) $$exe ; \
+	  eval env GASNET_MAX_SEGSIZE=$(TEST_UPC_SZ)MB UPC_SHARED_HEAP_SIZE=$(TEST_UPC_SZ)MB UPCXX_SEGMENT_MB=$(TEST_UPCXX_SZ) \
+	  $(UPCXX_RUN) -N $(TEST_NODES) -n $(TEST_PROCS) $$exe \$$TEST_ARGS_$$exe ; \
 	 done
 
 .PHONY: version force do_target
