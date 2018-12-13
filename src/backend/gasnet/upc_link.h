@@ -24,12 +24,15 @@ extern void upcxx_upc_init(
             );
 
 // allocate sz bytes from the libupcr shared heap
-// this call is collective and sz must be single-valued
+// the _all variant is collective and sz must be single-valued
 // out-of-memory failures are fatal.
 extern void *upcxx_upc_alloc(size_t sz);
+extern void *upcxx_upc_all_alloc(size_t sz);
 
 // release storage previously allocated using upcxx_upc_alloc()
 extern void upcxx_upc_free(void *ptr);
+// collectively release storage previously allocated using upcxx_upc_all_alloc()
+extern void upcxx_upc_all_free(void *ptr);
 
 #ifdef __cplusplus
 } // extern "C"

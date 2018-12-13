@@ -8,11 +8,6 @@
 #include <upcxx/backend/gasnet/upc_link.h>
 #include "bupc_tentative.h"
 
-// UPCXX_UPC_HEAP_COLL: selects the use of the collective or non-collective UPC shared heap
-#ifndef UPCXX_UPC_HEAP_COLL_DEFAULT
-#define UPCXX_UPC_HEAP_COLL_DEFAULT 0
-#endif
-static int upcxx_upc_heap_coll = UPCXX_UPC_HEAP_COLL_DEFAULT;
 static gex_Rank_t upcxx_upc_rank_me = GEX_RANK_INVALID;
 static gex_Rank_t upcxx_upc_rank_n = GEX_RANK_INVALID;
 static int upcxx_upc_is_init = 0;
@@ -69,8 +64,6 @@ extern void upcxx_upc_init(
   assert(upcxx_upc_rank_n > 0);
   assert(upcxx_upc_rank_me < upcxx_upc_rank_n);
 
-  upcxx_upc_heap_coll = gasnett_getenv_yesno_withdefault("UPCXX_UPC_HEAP_COLL" , upcxx_upc_heap_coll);
-
   upcxx_upc_is_init = 1;
 }
 
@@ -78,12 +71,7 @@ extern void *upcxx_upc_alloc(size_t sz) {
   assert(upcxx_upc_is_linked());
   assert(upcxx_upc_is_init);
 
-  void *ptr;
-  if (upcxx_upc_heap_coll) {
-    ptr = bupc_tentative_all_alloc(upcxx_upc_rank_n, sz);
-  } else {
-    ptr = bupc_tentative_alloc(sz);
-  }
+  void *ptr = bupc_tentative_alloc(sz);
   if (!ptr) {
     fprintf(stderr, 
             "FATAL ERROR: UPC++ failed to allocate %lld bytes from the Berkeley UPC Runtime non-collective shared heap\n", 
@@ -94,15 +82,34 @@ extern void *upcxx_upc_alloc(size_t sz) {
   return ptr;
 }
 
+extern void *upcxx_upc_all_alloc(size_t sz) {
+  assert(upcxx_upc_is_linked());
+  assert(upcxx_upc_is_init);
+
+  void *ptr = bupc_tentative_all_alloc(upcxx_upc_rank_n, sz);
+  if (!ptr) {
+    fprintf(stderr, 
+            "FATAL ERROR: UPC++ failed to allocate %lld bytes from the Berkeley UPC Runtime collective shared heap\n", 
+            (long long)sz);
+    fflush(stderr);
+    abort();
+  }
+  return ptr;
+}
+
+
 extern void upcxx_upc_free(void *ptr) {
   assert(upcxx_upc_is_linked());
   assert(upcxx_upc_is_init);
 
-  if (upcxx_upc_heap_coll) {
-    bupc_tentative_all_free(ptr, 0);
-  } else {
-    bupc_tentative_free(ptr, upcxx_upc_rank_me);
-  }
+  bupc_tentative_free(ptr, upcxx_upc_rank_me);
+}
+
+extern void upcxx_upc_all_free(void *ptr) {
+  assert(upcxx_upc_is_linked());
+  assert(upcxx_upc_is_init);
+
+  bupc_tentative_all_free(ptr, 0);
 }
 
 
