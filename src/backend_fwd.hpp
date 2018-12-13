@@ -57,6 +57,9 @@ namespace upcxx {
   void init();
   bool initialized();
   void finalize();
+
+  void destroy_heap();
+  void restore_heap();
   
   intrank_t rank_n();
   intrank_t rank_me();

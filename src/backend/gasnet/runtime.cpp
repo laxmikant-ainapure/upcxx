@@ -208,7 +208,74 @@ namespace {
   void init_localheap_tables(void);
 }
 
+// WARNING: This is not a documented or supported entry point, and may soon be removed!!
+// void upcxx::destroy_heap(void):
+//
+// Precondition: The shared heap is a live state, either by virtue
+// of library initialization, or a prior call to upcxx::restore_heap.
+// Calling thread must have the master persona.
+//
+// This collective call over all processes enforces an user-level entry barrier,
+// and then destroys the entire shared heap. Behavior is undefined if any
+// live objects remain in the shared heap at the time of destruction -
+// this includes shared objects allocated directly by the application 
+// (ie via upcxx::new* and upcxx::allocate* calls), and those allocated 
+// indirectly on its behalf by the runtime. The list of library operations 
+// that may indirectly allocate shared objects and their ensuing lifetime
+// is implementation-defined.
+//
+// After this call, the shared heap of all processes are in a dead state.
+// While dead, any calls to library functions that trigger shared object
+// creation have undefined behavior. The list of such functions is
+// implementation-defined.
 
+void upcxx::destroy_heap(void) {
+  UPCXX_ASSERT_ALWAYS(backend::master.active_with_caller());
+  UPCXX_ASSERT_ALWAYS(shared_heap_isinit);
+  backend::quiesce(upcxx::world(), entry_barrier::user);
+
+  if (allocs_live_n_ > 0) {
+     char warning[200];
+     snprintf(warning, sizeof(warning), 
+        "%i: WARNING: upcxx::destroy_heap() called with %lli live shared objects\n",
+        backend::rank_me, (long long)allocs_live_n_);
+     cerr << warning << flush;
+  }
+  allocs_live_n_ = 0;
+
+  destroy_mspace(segment_mspace_);
+  segment_mspace_ = 0;
+
+  if (upcxx_upc_is_linked()) {
+    upcxx_upc_free(shared_heap_base);
+    shared_heap_base = nullptr;
+  }
+
+  shared_heap_isinit = false;
+}
+
+// void upcxx::restore_heap(void):
+//
+// Precondition: The shared heap is a live state, either by virtue
+// of library initialization, or a prior call to upcxx::restore_heap.
+// Calling thread must have the master persona.
+//
+// This collective call over all processes re-initializes the shared heap of 
+// all processes, returning them to a live state.
+
+void upcxx::restore_heap(void) {
+  UPCXX_ASSERT_ALWAYS(backend::master.active_with_caller());
+  UPCXX_ASSERT_ALWAYS(!shared_heap_isinit);
+  UPCXX_ASSERT_ALWAYS(shared_heap_sz > 0);
+
+  heap_init_internal(shared_heap_sz);
+  init_localheap_tables();
+  shared_heap_isinit = true;
+
+  gasnet_barrier_notify(0, GASNET_BARRIERFLAG_ANONYMOUS);
+  int ok = gasnet_barrier_wait(0, GASNET_BARRIERFLAG_ANONYMOUS);
+  UPCXX_ASSERT_ALWAYS(ok == GASNET_OK);
+}
 
 ////////////////////////////////////////////////////////////////////////
 // from: upcxx/backend.hpp
