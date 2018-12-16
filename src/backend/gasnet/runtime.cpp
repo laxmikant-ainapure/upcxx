@@ -578,6 +578,7 @@ namespace {
     UPCXX_ASSERT_ALWAYS(owner_vbase && local_vbase && size);
 
     if (upcxx_upc_is_linked() && !upcxx_use_upc_alloc) { 
+    #if UPCXX_STRICT_SEGMENT // this logic prevents UPCR shared objects from passing upcxx::try_global_ptr
       // We have the GEX segment info for the local peer, but
       // the UPC++ shared heap is a subset of the GEX segment.
       // Determine the necessary adjustment to locate our shared heap:
@@ -592,6 +593,7 @@ namespace {
       local_vbase += info.first;
       UPCXX_ASSERT_ALWAYS(info.second <= size);
       size = info.second;
+    #endif
     }
     
     backend::pshm_local_minus_remote[p] = reinterpret_cast<uintptr_t>(local_vbase) - reinterpret_cast<uintptr_t>(owner_vbase);

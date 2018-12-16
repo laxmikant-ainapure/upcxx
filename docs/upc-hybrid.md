@@ -11,9 +11,9 @@ This makes it possible to run hybrid applications that use both UPC and UPC++
 The UPC and UPC++ layers can be initialized in either order - `upcxx::init()` 
 will detect if UPC has been linked in and initialize UPC if necessary.
 
-Both layers may be active simultaneously, and in the default `UPCXX_USE_UPC_ALLOC=yes` mode,
-shared objects from either layer are also valid shared objects in the other layer -
-however there are caveats. In particular, the `upcxx::global_pointer` and UPC pointer-to-shared
+Both layers may be active simultaneously, and shared objects from either layer are also 
+valid shared objects in the other layer - however there are some important caveats. 
+In particular, the `upcxx::global_pointer` and UPC pointer-to-shared
 representations are NOT interchangable. Passing of shared objects across layers should be
 accomplished by "down-casting" to a raw C pointer (ie `void *`) on a process with affinity
 to the shared object (eg in UPC this is done using a `(void*)` cast, in UPC++ use `global_pointer<T>::local()`).

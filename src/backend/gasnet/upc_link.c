@@ -1,6 +1,12 @@
 // upc_link.c
 // this file MUST be compiled as C (not C++) to support the bupc_tentative API
 
+#if UPCXX_ASSERT_ENABLED
+  #undef NDEBUG
+#else
+  #define NDEBUG 1
+#endif
+
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -72,13 +78,7 @@ extern void *upcxx_upc_alloc(size_t sz) {
   assert(upcxx_upc_is_init);
 
   void *ptr = bupc_tentative_alloc(sz);
-  if (!ptr) {
-    fprintf(stderr, 
-            "FATAL ERROR: UPC++ failed to allocate %lld bytes from the Berkeley UPC Runtime non-collective shared heap\n", 
-            (long long)sz);
-    fflush(stderr);
-    abort();
-  }
+  assert(ptr); // UPCR allocation failures are fatal
   return ptr;
 }
 
@@ -87,13 +87,7 @@ extern void *upcxx_upc_all_alloc(size_t sz) {
   assert(upcxx_upc_is_init);
 
   void *ptr = bupc_tentative_all_alloc(upcxx_upc_rank_n, sz);
-  if (!ptr) {
-    fprintf(stderr, 
-            "FATAL ERROR: UPC++ failed to allocate %lld bytes from the Berkeley UPC Runtime collective shared heap\n", 
-            (long long)sz);
-    fflush(stderr);
-    abort();
-  }
+  assert(ptr); // UPCR allocation failures are fatal
   return ptr;
 }
 
