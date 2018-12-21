@@ -1,5 +1,6 @@
 #include <upcxx/backend/gasnet/runtime.hpp>
 #include <upcxx/backend/gasnet/runtime_internal.hpp>
+#include <upcxx/backend/gasnet/upc_link.h>
 
 #include <upcxx/os_env.hpp>
 #include <upcxx/reduce.hpp>
@@ -117,12 +118,19 @@ namespace {
 ////////////////////////////////////////////////////////////////////////
 
 namespace {
+  // we statically allocate the top of the AM handler space, 
+  // to improve interoperability with UPCR that uses the bottom
+  #define UPCXX_NUM_AM_HANDLERS 4
+  #define UPCXX_AM_INDEX_BASE   (256 - UPCXX_NUM_AM_HANDLERS)
   enum {
-    id_am_eager_restricted = GEX_AM_INDEX_BASE,
+    id_am_eager_restricted = UPCXX_AM_INDEX_BASE,
     id_am_eager_master,
     id_am_eager_persona,
-    id_am_bcast_master_eager
+    id_am_bcast_master_eager,
+    _id_am_endpost
   };
+  static_assert(UPCXX_AM_INDEX_BASE >= GEX_AM_INDEX_BASE, "Incorrect UPCXX_AM_INDEX_BASE");
+  static_assert((int)_id_am_endpost - UPCXX_AM_INDEX_BASE == UPCXX_NUM_AM_HANDLERS, "Incorrect UPCXX_NUM_AM_HANDLERS");
     
   void am_eager_restricted(gex_Token_t, void *buf, size_t buf_size, gex_AM_Arg_t buf_align);
   void am_eager_master(gex_Token_t, void *buf, size_t buf_size, gex_AM_Arg_t buf_align_and_level);
@@ -143,13 +151,162 @@ namespace {
 }
 
 ////////////////////////////////////////////////////////////////////////
+// shared heap management
 
 #include <upcxx/dl_malloc.h>
 
 namespace {
+  gex_TM_t world_tm;
+  gex_TM_t local_tm;
+
   std::mutex segment_lock_;
   intptr_t allocs_live_n_ = 0;
   mspace segment_mspace_;
+
+  // scratch space for the local_team, if required
+  size_t local_scratch_sz = 0;
+  void  *local_scratch_ptr = nullptr;
+
+  bool upcxx_use_upc_alloc = true;
+  bool upcxx_upc_heap_coll = false;
+
+  bool   shared_heap_isinit = false;
+  void  *shared_heap_base = nullptr;
+  size_t shared_heap_sz = 0;
+  void heap_init_internal(size_t &size) {
+    UPCXX_ASSERT_ALWAYS(!shared_heap_isinit);
+
+    void *segment_base = 0;
+    size_t segment_size = 0;
+    int ok = gex_Segment_QueryBound(
+        world_tm, backend::rank_me, &segment_base, nullptr, &segment_size
+    );
+    UPCXX_ASSERT_ALWAYS(ok == GASNET_OK);
+
+    if (upcxx_upc_is_linked()) {
+      static bool firstcall = true;
+      if (firstcall) {
+        firstcall = false;
+        // UPCXX_USE_UPC_ALLOC enables the use of the UPC allocator to replace our allocator
+        upcxx_use_upc_alloc = !!gasnett_getenv_yesno_withdefault("UPCXX_USE_UPC_ALLOC" , upcxx_use_upc_alloc);
+        if (!upcxx_use_upc_alloc) {
+          // UPCXX_UPC_HEAP_COLL: selects the use of the collective or non-collective UPC shared heap to host the UPC++ allocator
+          upcxx_upc_heap_coll = !!gasnett_getenv_yesno_withdefault("UPCXX_UPC_HEAP_COLL" , upcxx_upc_heap_coll);
+        }
+      }
+      if (local_scratch_sz && !local_scratch_ptr) { 
+        // allocate local scratch separately from the heap to ensure it persists
+        // we do this before segment allocation to prevent fragmentation issues
+        local_scratch_ptr = upcxx_upc_all_alloc(local_scratch_sz);
+      }
+      if (upcxx_use_upc_alloc) {
+        shared_heap_base = segment_base;
+        size = segment_size;
+      } else {
+        shared_heap_base = upcxx_upc_alloc(size);
+      }
+    } else { // stand-alone UPC++
+      upcxx_use_upc_alloc = false;
+      size = segment_size;
+      shared_heap_base = segment_base;
+    }
+    shared_heap_sz = size;
+
+    if (!upcxx_use_upc_alloc) {
+      // init dlmalloc to run over our piece of the segment
+      segment_mspace_ = create_mspace_with_base(shared_heap_base, shared_heap_sz, 0);
+      // ensure dlmalloc never tries to mmap anything from the system
+      mspace_set_footprint_limit(segment_mspace_, shared_heap_sz);
+    }
+    shared_heap_isinit = true;
+
+    if (!upcxx_upc_is_linked()) {
+      if (local_scratch_sz && !local_scratch_ptr) { 
+        local_scratch_ptr = upcxx::allocate(local_scratch_sz, GASNET_PAGESIZE);
+      }
+    }
+  }
+  void init_localheap_tables(void);
+}
+
+// WARNING: This is not a documented or supported entry point, and may soon be removed!!
+// void upcxx::destroy_heap(void):
+//
+// Precondition: The shared heap is a live state, either by virtue
+// of library initialization, or a prior call to upcxx::restore_heap.
+// Calling thread must have the master persona.
+//
+// This collective call over all processes enforces an user-level entry barrier,
+// and then destroys the entire shared heap. Behavior is undefined if any
+// live objects remain in the shared heap at the time of destruction -
+// this includes shared objects allocated directly by the application 
+// (ie via upcxx::new* and upcxx::allocate* calls), and those allocated 
+// indirectly on its behalf by the runtime. The list of library operations 
+// that may indirectly allocate shared objects and their ensuing lifetime
+// is implementation-defined.
+//
+// After this call, the shared heap of all processes are in a dead state.
+// While dead, any calls to library functions that trigger shared object
+// creation have undefined behavior. The list of such functions is
+// implementation-defined.
+
+void upcxx::destroy_heap(void) {
+  UPCXX_ASSERT_ALWAYS(backend::master.active_with_caller());
+  UPCXX_ASSERT_ALWAYS(shared_heap_isinit);
+  backend::quiesce(upcxx::world(), entry_barrier::user);
+
+  if (allocs_live_n_ > 0) {
+     char warning[200];
+     snprintf(warning, sizeof(warning), 
+        "%i: WARNING: upcxx::destroy_heap() called with %lli live shared objects\n",
+        backend::rank_me, (long long)allocs_live_n_);
+     cerr << warning << flush;
+  }
+  if (upcxx_use_upc_alloc) { 
+    if (!backend::rank_me) {
+      cerr << "WARNING: upcxx::destroy_heap() is not supported for UPCXX_USE_UPC_ALLOC=yes" << endl;
+    }
+  } else {
+    allocs_live_n_ = 0;
+
+    destroy_mspace(segment_mspace_);
+    segment_mspace_ = 0;
+
+    if (upcxx_upc_is_linked()) {
+      if (upcxx_upc_heap_coll) upcxx_upc_all_free(shared_heap_base);
+      else upcxx_upc_free(shared_heap_base);
+      shared_heap_base = nullptr;
+    }
+  }
+
+  shared_heap_isinit = false;
+}
+
+// void upcxx::restore_heap(void):
+//
+// Precondition: The shared heap is a live state, either by virtue
+// of library initialization, or a prior call to upcxx::restore_heap.
+// Calling thread must have the master persona.
+//
+// This collective call over all processes re-initializes the shared heap of 
+// all processes, returning them to a live state.
+
+void upcxx::restore_heap(void) {
+  UPCXX_ASSERT_ALWAYS(backend::master.active_with_caller());
+  UPCXX_ASSERT_ALWAYS(!shared_heap_isinit);
+  UPCXX_ASSERT_ALWAYS(shared_heap_sz > 0);
+
+  if (upcxx_use_upc_alloc) {
+    // unsupported/ignored
+  } else { 
+    heap_init_internal(shared_heap_sz);
+    init_localheap_tables();
+  }
+  shared_heap_isinit = true;
+
+  gasnet_barrier_notify(0, GASNET_BARRIERFLAG_ANONYMOUS);
+  int ok = gasnet_barrier_wait(0, GASNET_BARRIERFLAG_ANONYMOUS);
+  UPCXX_ASSERT_ALWAYS(ok == GASNET_OK);
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -168,29 +325,40 @@ void upcxx::init() {
   gex_Client_t client;
   gex_EP_t endpoint;
   gex_Segment_t segment;
-  gex_TM_t world_tm;
-  
-  ok = gex_Client_Init(&client, &endpoint, &world_tm, "upcxx", nullptr, nullptr, 0);
-  UPCXX_ASSERT_ALWAYS(ok == GASNET_OK);
+
+  if (upcxx_upc_is_linked()) {
+    upcxx_upc_init(&client, &endpoint, &world_tm);
+  } else { 
+    ok = gex_Client_Init(&client, &endpoint, &world_tm, "upcxx", nullptr, nullptr, 0);
+    UPCXX_ASSERT_ALWAYS(ok == GASNET_OK);
+  }
   
   backend::verbose_noise = (bool)os_env<int>("UPCXX_VERBOSE", 0);
 
-  size_t segment_size = 128*(1<<20);
+  // Determine a bound on the max usable shared segment size
+  size_t gasnet_max_segsize = gasnet_getMaxLocalSegmentSize();
+  if (upcxx_upc_is_linked()) {
+    gasnet_max_segsize = gasnet_getMaxGlobalSegmentSize();
+    size_t upc_segment_pad = 16*1024*1024; // TODO: replace this hack
+    UPCXX_ASSERT_ALWAYS(gasnet_max_segsize > upc_segment_pad);
+    gasnet_max_segsize -= upc_segment_pad;
+  }
+
   std::string upcxx_segment_variable = os_env<std::string>("UPCXX_SEGMENT_MB", "128");
   std::transform(
     upcxx_segment_variable.begin(), upcxx_segment_variable.end(),
     upcxx_segment_variable.begin(),
     [](unsigned char c) { return std::toupper(c); }
   );
-  
+ 
+  size_t segment_size = 0;
   if(upcxx_segment_variable == "MAX") {
-    segment_size = gasnet_getMaxLocalSegmentSize();
-  }
-  else {
+    segment_size = gasnet_max_segsize;
+  } else {
     segment_size = size_t(os_env<double>("UPCXX_SEGMENT_MB", 128)*(1<<20));
-    // page size should always be a power of 2
-    segment_size = (segment_size + GASNET_PAGESIZE-1) & -GASNET_PAGESIZE;
   }
+  // page align: page size should always be a power of 2
+  segment_size = (segment_size + GASNET_PAGESIZE-1) & -GASNET_PAGESIZE;
 
   backend::rank_n = gex_TM_QuerySize(world_tm);
   backend::rank_me = gex_TM_QueryRank(world_tm);
@@ -208,7 +376,6 @@ void upcxx::init() {
   );
   
   // now adjust the segment size if it's less than the GASNET_MAX_SEGSIZE
-  size_t gasnet_max_segsize = gasnet_getMaxLocalSegmentSize();
   if(segment_size > gasnet_max_segsize) {
     if(upcxx::rank_me() == 0) {
       cerr << "WARNING: Requested UPC++ segment size (" << segment_size << ") "
@@ -217,10 +384,18 @@ void upcxx::init() {
     }
     segment_size = gasnet_max_segsize;
   }
-  
-  ok = gex_Segment_Attach(&segment, world_tm, segment_size);
-  UPCXX_ASSERT_ALWAYS(ok == GASNET_OK);
+ 
+  // Create the GEX segment
+  if (upcxx_upc_is_linked()) {
+    if (!backend::rank_me) 
+      cerr << "UPC++ BETA FEATURE NOTICE: Activating interoperability support for the Berkeley UPC Runtime. "
+              "This is not an officially supported feature." << endl;
+  } else {
+    ok = gex_Segment_Attach(&segment, world_tm, segment_size);
+    UPCXX_ASSERT_ALWAYS(ok == GASNET_OK);
+  }
 
+  // AM handler registration
   ok = gex_EP_RegisterHandlers(endpoint, am_table, sizeof(am_table)/sizeof(am_table[0]));
   UPCXX_ASSERT_ALWAYS(ok == GASNET_OK);
 
@@ -247,17 +422,6 @@ void upcxx::init() {
                              1024;
   UPCXX_ASSERT(gasnet::am_size_rdzv_cutover_min <= gasnet::am_size_rdzv_cutover);
   
-  // setup shared segment allocator
-  void *segment_base;
-  
-  ok = gex_Segment_QueryBound(
-    world_tm, backend::rank_me, &segment_base, nullptr, &segment_size
-  );
-  UPCXX_ASSERT_ALWAYS(ok == GASNET_OK);
-  
-  segment_mspace_ = create_mspace_with_base(segment_base, segment_size, 1);
-  mspace_set_footprint_limit(segment_mspace_, segment_size);
-
   //////////////////////////////////////////////////////////////////////////////
   // Setup the local-memory neighborhood tables.
   
@@ -269,9 +433,23 @@ void upcxx::init() {
   for(gex_Rank_t p=1; p < peer_n; p++)
     contiguous_nbhd &= (nbhd[p].gex_jobrank == 1 + nbhd[p-1].gex_jobrank);
 
-  gex_TM_t local_tm;
+  bool const local_is_world = ((intrank_t)peer_n == backend::rank_n);
+
+  if (!local_is_world) { // determine (upper bound on) scratch requirements for local_team
+    local_scratch_sz = gex_TM_Split(
+      &local_tm, world_tm,
+      /*color*/nbhd[0].gex_jobrank, /*key*/peer_me,
+      nullptr, 0,
+      peer_n == 1
+        ? GEX_FLAG_TM_SCRATCH_SIZE_MIN
+        : GEX_FLAG_TM_SCRATCH_SIZE_RECOMMENDED
+    );
+  }
+
+  // setup shared segment allocator
+  heap_init_internal(segment_size);
   
-  if((intrank_t)peer_n == backend::rank_n) {
+  if (local_is_world) {
     if(backend::verbose_noise && backend::rank_me == 0) {
       std::cerr
         <<std::string(70,'/')<<std::endl
@@ -284,8 +462,7 @@ void upcxx::init() {
     peer_n = backend::rank_n;
     peer_me = backend::rank_me;
     local_tm = world_tm;
-  }
-  else {
+  } else { // !local_is_world
     if(!contiguous_nbhd) {
       // Discontiguous rank-set is collapsed to singleton set of "me"
       backend::pshm_peer_lb = backend::rank_me;
@@ -339,25 +516,17 @@ void upcxx::init() {
       }
     }
     
-    size_t scratch_sz = gex_TM_Split(
-      &local_tm, world_tm,
-      /*color*/backend::pshm_peer_lb, /*key*/peer_me,
-      nullptr, 0,
-      peer_n == 1
-        ? GEX_FLAG_TM_SCRATCH_SIZE_MIN
-        : GEX_FLAG_TM_SCRATCH_SIZE_RECOMMENDED
-    );
-    
-    void *scratch_buf = upcxx::allocate(scratch_sz, GASNET_PAGESIZE);
+    UPCXX_ASSERT_ALWAYS( local_scratch_sz && local_scratch_ptr );
     
     gex_TM_Split(
       &local_tm, world_tm,
       /*color*/backend::pshm_peer_lb, /*key*/peer_me,
-      scratch_buf, scratch_sz,
+      local_scratch_ptr, local_scratch_sz,
       /*flags*/0
     );
     
-    gex_TM_SetCData(local_tm, scratch_buf);
+    if (!upcxx_upc_is_linked()) 
+      gex_TM_SetCData(local_tm, local_scratch_ptr );
   }
   
   backend::pshm_peer_n = peer_n;
@@ -372,6 +541,20 @@ void upcxx::init() {
   );
   
   // Setup local peer address translation tables
+  init_localheap_tables();
+
+  //////////////////////////////////////////////////////////////////////////////
+  // Exit barrier
+  
+  gasnet_barrier_notify(0, GASNET_BARRIERFLAG_ANONYMOUS);
+  ok = gasnet_barrier_wait(0, GASNET_BARRIERFLAG_ANONYMOUS);
+  UPCXX_ASSERT_ALWAYS(ok == GASNET_OK);
+}
+
+namespace {
+ void init_localheap_tables(void) {
+  const gex_Rank_t peer_n = backend::pshm_peer_n;
+
   backend::pshm_local_minus_remote.reset(new uintptr_t[peer_n]);
   backend::pshm_vbase.reset(new uintptr_t[peer_n]);
   backend::pshm_size.reset(new uintptr_t[peer_n]);
@@ -379,14 +562,39 @@ void upcxx::init() {
   pshm_owner_peer.reset(new intrank_t[peer_n]);
   
   for(gex_Rank_t p=0; p < peer_n; p++) {
-    void *owner_vbase, *local_vbase;
+    char *owner_vbase, *local_vbase;
+    void *owner_vbase_vp, *local_vbase_vp;
     uintptr_t size;
 
     gex_Segment_QueryBound(
       /*team*/world_tm,
       /*rank*/backend::pshm_peer_lb + p,
-      &owner_vbase, &local_vbase, &size
+      &owner_vbase_vp, 
+      &local_vbase_vp, 
+      &size
     );
+    owner_vbase = reinterpret_cast<char*>(owner_vbase_vp);
+    local_vbase = reinterpret_cast<char*>(local_vbase_vp);
+    UPCXX_ASSERT_ALWAYS(owner_vbase && local_vbase && size);
+
+    if (upcxx_upc_is_linked() && !upcxx_use_upc_alloc) { 
+    #if UPCXX_STRICT_SEGMENT // this logic prevents UPCR shared objects from passing upcxx::try_global_ptr
+      // We have the GEX segment info for the local peer, but
+      // the UPC++ shared heap is a subset of the GEX segment.
+      // Determine the necessary adjustment to locate our shared heap:
+      std::pair<uintptr_t, uintptr_t> info(
+        reinterpret_cast<char *>(shared_heap_base) - owner_vbase, // base offset on owner
+        shared_heap_sz // size
+      );
+      gex_Event_Wait(gex_Coll_BroadcastNB( local_tm, p, &info, &info, sizeof(info), 0));
+
+      UPCXX_ASSERT_ALWAYS(info.first < size);
+      owner_vbase += info.first;
+      local_vbase += info.first;
+      UPCXX_ASSERT_ALWAYS(info.second <= size);
+      size = info.second;
+    #endif
+    }
     
     backend::pshm_local_minus_remote[p] = reinterpret_cast<uintptr_t>(local_vbase) - reinterpret_cast<uintptr_t>(owner_vbase);
     backend::pshm_vbase[p] = reinterpret_cast<uintptr_t>(local_vbase);
@@ -416,13 +624,7 @@ void upcxx::init() {
   // permute vbase's into sorted order
   for(gex_Rank_t i=0; i < peer_n; i++)
     pshm_owner_vbase[i] = backend::pshm_vbase[pshm_owner_peer[i]];
-
-  //////////////////////////////////////////////////////////////////////////////
-  // Exit barrier
-  
-  gasnet_barrier_notify(0, GASNET_BARRIERFLAG_ANONYMOUS);
-  ok = gasnet_barrier_wait(0, GASNET_BARRIERFLAG_ANONYMOUS);
-  UPCXX_ASSERT_ALWAYS(ok == GASNET_OK);
+ }
 }
 
 void upcxx::finalize() {
@@ -475,7 +677,8 @@ void upcxx::finalize() {
     int64_t live_local = allocs_live_n_;
     
     if(gasnet::handle_of(detail::the_local_team.value) !=
-       gasnet::handle_of(detail::the_world_team.value))
+       gasnet::handle_of(detail::the_world_team.value)
+       && !upcxx_upc_is_linked())
        live_local -= 1; // minus local_team scratch
     
     popn_stats_t live = reduce_popn_to_rank0(live_local);
@@ -517,28 +720,54 @@ void upcxx::liberate_master_persona() {
 }
 
 void* upcxx::allocate(size_t size, size_t alignment) {
+  UPCXX_ASSERT(shared_heap_isinit);
   #if UPCXX_BACKEND_GASNET_SEQ
     UPCXX_ASSERT(backend::master.active_with_caller());
   #elif UPCXX_BACKEND_GASNET_PAR
     std::lock_guard<std::mutex> locked{segment_lock_};
   #endif
   
-  void *p = mspace_memalign(segment_mspace_, alignment, size);
-  allocs_live_n_ += 1;
+  void *p;
+  if (upcxx_use_upc_alloc) {
+    // must overallocate and pad to ensure alignment
+    UPCXX_ASSERT(alignment < 1U<<31);
+    alignment = std::max(alignment, (size_t)4);
+    UPCXX_ASSERT((alignment & (alignment-1)) == 0); // assumed to be power-of-two
+    uintptr_t base = (uintptr_t)upcxx_upc_alloc(size+alignment);
+    uintptr_t user = (base+alignment) & ~(alignment-1);
+    uintptr_t pad = (user - base);
+    UPCXX_ASSERT(pad >= 4 && pad <= alignment);
+    *(reinterpret_cast<uint32_t*>(user-4)) = pad; // store padding amount in header
+    p = reinterpret_cast<void *>(user);
+  } else {
+    p = mspace_memalign(segment_mspace_, alignment, size);
+  }
+  if_pt(p) allocs_live_n_ += 1;
   //UPCXX_ASSERT(p != nullptr);
   UPCXX_ASSERT(reinterpret_cast<uintptr_t>(p) % alignment == 0);
   return p;
 }
 
 void upcxx::deallocate(void *p) {
+  UPCXX_ASSERT(shared_heap_isinit);
   #if UPCXX_BACKEND_GASNET_SEQ
     UPCXX_ASSERT(backend::master.active_with_caller());
   #elif UPCXX_BACKEND_GASNET_PAR
     std::lock_guard<std::mutex> locked{segment_lock_};
   #endif
+  if_pf (!p) return;
   
-  mspace_free(segment_mspace_, p);
-  if(p) allocs_live_n_ -= 1;
+  if (upcxx_use_upc_alloc) {
+    // parse alignment header to recover original base ptr
+    uintptr_t user = reinterpret_cast<uintptr_t>(p);
+    UPCXX_ASSERT((user & 0x3) == 0);
+    uint32_t  pad = *(reinterpret_cast<uint32_t*>(user-4));
+    uintptr_t base = user-pad;
+    upcxx_upc_free(reinterpret_cast<void *>(base));
+  } else {
+    mspace_free(segment_mspace_, p);
+  }
+  allocs_live_n_ -= 1;
 }
 
 //////////////////////////////////////////////////////////////////////
