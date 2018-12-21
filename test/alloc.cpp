@@ -34,6 +34,10 @@ typedef unsigned char byte;
 
 // usage: alloc <log_2 of max requests> <max heap to use in MB>
 int main(int argc, char **argv) {
+  #if UPC_INTEROP
+    bupc_init(&argc, &argv); // optional, but recommended
+  #endif
+
   int errors = 0;
 
   upcxx::init();

@@ -5,8 +5,6 @@
 
 #include "test.h"
 
-extern "C" void bupc_init(int *argc, char ***argv);
-
 int main(int argc, char **argv) {
 
   bupc_init(&argc, &argv); // optional, but recommended
