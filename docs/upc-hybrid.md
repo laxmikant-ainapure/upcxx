@@ -10,6 +10,10 @@ This makes it possible to run hybrid applications that use both UPC and UPC++
 
 The UPC and UPC++ layers can be initialized in either order - `upcxx::init()` 
 will detect if UPC has been linked in and initialize UPC if necessary.
+[test/interop/main_upc.upc](test/interop/main_upc.upc) and 
+[test/interop/main_upcxx.cpp](test/interop/main_upcxx.cpp) provide simple
+interoperability examples, where main() is in UPC or UPC++, respectively.
+
 
 Both layers may be active simultaneously, and shared objects from either layer are also 
 valid shared objects in the other layer - however there are some important caveats. 
@@ -20,6 +24,9 @@ to the shared object (eg in UPC this is done using a `(void*)` cast, in UPC++ us
 The raw pointer can then be passed across layers, and "up-cast" using the
 appropriate function (i.e. `upcxx::try_global_ptr()` or `bupc_inverse_cast()`).
 See the documentation for each model for details on up-casting/down-casting.
+[test/interop/arrval_upc.upc](test/interop/arrval_upc.upc) and 
+[test/interop/arrval_upcxx.cpp](test/interop/arrval_upcxx.cpp) provide examples of 
+passing shared objects across layers.
 
 ## UPC++ / Berkeley UPC Runtime Hybrid Build Rules
 

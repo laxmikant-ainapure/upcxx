@@ -23,6 +23,7 @@
 
 using namespace std;
 
+#undef ERROR
 #define ERROR(stream) do { \
   errors++; \
   cerr << rank_me << ": ERROR at " << __LINE__ << ": " << stream << endl; \

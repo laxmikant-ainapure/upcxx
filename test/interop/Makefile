@@ -28,7 +28,7 @@ UPCXX_CMD = $(shell echo $(UPCXX)) $(OPTLVL) $(UPCXX_FLAGS)
 
 export UPCXX_GASNET_CONDUIT
 
-TARGETS = main_upc main_upcxx alloc
+TARGETS = main_upc main_upcxx alloc arrval_upc arrval_upcxx
 
 TEST_OBJS = test_upc.o test_upcxx.o
 
@@ -40,16 +40,18 @@ version:
 	@type -p $(UPCC) ; exit 0
 	-$(UPCC_CMD) --version	
 
+$(TEST_OBJS) $(TARGETS:=.o): test.h
+
 .upc.o:
 	$(UPCC_CMD) -c $<
 
 .cpp.o:
 	$(UPCXX_CMD) -c $<
 
-main_upc: main_upc.o $(TEST_OBJS)
+%_upc: %_upc.o $(TEST_OBJS)
 	$(UPCC_CMD) -link-with='$(UPCXX_CMD)' $^ -o $@
 
-main_upcxx: main_upcxx.o $(TEST_OBJS)
+%_upcxx: %_upcxx.o $(TEST_OBJS)
 	$(UPCC_CMD) -link-with='$(UPCXX_CMD)' -extern-main $^ -o $@
 
 alloc.o: ../alloc.cpp

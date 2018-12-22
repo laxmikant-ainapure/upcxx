@@ -1,3 +1,4 @@
+// Simple UPC++ program that calls UPC
 #include <cassert>
 #include <iostream>
 
