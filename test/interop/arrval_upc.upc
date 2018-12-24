@@ -18,8 +18,8 @@
 
 #define CHECK(lp, base, sz) do { \
  if (arrval_check(lp, base, sz)) ERROR("failed arrval_check(" #lp "=%p, " \
-                                       #base "=0x%04x, " #sz "=%i)", \
-                                       (lp), (base), (sz)); \
+                                       #base "=0x%04x, " #sz "=%lu)", \
+                                       (lp), (int)(base), (unsigned long)(sz)); \
 } while (0)
 
 static char _gp_str[3][120];
@@ -64,7 +64,7 @@ int main(int argc, char **argv) {
   assert(lpeer >= 0 && lpeer < THREADS);
   char msg[80];
   snprintf(msg,sizeof(msg),"rank %i/%i: sending to gpeer=%i lpeer=%i\n", 
-    MYTHREAD, THREADS, gpeer, lpeer);
+    (int)MYTHREAD, (int)THREADS, gpeer, lpeer);
   fputs(msg,stdout); fflush(stdout);
 
   upc_barrier;
@@ -84,7 +84,7 @@ int main(int argc, char **argv) {
       // check upcast and downcasts
       shared [] val_t *gp = bupc_inverse_cast(lp);
       if (!gp) ERROR("Failed to bupc_inverse_cast(%p)", lp);
-      if (upc_threadof(gp) != MYTHREAD) ERROR("upc_threadof(%s)=%i",DUMP(1,gp),upc_threadof(gp));
+      if (upc_threadof(gp) != MYTHREAD) ERROR("upc_threadof(%s)=%i",DUMP(1,gp),(int)upc_threadof(gp));
       val_t *lp2 = (val_t *)gp;
       if (lp != lp2) ERROR("lp=%p != lp2=%p",lp,lp2);
 
