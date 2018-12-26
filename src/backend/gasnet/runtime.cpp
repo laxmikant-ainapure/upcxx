@@ -332,6 +332,11 @@ void upcxx::init() {
     ok = gex_Client_Init(&client, &endpoint, &world_tm, "upcxx", nullptr, nullptr, 0);
     UPCXX_ASSERT_ALWAYS(ok == GASNET_OK);
   }
+
+  // issue 100: hook up GASNet envvar services
+  detail::getenv = ([](const char *key){ return gasnett_getenv(key); });
+  detail::getenv_report = ([](const char *key, const char *val, bool is_dflt){ 
+                                      gasnett_envstr_display(key,val,is_dflt); });
   
   backend::verbose_noise = (bool)os_env<int>("UPCXX_VERBOSE", 0);
 
@@ -1588,6 +1593,20 @@ inline int handle_cb_queue::burst(int burst_n) {
   }
   
   return exec_n;
+}
+
+////////////////////////////////////////////////////////////////////////
+// from: upcxx/os_env.hpp
+
+namespace upcxx {
+
+  template<>
+  bool os_env(const std::string &name, const bool &otherwise) {
+    return !!gasnett_getenv_yesno_withdefault(name.c_str(), otherwise);
+  }
+  int64_t os_env(const std::string &name, const int64_t &otherwise, size_t mem_size_multiplier) {
+    return gasnett_getenv_int_withdefault(name.c_str(), otherwise, mem_size_multiplier);
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////
