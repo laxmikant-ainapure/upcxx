@@ -6,11 +6,11 @@ def _everything():
   import __builtin__
   import collections
   import os
-  import subprocess
   import sys
-  import threading
   import traceback
   import types
+
+  from . import errorlog
   
   def export(obj):
     globals()[obj.__name__] = obj
@@ -35,334 +35,132 @@ def _everything():
   deque = collections.deque
   
   types_GeneratorType = types.GeneratorType
-  
-  _tls = threading.local()
-  
-  def _tls_current_task():
-    task = getattr(_tls, 'task', None)
-    if task is None:
-      team = Team()
-      _tls.team = team
-      task = Task(team)
-      _tls.task = task
-    return task
-  
-  class Task(object):
-    __slots__ = ('_team','_sucs','_sats','_fireables','_progressing')
-    
-    def __init__(me, team):
-      me._team = team
-      me._sucs = deque()
-      me._sats = deque()
-      me._fireables = deque()
-      me._progressing = False
-    
-    # possibly remote dependency
-    def add_successor(me, dep, suc):
-      #suc_task = suc._task
-      #assert suc_task is me
-      
-      if dep._status == -1:
-        return 0
-      else:
-        dep_task = dep._task
-        if dep_task is me:
-          dep._sucs.append(suc)
-        else:
-          dep_task._sucs.append((dep,suc))
-          dep_task.dirtied()
-        return 1
-    
-    # possibly remote satisfy
-    def satisfy(me, fu):
-      fu_task = fu._task
-      if fu_task is me:
-        fu._status -= 1
-        if fu._status <= 0:
-          me._fireables.append(fu)
-        me.progress()
-      else:
-        fu_task._sats.append(fu)
-        fu_task.dirtied()
-    
-    def dirty(me):
-      return 0 != len(me._sucs) + len(me._sats) + len(me._fireables)
-    
-    def dirtied(me):
-      team = me._team
-      if me not in team._tasks_dirty:
-        guard = team._guard
-        guard.acquire()
-        if me not in team._tasks_dirty:
-          team._tasks_dirty.add(me)
-          team._tasks_dirty_idle.add(me)
-        guard.notify()
-        guard.release()
-    
-    def progress(me):
-      if not me._progressing:
-        me._progressing = True
-        sucs = me._sucs
-        sats = me._sats
-        fireables = me._fireables 
-        
-        while 0 != len(sucs) + len(sats) + len(fireables):
-          while len(sucs) != 0:
-            dep,suc = sucs.popleft()
-            assert dep._task is me
-            if dep._status == -1:
-              me.satisfy(suc)
-            else:
-              dep._sucs.append(suc)
-          
-          while len(sats) != 0:
-            fu = sats.popleft()
-            assert fu._task is me
-            fu._status -= 1
-            if fu._status <= 0:
-              fireables.append(fu)
-          
-          while len(fireables) != 0:
-            fu = fireables.popleft()
-            assert fu._task is me
-            fu._fire()
-        
-        me._progressing = False
 
-  class Team(object):
-    def __init__(me):
-      me._guard = guard = threading.Condition()
-      me._tasks_dirty = tasks_dirty = set()
-      me._tasks_dirty_idle = tasks_dirty_idle = set() # idle subset of dirty
-      me._idle_n = 0
-      
-      guard_acquire = guard.acquire
-      guard_release = guard.release
-
-      tasks_dirty_idle_add = tasks_dirty_idle.add
-      tasks_dirty_idle_discard = tasks_dirty_idle.discard
-      tasks_dirty_idle_pop = tasks_dirty_idle.pop
-
-      tasks_dirty_add = tasks_dirty.add
-      tasks_dirty_discard = tasks_dirty.discard
-      
-      def dirty():
-        return 0 != len(tasks_dirty_idle)
-      # register method
-      me.dirty = dirty
-      
-      # must be called with _guard held
-      def progress():
-        while 0 != len(tasks_dirty_idle):
-          task = tasks_dirty_idle_pop()
-          
-          me._idle_n -= 1
-          guard_release()
-          
-          _tls.task = task
-          task.progress()
-          
-          guard_acquire()
-          me._idle_n += 1
-          
-          # task.dirtied() does this:
-          #   1. makes task.dirty() return True by modifying one of its queues
-          #   2. puts task in tasks_dirty to signal it
-          # so we remove the signaled status first then test its queues to
-          # avoid the possiblity of lost notifications.
-          tasks_dirty_discard(task)
-          if task.dirty():
-            tasks_dirty_add(task)
-            tasks_dirty_idle_add(task)
-      # register method
-      me.progress = progress
-    
-      def suspend_current_task(task):
-        prog = task._progressing
-        task._progressing = False
-        
-        if task.dirty():
-          tasks_dirty_add(task)
-          tasks_dirty_idle_add(task)
-        else:
-          tasks_dirty_discard(task)
-        me._idle_n += 1
-        
-        return (task, prog)
-      # register method
-      me.suspend_current_task = suspend_current_task
-      
-      def resume_current_task(state):
-        task, prog = state
-        
-        _tls.task = task
-        task._progressing = prog
-        
-        if task.dirty():
-          tasks_dirty_add(task)
-        tasks_dirty_idle_discard(task)
-        me._idle_n -= 1
-      # register method
-      me.resume_current_task = resume_current_task
-  
-  threadpools = set()
-  
   @export
-  class ThreadPool(Team):
-    """
-    ThreadPool: maintains a collection of worker threads to which
-    function calls can be enqueued.
-    """
-    def __init__(me, size=None):
-      """
-      Initialize the pool where `size` indicates the number of threads.
-      If `size` is absent or None, then `multiprocessing.cpu_count()`
-      is used as `size`.
-      """
-      super(ThreadPool, me).__init__()
-      
-      threadpools.add(me)
-      
-      if size is None:
-        try: size = int(os.environ.get('UPCXX_NOBS_THREADS',''))
-        except: size = 4
-      
-      from multiprocessing import cpu_count
-      cpus = cpu_count()
-      
-      if size <= 0 or cpus < size:
-        size = cpus
-      
-      me._pending_n = 0
-      me._dead_n = size
-      me._threads_live = set()
-      me._thread_dead = None
-    
-    def join(me):
-      while True:
-        me._guard.acquire()
-        
-        live = list(me._threads_live)
-        me._threads_live.clear()
-        
-        dead = me._thread_dead
-        me._thread_dead = None
-        
-        me._guard.release()
-        
-        if len(live) == 0 and dead is None:
-          break
-        
-        for t in live:
-          t.join()
-        
-        if dead:
-          dead.join()
-      
-    def _worker(me, thd_me_box):
-      thd_me = thd_me_box[0]
-      me_dirty = me.dirty
-      me_progress = me.progress
-      guard = me._guard
-      guard_wait = guard.wait
-      
-      guard.acquire()
-      while me._pending_n != 0:
-        if not me_dirty():
-          guard_wait(.1)
-        me_progress()
-      
-      me._idle_n -= 1
-      me._dead_n += 1
-      
-      dead = me._thread_dead
-      me._thread_dead = thd_me
-      me._threads_live.discard(thd_me)
-      
-      guard.release()
-      
-      if dead is not None:
-        dead.join()
-    
-    def launch(me, lam, *args, **kws):
-      """
-      Enqueue `lam(*args,**kws)` for execution on the next available
-      worker thread.
-      """
-      guard = me._guard
-      guard.acquire()
-      
-      if me._idle_n == 0 and me._dead_n != 0:
-        me._idle_n += 1
-        me._dead_n -= 1
-        thd_me_box = [None]
-        thd = threading.Thread(target=ThreadPool._worker, args=(me, thd_me_box))
-        thd_me_box[0] = thd
-        thd.daemon = True
-        me._threads_live.add(thd)
-        thd.start()
-      
+  class Job(object):
+    def join(me): pass
+    def cancel(me): pass
+
+  jobs = deque()
+  
+  concurrency_limit = os.environ.get("UPCXX_NOBS_THREADS","")
+  try: concurrency_limit = int(concurrency_limit)
+  except: concurrency_limit = 0
+  
+  if concurrency_limit <= 0:
+    import multiprocessing
+    concurrency_limit = multiprocessing.cpu_count()
+
+  @export
+  def launched(job_fn):
+    def proxy(*args, **kws):
       ans = Promise()
-      
-      def finished(result):
-        ans.satisfy(result)
-        
-        guard.acquire()
-        pending_n = me._pending_n
-        pending_n -= 1
-        me._pending_n = pending_n
-        if pending_n == 0:
-          guard.notify_all()
-        guard.release()
-      
-      me._pending_n += 1
-      task = Task(me)
-      root = Mbind(Result(*args, **kws), lam, jailed=False)
-      root._task = task
-      tip = Mbind(root, finished, jailed=True)
-      tip._task = task
-      task._fireables.append(root)
-      
-      me._tasks_dirty.add(task)
-      me._tasks_dirty_idle.add(task)
-      guard.notify()
-      guard.release()
-      
+      if len(jobs) < concurrency_limit:
+        try:
+          jobs.append((job_fn(*args, **kws), ans))
+        except (AssertionError, KeyboardInterrupt):
+          raise
+        except BaseException as e:
+          ans.satisfy(Failure(e))
+      else:
+        jobs.append(((job_fn, args, kws), ans))
       return ans
-  
-  ThreadPool.default = ThreadPool()
-  
-  @export
+    proxy.__wrapped__ = job_fn
+    proxy.__name__ = job_fn.__name__
+    return proxy
+
+  @errorlog.at_shutdown
   def shutdown():
-    for pool in list(threadpools):
-      pool.join()
+    tmp = list(jobs)[0:concurrency_limit]
+    while tmp:
+      try:
+        job, ans = tmp.pop()
+        if not isinstance(job, tuple):
+          job.cancel()
+      except: pass
   
-  @export
-  def launched(fn):
-    """
-    Decorate the function `fn` as having its execution occur on
-    `ThreadPool.default`. The return value of the decorated function
-    will be wrapped in a future if it isn't a future already.
-    """
-    launch = ThreadPool.default.launch
-    return lambda *a,**kw: launch(fn, *a, **kw)
+  actives = deque()
+  actives_append = actives.append
+  actives_popleft = actives.popleft
+
+  progressing = [0]
+  def progress():
+    if progressing[0]: return
+    progressing[0] += 1
+
+    try:
+      while actives:
+        actives_popleft()._fire()
+    finally:
+      progressing[0] -= 1
+
+  def wait(until):
+    while True:
+      progressing[0] += 1
+      try:
+        while actives:
+          actives_popleft()._fire()
+      finally:
+        progressing[0] -= 1
+      
+      if until._status == -1:
+        return until._result
+      
+      if jobs:
+        sats = []
+        job, ans = jobs.popleft()
+        try:
+          sats.append((ans, Result(job.join())))
+        except (AssertionError, KeyboardInterrupt):
+          raise
+        except BaseException as e:
+          sats.append((ans, Failure(e)))
+        
+        while len(jobs) >= concurrency_limit:
+          (job_fn, args, kws), ans = jobs[concurrency_limit-1]
+          try:
+            job = job_fn(*args, **kws)
+            jobs[concurrency_limit-1] = (job, ans)
+            break
+          except (AssertionError, KeyboardInterrupt):
+            raise
+          except BaseException as e:
+            del jobs[concurrency_limit-1]
+            sats.append((ans, Failure(e)))
+
+        for fu,res in sats:
+          fu.satisfy(res)
+      else:
+        raise AssertionError("wait() on unsatisfiable future.")
   
   def enter_done(fu, result):
     fu._result = result._result
     fu._status = -1 # release-store
     
-    task = fu._task
-    task_satisfy = task.satisfy
     for suc in fu._sucs:
-      task_satisfy(suc)
-    task.progress()
+      suc._status -= 1
+      if suc._status == 0:
+        actives_append(suc)
+
+    progress()
   
   def fresh(fu):
     if fu._status == 0:
-      task = fu._task
-      task._fireables.append(fu)
-      task.progress()
+      actives_append(fu)
+      progress()
     return fu
+
+  def add_successor(dep, suc):
+    if dep._status == -1:
+      return 0
+    dep._sucs.append(suc)
+    return 1
+
+  def satisfy(fu):
+    fu._status -= 1
+    if fu._status == 0:
+      actives_append(fu)
+      progress()
   
   @export
   class Future(object):
@@ -376,10 +174,7 @@ def _everything():
     arguments. Futures may also represent a single thrown exception
     value.
     """
-    __slots__ = ('_task','_status','_result','_sucs')
-    
-    def __init__(me):
-      me._task = _tls_current_task()
+    __slots__ = ('_status','_result','_sucs')
     
     def __rshift__(arg, lam):
       """
@@ -448,29 +243,15 @@ def _everything():
       Cause this thread to make progress until this future is ready.
       Returns `value()` of this future.
       """
-      return me.wait_futurized().value()
+      return wait(me).value()
     
     def wait_futurized(me):
       """
       Cause this thread to make progress until this future is ready.
       Returns `result()` of this future.
       """
-      if me._status != -1:
-        task = _tls_current_task()
-        team = task._team
-        guard = team._guard
-        
-        guard.acquire()
-        state = team.suspend_current_task(task)
-        while me._status != -1:
-          if not team.dirty():
-            guard.wait(.1)
-          team.progress()
-        team.resume_current_task(state)
-        guard.release()
-      
-      return me._result
-
+      return wait(me)
+  
   @export
   class Result(Future):
     """
@@ -484,7 +265,6 @@ def _everything():
       Construct this future to have the same positional and keywords
       values that this function was called with.
       """
-      me._task = None
       me._status = -1
       me._result = me
       me._sucs = None
@@ -533,7 +313,6 @@ def _everything():
       traceback. If `traceback` is absent or None, then it will be
       initialized to the current traceback in `sys.exc_info()`.
       """
-      me._task = None
       me._status = -1
       me._result = me
       me._sucs = None
@@ -581,10 +360,8 @@ def _everything():
       """
       arg = futurize(*args, **kwargs)
       me._arg = arg
-      task = _tls_current_task()
-      me._status += task.add_successor(arg, me)
-      task.satisfy(me)
-      task.progress()
+      me._status += add_successor(arg, me)
+      satisfy(me)
   
   @export
   class Mbind(Future):
@@ -593,10 +370,8 @@ def _everything():
     def __init__(me, arg, lam, jailed):
       super(Mbind, me).__init__()
       
-      task = me._task
-      
       me._sucs = []
-      me._status = task.add_successor(arg, me)
+      me._status = add_successor(arg, me)
       
       def fire1():
         arg_result = arg._result
@@ -620,7 +395,7 @@ def _everything():
         if proxied._status in (-2,-3): # acquire load
           proxied = proxied._proxied
         
-        if 0 == task.add_successor(proxied, me):
+        if 0 == add_successor(proxied, me):
           enter_done(me, proxied)
         else:
           me._fire = make_fire2(proxied)
@@ -642,13 +417,11 @@ def _everything():
       super(All, me).__init__()
       me._sucs = []
       
-      me_task_add_successor = me._task.add_successor
-      
       status = 0
       for arg in args:
-        status += me_task_add_successor(arg, me)
+        status += add_successor(arg, me)
       for k in kws:
-        status += me_task_add_successor(kws[k], me)
+        status += add_successor(kws[k], me)
       me._status = status
     
       def _fire():
@@ -692,11 +465,9 @@ def _everything():
       super(WhenDone, me).__init__()
       me._sucs = []
       
-      me_task_add_successor = me._task.add_successor
-      
       status = 0
       for arg in args:
-        status += me_task_add_successor(arg, me)
+        status += add_successor(arg, me)
       me._status = status
     
     def _fire(me):
@@ -711,11 +482,9 @@ def _everything():
       me._sucs = []
       me._args = args
       
-      me_task_add_successor = me._task.add_successor
-      
       status = 0
       for arg in args:
-        status += me_task_add_successor(arg, me)
+        status += add_successor(arg, me)
       me._status = status
     
     def _fire(me):
@@ -738,7 +507,6 @@ def _everything():
       
       me.__name__ = gen.__name__
       
-      me_task_add_successor = me._task.add_successor
       gen_send = gen.send
       gen_throw = gen.throw
       
@@ -770,7 +538,7 @@ def _everything():
               break
             else:
               arg = futurize(arg)
-              status = me_task_add_successor(arg, me)
+              status = add_successor(arg, me)
               if status != 0:
                 me._fire = make_fire(arg)
                 me._status = status

@@ -971,7 +971,7 @@ sys.stdout.write(repr((sys.argv, os.environ)))
     
     # Run the cross-configure script.
     import subprocess as subp
-    p = subp.Popen([path(tmpd, crosslong)], cwd=tmpd, stdout=subp.PIPE, stdin=subp.PIPE, stderr=subp.STDOUT)
+    p = subp.Popen([path(tmpd, crosslong)], cwd=tmpd, stdout=subp.PIPE, stdin=subp.PIPE, stderr=subp.STDOUT, close_fds=True)
     out, _ = p.communicate('')
     if p.returncode != 0:
       raise errorlog.LoggedError('Configuration Error', 'GASNet cross-compile script (%s) failed.'%cross)
@@ -1689,7 +1689,7 @@ def makefile_extract(makefile, varname):
   --no-print-directory is required to ensure correct behavior when nobs was invoked by make
   """
   import subprocess as sp
-  p = sp.Popen(['make','--no-print-directory','-f','-','gimme'], stdin=sp.PIPE, stdout=sp.PIPE, stderr=sp.PIPE)
+  p = sp.Popen(['make','--no-print-directory','-f','-','gimme'], stdin=sp.PIPE, stdout=sp.PIPE, stderr=sp.PIPE, close_fds=True)
   tmp = ('include {0}\n' + 'gimme:\n' + '\t@echo $({1})\n').format(makefile, varname)
   val, _ = p.communicate(tmp)
   if p.returncode != 0:
@@ -1709,14 +1709,13 @@ def output_of(cmd_args):
   """
   try:
     import subprocess as sp
-    p = sp.Popen(cmd_args, stdin=sp.PIPE, stdout=sp.PIPE, stderr=sp.PIPE)
+    p = sp.Popen(cmd_args, stdin=sp.PIPE, stdout=sp.PIPE, stderr=sp.PIPE, close_fds=True)
     stdout, stderr = p.communicate()
     return (p.returncode, stdout, stderr)
   except OSError as e:
     return (e.errno, None, None)
 
 def download(url, to):
-  @async.launched
   def doit():
     import urllib
     try:
@@ -1731,5 +1730,5 @@ def download(url, to):
         raise
   
   print>>sys.stderr, 'Downloading %s' % url
-  yield doit()
+  doit()
   print>>sys.stderr, 'Finished    %s' % url
