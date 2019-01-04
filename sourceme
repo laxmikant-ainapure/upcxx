@@ -29,12 +29,29 @@ function upcxx_sourceme {
   
   export NOBS_ROOT
   export NOBS_PATH
+
+  # Find a suitable, working python install
+  if [[ -z "${UPCXX_PYTHON}" ]]; then
+    for py in python2.7 python2.8 python2 python ; do 
+      fpy=`type -p $py`
+      if test -x "$fpy" ; then
+          ver=`"$fpy" --version 2>&1 | head -1 | cut -f2 -d' '`
+          #echo "$fpy: $ver" 1>&2
+	  if expr "$ver" : '2\.[0-9][0-9]*\.[0-9][0-9]*$' >/dev/null ; then
+	    ver2=`echo $ver | cut -f2 -d.`
+	    ver3=`echo $ver | cut -f3 -d.`
+            if [ "$ver2" -gt 7 ] ||  \
+	       ( [ "$ver2" -eq 7 ] && [ "$ver3" -ge 5 ] ) ; then
+               export UPCXX_PYTHON="$fpy"
+               #echo "USING: $UPCXX_PYTHON" 1>&2
+               break
+	    fi
+	  fi
+      fi
+    done
+  fi
   function nobs {
-    if [[ -z "${UPCXX_PYTHON}" ]]; then
-      "${NOBS_PATH}/tool.py" "$@"
-    else
-      "${UPCXX_PYTHON}" "${NOBS_PATH}/tool.py" "$@"
-    fi
+    "${UPCXX_PYTHON}" "${NOBS_PATH}/tool.py" "$@"
   }
   
   if [ -e "./sourceme.ext" ]; then
