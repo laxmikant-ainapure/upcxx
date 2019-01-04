@@ -25,12 +25,14 @@ sys_info() {
         done
         echo "Settings:$SETTINGS"
         echo " "
-        for py in python python2 ; do # output python versions
-          fpy=`type -p $py`
-          if test -x "$fpy" ; then 
-            echo "$fpy: " `$fpy --version 2>&1` 
-          fi
-        done 
+	if test -n "$UPCXX_PYTHON" ; then
+            fpy=`type -p $UPCXX_PYTHON`
+            if test -x "$fpy" ; then
+              echo "$fpy: " `$fpy --version 2>&1`
+            else
+              echo "UPCXX_PYTHON=$UPCXX_PYTHON not found!"
+            fi
+	fi
         echo " "
     ) fi
 }
