@@ -47,6 +47,9 @@ def _everything():
         raise
       
       me.io_done.acquire()
+
+      for fd in me.fds:
+        os.close(fd)
       
       return (status, me.outputs['stdout'], me.outputs['stderr'])
 
@@ -140,55 +143,54 @@ def _everything():
 
     @async.launched
     def go():
-      if True:
-        initialize()
-        
+      initialize()
+      
+      if capture_stdout:
+        pipe_r, pipe_w = os.pipe()
+        set_nonblock(pipe_r)
+      
+      pid, ptfd = os.forkpty()
+      
+      if pid == 0: # i am child
         if capture_stdout:
-          pipe_r, pipe_w = os.pipe()
-          set_nonblock(pipe_r)
-        
-        pid, ptfd = os.forkpty()
-        
-        if pid == 0: # i am child
-          if capture_stdout:
-            os.close(pipe_r)
-            os.dup2(pipe_w, 1)
-            os.close(pipe_w)
+          os.close(pipe_r)
+          os.dup2(pipe_w, 1)
+          os.close(pipe_w)
 
-          child_close_fds()
-          
-          if cwd is not None:
-            os.chdir(cwd)
-          
-          if env is not None:
-            os.execvpe(args[0], args, env)
-          else:
-            os.execvp(args[0], args)
-        else: # i am parent
+        child_close_fds()
+        
+        if cwd is not None:
+          os.chdir(cwd)
+        
+        if env is not None:
+          os.execvpe(args[0], args, env)
+        else:
+          os.execvp(args[0], args)
+      else: # i am parent
+        with io_cond:
           job = Job()
           job.pid = pid
-          if capture_stdout:
-            job.wait_n = 3
-            os.close(pipe_w)
-          else:
-            job.wait_n = 2
-            job.outputs['stdout'] = ''
-
-          with io_cond:
-            io_w[ptfd] = (reversed_bufs(stdin), job)
-            io_r[ptfd] = ([], 'stderr', job)
-            if capture_stdout:
-              io_r[pipe_r] = ([], 'stdout', job)
-            io_cond.notify()
+          job.wait_n = 1
           
-          return job
-      else:
-        assert 0
-        import subprocess as sp
-        p = sp.Popen(args, stdout=sp.PIPE, stderr=sp.PIPE, stdin=sp.PIPE, cwd=cwd, env=env, close_fds=True)
-        out, err = p.communicate(stdin)
-        status = p.returncode
-    
+          if len(stdin) > 0:
+            job.wait_n += 1
+            io_w[ptfd] = (reversed_bufs(stdin), job)
+            
+          io_r[ptfd] = ([], 'stderr', job)
+          job.fds = [ptfd]
+          
+          if capture_stdout:
+            job.wait_n += 1
+            os.close(pipe_w)
+            io_r[pipe_r] = ([], 'stdout', job)
+            job.fds.append(pipe_r)
+          else:
+            job.outputs['stdout'] = ''
+          
+          io_cond.notify()
+        
+        return job
+  
     if cwd is not None:
       sys.stderr.write('(in '+ cwd + ')\n')
     sys.stderr.write(' '.join(args) + '\n\n')
@@ -218,7 +220,7 @@ def _everything():
 
   def reversed_bufs(s):
     cn = select.PIPE_BUF
-    n = len(s) + cn-1/cn
+    n = (len(s) + cn-1)/cn
     ans = [None]*n
     i = 0
     while i < n:
