@@ -51,6 +51,11 @@ sys_info
 platform_sanity_checks
 platform_settings
 
+# Check that Python/nobs is usable
+if ! nobs gasnet_conduit >/dev/null ; then
+    echo_and_die "Error invoking Python"
+fi
+
 if [ "$single" -eq 1 ]; then
   nobs install src/upcxx.cpp "$install_to" \
     || failure_and_die
