@@ -37,9 +37,9 @@ function upcxx_sourceme {
       if test -x "$fpy" ; then
           ver=`"$fpy" --version 2>&1 | head -1 | cut -f2 -d' '`
           #echo "$fpy: $ver" 1>&2
-	  if expr "$ver" : '2\.[0-9][0-9]*\.[0-9][0-9]*$' >/dev/null ; then
-	    ver2=`echo $ver | cut -f2 -d.`
-	    ver3=`echo $ver | cut -f3 -d.`
+	  if expr "$ver" : '2\.[0-9][0-9]*\.[0-9][0-9]*' >/dev/null ; then
+	    ver2=`expr "$ver" : '2\.\([0-9][0-9]*\)\.[0-9][0-9]*'`
+	    ver3=`expr "$ver" : '2\.[0-9][0-9]*\.\([0-9][0-9]*\)'`
             if [ "$ver2" -gt 7 ] ||  \
 	       ( [ "$ver2" -eq 7 ] && [ "$ver3" -ge 5 ] ) ; then
                export UPCXX_PYTHON="$fpy"
@@ -49,6 +49,10 @@ function upcxx_sourceme {
 	  fi
       fi
     done
+    if [[ -z "${UPCXX_PYTHON}" ]]; then
+      echo 'ERROR: Failed to find a suitable Python2 interpreter. Please set $UPCXX_PYTHON'
+      UPCXX_PYTHON=python
+    fi
   fi
   function nobs {
     "${UPCXX_PYTHON}" "${NOBS_PATH}/tool.py" "$@"
