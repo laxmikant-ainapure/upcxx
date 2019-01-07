@@ -3,10 +3,11 @@
 
 #include <upcxx/diagnostic.hpp>
 
-#include <cstdlib>
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <cstdint>
+#include <cstddef>
 
 namespace upcxx {
   template<class T>
@@ -14,7 +15,15 @@ namespace upcxx {
   template<class T>
   T os_env(const std::string &name, const T &otherwise);
 
+  template<>
+  bool os_env(const std::string &name, const bool &otherwise);
+  // mem_size_multiplier = default units (eg 1024=KB), or 0 for not a memory size
+  std::int64_t os_env(const std::string &name, const std::int64_t &otherwise, std::size_t mem_size_multiplier);
+
   namespace detail {
+    extern char *(*getenv)(const char *key);
+    extern void (*getenv_report)(const char *key, const char *val, bool is_dflt);
+
     template<class T>
     struct os_env_parse;
     
@@ -34,15 +43,35 @@ namespace upcxx {
         return val;
       }
     };
+
+    template<class T>
+    struct os_env_tostring;
+    
+    template<>
+    struct os_env_tostring<std::string> {
+      std::string operator()(const std::string & x) {
+        return x;
+      }
+    };
+    
+    template<class T>
+    struct os_env_tostring {
+      std::string operator()(const T & x) {
+        std::ostringstream ss;
+	ss << x;
+        return ss.str();
+      }
+    };
   }
 }
 
 template<class T>
 T upcxx::os_env(const std::string &name) {
+  char const *key = name.c_str();
   std::string sval;
   
-  char const *p = std::getenv(name.c_str());
-  UPCXX_ASSERT(p != 0x0);
+  char const *p = detail::getenv(key);
+  UPCXX_ASSERT_ALWAYS(p, "Missing required environment variable setting: " << key);
   sval = p;
   
   return detail::os_env_parse<T>()(std::move(sval));
@@ -50,15 +79,19 @@ T upcxx::os_env(const std::string &name) {
 
 template<class T>
 T upcxx::os_env(const std::string &name, const T &otherwise) {
+  char const *key = name.c_str();
+  char const *p = detail::getenv(key);
   std::string sval;
-  
-  char const *p = std::getenv(name.c_str());
   if(p) sval = p;
-  
-  if(sval.size() != 0)
-    return detail::os_env_parse<T>()(std::move(sval));
-  else
-    return otherwise;
+  bool is_dflt = (sval.size() == 0);
+ 
+  T result;
+  if (is_dflt) result = otherwise;
+  else         result = detail::os_env_parse<T>()(std::move(sval));
+
+  detail::getenv_report(key, detail::os_env_tostring<T>()(result).c_str(), is_dflt);
+
+  return result;
 }
 
 #endif

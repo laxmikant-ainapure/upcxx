@@ -34,17 +34,14 @@ void finish(uint64_t par_node_n, digest par_hash);
 double uts_width;
 
 int main() {
-  uts_width = upcxx::os_env<double>("UTS_WIDTH", -1);
-  if(uts_width < 0) {
-    std::cout<<"Using default UTS_WIDTH=100"<<std::endl<<std::flush;
-    uts_width = 100;
-  }
-  
   vranks::spawn(
     [](int vrank_me1, int vrank_n1) {
       vrank_me = vrank_me1;
       vrank_n = vrank_n1;
       
+      uts_width = upcxx::os_env<double>("UTS_WIDTH", 100);
+      if (!vrank_me) std::cout<<"UTS_WIDTH: " << uts_width << std::endl;
+
       uint64_t par_node_n;
       digest par_hash;
       

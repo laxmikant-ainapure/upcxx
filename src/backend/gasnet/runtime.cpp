@@ -173,6 +173,12 @@ namespace {
   bool   shared_heap_isinit = false;
   void  *shared_heap_base = nullptr;
   size_t shared_heap_sz = 0;
+
+  std::string format_memsize(size_t memsize) {
+    char buf[80];
+    return std::string(gasnett_format_number(memsize, buf, sizeof(buf), 1));
+  }
+
   void heap_init_internal(size_t &size) {
     UPCXX_ASSERT_ALWAYS(!shared_heap_isinit);
 
@@ -218,11 +224,27 @@ namespace {
       // ensure dlmalloc never tries to mmap anything from the system
       mspace_set_footprint_limit(segment_mspace_, shared_heap_sz);
     }
+    if(backend::verbose_noise) {
+      uint64_t maxsz = shared_heap_sz;
+      uint64_t minsz = shared_heap_sz;
+      gex_Event_Wait(gex_Coll_ReduceToOneNB(world_tm, 0, &maxsz, &maxsz, GEX_DT_U64, sizeof(maxsz), 1, GEX_OP_MAX, 0,0,0));
+      gex_Event_Wait(gex_Coll_ReduceToOneNB(world_tm, 0, &minsz, &minsz, GEX_DT_U64, sizeof(minsz), 1, GEX_OP_MIN, 0,0,0));
+      if (backend::rank_me == 0) {
+        std::cerr
+        <<std::string(70,'/')<<std::endl
+        <<"heap_init_internal(): Shared heap statistics: \n"
+        << "  max size: 0x" << std::hex << maxsz << " (" << format_memsize(maxsz) << ")\n"
+        << "  min size: 0x" << std::hex << minsz << " (" << format_memsize(minsz) << ")\n"
+        << "  P0 base:  " << shared_heap_base <<std::endl
+        <<std::string(70,'/')<<std::endl;
+      }
+    }
     shared_heap_isinit = true;
 
     if (!upcxx_upc_is_linked()) {
       if (local_scratch_sz && !local_scratch_ptr) { 
         local_scratch_ptr = upcxx::allocate(local_scratch_sz, GASNET_PAGESIZE);
+        UPCXX_ASSERT_ALWAYS(local_scratch_ptr);
       }
     }
   }
@@ -332,8 +354,19 @@ void upcxx::init() {
     ok = gex_Client_Init(&client, &endpoint, &world_tm, "upcxx", nullptr, nullptr, 0);
     UPCXX_ASSERT_ALWAYS(ok == GASNET_OK);
   }
+
+  backend::rank_n = gex_TM_QuerySize(world_tm);
+  backend::rank_me = gex_TM_QueryRank(world_tm);
   
-  backend::verbose_noise = (bool)os_env<int>("UPCXX_VERBOSE", 0);
+  // issue 100: hook up GASNet envvar services
+  detail::getenv = ([](const char *key){ return gasnett_getenv(key); });
+  detail::getenv_report = ([](const char *key, const char *val, bool is_dflt){ 
+                                      gasnett_envstr_display(key,val,is_dflt); });
+  
+  backend::verbose_noise = os_env<bool>("UPCXX_VERBOSE", false);
+
+  //////////////////////////////////////////////////////////////////////////////
+  // UPCXX_SHARED_HEAP_SIZE environment handling
 
   // Determine a bound on the max usable shared segment size
   size_t gasnet_max_segsize = gasnet_getMaxLocalSegmentSize();
@@ -344,25 +377,45 @@ void upcxx::init() {
     gasnet_max_segsize -= upc_segment_pad;
   }
 
-  std::string upcxx_segment_variable = os_env<std::string>("UPCXX_SEGMENT_MB", "128");
-  std::transform(
-    upcxx_segment_variable.begin(), upcxx_segment_variable.end(),
-    upcxx_segment_variable.begin(),
-    [](unsigned char c) { return std::toupper(c); }
-  );
- 
+  const char *segment_keyname = "UPCXX_SHARED_HEAP_SIZE";
+  { // Accept UPCXX_SEGMENT_MB for backwards compatibility:
+    const char *old_keyname = "UPCXX_SEGMENT_MB";
+    if (!detail::getenv(segment_keyname) && detail::getenv(old_keyname)) segment_keyname = old_keyname;
+  }
+  bool use_max = false;
+  { // Accept m/MAX/i to request the largest available segment (limited by GASNET_MAX_SEGSIZE)
+    const char *val = detail::getenv(segment_keyname);
+    if (val) {
+      std::string maxcheck = val;
+      std::transform( maxcheck.begin(), maxcheck.end(), maxcheck.begin(),
+                  [](unsigned char c) { return std::toupper(c); }); 
+      use_max = (maxcheck == "MAX");
+    }
+  }
+
   size_t segment_size = 0;
-  if(upcxx_segment_variable == "MAX") {
+  if (use_max) {
     segment_size = gasnet_max_segsize;
+    gasnett_envint_display(segment_keyname, segment_size, 0, 1);
   } else {
-    segment_size = size_t(os_env<double>("UPCXX_SEGMENT_MB", 128)*(1<<20));
+    int64_t szval = os_env(segment_keyname, 128<<20, 1<<20); // default units = MB
+    int64_t minheap = 2*GASNET_PAGESIZE; // space for local scratch and heap
+    UPCXX_ASSERT_ALWAYS(szval >= minheap, segment_keyname << " too small!");
+    segment_size = szval;
   }
   // page align: page size should always be a power of 2
   segment_size = (segment_size + GASNET_PAGESIZE-1) & -GASNET_PAGESIZE;
 
-  backend::rank_n = gex_TM_QuerySize(world_tm);
-  backend::rank_me = gex_TM_QueryRank(world_tm);
-  
+  // now adjust the segment size if it's less than the GASNET_MAX_SEGSIZE
+  if (segment_size > gasnet_max_segsize) {
+    if(upcxx::rank_me() == 0) {
+      cerr << "WARNING: Requested UPC++ shared heap size (" << format_memsize(segment_size) << ") "
+              "is larger than the GASNet segment size (" << format_memsize(gasnet_max_segsize) << "). "
+              "Adjusted shared heap size to " << format_memsize(gasnet_max_segsize) << ".\n";
+    }
+    segment_size = gasnet_max_segsize;
+  }
+ 
   // ready master persona
   backend::initial_master_scope = new persona_scope(backend::master);
   UPCXX_ASSERT_ALWAYS(backend::master.active_with_caller());
@@ -375,16 +428,6 @@ void upcxx::init() {
     backend::rank_n, backend::rank_me
   );
   
-  // now adjust the segment size if it's less than the GASNET_MAX_SEGSIZE
-  if(segment_size > gasnet_max_segsize) {
-    if(upcxx::rank_me() == 0) {
-      cerr << "WARNING: Requested UPC++ segment size (" << segment_size << ") "
-              "is larger than the GASNet segment size (" << gasnet_max_segsize << "). "
-              "Adjusted segment size to " << (gasnet_max_segsize) << ".\n";
-    }
-    segment_size = gasnet_max_segsize;
-  }
- 
   // Create the GEX segment
   if (upcxx_upc_is_linked()) {
     if (!backend::rank_me) 
@@ -1588,6 +1631,20 @@ inline int handle_cb_queue::burst(int burst_n) {
   }
   
   return exec_n;
+}
+
+////////////////////////////////////////////////////////////////////////
+// from: upcxx/os_env.hpp
+
+namespace upcxx {
+
+  template<>
+  bool os_env(const std::string &name, const bool &otherwise) {
+    return !!gasnett_getenv_yesno_withdefault(name.c_str(), otherwise);
+  }
+  int64_t os_env(const std::string &name, const int64_t &otherwise, size_t mem_size_multiplier) {
+    return gasnett_getenv_int_withdefault(name.c_str(), otherwise, mem_size_multiplier);
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////
