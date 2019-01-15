@@ -12,8 +12,7 @@ The UPC and UPC++ layers can be initialized in either order - `upcxx::init()`
 will detect if UPC has been linked in and initialize UPC if necessary.
 [test/interop/main_upc.upc](../test/interop/main_upc.upc) and 
 [test/interop/main_upcxx.cpp](../test/interop/main_upcxx.cpp) provide simple
-interoperability examples, where main() is in UPC or UPC++, respectively.
-
+interoperability examples, where `main()` is in UPC or UPC++, respectively.
 
 Both layers may be active simultaneously, and shared objects from either layer are also 
 valid shared objects in the other layer - however there are some important caveats. 
@@ -24,9 +23,23 @@ to the shared object (eg in UPC this is done using a `(void*)` cast, in UPC++ us
 The raw pointer can then be passed across layers, and "up-cast" using the
 appropriate function (i.e. `upcxx::try_global_ptr()` or `bupc_inverse_cast()`).
 See the documentation for each model for details on up-casting/down-casting.
+Finally, note that shared objects dynamically allocated by one layer may only be 
+freed using the appropriate routine in that same layer.
 [test/interop/arrval_upc.upc](../test/interop/arrval_upc.upc) and 
 [test/interop/arrval_upcxx.cpp](../test/interop/arrval_upcxx.cpp) provide examples of 
 passing shared objects across layers.
+
+Note that UPC communication operations will NOT advance the user-level UPC++ progress engine,
+so for example processes stalled inside a `upc_barrier` or other UPC collective operations 
+will NOT execute UPC++ RPCs, which could lead to deadlock if a remote process
+is waiting for an RPC acknowledgment before entering the matching UPC collective call.
+Conversely, UPC++ internal progress IS sufficient to service remotely initiated
+UPC operations (i.e. `upcxx::progress()`, `upcxx::progress(upcxx::progress_level::internal)`,
+and any UPC++ routines specified as "progress level: internal" all ensure
+UPC-side progress equivalent to `bupc_poll()`).
+
+UPC atomic memory operations are not guaranteed to be coherent with UPC++ atomic memory operations,
+as there is currently no way to express a single atomic domain shared by both layers.
 
 ## UPC++ / Berkeley UPC Runtime Hybrid Build Rules
 
@@ -37,7 +50,7 @@ passing shared objects across layers.
   and compatible settings for any non-default GASNet configure options.
 * The C++ compiler used for UPC++ must be ABI compatible with the backend C compiler configured for UPCR.
 * UPCR must use `upcc -nopthreads` mode (ie UPC++ interop does not support pthread-as-UPC-thread mode).
-* All objects linked into one executable must agree upon GASNet conduit, debug mode and thread-safety setting.
+* All object files linked into one executable must agree upon GASNet conduit, debug mode and thread-safety setting.
 * If `UPCXX_THREADMODE=par`, then must pass `upcc -uses-threads`.
   This in turn may require UPCR's `configure --enable-uses-threads`.
 * The link command should use the UPCR link wrapper, and specify `upcc -link-with='upcxx <args>'`.
@@ -47,12 +60,12 @@ passing shared objects across layers.
 
 ## Running UPC++ / Berkeley UPC Runtime Hybrid programs
 
-Resulting executables can be run using either upcrun or upcxx-run (or in many cases, 
+Resulting executables can be run using either `upcrun` or `upcxx-run` (or in many cases, 
 the normal system mpirun equivalent), the job layout options are very similar.
 However for obvious reasons, the model-specific scripts only have command-line options for altering 
 model-specific behaviors of their own model (implemented by setting environment variables). 
 If one needs non-default runtime behaviors from both models, then the recommended mechanism is to 
-manually set the appropriate environment variables. Both upcrun and upcxx-run scripts have `-v` 
+manually set the appropriate environment variables. Both `upcrun` and `upcxx-run` scripts have `-v` 
 options that output the environment variables set to effect a given set of command-line options.
 
 Note that special care must usually be given to the shared heap settings.
