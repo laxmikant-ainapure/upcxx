@@ -209,7 +209,8 @@ namespace {
         shared_heap_base = segment_base;
         size = segment_size;
       } else {
-        shared_heap_base = upcxx_upc_alloc(size);
+        if (upcxx_upc_heap_coll) shared_heap_base = upcxx_upc_all_alloc(size);
+        else shared_heap_base = upcxx_upc_alloc(size);
       }
     } else { // stand-alone UPC++
       upcxx_use_upc_alloc = false;
