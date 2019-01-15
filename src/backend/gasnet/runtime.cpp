@@ -194,10 +194,10 @@ namespace {
       if (firstcall) {
         firstcall = false;
         // UPCXX_USE_UPC_ALLOC enables the use of the UPC allocator to replace our allocator
-        upcxx_use_upc_alloc = !!gasnett_getenv_yesno_withdefault("UPCXX_USE_UPC_ALLOC" , upcxx_use_upc_alloc);
+        upcxx_use_upc_alloc = upcxx::os_env<bool>("UPCXX_USE_UPC_ALLOC" , upcxx_use_upc_alloc);
         if (!upcxx_use_upc_alloc) {
           // UPCXX_UPC_HEAP_COLL: selects the use of the collective or non-collective UPC shared heap to host the UPC++ allocator
-          upcxx_upc_heap_coll = !!gasnett_getenv_yesno_withdefault("UPCXX_UPC_HEAP_COLL" , upcxx_upc_heap_coll);
+          upcxx_upc_heap_coll = upcxx::os_env<bool>("UPCXX_UPC_HEAP_COLL" , upcxx_upc_heap_coll);
         }
       }
       if (local_scratch_sz && !local_scratch_ptr) { 
