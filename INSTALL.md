@@ -72,9 +72,10 @@ environment variables:
 * `CROSS`: The cross-configure settings script to pull from the GASNet source
   tree (computed as `<gasnet>/other/contrib/cross-configure-${CROSS}`).
 * `GASNET`: Provides the GASNet-EX source tree from which the UPC\+\+ install
-  script will build its own version of GASNet. This can be a path to a tarball,
-  url to a tarball, or path to a full source tree.  Defaults to a url to a
-  publicly available GASNet-EX tarball.
+  script will build its own version of GASNet-EX. This can be a path to a tarball,
+  URL to a tarball, or path to a full source tree. If provided, this must correspond 
+  to a recent and compatible version of GASNet-EX (NOT GASNet-1).
+  Defaults to a URL to a publicly available GASNet-EX tarball. 
 * `GASNET_CONFIGURE_ARGS`: List of additional command line arguments passed to
   GASNet's configure phase.
 
