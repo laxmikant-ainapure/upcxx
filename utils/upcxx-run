@@ -4,12 +4,18 @@
 from __future__ import print_function
 
 import sys
+import os
 
 if sys.version_info < (2, 7, 5):
-    sys.stderr.write('ERROR: Python version >= 2.7.5 required\n')
+    # allow the environment to override a too-old python in PATH
+    if os.environ.get('UPCXX_PYTHON') and not os.environ.get('UPCXX_PYTHON_NORECURSE'):
+        os.environ['UPCXX_PYTHON_NORECURSE'] = "1";
+        os.execv('/usr/bin/env', ['/usr/bin/env',os.environ['UPCXX_PYTHON']] + sys.argv)
+    sys.stderr.write('ERROR: Python version >= 2.7.5 required. Please set $UPCXX_PYTHON to a working interpreter.\n')
     exit(1)
+if os.environ.get('UPCXX_PYTHON_NORECURSE'):
+    del os.environ['UPCXX_PYTHON_NORECURSE']
 
-import os
 import argparse
 import subprocess
 import string
