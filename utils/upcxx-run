@@ -289,6 +289,10 @@ def main():
         
     if conduit == 'smp':
         os.environ['GASNET_PSHM_NODES'] = str(args.nranks)
+        if args.nnodes and args.nnodes != 1:
+            print('WARNING: '+executable+' was compiled with smp backend, which only supports single-node operation. -N option ignored.')
+            print('WARNING: For multi-node operation, please re-compile with UPCXX_GASNET_CONDUIT=<backend>')
+            args.nnodes = 1
     elif conduit == 'udp':
         spawner = 'amudprun'
         cmd = ['-np', str(args.nranks)] + cmd
