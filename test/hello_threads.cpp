@@ -26,7 +26,7 @@ int main() {
     delete threads[t];
   }
 
-  std::cout << "Done.\n";
+  std::cout << "Done." << std::endl;
 
   return 0;
 }
