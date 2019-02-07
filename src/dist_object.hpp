@@ -88,7 +88,7 @@ namespace upcxx {
         );
     }
     
-    dist_object(upcxx::team &tm, T value):
+    dist_object(T value, upcxx::team &tm):
       tm_(&tm),
       value_(std::move(value)) {
       
