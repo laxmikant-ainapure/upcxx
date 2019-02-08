@@ -132,7 +132,7 @@ def gasnet_user(cxt):
   value = env('GASNET', None)
   
   if not value:
-    default_gasnetex_url_b64 = 'aHR0cHM6Ly91cGMtYnVncy5sYmwuZ292L3NuYXBzaG90L0dBU05ldC0yMDE4LjEyLjIudGFyLmd6'
+    default_gasnetex_url_b64 = 'aHR0cHM6Ly91cGMtYnVncy5sYmwuZ292L25pZ2h0bHkvdW5saXN0ZWQvR0FTTmV0LUVYLWNvbGxhYm9yYXRvci1zbmFwc2hvdC50YXIuZ3o='
     import base64
     value = base64.b64decode(default_gasnetex_url_b64)
   
