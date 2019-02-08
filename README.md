@@ -66,7 +66,7 @@ For instructions on installing UPC++ and compiling programs, look at
 
 For recommendations on debugging, see [docs/debugging.md](docs/debugging.md)
 
-Please report any problems in the [issue tracker](https://bitbucket.org/berkeleylab/upcxx/issues).
+Please report any problems in the [issue tracker](http://upcxx-bugs.lbl.gov).
 
 ## Testing
 
@@ -93,13 +93,23 @@ For copyright notice and licensing agreement, see [LICENSE.txt](LICENSE.txt)
 New features/enhancements: (see specification and programmer's guide for full details)
 
 * There is now an offline installer package for UPC++, for systems lacking connectivity
-* upcxx::barrier performance has been improved
-* Experimental interoperability support for Berkeley UPC
+* Barrier synchronization performance has been improved
+* Support for interoperability Berkeley UPC, see [upc-hybrid.md](docs/upc-hybrid.md)
 
 Notable bug fixes:
 
+* issue #100: Fix shared heap setting propagation on loosely-coupled clusters
+* issue #118: Enforce GEX version interlock at compile time
 * issue #177: Completion broken for non-fetching binary AMOs
 * issue #183: bench/{put_flood,nebr_exchange} were failing to compile
+* issue #185: Fix argument order for dist_object constructor to match spec
+* issue #187: Improve Python detection logic for the install script
+* issue #190: Teach upcxx-run to honor UPCXX_PYTHON
+
+Breaking changes:
+
+* envvar `UPCXX_SEGMENT_MB` has been renamed to `UPCXX_SHARED_HEAP_SIZE`.
+  For backwards compat, the former is still accepted when the latter is unset.
 
 ### 2018.09.26: Release 2018.9.0
 
@@ -179,7 +189,7 @@ Notable bug fixes:
 
 This release is not yet performant, and may be unstable or buggy.
 
-Please report any problems in the [issue tracker](https://bitbucket.org/berkeleylab/upcxx/issues).
+Please report any problems in the [issue tracker](http://upcxx-bugs.lbl.gov).
 
 ### 2018.01.31: Release 2018.1.0 BETA
 
