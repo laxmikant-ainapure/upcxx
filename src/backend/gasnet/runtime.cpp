@@ -431,9 +431,8 @@ void upcxx::init() {
   
   // Create the GEX segment
   if (upcxx_upc_is_linked()) {
-    if (!backend::rank_me) 
-      cerr << "UPC++ BETA FEATURE NOTICE: Activating interoperability support for the Berkeley UPC Runtime. "
-              "This is not an officially supported feature." << endl;
+    if (backend::verbose_noise && !backend::rank_me) 
+      cerr << "UPCXX: Activating interoperability support for the Berkeley UPC Runtime." << endl;
   } else {
     ok = gex_Segment_Attach(&segment, world_tm, segment_size);
     UPCXX_ASSERT_ALWAYS(ok == GASNET_OK);
