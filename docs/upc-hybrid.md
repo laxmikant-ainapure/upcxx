@@ -61,8 +61,10 @@ as there is currently no way to express a single atomic domain shared by both la
 ## Running UPC++ / Berkeley UPC Runtime Hybrid programs
 
 Resulting executables can be run using either `upcrun` or `upcxx-run` (or in many cases, 
-the normal system mpirun equivalent), the job layout options are very similar.
-However for obvious reasons, the model-specific scripts only have command-line options for altering 
+the normal system mpirun equivalent), the job layout options are very similar. However `upcrun`
+is recommended for most users because the UPC Runtime controls the overall shared heap sizing
+(which most users will want to tweak) and `upcxx-run` does not know how control the UPC heap size.
+For obvious reasons, the model-specific scripts only have command-line options for altering 
 model-specific behaviors of their own model (implemented by setting environment variables). 
 If one needs non-default runtime behaviors from both models, then the recommended mechanism is to 
 manually set the appropriate environment variables. Both `upcrun` and `upcxx-run` scripts have `-v` 
@@ -75,7 +77,7 @@ For the default `UPCXX_USE_UPC_ALLOC=yes` mode: (recommended)
   In this mode, UPC++ uses the UPCR non-collective shared heap allocator directly to service all 
   UPC++ shared allocations. In this mode, UPC++ shared heap controls are disabled and the size of the
   shared heap (shared by both models) is controlled by Berkeley UPC Runtime.
-  See documentation for `upcc -shared-heap` and `UPC_SHARED_HEAP_SIZE` for details on controlling size.
+  See documentation for `upcrun -shared-heap` and `UPC_SHARED_HEAP_SIZE` for details on controlling size.
   Note that UPC++ shared heap allocation failures (ie out of memory) are fatal in this mode.
 
 For `UPCXX_USE_UPC_ALLOC=no` mode:
