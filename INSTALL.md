@@ -79,6 +79,13 @@ environment variables:
 * `GASNET_CONFIGURE_ARGS`: List of additional command line arguments passed to
   GASNet's configure phase.
 
+By default ibv-conduit (InfiniBand support) will use MPI for job spawning if a
+working `mpicc` is found at installation time.  When this occurs, `CXX=mpicxx`
+(or similar) is recommended at install time to ensure correct linkage of
+ibv-conduit executables.  Alternatively, one may include `--disable-mpi-compat`
+in the value of `GASNET_CONFIGURE_ARGS` to exclude support for MPI as a job
+spawner.
+
 # Compiling Against UPC\+\+ on the Command Line #
 
 With UPC\+\+ installed, the easiest way to build a UPC++ application from the
