@@ -66,6 +66,9 @@ def upcxx_backend_id():
              otherwise="gasnet_seq",
              universe=("gasnet_seq","gasnet_par"))
 
+def upcxx_make():
+  return shplit(env("UPCXX_MAKE", "make -j 8"))
+
 @cached # only execute once per nobs invocation
 def _pthread():
   """
@@ -1152,13 +1155,13 @@ class gasnet_built:
         # so we can build just what we need (conduit,threading)
         print>>sys.stderr, 'Building GASNet (conduit=%s, threading=%s)...'%(conduit, syncmode)
         yield subexec.launch(
-          ['make', syncmode],
+          upcxx_make() + [syncmode],
           cwd = os.path.join(build_dir, '%s-conduit'%conduit)
         )
         
         if conduit == 'udp':
           yield subexec.launch(
-            ['make', 'amudprun'],
+            upcxx_make() + ['amudprun'],
             cwd = os.path.join(build_dir, 'other', 'amudp')
           )
         
@@ -1167,11 +1170,11 @@ class gasnet_built:
       else:
         # User wants us to install gasnet
         print>>sys.stderr, 'Building GASNet...'
-        yield subexec.launch(['make'], cwd=build_dir)
+        yield subexec.launch(upcxx_make(), cwd=build_dir)
         
         print>>sys.stderr, 'Installing GASNet...'
         yield subexec.launch(
-          ['make', 'install', 'prefix='+install_to],
+          upcxx_make() + ['install', 'prefix='+install_to],
           cwd=build_dir
         )
         installed = True
@@ -1689,7 +1692,7 @@ def makefile_extract(makefile, varname):
   --no-print-directory is required to ensure correct behavior when nobs was invoked by make
   """
   import subprocess as sp
-  p = sp.Popen(['make','--no-print-directory','-f','-','gimme'], stdin=sp.PIPE, stdout=sp.PIPE, stderr=sp.PIPE, close_fds=True)
+  p = sp.Popen(upcxx_make() + ['--no-print-directory','-f','-','gimme'], stdin=sp.PIPE, stdout=sp.PIPE, stderr=sp.PIPE, close_fds=True)
   tmp = ('include {0}\n' + 'gimme:\n' + '\t@echo $({1})\n').format(makefile, varname)
   val, _ = p.communicate(tmp)
   if p.returncode != 0:

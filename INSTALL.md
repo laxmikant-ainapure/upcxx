@@ -78,6 +78,12 @@ environment variables:
   Defaults to a URL to a publicly available GASNet-EX tarball. 
 * `GASNET_CONFIGURE_ARGS`: List of additional command line arguments passed to
   GASNet's configure phase.
+* `UPCXX_PYTHON`: Python2 interpreter to use.
+* `UPCXX_MAKE`: GNU Make command for make steps in the installation (e.g. building
+  the GASNet-EX library). Defaults to `make -j 8` for parallel make.  To disable
+  parallel make, set `UPCXX_MAKE=make`.
+* `UPCXX_NOBS_THREADS`: Number of tasks to used for nobs-based compilation of the runtime.
+  Defaults to autodetected CPU count, set `UPCXX_NOBS_THREADS=1` for serial compilation.
 
 By default ibv-conduit (InfiniBand support) will use MPI for job spawning if a
 working `mpicc` is found at installation time.  When this occurs, `CXX=mpicxx`
