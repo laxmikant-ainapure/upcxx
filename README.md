@@ -95,16 +95,17 @@ New features/enhancements: (see specification and programmer's guide for full de
 * There is now an offline installer package for UPC++, for systems lacking connectivity
 * Barrier synchronization performance has been improved
 * Support for interoperability Berkeley UPC, see [upc-hybrid.md](docs/upc-hybrid.md)
+* Installer now defaults to more build parallelism, improving efficiency (see `UPCXX_MAKE`)
 
 Notable bug fixes:
 
 * issue #100: Fix shared heap setting propagation on loosely-coupled clusters
 * issue #118: Enforce GEX version interlock at compile time
 * issue #177: Completion broken for non-fetching binary AMOs
-* issue #183: bench/{put_flood,nebr_exchange} were failing to compile
-* issue #185: Fix argument order for dist_object constructor to match spec
+* issue #183: `bench/{put_flood,nebr_exchange}` were failing to compile
+* issue #185: Fix argument order for `dist_object` constructor to match spec
 * issue #187: Improve Python detection logic for the install script
-* issue #190: Teach upcxx-run to honor UPCXX_PYTHON
+* issue #190: Teach upcxx-run to honor `UPCXX_PYTHON`
 
 Breaking changes:
 
