@@ -2,6 +2,7 @@
 #include <upcxx/backend/gasnet/runtime_internal.hpp>
 #include <upcxx/backend/gasnet/upc_link.h>
 
+#include <upcxx/cuda_internal.hpp>
 #include <upcxx/os_env.hpp>
 #include <upcxx/reduce.hpp>
 #include <upcxx/team.hpp>
@@ -19,6 +20,7 @@
 namespace backend = upcxx::backend;
 namespace detail  = upcxx::detail;
 namespace gasnet  = upcxx::backend::gasnet;
+namespace cuda    = upcxx::cuda;
 
 using upcxx::command;
 using upcxx::intrank_t;
@@ -682,7 +684,7 @@ void upcxx::finalize() {
     while(GASNET_OK != gasnet_barrier_try(0, GASNET_BARRIERFLAG_ANONYMOUS))
       upcxx::progress();
   }
-  
+
   struct popn_stats_t {
     int64_t sum, min, max;
   };
@@ -980,17 +982,6 @@ void gasnet::send_am_eager_persona(
 
 namespace {
   template<typename Fn>
-  struct rma_get_cb final: gasnet::handle_cb {
-    Fn fn_;
-    rma_get_cb(Fn fn): fn_(std::move(fn)) {}
-
-    void execute_and_delete(gasnet::handle_cb_successor add) {
-      fn_();
-      delete this;
-    }
-  };
-
-  template<typename Fn>
   void rma_get(
       void *buf_d,
       intrank_t rank_s,
@@ -1001,7 +992,7 @@ namespace {
     
     UPCXX_ASSERT(!UPCXX_BACKEND_GASNET_SEQ || backend::master.active_with_caller());
 
-    auto *cb = new rma_get_cb<Fn>{std::move(fn)};
+    auto *cb = gasnet::make_handle_cb(std::move(fn));
     
     gex_Event_t h = gex_RMA_GetNB(
       gasnet::handle_of(upcxx::world()),
@@ -1372,6 +1363,22 @@ RpcAsLpc* rpc_as_lpc::build_rdzv_lz(
   return m;
 }
 
+namespace {
+  void burst_cuda(persona *per) {
+  #if UPCXX_CUDA_ENABLED
+    while(cuda::event_cb *cb = per->cuda_state_.event_cbs.peek()) {
+      if(CUDA_SUCCESS == cuEventQuery((CUevent)cb->cu_event)) {
+        cuEventDestroy((CUevent)cb->cu_event);
+        per->cuda_state_.event_cbs.dequeue();
+        cb->execute_and_delete();
+      }
+      else
+        break;
+    }
+  #endif
+  }
+}
+
 void gasnet::after_gasnet() {
   detail::persona_tls &tls = detail::the_persona_tls;
   
@@ -1386,6 +1393,8 @@ void gasnet::after_gasnet() {
     exec_n = 0;
     
     tls.foreach_active_as_top([&](persona &p) {
+      burst_cuda(&p);
+      
       #if UPCXX_BACKEND_GASNET_SEQ
         if(&p == &backend::master)
           exec_n += gasnet::master_hcbs.burst(4);
@@ -1431,6 +1440,8 @@ void upcxx::progress(progress_level level) {
     exec_n = 0;
     
     tls.foreach_active_as_top([&](persona &p) {
+      burst_cuda(&p);
+      
       #if UPCXX_BACKEND_GASNET_SEQ
         if(&p == &backend::master)
           exec_n += gasnet::master_hcbs.burst(4);

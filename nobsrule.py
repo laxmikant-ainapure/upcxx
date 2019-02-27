@@ -90,6 +90,54 @@ def openmp(cxt):
     'libflags': ['-fopenmp']
   }}
 
+@rule(cli='cuda')
+@cached
+def cuda(cxt):
+  """
+  Platform specific logic for finding cuda goes here.
+  """
+  import os
+  import tempfile
+
+  fd,dummy = tempfile.mkstemp(suffix='.cpp')
+  dummy_out = os.path.join(dummy, '.out')
+  os.write(fd, "int main() { return 0; }\n")
+  os.close(fd)
+
+  import subprocess as subp
+  p=subp.Popen(['nvcc','-ccbin=g++','--verbose',dummy,'-o',dummy_out],
+    stdin=subp.PIPE, stdout=subp.PIPE, stderr=subp.PIPE, close_fds=True)
+  out,err = p.communicate()
+
+  os.remove(dummy)
+  try: os.remove(dummy_out)
+  except: pass
+
+  ppflags = []
+  libflags = []
+  for line in err.split('\n'):
+    if line.startswith('#$ g++ -o'):
+      flags = [flag[1:-1] if flag.startswith('"') else flag for flag in line.split()]
+      if '-Wl,--start-group' in flags:
+        libflags += [flag for flag in flags[
+            flags.index('-Wl,--start-group') :
+            flags.index('-Wl,--end-group') + 1
+          ] if flag.startswith('-')]
+      else:
+        for flag in flags:
+          if any(flag.startswith(pre) for pre in ['-L','-l','-pthread']):
+            libflags.append(flag)
+    
+    elif line.startswith('#$ INCLUDES='):
+      line = line[len('#$ INCLUDES='):]
+      for flag in line.split():
+        if flag.startswith('"') and flag.endswith('"'):
+          flag = flag[1:-1]
+        ppflags.append(flag)
+
+  libflags += ['-lcuda']
+  return {'cuda': {'ppflags': ppflags, 'libflags': libflags}}
+
 # Rule overriden in sub-nobsrule files.
 @rule(cli='requires_gasnet', path_arg='src')
 def requires_gasnet(cxt, src):
@@ -105,7 +153,6 @@ def requires_pthread(cxt, src):
 def requires_openmp(cxt, src):
   return False
 
-# TODO: rename to required_libraries
 @rule(cli='required_libraries', path_arg='src')
 @coroutine
 def required_libraries(cxt, src):
@@ -127,7 +174,7 @@ def required_libraries(cxt, src):
     maybe_openmp = cxt.openmp()
   else:
     maybe_openmp = {}
-  
+
   yield libset_merge(maybe_gasnet, maybe_pthread, maybe_openmp)
 
 @rule()
@@ -341,6 +388,10 @@ def comp_version(cxt, src):
 @rule()
 def upcxx_assert_enabled(cxt):
   return bool(env('ASSERT', False))
+
+@rule()
+def upcxx_cuda_enabled(cxt):
+  return bool(env('UPCXX_CUDA', False))
 
 @rule(path_arg='src')
 @coroutine

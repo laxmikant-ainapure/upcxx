@@ -45,11 +45,18 @@ namespace detail {
     
   public:
     segment_allocator(void *segment_base, std::size_t segment_size);
+    segment_allocator(segment_allocator const&) = delete;
+    segment_allocator(segment_allocator &&that);
     ~segment_allocator();
 
-    segment_allocator(segment_allocator const&) = delete;
-    segment_allocator(segment_allocator&&) = delete; // could implement
+    std::pair<void*,std::size_t> segment_range() const {
+      return {reinterpret_cast<void*>(seg_base_), endpost_.begin};
+    }
 
+    bool in_segment(void *p) const {
+      return reinterpret_cast<std::uintptr_t>(p) - seg_base_ < endpost_.begin;
+    }
+    
     void* allocate(std::size_t size, std::size_t align);
     void deallocate(void *p);
   };

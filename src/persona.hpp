@@ -2,6 +2,7 @@
 #define _850ece2c_7b55_43a8_9e57_8cbd44974055
 
 #include <upcxx/backend_fwd.hpp>
+#include <upcxx/cuda_fwd.hpp>
 #include <upcxx/future.hpp>
 #include <upcxx/intru_queue.hpp>
 #include <upcxx/lpc.hpp>
@@ -45,6 +46,7 @@ namespace upcxx {
     
   public:
     backend::persona_state backend_state_;
+    cuda::persona_state cuda_state_;
   
   private:
     persona* get_owner() const;

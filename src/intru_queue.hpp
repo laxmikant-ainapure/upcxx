@@ -36,12 +36,15 @@ namespace upcxx {
     };
     
     template<typename T>
-    union intru_queue_intruder {
-       T *p;
-       std::atomic<T*> ap;
+    struct intru_queue_intruder {
+       std::atomic<T*> p;
        
-       intru_queue_intruder() {}
+       intru_queue_intruder(): p(reinterpret_cast<T*>(0x1)) {}
        ~intru_queue_intruder() {}
+
+       bool is_enqueued() const {
+         return p.load(std::memory_order_relaxed) != reinterpret_cast<T*>(0x1);
+       }
     };
     
     template<typename T,
@@ -69,6 +72,8 @@ namespace upcxx {
       constexpr bool empty() const {
         return this->head_ == nullptr;
       }
+
+      T* peek() const { return this->head_; }
       
       void enqueue(T *x);
       T* dequeue();
@@ -104,13 +109,13 @@ namespace upcxx {
       T **tailp = reinterpret_cast<T**>(UINTPTR_OF(&this->head_) ^ this->tailp_xor_head_);
       *tailp = x;
       this->tailp_xor_head_ = UINTPTR_OF(&(x->*next)) ^ UINTPTR_OF(&this->head_);
-      (x->*next).p = nullptr;
+      (x->*next).p.store(nullptr, std::memory_order_relaxed);
     }
-    
+
     template<typename T, intru_queue_intruder<T> T::*next>
     inline T* intru_queue<T, intru_queue_safety::none, next>::dequeue() {
       T *ans = this->head_;
-      this->head_ = (ans->*next).p;
+      this->head_ = (ans->*next).p.load(std::memory_order_relaxed);
       if(this->head_ == nullptr)
         this->tailp_xor_head_ = 0;
       return ans;
@@ -134,11 +139,11 @@ namespace upcxx {
       int exec_n = 0;
       
       do {
-        T *head1_next = (head1->*next).p;
+        T *head1_next = (head1->*next).p.load(std::memory_order_relaxed);
         fn(head1);
         head1 = head1_next;
         exec_n += 1;
-      } while(head1 != nullptr) ;
+      } while(head1 != nullptr);
       
       return exec_n;
     }
@@ -164,7 +169,7 @@ namespace upcxx {
       int n = max_n;
       
       do {
-        T *head1_next = (head1->*next).p;
+        T *head1_next = (head1->*next).p.load(std::memory_order_relaxed);
         fn(head1);
         head1 = head1_next;
         n -= 1;
@@ -210,7 +215,12 @@ namespace upcxx {
           return this->head_.load(std::memory_order_relaxed) == nullptr;
         }
         
+        T* peek() const {
+          return this->head_.load(std::memory_order_relaxed);
+        }
+
         void enqueue(T *x);
+        T* dequeue();
         
         template<typename Fn>
         int burst(Fn &&fn);
@@ -226,11 +236,11 @@ namespace upcxx {
       
       template<typename T, intru_queue_intruder<T> T::*next>
       inline void intru_queue<T, intru_queue_safety::mpsc, next>::enqueue(T *x) {
-        (x->*next).ap.store(nullptr, std::memory_order_relaxed);
+        (x->*next).p.store(nullptr, std::memory_order_relaxed);
         
         std::atomic<T*> *got = this->decode_tailp(
                                  this->tailp_xor_head_.exchange(
-                                   this->encode_tailp(&(x->*next).ap)
+                                   this->encode_tailp(&(x->*next).p)
                                  )
                                );
         got->store(x, std::memory_order_relaxed);
@@ -254,6 +264,29 @@ namespace upcxx {
       }
       
       template<typename T, intru_queue_intruder<T> T::*next>
+      T* intru_queue<T, intru_queue_safety::mpsc, next>::dequeue() {
+        T *head = this->head_.load(std::memory_order_relaxed);
+        T *head_next = (head->*next).p.load(std::memory_order_relaxed);
+
+        this->head_.store(head_next, std::memory_order_relaxed);
+
+        if(head_next == nullptr) {
+          std::uintptr_t expected = this->encode_tailp(&(head->*next).p);
+          std::uintptr_t desired = this->encode_tailp(&this->head_);
+          if(!this->tailp_xor_head_.compare_exchange_weak(expected, desired)) {
+            do {
+              // TODO: pause instruction here
+              head_next = (head->*next).p.load(std::memory_order_relaxed);
+            } while(head_next == nullptr);
+
+            this->head_.store(head_next, std::memory_order_relaxed);
+          }
+        }
+        
+        return head;
+      }
+
+      template<typename T, intru_queue_intruder<T> T::*next>
       template<typename Fn>
       int __attribute__((noinline))
       intru_queue<T, intru_queue_safety::mpsc, next>::burst_something(int max_n, Fn &&fn, T *head) {
@@ -263,7 +296,7 @@ namespace upcxx {
         // Execute as many elements as we can until we reach one that looks
         // like it may be the last in the list.
         while(true) {
-          T *p_next = (p->*next).ap.load(std::memory_order_relaxed);
+          T *p_next = (p->*next).p.load(std::memory_order_relaxed);
           if(p_next == nullptr)
             break; // Element has no `next`, so it looks like the last.
           
@@ -303,15 +336,15 @@ namespace upcxx {
                                      );
         
         // Process all elements before the last.
-        while(&(p->*next).ap != last_next) {
+        while(&(p->*next).p != last_next) {
           // Get next pointer, and must spin for it. Spin should be of
           // extremely short duration since we know that it's on the way by
           // virtue of this not being the tail element.
-          T *p_next = (p->*next).ap.load(std::memory_order_relaxed);
+          T *p_next = (p->*next).p.load(std::memory_order_relaxed);
           while(p_next == nullptr) {
             // TODO: add pause instruction here
             // asm volatile("pause\n": : :"memory");
-            p_next = (p->*next).ap.load(std::memory_order_relaxed);
+            p_next = (p->*next).p.load(std::memory_order_relaxed);
           }
           
           fn(p);

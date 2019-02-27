@@ -35,6 +35,21 @@ segment_allocator::segment_allocator(void *segment_base, size_t segment_size) {
   insert_hole_by_size(holes_by_size_, big_hole, segment_size);
 }
 
+segment_allocator::segment_allocator(segment_allocator &&that):
+  seg_base_(that.seg_base_),
+  holes_by_size_(std::move(that.holes_by_size_)),
+  hunks_by_begin_(std::move(that.hunks_by_begin_)) {
+
+  that.seg_base_ = 0;
+
+  this->endpost_ = that.endpost_;
+  that.endpost_.begin = 0;
+  that.endpost_.prev = nullptr;
+  
+  if(this->endpost_.prev != nullptr)
+    this->endpost_.prev->next = &this->endpost_;
+}
+
 segment_allocator::~segment_allocator() {
   block *b = endpost_.prev;
   while(b != nullptr) {
@@ -134,6 +149,8 @@ void segment_allocator::deallocate(void *ptr) {
 
   block *m; {
     auto it = hunks_by_begin_.find(m_begin);
+    UPCXX_ASSERT_ALWAYS(it != hunks_by_begin_.end(), "Invalid address to deallcoate.");
+    
     m = it->second;
     hunks_by_begin_.erase(it);
   }
