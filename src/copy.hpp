@@ -71,8 +71,7 @@ namespace upcxx {
     );
   }
   
-  template<typename T, memory_kind Ks, memory_kind Kd,
-           typename Cxs = completions<future_cx<operation_cx_event>>>
+  template<typename T, memory_kind Ks, memory_kind Kd, typename Cxs>
   typename detail::completions_returner<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::rput_event_values,

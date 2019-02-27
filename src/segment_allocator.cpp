@@ -10,7 +10,7 @@ using std::uintptr_t;
 using std::pair;
 
 namespace {
-  constexpr pair<uintptr_t, uintptr_t> make_pair_uu(uintptr_t a, uintptr_t b) {
+  pair<uintptr_t, uintptr_t> make_pair_uu(uintptr_t a, uintptr_t b) {
     return {a, b};
   }
   

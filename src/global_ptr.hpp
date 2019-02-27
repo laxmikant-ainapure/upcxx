@@ -276,7 +276,7 @@ namespace std {
   // Comparators specify total order
   template<typename T, upcxx::memory_kind K>
   struct less<upcxx::global_ptr<T,K>> {
-    constexpr bool operator()(upcxx::global_ptr<T,K> lhs,
+    bool operator()(upcxx::global_ptr<T,K> lhs,
                               upcxx::global_ptr<T,K> rhs) const {
       bool ans = lhs.raw_ptr_ < rhs.raw_ptr_;
       ans &= lhs.rank_ == rhs.rank_;
@@ -289,7 +289,7 @@ namespace std {
   
   template<typename T, upcxx::memory_kind K>
   struct less_equal<upcxx::global_ptr<T,K>> {
-    constexpr bool operator()(upcxx::global_ptr<T,K> lhs,
+    bool operator()(upcxx::global_ptr<T,K> lhs,
                               upcxx::global_ptr<T,K> rhs) const {
       bool ans = lhs.raw_ptr_ <= rhs.raw_ptr_;
       ans &= lhs.rank_ == rhs.rank_;
@@ -302,7 +302,7 @@ namespace std {
   
   template<typename T, upcxx::memory_kind K>
   struct greater<upcxx::global_ptr<T,K>> {
-    constexpr bool operator()(upcxx::global_ptr<T,K> lhs,
+    bool operator()(upcxx::global_ptr<T,K> lhs,
                               upcxx::global_ptr<T,K> rhs) const {
       bool ans = lhs.raw_ptr_ > rhs.raw_ptr_;
       ans &= lhs.rank_ == rhs.rank_;
@@ -315,7 +315,7 @@ namespace std {
   
   template<typename T, upcxx::memory_kind K>
   struct greater_equal<upcxx::global_ptr<T,K>> {
-    constexpr bool operator()(upcxx::global_ptr<T,K> lhs,
+    bool operator()(upcxx::global_ptr<T,K> lhs,
                               upcxx::global_ptr<T,K> rhs) const {
       bool ans = lhs.raw_ptr_ >= rhs.raw_ptr_;
       ans &= lhs.rank_ == rhs.rank_;
