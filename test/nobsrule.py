@@ -7,6 +7,8 @@ on the structure and interpretation of a rule-file.
 # headers which do.
 REQUIRES_GASNET = [
   'hello_gasnet.cpp',
+  'regression/issue140.cpp',
+  'regression/issue142.cpp',
 ]
 
 REQUIRES_PTHREAD = [
