@@ -51,7 +51,7 @@ namespace upcxx {
     global_ptr<T,Device::kind> allocate(std::size_t n=1) {
       void *ptr = this->seg_.allocate(
           n*sizeof(T),
-          std::min<std::size_t>(align, this->min_alignment)
+          std::max<std::size_t>(align, this->min_alignment)
         );
       
       return ptr == nullptr
