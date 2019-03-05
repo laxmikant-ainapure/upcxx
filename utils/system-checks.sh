@@ -18,6 +18,7 @@ sys_info() {
         for var in CC CXX GASNET GASNET_CONFIGURE_ARGS CROSS OPTLEV DBGSYM \
 	           UPCXX_BACKEND GASNET_INSTALL_TO \
 		   UPCXX_CODEMODE UPCXX_THREADMODE \
+		   UPCXX_CUDA \
 		   ; do
             if test "${!var:+set}" = set; then
                 SETTINGS="$SETTINGS $var='${!var}'"
