@@ -1,0 +1,37 @@
+#########################################################################
+#									#
+# Sample makefile header for buildig cuda code including C/C++  	#
+#  The makefile targets are appended to  the end of this file		#
+#	 Don't change anything that comes before the targets 		#
+#									#
+#									#
+#########################################################################
+
+ifeq ($(capb), 37)
+GENCODE_FLAGS = --gpu-architecture=compute_37
+else
+ifeq ($(capb), 60)
+GENCODE_FLAGS = --gpu-architecture=compute_60
+else
+ifeq ($(capb), univ)
+GENCODE_FLAGS = --gpu-architecture=compute_37 --gpu-code=compute_37,sm_37,sm_60
+endif
+endif
+endif
+
+PTXFLAGS=-v
+# PTXFLAGS=-dlcm=ca 
+
+
+# Compilers
+NVCC = $(shell which nvcc)
+NVCC_LINK        = $(NVCC)
+
+NVCCFLAGS	+=  -m64 -c --compiler-options -fno-strict-aliasing  -O3 $(GENCODE_FLAGS) $(NVCC_INCLUDES) 
+ 
+
+# .SUFFIXES: .c .cpp .cu .o
+
+
+.cu.o:
+	$(NVCC)  $(NVCCFLAGS) $<
