@@ -13,7 +13,7 @@ namespace upcxx {
   namespace detail {
     void rma_copy_get(void *buf_d, intrank_t rank_s, void const *buf_s, std::size_t size, backend::gasnet::handle_cb *cb);
     void rma_copy_put(intrank_t rank_d, void *buf_d, void const *buf_s, std::size_t size, backend::gasnet::handle_cb *cb);
-    void rma_copy_cuda(
+    void rma_copy_local(
         int dev_d, void *buf_d,
         int dev_s, void const *buf_s, std::size_t size,
         cuda::event_cb *cb
@@ -106,11 +106,34 @@ namespace upcxx {
         Cxs
       >(*cxs_here);
 
-    if(rank_d == rank_s) {
-      UPCXX_ASSERT(rank_d == upcxx::rank_me());
-
-      detail::rma_copy_cuda(dev_d, buf_d, dev_s, buf_s, size,
+    if(upcxx::rank_me() != rank_d && upcxx::rank_me() != rank_s) {
+      int third_party = upcxx::rank_me();
+      
+      backend::send_am_master<progress_level::internal>(
+        upcxx::world(), rank_d,
+        [=]() {
+          auto operation_cx_as_internal_future = upcxx::completions<upcxx::future_cx<upcxx::operation_cx_event, progress_level::internal>>{{}};
+          
+          upcxx::copy(src, dest, n, operation_cx_as_internal_future)
+          .then([=]() {
+            const_cast<cxs_remote_t&>(cxs_remote).template operator()<remote_cx_event>();
+            
+            backend::send_am_master<progress_level::internal>(
+              upcxx::world(), third_party,
+              [=]() {
+                cxs_here->template operator()<source_cx_event>();
+                cxs_here->template operator()<operation_cx_event>();
+                delete cxs_here;
+              }
+            );
+          });
+        }
+      );
+    }
+    else if(rank_d == rank_s) {
+      detail::rma_copy_local(dev_d, buf_d, dev_s, buf_s, size,
         cuda::make_event_cb([=]() {
+          cxs_here->template operator()<source_cx_event>();
           cxs_here->template operator()<operation_cx_event>();
           const_cast<cxs_remote_t&>(cxs_remote).template operator()<remote_cx_event>();
           delete cxs_here;
@@ -118,6 +141,8 @@ namespace upcxx {
       );
     }
     else if(rank_d == upcxx::rank_me()) {
+      cxs_remote_t *cxs_remote_heaped = new cxs_remote_t(std::move(cxs_remote));
+      
       /* We are the destination, so semantically like a GET, even though a PUT
        * is used to transfer on the network
        */
@@ -140,18 +165,22 @@ namespace upcxx {
                   backend::send_am_master<progress_level::internal>(
                     upcxx::world(), rank_d,
                     [=]() {
+                      cxs_here->template operator()<source_cx_event>();
+                      
                       auto bounce_d_cont = [=]() {
                         if(dev_d != host_device)
                           upcxx::deallocate(bounce_d);
-                        
+
+                        cxs_remote_heaped->template operator()<remote_cx_event>();
                         cxs_here->template operator()<operation_cx_event>();
+                        delete cxs_remote_heaped;
                         delete cxs_here;
                       };
                       
                       if(dev_d == host_device)
                         bounce_d_cont();
                       else
-                        detail::rma_copy_cuda(dev_d, buf_d, host_device, bounce_d, size, cuda::make_event_cb(bounce_d_cont));
+                        detail::rma_copy_local(dev_d, buf_d, host_device, bounce_d, size, cuda::make_event_cb(bounce_d_cont));
                     }
                   );
                 })
@@ -163,7 +192,7 @@ namespace upcxx {
             make_bounce_s_cont(buf_s)();
           else {
             void *bounce_s = upcxx::allocate(size, 64);
-            detail::rma_copy_cuda(
+            detail::rma_copy_local(
               host_device, bounce_s, dev_s, buf_s, size,
               cuda::make_event_cb(make_bounce_s_cont(bounce_s))
             );
@@ -216,7 +245,7 @@ namespace upcxx {
                     if(dev_d == host_device)
                       bounce_d_cont();
                     else
-                      detail::rma_copy_cuda(dev_d, buf_d, host_device, bounce_d, size, cuda::make_event_cb(bounce_d_cont));
+                      detail::rma_copy_local(dev_d, buf_d, host_device, bounce_d, size, cuda::make_event_cb(bounce_d_cont));
                   })
                 );
               }, std::move(cxs_remote)
@@ -229,7 +258,7 @@ namespace upcxx {
         make_bounce_s_cont(buf_s)();
       else {
         void *bounce_s = upcxx::allocate(size, 64);
-        detail::rma_copy_cuda(host_device, bounce_s, dev_s, buf_s, size, cuda::make_event_cb(make_bounce_s_cont(bounce_s)));
+        detail::rma_copy_local(host_device, bounce_s, dev_s, buf_s, size, cuda::make_event_cb(make_bounce_s_cont(bounce_s)));
       }
     }
 

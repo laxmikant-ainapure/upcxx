@@ -2,6 +2,8 @@
 #include <upcxx/cuda_internal.hpp>
 #include <upcxx/backend/gasnet/runtime_internal.hpp>
 
+#include <cstring>
+
 using namespace std;
 
 namespace detail = upcxx::detail;
@@ -11,31 +13,37 @@ namespace cuda = upcxx::cuda;
 using upcxx::memory_kind;
 using upcxx::detail::lpc_base;
 
-void upcxx::detail::rma_copy_cuda(
+void upcxx::detail::rma_copy_local(
     int dev_d, void *buf_d,
     int dev_s, void const *buf_s, std::size_t size,
     cuda::event_cb *cb
   ) {
 
-// this function is no-op without cuda since it won't ever be called
-#if UPCXX_CUDA_ENABLED
-
   constexpr int host_device = -1;
-  
-  int dev_main = dev_d != host_device ? dev_d : dev_s;
-  cuda::device_state *st = static_cast<cuda::device_state*>(cuda::devices[dev_main]);
-  
-  CU_CHECK(cuCtxPushCurrent(st->context));
 
-  if(dev_d != host_device && dev_s != host_device) {
-    // device to device
-    CURT_CHECK(cudaMemcpyPeerAsync(
-      buf_d, dev_d,
-      buf_s, dev_s,
-      size, st->stream));
+  if(dev_d == host_device && dev_s == host_device) {
+    std::memmove(buf_d, buf_s, size);
+    cb->execute_and_delete();
   }
   else {
-    if(dev_d != host_device) {
+  #if UPCXX_CUDA_ENABLED
+    int dev_main = dev_d != host_device ? dev_d : dev_s;
+    cuda::device_state *st = static_cast<cuda::device_state*>(cuda::devices[dev_main]);
+    
+    CU_CHECK(cuCtxPushCurrent(st->context));
+
+    if(dev_d != host_device && dev_s != host_device) {
+      cuda::device_state *st_d = static_cast<cuda::device_state*>(cuda::devices[dev_d]);
+      cuda::device_state *st_s = static_cast<cuda::device_state*>(cuda::devices[dev_s]);
+      
+      // device to device
+      CU_CHECK(cuMemcpyPeerAsync(
+        reinterpret_cast<CUdeviceptr>(buf_d), st_d->context,
+        reinterpret_cast<CUdeviceptr>(buf_s), st_s->context,
+        size, st->stream
+      ));
+    }
+    else if(dev_d != host_device) {
       // host to device
       CU_CHECK(cuMemcpyHtoDAsync(reinterpret_cast<CUdeviceptr>(buf_d), buf_s, size, st->stream));
     }
@@ -43,18 +51,18 @@ void upcxx::detail::rma_copy_cuda(
       // device to host
       CU_CHECK(cuMemcpyDtoHAsync(buf_d, reinterpret_cast<CUdeviceptr>(buf_s), size, st->stream));
     }
+
+    CUevent event;
+    cuEventCreate(&event, CU_EVENT_DISABLE_TIMING);
+    CU_CHECK(cuEventRecord(event, st->stream));
+    cb->cu_event = (void*)event;
+
+    persona *per = detail::the_persona_tls.get_top_persona();
+    per->cuda_state_.event_cbs.enqueue(cb);
+    
+    {CUcontext dump; CU_CHECK(cuCtxPopCurrent(&dump));}
+  #endif
   }
-
-  CUevent event;
-  cuEventCreate(&event, CU_EVENT_DISABLE_TIMING);
-  CU_CHECK(cuEventRecord(event, st->stream));
-  cb->cu_event = (void*)event;
-
-  persona *per = detail::the_persona_tls.get_top_persona();
-  per->cuda_state_.event_cbs.enqueue(cb);
-  
-  {CUcontext dump; CU_CHECK(cuCtxPopCurrent(&dump));}
-#endif
 }
 
 void upcxx::detail::rma_copy_get(
