@@ -54,11 +54,13 @@ EXAMPLES = \
   persona-example-rputs \
   persona-example	
 
-GPU_EXAMPLES = \
+
+CUDA_EXAMPLES = \
   h-d \
   h-d-remote
 
 all: $(EXAMPLES)
+cuda: $(CUDA_EXAMPLES)
 
 # The rule for building any example.
 %: %.cpp $(wildcard *.h) $(wildcard *.hpp)
@@ -74,15 +76,15 @@ include ./arch.cuda.gnuMPI
 
 
 # Example-specific variable specializations.
-persona-example: UPCXX_THREADMODE = par
+persona-example: export UPCXX_THREADMODE=par
 persona-example: EXTRA_FLAGS += $(PTHREAD_FLAGS)
-persona-example-rputs: UPCXX_THREADMODE = par
+persona-example-rputs: export UPCXX_THREADMODE=par
 persona-example-rputs: EXTRA_FLAGS += $(PTHREAD_FLAGS)
 view-matrix-tasks: EXTRA_FLAGS += $(PTHREAD_FLAGS)
 
 clean:
 	rm -f $(EXAMPLES)
-	rm -f $(GPU_EXAMPLES)
+	rm -f $(CUDA_EXAMPLES)
 
 .PHONY: clean all
 

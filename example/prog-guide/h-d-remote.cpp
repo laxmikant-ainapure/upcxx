@@ -4,6 +4,10 @@
 using namespace std;
 using namespace upcxx; 
 
+#if !UPCXX_CUDA_ENABLED
+  #error "UPC++ should be build with CUDA support."
+#endif
+
 int main() {
   upcxx::init();
 
