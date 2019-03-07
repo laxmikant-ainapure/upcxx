@@ -60,7 +60,7 @@ upcxx::cuda_device::cuda_device(int device):
   UPCXX_ASSERT_ALWAYS(backend::master.active_with_caller());
 
   #if UPCXX_CUDA_ENABLED
-    if(device != inactive_device_id) {
+    if(device != invalid_device_id) {
       UPCXX_ASSERT_ALWAYS(cuda::devices[device] == nullptr, "Cuda device "<<device<<" already initialized.");
       
       CUcontext ctx;
@@ -80,12 +80,12 @@ upcxx::cuda_device::cuda_device(int device):
       CU_CHECK_ALWAYS(cuCtxPopCurrent(&ctx));
     }
   #else
-    UPCXX_ASSERT_ALWAYS(device == inactive_device_id);
+    UPCXX_ASSERT_ALWAYS(device == invalid_device_id);
   #endif
 }
 
 upcxx::cuda_device::~cuda_device() {
-  UPCXX_ASSERT_ALWAYS(device_ == inactive_device_id, "upcxx::cuda_device must have destroy() called before it dies.");
+  UPCXX_ASSERT_ALWAYS(device_ == invalid_device_id, "upcxx::cuda_device must have destroy() called before it dies.");
 }
 
 void upcxx::cuda_device::destroy(upcxx::entry_barrier eb) {
@@ -94,7 +94,7 @@ void upcxx::cuda_device::destroy(upcxx::entry_barrier eb) {
   backend::quiesce(upcxx::world(), eb);
 
   #if UPCXX_CUDA_ENABLED
-  if(device_ != inactive_device_id) {
+  if(device_ != invalid_device_id) {
     cuda::device_state *st = cuda::devices[device_];
     UPCXX_ASSERT(st != nullptr);
     cuda::devices[device_] = nullptr;
@@ -111,14 +111,14 @@ void upcxx::cuda_device::destroy(upcxx::entry_barrier eb) {
   }
   #endif
   
-  device_ = inactive_device_id;
+  device_ = invalid_device_id;
 }
 
 detail::device_allocator_core<upcxx::cuda_device>::device_allocator_core(
     upcxx::cuda_device *dev, void *base, size_t size
   ):
   detail::device_allocator_base(
-    dev ? dev->device_ : upcxx::cuda_device::inactive_device_id,
+    dev ? dev->device_ : upcxx::cuda_device::invalid_device_id,
     #if UPCXX_CUDA_ENABLED
       dev ? make_segment(cuda::devices[dev->device_], base, size)
           : segment_allocator(nullptr, 0)
@@ -133,7 +133,7 @@ detail::device_allocator_core<upcxx::cuda_device>::~device_allocator_core() {
   UPCXX_ASSERT_ALWAYS(backend::master.active_with_caller());
   
   #if UPCXX_CUDA_ENABLED  
-    if(device_ != upcxx::cuda_device::inactive_device_id) {
+    if(device_ != upcxx::cuda_device::invalid_device_id) {
       cuda::device_state *st = cuda::devices[device_];
       
       if(st && st->segment_to_free) {

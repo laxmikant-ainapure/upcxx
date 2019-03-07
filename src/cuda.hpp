@@ -33,15 +33,15 @@ namespace upcxx {
     
     static constexpr memory_kind kind = memory_kind::cuda_device;
 
-    static constexpr int inactive_device_id = -1;
+    static constexpr int invalid_device_id = -1;
 
-    cuda_device(int device = inactive_device_id);
+    cuda_device(int device = invalid_device_id);
     cuda_device(cuda_device const&) = delete;
     cuda_device(cuda_device&&) = default;
     ~cuda_device();
 
     int device_id() const { return device_; }
-    bool is_active() const { return device_ != inactive_device_id; }
+    bool is_active() const { return device_ != invalid_device_id; }
 
     template<typename T>
     static int device_id(global_ptr<T,memory_kind::cuda_device> gp) {
