@@ -6,16 +6,35 @@
 #include <upcxx/global_ptr.hpp>
 #include <upcxx/segment_allocator.hpp>
 
+#include <new>
+#include <type_traits>
+
 // TODO: break detail::par_mutex out into seperate internal concurrency toolbox header.
 #if UPCXX_BACKEND_GASNET_PAR
   #include <mutex>
   namespace upcxx {
     namespace detail {
       class par_mutex {
-        std::mutex m_;
+        typename std::aligned_storage<sizeof(std::mutex),alignof(std::mutex)>::type raw_;
       public:
-        void lock() { m_.lock(); }
-        void unlock() { m_.unlock(); }
+        par_mutex() { ::new(&raw_) std::mutex; }
+        par_mutex(par_mutex const&) = delete;
+        par_mutex(par_mutex &&that) {
+          // std::mutex's aren't movable, but since we dont expect a par_mutex to be
+          // moved while locked, it has no state worth transfering so we can
+          // just default construct the internal std::mutex.
+          ::new(&raw_) std::mutex;
+        }
+
+        // TODO: need to use std::launder on the following reinterpret_cast's.
+        
+        ~par_mutex() {
+          using std::mutex;
+          reinterpret_cast<std::mutex*>(&raw_)->~mutex();
+        }
+        
+        void lock() { reinterpret_cast<std::mutex*>(&raw_)->lock(); }
+        void unlock() { reinterpret_cast<std::mutex*>(&raw_)->unlock(); }
       };
     }
   }
