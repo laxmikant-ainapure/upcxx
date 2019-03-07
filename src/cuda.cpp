@@ -9,8 +9,8 @@ constexpr std::size_t detail::device_allocator_core<upcxx::cuda_device>::min_ali
 
 #if UPCXX_CUDA_ENABLED
   namespace {
-    detail::segment_allocator make_segment(CUcontext cxt, void *base, size_t size) {
-      CU_CHECK(cuCtxPushCurrent(cxt));
+    detail::segment_allocator make_segment(upcxx::cuda::device_state *st, void *base, size_t size) {
+      CU_CHECK(cuCtxPushCurrent(st->context));
       
       CUdeviceptr p = 0x0;
 
@@ -30,16 +30,22 @@ constexpr std::size_t detail::device_allocator_core<upcxx::cuda_device>::min_ali
             CU_CHECK(r);
         }
 
+        st->segment_to_free = p;
         base = reinterpret_cast<void*>(p);
       }
       else if(base == nullptr) {
         CUresult r = cuMemAlloc(&p, size);
         UPCXX_ASSERT_ALWAYS(r != CUDA_ERROR_OUT_OF_MEMORY, "Requested cuda allocation too large: size="<<size);
         CU_CHECK(r);
+        
+        st->segment_to_free = p;
         base = reinterpret_cast<void*>(p);
       }
-
-      CU_CHECK(cuCtxPopCurrent(&cxt));
+      else
+        st->segment_to_free = reinterpret_cast<CUdeviceptr>(nullptr);
+      
+      CUcontext dump;
+      CU_CHECK(cuCtxPopCurrent(&dump));
       
       return detail::segment_allocator(base, size);
     }
@@ -54,7 +60,7 @@ upcxx::cuda_device::cuda_device(int device):
   UPCXX_ASSERT_ALWAYS(backend::master.active_with_caller());
 
   #if UPCXX_CUDA_ENABLED
-    if(device != invalid_device_id) {
+    if(device != inactive_device_id) {
       UPCXX_ASSERT_ALWAYS(cuda::devices[device] == nullptr, "Cuda device "<<device<<" already initialized.");
       
       CUcontext ctx;
@@ -63,71 +69,81 @@ upcxx::cuda_device::cuda_device(int device):
         cuInit(0);
         res = cuDevicePrimaryCtxRetain(&ctx, device);
       }
-      CU_CHECK(res);
-      CU_CHECK(cuCtxPushCurrent(ctx));
+      UPCXX_ASSERT_ALWAYS(res == CUDA_SUCCESS, "cuDevicePrimaryCtxRetain failed, error="<<int(res));
+      CU_CHECK_ALWAYS(cuCtxPushCurrent(ctx));
 
       cuda::device_state *st = new cuda::device_state;
       st->context = ctx;
-      CU_CHECK(cuStreamCreate(&st->stream, CU_STREAM_NON_BLOCKING));
+      CU_CHECK_ALWAYS(cuStreamCreate(&st->stream, CU_STREAM_NON_BLOCKING));
       cuda::devices[device] = st;
       
-      CU_CHECK(cuCtxPopCurrent(&ctx));
+      CU_CHECK_ALWAYS(cuCtxPopCurrent(&ctx));
     }
   #else
-    UPCXX_ASSERT_ALWAYS(device == invalid_device_id);
+    UPCXX_ASSERT_ALWAYS(device == inactive_device_id);
   #endif
 }
 
 upcxx::cuda_device::~cuda_device() {
-  UPCXX_ASSERT_ALWAYS(device_ == invalid_device_id, "upcxx::cuda_device must have destroy() called before it dies.");
+  UPCXX_ASSERT_ALWAYS(device_ == inactive_device_id, "upcxx::cuda_device must have destroy() called before it dies.");
 }
 
 void upcxx::cuda_device::destroy(upcxx::entry_barrier eb) {
   UPCXX_ASSERT(backend::master.active_with_caller());
 
-  #if UPCXX_CUDA_ENABLED
-  if(device_ != invalid_device_id) {
-    backend::quiesce(upcxx::world(), eb);
+  backend::quiesce(upcxx::world(), eb);
 
+  #if UPCXX_CUDA_ENABLED
+  if(device_ != inactive_device_id) {
     cuda::device_state *st = cuda::devices[device_];
     UPCXX_ASSERT(st != nullptr);
     cuda::devices[device_] = nullptr;
 
-    CU_CHECK(cuCtxPushCurrent(st->context));
-    CU_CHECK(cuStreamDestroy(st->stream));
-    CU_CHECK(cuCtxSetCurrent(nullptr));
-    CU_CHECK(cuDevicePrimaryCtxRelease(device_));
+    if(st->segment_to_free)
+      CU_CHECK_ALWAYS(cuMemFree(st->segment_to_free));
+    
+    CU_CHECK_ALWAYS(cuCtxPushCurrent(st->context));
+    CU_CHECK_ALWAYS(cuStreamDestroy(st->stream));
+    CU_CHECK_ALWAYS(cuCtxSetCurrent(nullptr));
+    CU_CHECK_ALWAYS(cuDevicePrimaryCtxRelease(device_));
     
     delete st;
   }
   #endif
   
-  device_ = invalid_device_id;
+  device_ = inactive_device_id;
 }
 
 detail::device_allocator_core<upcxx::cuda_device>::device_allocator_core(
-    upcxx::cuda_device &dev, void *base, size_t size
+    upcxx::cuda_device *dev, void *base, size_t size
   ):
   detail::device_allocator_base(
-    dev.device_,
+    dev ? dev->device_ : upcxx::cuda_device::inactive_device_id,
     #if UPCXX_CUDA_ENABLED
-      make_segment(cuda::devices[dev.device_]->context, base, size)
+      dev ? make_segment(cuda::devices[dev->device_], base, size)
+          : segment_allocator(nullptr, 0)
     #else
       segment_allocator(nullptr, 0)
     #endif
-  ),
-  free_on_death_(base == nullptr) {
+  ) {
+  UPCXX_ASSERT_ALWAYS(backend::master.active_with_caller());
 }
 
 detail::device_allocator_core<upcxx::cuda_device>::~device_allocator_core() {
-#if UPCXX_CUDA_ENABLED
-  if(free_on_death_) {
-    CU_CHECK(cuCtxPushCurrent(cuda::devices[device_]->context));
+  UPCXX_ASSERT_ALWAYS(backend::master.active_with_caller());
+  
+  #if UPCXX_CUDA_ENABLED  
+    if(device_ != upcxx::cuda_device::inactive_device_id) {
+      cuda::device_state *st = cuda::devices[device_];
+      
+      if(st && st->segment_to_free) {
+        CU_CHECK_ALWAYS(cuCtxPushCurrent(st->context));
+        CU_CHECK_ALWAYS(cuMemFree(st->segment_to_free));
+        CUcontext dump;
+        CU_CHECK_ALWAYS(cuCtxPopCurrent(&dump));
 
-    cuMemFree(reinterpret_cast<CUdeviceptr>(this->seg_.segment_range().first));
-    
-    CUcontext dump;
-    CU_CHECK(cuCtxPopCurrent(&dump));
-  }
-#endif
+        st->segment_to_free = reinterpret_cast<CUdeviceptr>(nullptr);
+      }
+    }
+  #endif
 }

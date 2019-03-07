@@ -53,7 +53,7 @@ void upcxx::detail::rma_copy_local(
     }
 
     CUevent event;
-    cuEventCreate(&event, CU_EVENT_DISABLE_TIMING);
+    CU_CHECK(cuEventCreate(&event, CU_EVENT_DISABLE_TIMING));
     CU_CHECK(cuEventRecord(event, st->stream));
     cb->cu_event = (void*)event;
 

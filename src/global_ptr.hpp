@@ -69,7 +69,7 @@ namespace upcxx {
     }
     
     T* local() const {
-      return device_ != -1
+      return KindSet != memory_kind::host && device_ != -1
         ? nullptr
         : static_cast<T*>(
           backend::localize_memory(
@@ -84,9 +84,12 @@ namespace upcxx {
     }
 
     memory_kind dynamic_kind() const {
-      return device_ == -1 ? memory_kind::host : memory_kind::cuda_device;
+      if(0 == (int(KindSet) & (int(KindSet)-1))) // determines if KindSet is a singleton set
+        return KindSet;
+      else
+        return device_ == -1 ? memory_kind::host : memory_kind::cuda_device;
     }
-
+    
     global_ptr operator+=(std::ptrdiff_t diff) {
       raw_ptr_ += diff;
       return *this;
@@ -222,14 +225,17 @@ namespace upcxx {
   }
 
   template<memory_kind K, typename T, memory_kind K1>
-  global_ptr<T,K> static_kind_cast(global_ptr<T,K1> p) {
-    UPCXX_ASSERT(((int)p.dynamic_kind() & (int)K) != 0 || p.is_null());
+  // sfinae out if there is no overlap between the two KindSet's
+  typename std::enable_if<(int(K) & int(K1)) != 0 , global_ptr<T,K>>::type
+  static_kind_cast(global_ptr<T,K1> p) {
     return global_ptr<T,K>(detail::internal_only(), p.rank_, p.raw_ptr_, p.device_);
   }
   
   template<memory_kind K, typename T, memory_kind K1>
-  global_ptr<T,K> dynamic_kind_cast(global_ptr<T,K1> p) {
-    return ((int)p.dynamic_kind() & (int)K) != 0 || p.is_null()
+  // sfinae out if there is no overlap between the two KindSet's
+  typename std::enable_if<(int(K) & int(K1)) != 0 , global_ptr<T,K>>::type
+  dynamic_kind_cast(global_ptr<T,K1> p) {
+    return ((int)p.dynamic_kind() & (int)K) != 0
         ? global_ptr<T,K>(
           detail::internal_only(), p.rank_, p.raw_ptr_, p.device_
         )
@@ -356,14 +362,8 @@ namespace std {
       DEALINGS IN THE SOFTWARE.
       */
 
-      std::uintptr_t b;
-      #if UPCXX_MANY_KINDS
-        b = unsigned(gptr.device_) | std::uintptr_t(gptr.rank_)<<32;
-      #else
-        b = gptr.rank_;
-      #endif
-      
-      std::uintptr_t a = reinterpret_cast<std::uintptr_t>(gptr.raw_ptr_);
+      std::uint64_t b = std::uint64_t(gptr.device_)<<32 | std::uint32_t(gptr.rank_);
+      std::uint64_t a = reinterpret_cast<std::uint64_t>(gptr.raw_ptr_);
       a ^= b + 0x9e3779b9 + (a<<6) + (a>>2);
       return std::size_t(a);
     }

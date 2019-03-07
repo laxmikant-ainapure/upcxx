@@ -33,14 +33,20 @@ namespace upcxx {
     
     static constexpr memory_kind kind = memory_kind::cuda_device;
 
-    static constexpr int invalid_device_id = -1;
+    static constexpr int inactive_device_id = -1;
 
-    cuda_device(int device);
+    cuda_device(int device = inactive_device_id);
     cuda_device(cuda_device const&) = delete;
     cuda_device(cuda_device&&) = default;
     ~cuda_device();
 
-    bool is_valid() const { return device_ != invalid_device_id; }
+    int device_id() const { return device_; }
+    bool is_active() const { return device_ != inactive_device_id; }
+
+    template<typename T>
+    static int device_id(global_ptr<T,memory_kind::cuda_device> gp) {
+      return gp.device_;
+    }
     
     void destroy(upcxx::entry_barrier eb = entry_barrier::user);
   };
@@ -48,13 +54,14 @@ namespace upcxx {
   namespace detail {
     template<>
     struct device_allocator_core<cuda_device>: device_allocator_base {
-    private:
-      bool free_on_death_;
-    public:
       static constexpr std::size_t min_alignment = 16;
-      static constexpr std::size_t default_alignment = 256;
+
+      template<typename T>
+      static constexpr std::size_t default_alignment() {
+        return alignof(T) < 256 ? 256 : alignof(T);
+      }
       
-      device_allocator_core(cuda_device &dev, void *base, std::size_t size);
+      device_allocator_core(cuda_device *dev, void *base, std::size_t size);
       device_allocator_core(device_allocator_core&&) = default;
       ~device_allocator_core();
     };

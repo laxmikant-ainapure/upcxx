@@ -25,6 +25,9 @@ int main() {
     int me = upcxx::rank_me();
     UPCXX_ASSERT_ALWAYS(upcxx::rank_n() >= 2, "Set ranks>=2 please.");
 
+    if(me == 0 && upcxx::rank_n() == 2)
+      std::cerr << "Advice: consider using 3 (or more) ranks to cover three-party cases for upcxx::copy.\n";
+
     #if UPCXX_CUDA_ENABLED
       cuInit(0);
       cuDeviceGetCount(&dev_n);
@@ -36,7 +39,7 @@ int main() {
       std::cerr<<"Running with devices="<<dev_n<<'\n';
     }
     
-    // buf[rank][1+dev][buf]
+    // buf[rank][1+device][shadow=0|1]
     std::array<std::array<any_ptr<int>,2>,1+max_dev_n> buf[2];
 
     if(me < 2) {
@@ -69,11 +72,20 @@ int main() {
     
     upcxx::broadcast(&buf[0], 1, 0).wait();
     upcxx::broadcast(&buf[1], 1, 1).wait();
-    
+
     for(int initiator=0; initiator < upcxx::rank_n(); initiator++) {
       if(me == initiator) {
         for(int round=0; round < rounds; round++) {
+          // Logically, ranks 0 and 1 each has one buffer per GPU plus one for
+          // the shared segment. The logical buffers are globally ordered in a
+          // ring. Each logical buffer has a "shadow" buffer used for double
+          // buffering. The following loop issues copy's to rotate the contents
+          // of the buffers into the shadows. Rotation is at the granularity of
+          // "parts" where a part is 1<<17 elements (therefor there are 8 parts
+          // in a buffer of 1<<20 elements).
+        
           future<> all = upcxx::make_future();
+          
           for(int dr=0; dr < 2; dr++) { // dest rank loop
             for(int dd=0; dd < 1+dev_n; dd++) { // dest dev loop
               for(int dp=0; dp < 8; dp++) { // dest part loop
@@ -85,12 +97,14 @@ int main() {
                   sr = (sr + (sd == 0 ? 1 : 0)) % 2;
                 }
 
+                // use round%2 to determine which buffer is logical and which is shadow
                 auto src = buf[sr][sd][(round+0)%2] + (sp<<17);
                 auto dst = buf[dr][dd][(round+1)%2] + (dp<<17);
                 all = upcxx::when_all(all, upcxx::copy(src, dst, 1<<17));
               }
             }
           }
+          
           all.wait();
           std::cerr<<"done round="<<round<<" initiator="<<initiator<<'\n';
         }
@@ -121,7 +135,14 @@ int main() {
           #if UPCXX_CUDA_ENABLED
             tmp = new int[1<<17];
             cudaSetDevice(dd-1);
-            cuMemcpyDtoH(tmp, reinterpret_cast<CUdeviceptr>(buf[me][dd][rounds%2].raw_ptr_ + (dp<<17)), sizeof(int)<<17);
+            cuMemcpyDtoH(tmp,
+              reinterpret_cast<CUdeviceptr>(
+                seg[dd-1]->raw_pointer(
+                  static_kind_cast<memory_kind::cuda_device>(buf[me][dd][rounds%2])
+                ) + (dp<<17)
+              ),
+              sizeof(int)<<17
+            );
           #endif
           }
           
@@ -149,9 +170,9 @@ int main() {
           seg[dev-1]->deallocate(upcxx::static_kind_cast<memory_kind::cuda_device>(buf[me][dev][0]));
           seg[dev-1]->deallocate(upcxx::static_kind_cast<memory_kind::cuda_device>(buf[me][dev][1]));
         }
-        delete seg[dev-1];
         gpu[dev-1]->destroy();
         delete gpu[dev-1];
+        delete seg[dev-1]; // delete segment after device since that's historically buggy in implementation
       }
     #endif
   }

@@ -1368,7 +1368,7 @@ namespace {
   #if UPCXX_CUDA_ENABLED
     while(cuda::event_cb *cb = per->cuda_state_.event_cbs.peek()) {
       if(CUDA_SUCCESS == cuEventQuery((CUevent)cb->cu_event)) {
-        cuEventDestroy((CUevent)cb->cu_event);
+        CU_CHECK(cuEventDestroy((CUevent)cb->cu_event));
         per->cuda_state_.event_cbs.dequeue();
         cb->execute_and_delete();
       }
