@@ -137,7 +137,7 @@ int main() {
             cudaSetDevice(dd-1);
             cuMemcpyDtoH(tmp,
               reinterpret_cast<CUdeviceptr>(
-                seg[dd-1]->raw_pointer(
+                seg[dd-1]->local(
                   static_kind_cast<memory_kind::cuda_device>(buf[me][dd][rounds%2])
                 ) + (dp<<17)
               ),

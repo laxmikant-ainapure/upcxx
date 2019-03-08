@@ -27,13 +27,14 @@ namespace upcxx {
   public:
     template<typename T>
     using pointer = T*;
+    using id_type = int;
 
     template<typename T>
     static constexpr T* null_pointer() { return nullptr; }
     
     static constexpr memory_kind kind = memory_kind::cuda_device;
 
-    static constexpr int invalid_device_id = -1;
+    static constexpr id_type invalid_device_id = -1;
 
     cuda_device(int device = invalid_device_id);
     cuda_device(cuda_device const&) = delete;
@@ -43,11 +44,6 @@ namespace upcxx {
     int device_id() const { return device_; }
     bool is_active() const { return device_ != invalid_device_id; }
 
-    template<typename T>
-    static int device_id(global_ptr<T,memory_kind::cuda_device> gp) {
-      return gp.device_;
-    }
-    
     void destroy(upcxx::entry_barrier eb = entry_barrier::user);
   };
 

@@ -136,6 +136,7 @@ namespace upcxx {
       );
     }
 
+    #if 0 // removed from spec
     template<typename T>
     global_ptr<T,Device::kind> try_global_ptr(typename Device::template pointer<T> p) const {
       return this->seg_.in_segment((void*)p)
@@ -147,9 +148,17 @@ namespace upcxx {
         )
         : global_ptr<T,Device::kind>(nullptr);
     }
-
+    #endif
+    
     template<typename T>
-    static typename Device::template pointer<T> raw_pointer(global_ptr<T,Device::kind> gp) {
+    static typename Device::id_type device_id(global_ptr<T,Device::kind> gp) {
+      return Device::invalid_device_id == -1 // this is true statically so faster case will always be taken
+        ? gp.device_
+        : gp ? gp.device_ : Device::invalid_device_id;
+    }
+    
+    template<typename T>
+    static typename Device::template pointer<T> local(global_ptr<T,Device::kind> gp) {
       UPCXX_ASSERT(gp.where() == upcxx::rank_me());
       return gp.raw_ptr_;
     }
