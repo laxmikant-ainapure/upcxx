@@ -29,10 +29,20 @@ int main() {
       std::cerr << "Advice: consider using 3 (or more) ranks to cover three-party cases for upcxx::copy.\n";
 
     #if UPCXX_CUDA_ENABLED
+    {
       cuInit(0);
       cuDeviceGetCount(&dev_n);
       if(dev_n >= max_dev_n)
         dev_n = max_dev_n-1;
+
+      int lo = upcxx::reduce_all(dev_n, upcxx::op_fast_min).wait();
+      int hi = upcxx::reduce_all(dev_n, upcxx::op_fast_max).wait();
+
+      if(me == 0 && lo != hi)
+        std::cerr<<"Notice: not all ranks report the same number of GPUs: min="<<lo<<" max="<<hi<<"\n";
+
+      dev_n = lo;
+    }
     #endif
 
     if(me == 0) {
