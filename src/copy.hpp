@@ -149,8 +149,10 @@ namespace upcxx {
       void *bounce_d;
       if(dev_d == host_device)
         bounce_d = buf_d;
-      else
+      else {
         bounce_d = upcxx::allocate(size, 64);
+        UPCXX_ASSERT_ALWAYS(bounce_d != nullptr, "UPC++ failed to allocate a temporary internal buffer form shared heap. Please run with a bigger shared heap.");
+      }
       
       backend::send_am_master<progress_level::internal>(
         upcxx::world(), rank_s,
@@ -192,6 +194,8 @@ namespace upcxx {
             make_bounce_s_cont(buf_s)();
           else {
             void *bounce_s = upcxx::allocate(size, 64);
+            UPCXX_ASSERT_ALWAYS(bounce_s != nullptr, "UPC++ failed to allocate a temporary internal buffer form shared heap. Please run with a bigger shared heap.");
+            
             detail::rma_copy_local(
               host_device, bounce_s, dev_s, buf_s, size,
               cuda::make_event_cb(make_bounce_s_cont(bounce_s))
@@ -217,7 +221,8 @@ namespace upcxx {
             upcxx::bind(
               [=](cxs_remote_t &cxs_remote) {
                 void *bounce_d = dev_d == host_device ? buf_d : upcxx::allocate(size, 64);
-
+                UPCXX_ASSERT_ALWAYS(dev_d == host_device || bounce_d != nullptr, "UPC++ failed to allocate a temporary internal buffer form shared heap. Please run with a bigger shared heap.");
+                
                 detail::rma_copy_get(bounce_d, rank_s, bounce_s, size,
                   backend::gasnet::make_handle_cb([=]() {
                     auto bounce_d_cont = [=]() {
@@ -258,6 +263,8 @@ namespace upcxx {
         make_bounce_s_cont(buf_s)();
       else {
         void *bounce_s = upcxx::allocate(size, 64);
+        UPCXX_ASSERT_ALWAYS(bounce_s != nullptr, "UPC++ failed to allocate a temporary internal buffer form shared heap. Please run with a bigger shared heap.");
+
         detail::rma_copy_local(host_device, bounce_s, dev_s, buf_s, size, cuda::make_event_cb(make_bounce_s_cont(bounce_s)));
       }
     }
