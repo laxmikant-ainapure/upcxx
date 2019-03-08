@@ -64,7 +64,7 @@ namespace upcxx {
     // or downconvert (to bool) the gp and use operator+(int,int). This is why
     // our operator+/- have overloads for all the integral types (those smaller
     // than `int` aren't necessary due to promotion).
-    operator bool() const {
+    explicit operator bool() const {
       return !is_null();
     }
     
