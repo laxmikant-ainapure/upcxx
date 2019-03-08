@@ -50,22 +50,33 @@ int main() {
     }
 
     #if UPCXX_CUDA_ENABLED
-      cuda_device* gpu[dev_n];
-      device_allocator<cuda_device>* seg[dev_n];
+      cuda_device* gpu[max_dev_n];
+      device_allocator<cuda_device>* seg[max_dev_n];
       for(int dev=1; dev < 1+dev_n; dev++) {
-        gpu[dev-1] = new cuda_device(dev-1);
-        seg[dev-1] = new device_allocator<cuda_device>(*gpu[dev-1], 32<<20);
-
-        buf[me][dev][0] = seg[dev-1]->allocate<int>(1<<20);
-        buf[me][dev][1] = seg[dev-1]->allocate<int>(1<<20);
-
         if(me < 2) {
+          gpu[dev-1] = new cuda_device(dev-1);
+          seg[dev-1] = new device_allocator<cuda_device>(*gpu[dev-1], 32<<20);
+
+          buf[me][dev][0] = seg[dev-1]->allocate<int>(1<<20);
+          buf[me][dev][1] = seg[dev-1]->allocate<int>(1<<20);
+
           int *tmp = new int[1<<20];
           for(int i=0; i < 1<<20; i++)
             tmp[i] = (i%(1<<17)%10) + (i>>17)*10 + (dev*100) + (me*1000);
           cudaSetDevice(dev-1);
-          cuMemcpyHtoD(reinterpret_cast<CUdeviceptr>(buf[me][dev][0].raw_ptr_), tmp, sizeof(int)<<20);
+          cuMemcpyHtoD(
+            reinterpret_cast<CUdeviceptr>(
+              seg[dev-1]->local(
+                upcxx::static_kind_cast<memory_kind::cuda_device>(buf[me][dev][0])
+              )
+            ),
+            tmp, sizeof(int)<<20
+          );
           delete[] tmp;
+        }
+        else {
+          gpu[dev-1] = new cuda_device(cuda_device::invalid_device_id);
+          seg[dev-1] = nullptr;
         }
       }
     #endif
@@ -172,7 +183,8 @@ int main() {
         }
         gpu[dev-1]->destroy();
         delete gpu[dev-1];
-        delete seg[dev-1]; // delete segment after device since that's historically buggy in implementation
+        if(me < 2)
+          delete seg[dev-1]; // delete segment after device since that's historically buggy in implementation
       }
     #endif
   }
