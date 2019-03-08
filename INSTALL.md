@@ -62,6 +62,52 @@ CROSS=cray-aries-slurm ./install <upcxx-install-path>
 The installer will use the `cc` and `CC` compiler aliases of the Cray
 programming environment loaded.
 
+**Installation: CUDA GPU support**
+
+UPC++ now includes *prototype* support for communication operations on memory buffers
+resident in a CUDA-compatible NVIDIA GPU. 
+Note the CUDA support in this UPC++ release is a proof-of-concept reference implementation
+which has not been tuned for performance. In particular, the current implementation of
+`upcxx::copy` does not utilize hardware offload and is expected to underperform 
+relative to solutions using RDMA, GPUDirect and similar technologies.
+Performance will improve in an upcoming release.
+
+System Requirements:
+
+* NVIDIA-branded [CUDA-compatible GPU hardware](https://developer.nvidia.com/cuda-gpus)
+* NVIDIA CUDA toolkit v9.0 or later. Available for [download here](http://developer.nvidia.com/cuda-downloads).
+
+To activate the UPC++ support for CUDA, set environment variable `UPCXX_CUDA=1`
+when running the install script:
+
+```bash
+cd <upcxx-source-path>
+env UPCXX_CUDA=1 ./install <upcxx-install-path>
+```
+
+This expects to find the NVIDIA `nvcc` compiler wrapper in your `$PATH` and
+will attempt to extract the correct build settings for your system.  If this
+automatic extraction fails (resulting in preprocessor or linker errors
+mentioning CUDA), then you may need to manually override the following
+settings:
+
+* `UPCXX_CUDA_NVCC`: the full path to the `nvcc` compiler wrapper from the CUDA toolkit. 
+   Eg `UPCXX_CUDA_NVCC=/Developer/NVIDIA/CUDA-10.0/bin/nvcc`
+* `UPCXX_CUDA_CPPFLAGS`: preprocessor flags to add for locating the CUDA toolkit headers.
+   Eg `UPCXX_CUDA_CPPFLAGS='-I/Developer/NVIDIA/CUDA-10.0/include'`
+* `UPCXX_CUDA_LIBFLAGS`: linker flags to use for linking CUDA executables.
+   Eg `UPCXX_CUDA_LIBFLAGS='-Xlinker -force_load -Xlinker /Developer/NVIDIA/CUDA-10.0/lib/libcudart_static.a -L/Developer/NVIDIA/CUDA-10.0/lib -lcudadevrt -Xlinker -rpath -Xlinker /usr/local/cuda/lib -Xlinker -framework -Xlinker CoreFoundation -framework CUDA'`
+
+UPC++ CUDA operation can be validated using the following programs in the source tree:
+
+* `test/copy.cpp`: correctness tester for the UPC++ `cuda_device`
+* `bench/cuda_flood.cpp`: performance microbenchmark for `upcxx::copy` using GPU memory
+* `example/cuda_vecadd`: demonstration of using UPC++ `cuda_device` to orchestrate
+  communication for a program invoking CUDA computational kernels on the GPU.
+
+See the "Memory Kinds" section in the _UPC++ Programmer's Guide_ for more details on 
+using the CUDA support.
+
 ## Advanced Installer Configuration ##
 
 The installer script tries to pick a sensible default behavior for the platform

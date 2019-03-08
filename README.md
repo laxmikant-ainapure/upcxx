@@ -88,14 +88,30 @@ For copyright notice and licensing agreement, see [LICENSE.txt](LICENSE.txt)
 
 ## ChangeLog
 
-### PENDING: Release 2019.XX.XX
+### 2019.03.15: Release 2019.3.0
+
+This release of UPC++ v1.0 supports most of the functionality specified in the 
+[UPC++ 1.0 Draft 10 Specification](docs/spec.pdf).
 
 New features/enhancements: (see specification and programmer's guide for full details)
 
+* Prototype Memory Kinds support for CUDA-based NVIDIA GPUs, see [INSTALL.md](INSTALL.md).
+    Note the CUDA support in this UPC++ release is a proof-of-concept reference implementation
+    which has not been tuned for performance. In particular, the current implementation of
+    `upcxx::copy` does not utilize hardware offload and is expected to underperform 
+    relative to solutions using RDMA, GPUDirect and similar technologies.
+    Performance will improve in an upcoming release.
+* Support for interoperability with Berkeley UPC, see [upc-hybrid.md](docs/upc-hybrid.md)
 * There is now an offline installer package for UPC++, for systems lacking connectivity
 * Barrier synchronization performance has been improved
-* Support for interoperability Berkeley UPC, see [upc-hybrid.md](docs/upc-hybrid.md)
 * Installer now defaults to more build parallelism, improving efficiency (see `UPCXX_MAKE`)
+
+The following features from the specification are not yet implemented:
+
+* Non-Blocking collectives currently support only the default future-based completion
+* `atomic_domain<float>` and `atomic_domain<double>` are not yet implemented
+* `team_id::when_here()` is unimplemented
+* User-defined Serialization interface
 
 Notable bug fixes:
 
@@ -106,6 +122,7 @@ Notable bug fixes:
 * issue #185: Fix argument order for `dist_object` constructor to match spec
 * issue #187: Improve Python detection logic for the install script
 * issue #190: Teach upcxx-run to honor `UPCXX_PYTHON`
+* issue #202: Make `global_ptr::operator bool` conversion explicit 
 
 Breaking changes:
 
@@ -115,7 +132,7 @@ Breaking changes:
 ### 2018.09.26: Release 2018.9.0
 
 This release of UPC++ v1.0 supports most of the functionality specified in the 
-[UPC++ 1.0 Draft 8 Specification](docs/spec.pdf).
+[UPC++ 1.0 Draft 8 Specification](https://bitbucket.org/berkeleylab/upcxx/downloads/upcxx-spec-V1.0-Draft8.pdf).
 
 New features/enhancements: (see specification and programmer's guide for full details)
 
