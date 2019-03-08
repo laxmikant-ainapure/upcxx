@@ -90,52 +90,141 @@ def openmp(cxt):
     'libflags': ['-fopenmp']
   }}
 
+def invoke(cmd):
+  import subprocess as subp
+  try:
+    p = subp.Popen(cmd, stdin=subp.PIPE, stdout=subp.PIPE, stderr=subp.PIPE, close_fds=True)
+  except OSError as e:
+    return (e.errno, '', '')
+  out,err = p.communicate()
+  ret = p.returncode
+  return (ret,out,err)
+
+def invoke_on_file(suffix, contents, file_to_cmd, file_to_outs=lambda x:[]):
+  import os
+  import tempfile
+  fd,name = tempfile.mkstemp(suffix=suffix)
+  os.write(fd, contents)
+  os.close(fd)
+  ans = invoke(file_to_cmd(name))
+  for f in [name] + list(file_to_outs(name)):
+    try: os.remove(f)
+    except OSError: pass
+  return ans
+
 @rule(cli='cuda')
-@cached
 def cuda(cxt):
+  return cuda_cached()
+
+@cached
+def cuda_cached():
   """
   Platform specific logic for finding cuda goes here.
   """
-  import os
-  import tempfile
+  import re
 
-  fd,dummy = tempfile.mkstemp(suffix='.cpp')
-  dummy_out = os.path.join(dummy, '.out')
-  os.write(fd, "int main() { return 0; }\n")
-  os.close(fd)
-
-  import subprocess as subp
-  p=subp.Popen(['nvcc','-ccbin=g++','--verbose',dummy,'-o',dummy_out],
-    stdin=subp.PIPE, stdout=subp.PIPE, stderr=subp.PIPE, close_fds=True)
-  out,err = p.communicate()
-
-  os.remove(dummy)
-  try: os.remove(dummy_out)
-  except: pass
-
+  nvcc = env('UPCXX_CUDA_NVCC','nvcc').split()
+  
+  ##############################################################################
+  # scrape the preprocessor flags and backend compiler
+  res,out,err = invoke(nvcc+['--dryrun','-c','foo.cpp','-o','foo.o'])
+  if res != 0:
+    raise errorlog.LoggedError(
+      'nvcc error',
+      'Failed to invoke nvcc (name=%s, exit=%d):\n'%(' '.join(nvcc), res) +
+      '\n' +
+      'Make sure CUDA is installed and either nvcc is in your PATH,\n' +
+      'or set UPCXX_CUDA_NVCC in your environment to point to it.'
+    )
+  lines = [line for line in err.split('\n') if line != '']
   ppflags = []
-  libflags = []
-  for line in err.split('\n'):
-    if line.startswith('#$ g++ -o'):
-      flags = [flag[1:-1] if flag.startswith('"') else flag for flag in line.split()]
-      if '-Wl,--start-group' in flags:
-        libflags += [flag for flag in flags[
-            flags.index('-Wl,--start-group') :
-            flags.index('-Wl,--end-group') + 1
-          ] if flag.startswith('-')]
-      else:
-        for flag in flags:
-          if any(flag.startswith(pre) for pre in ['-L','-l','-pthread']):
-            libflags.append(flag)
-    
-    elif line.startswith('#$ INCLUDES='):
-      line = line[len('#$ INCLUDES='):]
-      for flag in line.split():
-        if flag.startswith('"') and flag.endswith('"'):
-          flag = flag[1:-1]
-        ppflags.append(flag)
+  
+  for line in lines:
+    m1 = re.match(r'^#\$ INCLUDES=(.*)$', line)
+    m2 = re.match(r'^#\$ ([A-Za-z_+-]+) ', line)
+    if m1:
+      flags = m1.group(1).split()
+      flags = [flag[1:-1] if flag.startswith('"') else flag for flag in flags]
+      ppflags += [flag for flag in flags if re.match('^(-D|-I)', flag)]
+    elif m2:
+      compiler = {'gcc':'g++', 'clang':'clang++', 'icc':'icpc'}[m2.group(1)]
 
-  libflags += ['-lcuda']
+  if env('UPCXX_CUDA_CPPFLAGS', None) is not None:
+    # override scraped ppflags
+    ppflags = env('UPCXX_CUDA_CPPFLAGS',None).split()
+  
+  ##############################################################################
+  libflags = env('UPCXX_CUDA_LIBFLAGS', None)
+  if libflags is not None:
+    libflags = libflags.split()
+  else:
+    # scrape the link flags
+    res,out,err = invoke(nvcc+['--dryrun','foo.o'])
+    if res != 0:
+      raise errorlog.LoggedError('nvcc error', 'Failed to invoke nvcc (exit=%d).\nMake sure CUDA is installed and nvcc is in your PATH.'%res)
+    line = [line for line in err.split('\n') if line != ''][-1] # last line
+    m1 = re.match(r'^#\$ ([A-Z_]+)=', line)
+    m2 = re.match(r'^#\$ ([A-Za-z_+-]+) ', line)
+    libflags = []
+    
+    if not(m1 is None and m2):
+      raise errorlog.LoggedError('nvcc error', '"nvcc --dryrun" output format unrecognized.\n' + line)
+    else:
+      flags = [flag[1:-1] if flag.startswith('"') else flag for flag in line.split()]
+      flags = [flag for flag in flags if not flag.endswith('.o')]
+      flags.reverse()
+      while flags:
+        if flags[-1] == '-Wl,--start-group':
+          end = flags.index('-Wl,--end-group')
+          libflags += reversed(flags[end:])
+          del flags[end:]
+        elif re.match('^(-L|-l|-Wl,)', flags[-1]):
+          libflags.append(flags[-1])
+          del flags[-1]
+        elif flags[-1] in ('-Xlinker','-rpath'):
+          libflags += reversed(flags[-2:])
+          del flags[-2:]
+        elif flags[-1] in ('-pthread',):
+          libflags += flags[-1]
+          del flags[-1]
+        else:
+          del flags[-1]
+
+  ##############################################################################
+  # check that the CUDA Driver API is linkable
+  res,out,err = invoke_on_file(
+    '.cpp',
+    '#include <cuda.h>\n' +
+    'int main() { cuInit(0); return 0; }\n',
+    lambda cpp: [compiler] + ppflags + [cpp,'-o',cpp+'.exe'] + libflags,
+    lambda cpp: [cpp+'.exe']
+  )
+  if res != 0: # link failed, try adding -lcuda and others
+    for extra in [['-lcuda'], ['-framework','CUDA']]:
+      res,out,err = invoke_on_file(
+        '.cpp',
+        '#include <cuda.h>\n' +
+        'int main() { cuInit(0); return 0; }\n',
+        lambda cpp: [compiler] + ppflags + [cpp,'-o',cpp+'.exe'] + libflags + extra,
+        lambda cpp: [cpp+'.exe']
+      )
+      if res == 0:
+        libflags += extra
+        break
+
+    if res != 0:
+      raise errorlog.LoggedError(
+        'nvcc error',
+        'Failed to link against CUDA Driver API:\n' +
+        '\n' +
+        'foo.cpp:\n' +
+        '  #include <cuda.h>\n' +
+        '  int main() { cuInit(0); return 0; }\n' +
+        '\n' +
+        'command:\n' +
+        '  '+' '.join([compiler]+ppflags+['foo.cpp','-o','foo.exe']+libflags)
+      )
+  
   return {'cuda': {'ppflags': ppflags, 'libflags': libflags}}
 
 # Rule overriden in sub-nobsrule files.

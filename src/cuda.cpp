@@ -10,6 +10,7 @@ constexpr std::size_t detail::device_allocator_core<upcxx::cuda_device>::min_ali
 #if UPCXX_CUDA_ENABLED
   namespace {
     detail::segment_allocator make_segment(upcxx::cuda::device_state *st, void *base, size_t size) {
+      bool throw_bad_alloc = false;
       CU_CHECK(cuCtxPushCurrent(st->context));
       
       CUdeviceptr p = 0x0;
@@ -35,8 +36,12 @@ constexpr std::size_t detail::device_allocator_core<upcxx::cuda_device>::min_ali
       }
       else if(base == nullptr) {
         CUresult r = cuMemAlloc(&p, size);
-        UPCXX_ASSERT_ALWAYS(r != CUDA_ERROR_OUT_OF_MEMORY, "Requested cuda allocation too large: size="<<size);
-        CU_CHECK(r);
+        if(r == CUDA_ERROR_OUT_OF_MEMORY) {
+          throw_bad_alloc = true;
+          p = reinterpret_cast<CUdeviceptr>(nullptr);
+        }
+        else
+          UPCXX_ASSERT_ALWAYS(r == CUDA_SUCCESS, "Requested cuda allocation failed: size="<<size<<", return="<<int(r));
         
         st->segment_to_free = p;
         base = reinterpret_cast<void*>(p);
@@ -46,12 +51,41 @@ constexpr std::size_t detail::device_allocator_core<upcxx::cuda_device>::min_ali
       
       CUcontext dump;
       CU_CHECK(cuCtxPopCurrent(&dump));
-      
-      return detail::segment_allocator(base, size);
+
+      if(throw_bad_alloc)
+        throw std::bad_alloc();
+      else
+        return detail::segment_allocator(base, size);
     }
   }
 
   upcxx::cuda::device_state *upcxx::cuda::devices[upcxx::cuda::max_devices] = {/*nullptr...*/};
+#endif
+
+#if UPCXX_CUDA_ENABLED
+void upcxx::cuda::cu_failed(CUresult res, const char *file, int line, const char *expr) {
+  const char *errname, *errstr;
+  cuGetErrorName(res, &errname);
+  cuGetErrorString(res, &errstr);
+  
+  std::stringstream ss;
+  ss<<"CUDA call failed: "<<expr
+    <<"\n  error="<<errname<<": "<<errstr<<'\n';
+  
+  upcxx::assert_failed(file, line, ss.str().c_str());
+}
+
+void upcxx::cuda::curt_failed(cudaError_t res, const char *file, int line, const char *expr) {
+  const char *errname, *errstr;
+  errname = cudaGetErrorName(res);
+  errstr = cudaGetErrorString(res);
+  
+  std::stringstream ss;
+  ss<<"CUDA call failed: "<<expr
+    <<"\n  error="<<errname<<": "<<errstr<<'\n';
+  
+  upcxx::assert_failed(file, line, ss.str().c_str());
+}
 #endif
 
 upcxx::cuda_device::cuda_device(int device):

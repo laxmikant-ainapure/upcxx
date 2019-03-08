@@ -8,24 +8,35 @@
   #include <cuda.h>
   #include <cuda_runtime_api.h>
 
+  namespace upcxx {
+    namespace cuda {
+      void cu_failed(CUresult res, const char *file, int line, const char *expr);
+      void curt_failed(cudaError_t res, const char *file, int line, const char *expr);
+    }
+  }
+  
   #define CU_CHECK(expr) do { \
       CUresult res_xxxxxx = (expr); \
-      UPCXX_ASSERT(res_xxxxxx == CUDA_SUCCESS, "CUDA returned "<<res_xxxxxx<<": " #expr); \
+      if(UPCXX_ASSERT_ENABLED && res_xxxxxx != CUDA_SUCCESS) \
+        ::upcxx::cuda::cu_failed(res_xxxxxx, __FILE__, __LINE__, #expr); \
     } while(0)
 
   #define CU_CHECK_ALWAYS(expr) do { \
       CUresult res_xxxxxx = (expr); \
-      UPCXX_ASSERT_ALWAYS(res_xxxxxx == CUDA_SUCCESS, "CUDA returned "<<res_xxxxxx<<": " #expr); \
+      if(res_xxxxxx != CUDA_SUCCESS) \
+        ::upcxx::cuda::cu_failed(res_xxxxxx, __FILE__, __LINE__, #expr); \
     } while(0)
 
   #define CURT_CHECK(expr) do { \
       cudaError_t res_xxxxxx = (expr); \
-      UPCXX_ASSERT(res_xxxxxx == cudaSuccess, "CUDA returned "<<res_xxxxxx<<": " #expr); \
+      if(UPCXX_ASSERT_ENABLED && res_xxxxxx != cudaSuccess) \
+        ::upcxx::cuda::curt_failed(res_xxxxxx, __FILE__, __LINE__, #expr); \
     } while(0)
 
   #define CURT_CHECK_ALWAYS(expr) do { \
       cudaError_t res_xxxxxx = (expr); \
-      UPCXX_ASSERT_ALWAYS(res_xxxxxx == cudaSuccess, "CUDA returned "<<res_xxxxxx<<": " #expr); \
+      if(res_xxxxxx != cudaSuccess) \
+        ::upcxx::cuda::curt_failed(res_xxxxxx, __FILE__, __LINE__, #expr); \
     } while(0)
 
   namespace upcxx {

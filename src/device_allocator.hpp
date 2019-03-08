@@ -106,7 +106,7 @@ namespace upcxx {
       lock_.unlock();
       
       if(ptr == nullptr)
-        throw std::bad_alloc();
+        return global_ptr<T,Device::kind>(nullptr);
       else
         return global_ptr<T,Device::kind>(
           detail::internal_only(),
