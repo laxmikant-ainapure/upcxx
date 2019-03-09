@@ -55,7 +55,7 @@ static double helper(int warmup, int window_size, int trials, int len,
     return 0;
 }
 
-int main() {
+int main(int argc, char **argv) {
    {
        upcxx::init();
 
@@ -82,6 +82,11 @@ int main() {
        int warmup = 10;
        int trials = 100;
        int window_size = 100;
+
+       if (argc > 1) trials = atoi(argv[1]);
+       if (argc > 2) window_size = atoi(argv[2]);
+       if (!rank_me())
+         std::cout << "Running " << trials << " trials of window_size=" << window_size << std::endl;
 
        // TODO bi-directional and uni-directional
 
@@ -130,6 +135,11 @@ int main() {
        gpu_alloc.deallocate(local_gpu_array);
        upcxx::delete_array(host_array);
        gpu_device.destroy();
+
+
+       upcxx::barrier();
+
+       if (!rank_me())  std::cout << "SUCCESS" << std::endl;
    }
    upcxx::finalize();
 }
