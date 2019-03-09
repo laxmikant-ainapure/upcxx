@@ -114,9 +114,9 @@ platform_sanity_checks() {
             #     g++-7 (Homebrew GCC 7.2.0) 7.2.0
             #     foo (GCC) 7.2.0
             COMPILER_GOOD=1
-        elif echo "$CXXVERS" | egrep 'clang version (2|3\.[1-7])' 2>&1 > /dev/null ; then
+        elif echo "$CXXVERS" | egrep 'clang version [23]' 2>&1 > /dev/null ; then
             COMPILER_BAD=1
-        elif echo "$CXXVERS" | egrep 'clang version (3\.[8-9]|[4-9]\.|[1-9][0-9])' 2>&1 > /dev/null ; then
+        elif echo "$CXXVERS" | egrep 'clang version ([4-9]\.|[1-9][0-9])' 2>&1 > /dev/null ; then
             COMPILER_GOOD=1
             # PrgEnv-llvm should be Untested (neither GOOD nor BAD)
             if test -n "$CRAY_PRGENVGNU" ; then
@@ -125,7 +125,7 @@ platform_sanity_checks() {
         fi
 
         RECOMMEND='We recommend one of the following C++ compilers (or any later versions):
-           Linux on x86_64:   g++ 6.4.0, LLVM/clang 3.8.0, Intel C 17.0.2
+           Linux on x86_64:   g++ 6.4.0, LLVM/clang 4.0.0, Intel C 17.0.2
            Linux on ppc64le:  g++ 6.4.0
            macOS on x86_64:   g++ 6.4.0, Xcode/clang 8.0.0
            Cray XC systems:   PrgEnv-gnu with gcc/6.4.0 environment module loaded
