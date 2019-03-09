@@ -42,6 +42,8 @@ int main() {
         std::cerr<<"Notice: not all ranks report the same number of GPUs: min="<<lo<<" max="<<hi<<"\n";
 
       dev_n = lo;
+      if (me == 0 && !dev_n)
+        std::cerr<<"WARNING: UPC++ CUDA support is compiled-in, but could not find sufficient GPU support at runtime."<<std::endl;
     }
     #endif
 
