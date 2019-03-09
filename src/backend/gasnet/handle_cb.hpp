@@ -24,6 +24,22 @@ namespace gasnet {
     virtual void execute_and_delete(handle_cb_successor) = 0;
   };
 
+  template<typename Fn>
+  struct handle_cb_impl_fn final: handle_cb {
+    Fn fn;
+    handle_cb_impl_fn(Fn &&fn): fn(std::move(fn)) {}
+    virtual void execute_and_delete(handle_cb_successor) {
+      fn();
+      delete this;
+    }
+  };
+
+  template<typename Fn1, typename Fn = typename std::decay<Fn1>::type>
+  handle_cb_impl_fn<Fn>* make_handle_cb(Fn1 &&fn) {
+    return new handle_cb_impl_fn<Fn>(std::forward<Fn1>(fn));
+  }
+  
+  
   // This type is contained within `__thread` storage, so it must be:
   //   1. trivially destructible.
   //   2. constexpr constructible equivalent to zero-initialization.

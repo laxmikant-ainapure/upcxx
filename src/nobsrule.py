@@ -67,6 +67,15 @@ def required_libraries(cxt, src):
       }
     }}
     
+  elif src == here('cuda.hpp'):
+    if cxt.upcxx_cuda_enabled():
+      return cxt.libset_merge(
+        {'upcxx-cuda': {'ppdefs':{'UPCXX_CUDA_ENABLED':1}}},
+        cxt.cuda()
+      )
+    else:
+      return {}
+  
   else:
     # Parent "nobsrule.py" handles other cases.
     return cxt.required_libraries(src)

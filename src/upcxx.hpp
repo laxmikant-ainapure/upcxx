@@ -10,6 +10,8 @@
 #include <upcxx/backend.hpp>
 #include <upcxx/barrier.hpp>
 #include <upcxx/broadcast.hpp>
+#include <upcxx/copy.hpp>
+#include <upcxx/cuda.hpp>
 #include <upcxx/dist_object.hpp>
 #include <upcxx/future.hpp>
 #include <upcxx/global_ptr.hpp>

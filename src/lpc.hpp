@@ -40,10 +40,15 @@ namespace upcxx {
         this->vtbl = &the_vtbl;
       }
     };
-    
+
     template<typename Fn>
     constexpr lpc_vtable lpc_impl_fn<Fn>::the_vtbl;
-    
+
+    template<typename Fn1, typename Fn = typename std::decay<Fn1>::type>
+    lpc_impl_fn<Fn>* make_lpc(Fn1 &&fn) {
+      return new lpc_impl_fn<Fn>(std::forward<Fn1>(fn));
+    }
+        
     // This type is contained within `__thread` storage, so it must be:
     //   1. trivially destructible.
     //   2. constexpr constructible equivalent to zero-initialization.
