@@ -118,6 +118,10 @@ platform_sanity_checks() {
             COMPILER_BAD=1
         elif echo "$CXXVERS" | egrep 'clang version (3\.[8-9]|[4-9]\.|[1-9][0-9])' 2>&1 > /dev/null ; then
             COMPILER_GOOD=1
+            # PrgEnv-llvm should be Untested (neither GOOD nor BAD)
+            if test -n "$CRAY_PRGENVGNU" ; then
+              COMPILER_GOOD=
+            fi
         fi
 
         RECOMMEND='We recommend one of the following C++ compilers (or any later versions):
