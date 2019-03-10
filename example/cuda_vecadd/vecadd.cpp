@@ -21,8 +21,13 @@ using namespace upcxx;
 int main() {
    upcxx::init();
 
-   std::size_t segsize = 256*1024*1024; // 256MB
    int N = 1024;
+   std::size_t segsize = 3*N*sizeof(double);
+
+   if (!rank_me()) 
+       std::cout<<"Running vecadd with "<<rank_n()<<" processes, N="<<N<<" segsize="<<segsize<<std::endl;
+
+   upcxx::barrier();
 
    auto gpu_device = upcxx::cuda_device( 0 ); // open device 0 (or other args TBD)
    {
@@ -32,10 +37,13 @@ int main() {
 
        global_ptr<double,memory_kind::cuda_device> dA =
            gpu_alloc.allocate<double>(N);
+       assert(dA);
        global_ptr<double,memory_kind::cuda_device> dB =
            gpu_alloc.allocate<double>(N);
+       assert(dB);
        global_ptr<double,memory_kind::cuda_device> dC =
            gpu_alloc.allocate<double>(N);
+       assert(dC);
 
        if (rank_me() == 0) {
            initialize_device_arrays(gpu_alloc.local(dA),
@@ -52,11 +60,14 @@ int main() {
 
        upcxx::barrier();
 
-       upcxx::when_all(
-           upcxx::copy(root_dA, dA, N),
-           upcxx::copy(root_dB, dB, N),
-           upcxx::copy(root_dC, dC, N)
-       ).wait();
+       // transfer values from device on process 0 to device on this process
+       if (rank_me() != 0) {
+           upcxx::when_all(
+               upcxx::copy(root_dA, dA, N),
+               upcxx::copy(root_dB, dB, N),
+               upcxx::copy(root_dC, dC, N)
+           ).wait();
+       }
 
        double *hA = (double *)malloc(N * sizeof(*hA));
        assert(hA);
@@ -98,8 +109,10 @@ int main() {
        }
 
        // Push back to the root GPU
-       upcxx::copy(dC + my_chunk_start, root_dC + my_chunk_start,
-               my_chunk_end - my_chunk_start).wait();
+       if (rank_me() != 0) {
+           upcxx::copy(dC + my_chunk_start, root_dC + my_chunk_start,
+                       my_chunk_end - my_chunk_start).wait();
+       }
 
        upcxx::barrier();
 
@@ -117,7 +130,7 @@ int main() {
            }
 
            if (count_errs == 0) {
-               std::cout << "Success!" << std::endl;
+               std::cout << "SUCCESS" << std::endl;
            }
        }
 
