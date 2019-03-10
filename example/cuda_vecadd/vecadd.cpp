@@ -52,11 +52,14 @@ int main() {
 
        upcxx::barrier();
 
-       upcxx::when_all(
-           upcxx::copy(root_dA, dA, N),
-           upcxx::copy(root_dB, dB, N),
-           upcxx::copy(root_dC, dC, N)
-       ).wait();
+       // transfer values from device on process 0 to device on this process
+       if (rank_me() != 0) {
+           upcxx::when_all(
+               upcxx::copy(root_dA, dA, N),
+               upcxx::copy(root_dB, dB, N),
+               upcxx::copy(root_dC, dC, N)
+           ).wait();
+       }
 
        double *hA = (double *)malloc(N * sizeof(*hA));
        assert(hA);
@@ -98,8 +101,10 @@ int main() {
        }
 
        // Push back to the root GPU
-       upcxx::copy(dC + my_chunk_start, root_dC + my_chunk_start,
-               my_chunk_end - my_chunk_start).wait();
+       if (rank_me() != 0) {
+           upcxx::copy(dC + my_chunk_start, root_dC + my_chunk_start,
+                       my_chunk_end - my_chunk_start).wait();
+       }
 
        upcxx::barrier();
 
