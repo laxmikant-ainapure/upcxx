@@ -21,8 +21,13 @@ using namespace upcxx;
 int main() {
    upcxx::init();
 
-   std::size_t segsize = 256*1024*1024; // 256MB
    int N = 1024;
+   std::size_t segsize = 3*N*sizeof(double);
+
+   if (!rank_me()) 
+       std::cout<<"Running vecadd with "<<rank_n()<<" processes, N="<<N<<" segsize="<<segsize<<std::endl;
+
+   upcxx::barrier();
 
    auto gpu_device = upcxx::cuda_device( 0 ); // open device 0 (or other args TBD)
    {
@@ -32,10 +37,13 @@ int main() {
 
        global_ptr<double,memory_kind::cuda_device> dA =
            gpu_alloc.allocate<double>(N);
+       assert(dA);
        global_ptr<double,memory_kind::cuda_device> dB =
            gpu_alloc.allocate<double>(N);
+       assert(dB);
        global_ptr<double,memory_kind::cuda_device> dC =
            gpu_alloc.allocate<double>(N);
+       assert(dC);
 
        if (rank_me() == 0) {
            initialize_device_arrays(gpu_alloc.local(dA),
@@ -122,7 +130,7 @@ int main() {
            }
 
            if (count_errs == 0) {
-               std::cout << "Success!" << std::endl;
+               std::cout << "SUCCESS" << std::endl;
            }
        }
 
