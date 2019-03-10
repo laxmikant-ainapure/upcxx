@@ -33,7 +33,7 @@ The current release is known to work on the following configurations:
 
 * Linux/x86_64 with one of the following compilers:    
     - Gnu g++ 6.4.0 or newer    
-    - clang 3.8.0 or newer (with libstdc++ from gcc-5.1.0 or newer)    
+    - clang 4.0.0 or newer (with libstdc++ from gcc-6.4.0 or newer)    
     - Intel C++ 17.0.2 or newer (with libstdc++ from gcc-6.4.0 or newer)    
   If your system compilers do not meet these requirements, please see the note
   in [docs/local-gcc.md](docs/local-gcc.md) regarding use of non-system
