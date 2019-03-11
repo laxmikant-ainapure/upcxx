@@ -49,6 +49,6 @@ int main() {
   gpu_alloc.deallocate(gpu_array);
 
   gpu_device.destroy();
-  upcxx::finalize();  // We have suppressed deallocation
+  upcxx::finalize();
 }
 //SNIPPET
