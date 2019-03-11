@@ -11,8 +11,8 @@ using namespace upcxx;
 int main() {
   upcxx::init();
 
-  std::size_t segsize = 256*1024*1024; // 256MB
-  auto gpu_device = upcxx::cuda_device( 0 ); // open device 0 (or other args TBD)
+  std::size_t segsize = 4*1024*1024; // 4MB
+  auto gpu_device = upcxx::cuda_device( 0 ); // open device 0
   auto gpu_alloc = upcxx::device_allocator<upcxx::cuda_device>(gpu_device, segsize); // alloc GPU segment
 
   // alloc an array of 1024 doubles on GPU and host
