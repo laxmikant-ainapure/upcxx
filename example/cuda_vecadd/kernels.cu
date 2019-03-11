@@ -22,6 +22,7 @@ void initialize_device_arrays(double *dA, double *dB, int N) {
     int blocks_per_grid = (N + threads_per_block - 1) / threads_per_block;
     init_kernel<<<blocks_per_grid, threads_per_block>>>(dA, dB, N);
     CHECK_CUDA(cudaDeviceSynchronize());
+    CHECK_CUDA(cudaGetLastError());
 }
 
 __global__ void vecadd_kernel(double *A, double *B, double *C, int N) {
@@ -39,4 +40,5 @@ void gpu_vector_sum(double *dA, double *dB, double *dC, int start, int end) {
     vecadd_kernel<<<blocks_per_grid, threads_per_block>>>(dA + start, dB + start,
             dC + start, N);
     CHECK_CUDA(cudaDeviceSynchronize());
+    CHECK_CUDA(cudaGetLastError());
 }
