@@ -6,42 +6,6 @@
 #include <upcxx/global_ptr.hpp>
 #include <upcxx/segment_allocator.hpp>
 
-#include <new>
-#include <type_traits>
-
-// TODO: break detail::par_mutex out into seperate internal concurrency toolbox header.
-#if UPCXX_BACKEND_GASNET_PAR
-  #include <mutex>
-  namespace upcxx {
-    namespace detail {
-      class par_mutex {
-        std::mutex m_;
-      public:
-        par_mutex() = default;
-        par_mutex(par_mutex const&) = delete;
-        par_mutex(par_mutex&&) {
-          // std::mutex's aren't movable, but since we dont expect a par_mutex to be
-          // moved while locked, it has no state worth transfering so we can
-          // just let its mutex be default constructed.
-        }
-
-        void lock() { m_.lock(); }
-        void unlock() { m_.unlock(); }
-      };
-    }
-  }
-#else
-  namespace upcxx {
-    namespace detail {
-      class par_mutex {
-      public:
-        void lock() {}
-        void unlock() {}
-      };
-    }
-  }
-#endif
-
 namespace upcxx {
   namespace detail {
     struct device_allocator_base {
@@ -60,9 +24,10 @@ namespace upcxx {
     // specialized per device type
     template<typename Device>
     struct device_allocator_core; /*: device_allocator_base {
-      template<typename T>
       static constexpr std::size_t min_alignment;
+      template<typename T>
       static constexpr std::size_t default_alignment();
+
       device_allocator_core(Device &dev, typename Device::pointer<void> base, std::size_t size);
       device_allocator_core(device_allocator_core&&) = default;
     };*/
@@ -85,7 +50,16 @@ namespace upcxx {
       detail::device_allocator_core<Device>(&dev, Device::template null_pointer<void>(), size) {
     }
     
-    device_allocator(device_allocator&&) = default;
+    device_allocator(device_allocator &&that):
+      // base class move ctor
+      detail::device_allocator_core<Device>::device_allocator_core(
+        static_cast<detail::device_allocator_core<Device>&&>(
+          // use comma operator to create a temporary lock_guard surrounding
+          // the invocation of our base class's move ctor
+          (std::lock_guard<detail::par_mutex>(that.lock_), that)
+        )
+      ) {
+    }
 
     template<typename T,
              std::size_t align = detail::device_allocator_core<Device>::template default_alignment<T>()>
