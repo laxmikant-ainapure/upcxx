@@ -164,8 +164,13 @@ detail::device_allocator_core<upcxx::cuda_device>::device_allocator_core(
 }
 
 detail::device_allocator_core<upcxx::cuda_device>::~device_allocator_core() {
-  UPCXX_ASSERT_ALWAYS(backend::master.active_with_caller());
-  
+  if(upcxx::initialized()) {
+    // The thread safety restriction of this call still applies when upcxx isn't
+    // initialized, we just have no good way of asserting it so we conditionalize
+    // on initialized().
+    UPCXX_ASSERT_ALWAYS(backend::master.active_with_caller());
+  }
+
   #if UPCXX_CUDA_ENABLED  
     if(device_ != upcxx::cuda_device::invalid_device_id) {
       cuda::device_state *st = cuda::devices[device_];
