@@ -11,25 +11,8 @@ $(error Please set UPCXX_INSTALL=/path/to/upcxx/install)
 endif
 
 UPCXX_THREADMODE ?= seq
-
 ENV = env UPCXX_THREADMODE=$(UPCXX_THREADMODE)
-
-#CXX = $(shell $(ENV) $(UPCXX_INSTALL)/bin/upcxx-meta CXX)
-#CPPFLAGS = $(shell $(ENV) $(UPCXX_INSTALL)/bin/upcxx-meta CPPFLAGS)
-#CXXFLAGS = $(shell $(ENV) $(UPCXX_INSTALL)/bin/upcxx-meta CXXFLAGS)
-#LDFLAGS = $(shell $(ENV) $(UPCXX_INSTALL)/bin/upcxx-meta LDFLAGS)
-#LIBS = $(shell $(ENV) $(UPCXX_INSTALL)/bin/upcxx-meta LIBS)
-
-
-UPCXX_THREADMODE ?= seq
-UPCXX_CODEMODE = O3
-ENV = env UPCXX_THREADMODE=$(UPCXX_THREADMODE) UPCXX_CODEMODE=$(UPCXX_CODEMODE)
-
 CXX = $(UPCXX_INSTALL)/bin/upcxx
-
-
-
-
 
 PTHREAD_FLAGS = -pthread
 OPENMP_FLAGS = -fopenmp
@@ -65,14 +48,6 @@ cuda: $(CUDA_EXAMPLES)
 # The rule for building any example.
 %: %.cpp $(wildcard *.h) $(wildcard *.hpp)
 	$(CXX) $@.cpp $(EXTRA_FLAGS) -o $@
-
-# Adds CUDA definitions
-include ./arch.cuda.gnuMPI
-
-%.o: %.cu Makefile
-	$(NVCC) -c  $(NVCCFLAGS) -g $< -o $@
-
-
 
 
 # Example-specific variable specializations.
