@@ -128,6 +128,9 @@ Breaking changes:
 
 * envvar `UPCXX_SEGMENT_MB` has been renamed to `UPCXX_SHARED_HEAP_SIZE`.
   For backwards compat, the former is still accepted when the latter is unset.
+* The minimum-supported version of GNU g++ is now 6.4.0
+    - This also applies to the stdlibc++ used by Clang or Intel compilers
+* The minimum-supported version of llvm/clang for Linux is now 4.0
 
 ### 2018.09.26: Release 2018.9.0
 
