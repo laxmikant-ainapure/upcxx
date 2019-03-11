@@ -15,26 +15,18 @@
   namespace upcxx {
     namespace detail {
       class par_mutex {
-        typename std::aligned_storage<sizeof(std::mutex),alignof(std::mutex)>::type raw_;
+        std::mutex m_;
       public:
-        par_mutex() { ::new(&raw_) std::mutex; }
+        par_mutex() = default;
         par_mutex(par_mutex const&) = delete;
-        par_mutex(par_mutex &&that) {
+        par_mutex(par_mutex&&) {
           // std::mutex's aren't movable, but since we dont expect a par_mutex to be
           // moved while locked, it has no state worth transfering so we can
-          // just default construct the internal std::mutex.
-          ::new(&raw_) std::mutex;
+          // just let its mutex be default constructed.
         }
 
-        // TODO: need to use std::launder on the following reinterpret_cast's.
-        
-        ~par_mutex() {
-          using std::mutex;
-          reinterpret_cast<std::mutex*>(&raw_)->~mutex();
-        }
-        
-        void lock() { reinterpret_cast<std::mutex*>(&raw_)->lock(); }
-        void unlock() { reinterpret_cast<std::mutex*>(&raw_)->unlock(); }
+        void lock() { m_.lock(); }
+        void unlock() { m_.unlock(); }
       };
     }
   }
