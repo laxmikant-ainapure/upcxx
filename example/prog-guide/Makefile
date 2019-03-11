@@ -11,14 +11,8 @@ $(error Please set UPCXX_INSTALL=/path/to/upcxx/install)
 endif
 
 UPCXX_THREADMODE ?= seq
-
 ENV = env UPCXX_THREADMODE=$(UPCXX_THREADMODE)
-
-CXX = $(shell $(ENV) $(UPCXX_INSTALL)/bin/upcxx-meta CXX)
-CPPFLAGS = $(shell $(ENV) $(UPCXX_INSTALL)/bin/upcxx-meta CPPFLAGS)
-CXXFLAGS = $(shell $(ENV) $(UPCXX_INSTALL)/bin/upcxx-meta CXXFLAGS)
-LDFLAGS = $(shell $(ENV) $(UPCXX_INSTALL)/bin/upcxx-meta LDFLAGS)
-LIBS = $(shell $(ENV) $(UPCXX_INSTALL)/bin/upcxx-meta LIBS)
+CXX = $(UPCXX_INSTALL)/bin/upcxx
 
 PTHREAD_FLAGS = -pthread
 OPENMP_FLAGS = -fopenmp
@@ -43,21 +37,29 @@ EXAMPLES = \
   persona-example-rputs \
   persona-example	
 
+
+CUDA_EXAMPLES = \
+  h-d \
+  h-d-remote
+
 all: $(EXAMPLES)
+cuda: $(CUDA_EXAMPLES)
 
 # The rule for building any example.
 %: %.cpp $(wildcard *.h) $(wildcard *.hpp)
-	$(CXX) $@.cpp $(CPPFLAGS) $(CXXFLAGS) $(LDFLAGS) $(EXTRA_FLAGS) $(LIBS) -o $@
+	$(CXX) $@.cpp $(EXTRA_FLAGS) -o $@
+
 
 # Example-specific variable specializations.
-persona-example: UPCXX_THREADMODE = par
+persona-example: export UPCXX_THREADMODE=par
 persona-example: EXTRA_FLAGS += $(PTHREAD_FLAGS)
-persona-example-rputs: UPCXX_THREADMODE = par
+persona-example-rputs: export UPCXX_THREADMODE=par
 persona-example-rputs: EXTRA_FLAGS += $(PTHREAD_FLAGS)
 view-matrix-tasks: EXTRA_FLAGS += $(PTHREAD_FLAGS)
 
 clean:
 	rm -f $(EXAMPLES)
+	rm -f $(CUDA_EXAMPLES)
 
 .PHONY: clean all
 
