@@ -123,7 +123,7 @@ Notable bug fixes:
 * issue #187: Improve Python detection logic for the install script
 * issue #190: Teach upcxx-run to honor `UPCXX_PYTHON`
 * issue #202: Make `global_ptr::operator bool` conversion explicit 
-* issue #205: incorrect metadata handling in ~persona_scope()
+* issue #205: incorrect metadata handling in `~persona_scope()`
 
 Breaking changes:
 
