@@ -100,6 +100,8 @@ namespace upcxx {
     cxs_here_t *cxs_here = new cxs_here_t(std::move(cxs));
     cxs_remote_t cxs_remote(std::move(cxs));
 
+    persona *initiator_per = &upcxx::current_persona();
+    
     auto returner = detail::completions_returner<
         /*EventPredicate=*/detail::event_is_here,
         /*EventValues=*/detail::rput_event_values,
@@ -107,7 +109,7 @@ namespace upcxx {
       >(*cxs_here);
 
     if(upcxx::rank_me() != rank_d && upcxx::rank_me() != rank_s) {
-      int third_party = upcxx::rank_me();
+      int initiator = upcxx::rank_me();
       
       backend::send_am_master<progress_level::internal>(
         upcxx::world(), rank_d,
@@ -118,8 +120,8 @@ namespace upcxx {
           .then([=]() {
             const_cast<cxs_remote_t&>(cxs_remote).template operator()<remote_cx_event>();
             
-            backend::send_am_master<progress_level::internal>(
-              upcxx::world(), third_party,
+            backend::send_am_persona<progress_level::internal>(
+              upcxx::world(), initiator, initiator_per,
               [=]() {
                 cxs_here->template operator()<source_cx_event>();
                 cxs_here->template operator()<operation_cx_event>();
@@ -164,8 +166,8 @@ namespace upcxx {
                   if(dev_s != host_device)
                     upcxx::deallocate(bounce_s);
                   
-                  backend::send_am_master<progress_level::internal>(
-                    upcxx::world(), rank_d,
+                  backend::send_am_persona<progress_level::internal>(
+                    upcxx::world(), rank_d, initiator_per,
                     [=]() {
                       cxs_here->template operator()<source_cx_event>();
                       
@@ -231,8 +233,8 @@ namespace upcxx {
                       
                       const_cast<cxs_remote_t&>(cxs_remote).template operator()<remote_cx_event>();
 
-                      backend::send_am_master<progress_level::internal>(
-                        upcxx::world(), rank_s,
+                      backend::send_am_persona<progress_level::internal>(
+                        upcxx::world(), rank_s, initiator_per,
                         [=]() {
                           if(dev_s != host_device)
                             upcxx::deallocate(bounce_s);
