@@ -96,44 +96,59 @@ int main() {
     upcxx::broadcast(&buf[0], 1, 0).wait();
     upcxx::broadcast(&buf[1], 1, 1).wait();
 
-    for(int initiator=0; initiator < upcxx::rank_n(); initiator++) {
-      if(me == initiator) {
-        for(int round=0; round < rounds; round++) {
-          // Logically, ranks 0 and 1 each has one buffer per GPU plus one for
-          // the shared segment. The logical buffers are globally ordered in a
-          // ring. Each logical buffer has a "shadow" buffer used for double
-          // buffering. The following loop issues copy's to rotate the contents
-          // of the buffers into the shadows. Rotation is at the granularity of
-          // "parts" where a part is 1<<17 elements (therefor there are 8 parts
-          // in a buffer of 1<<20 elements).
-        
-          future<> all = upcxx::make_future();
-          
-          for(int dr=0; dr < 2; dr++) { // dest rank loop
-            for(int dd=0; dd < 1+dev_n; dd++) { // dest dev loop
-              for(int dp=0; dp < 8; dp++) { // dest part loop
-                // compute source rank,dev,part using overflowing increment per round
-                int sp = dp, sd = dd, sr = dr;
-                for(int r=0;  r < round+1; r++) {
-                  sp = (sp + 1) % 8;
-                  sd = (sd + (sp == 0 ? 1 : 0)) % (1+dev_n);
-                  sr = (sr + (sd == 0 ? 1 : 0)) % 2;
-                }
+    persona per_other;
+    persona *pers[2] = {&upcxx::master_persona(), &per_other};
 
-                // use round%2 to determine which buffer is logical and which is shadow
-                auto src = buf[sr][sd][(round+0)%2] + (sp<<17);
-                auto dst = buf[dr][dd][(round+1)%2] + (dp<<17);
-                all = upcxx::when_all(all, upcxx::copy(src, dst, 1<<17));
+    for(int initiator=0; initiator < upcxx::rank_n(); initiator++) {
+      for(int per=0; per < 2; per++) {
+        persona_scope pscope(*pers[per]);
+        
+        if(me == initiator) {
+          for(int round=0; round < rounds; round++) {
+            // Logically, ranks 0 and 1 each has one buffer per GPU plus one for
+            // the shared segment. The logical buffers are globally ordered in a
+            // ring. Each logical buffer has a "shadow" buffer used for double
+            // buffering. The following loop issues copy's to rotate the contents
+            // of the buffers into the shadows. Rotation is at the granularity of
+            // "parts" where a part is 1<<17 elements (therefor there are 8 parts
+            // in a buffer of 1<<20 elements).
+          
+            future<> all = upcxx::make_future();
+            
+            for(int dr=0; dr < 2; dr++) { // dest rank loop
+              for(int dd=0; dd < 1+dev_n; dd++) { // dest dev loop
+                for(int dp=0; dp < 8; dp++) { // dest part loop
+                  // compute source rank,dev,part using overflowing increment per round
+                  int sp = dp, sd = dd, sr = dr;
+                  for(int r=0;  r < round+1; r++) {
+                    sp = (sp + 1) % 8;
+                    sd = (sd + (sp == 0 ? 1 : 0)) % (1+dev_n);
+                    sr = (sr + (sd == 0 ? 1 : 0)) % 2;
+                  }
+
+                  // use round%2 to determine which buffer is logical and which is shadow
+                  auto src = buf[sr][sd][(round+0)%2] + (sp<<17);
+                  auto dst = buf[dr][dd][(round+1)%2] + (dp<<17);
+                  all = upcxx::when_all(all,
+                    upcxx::copy(src, dst, 1<<17)
+                    .then([=,&pers]() {
+                      UPCXX_ASSERT_ALWAYS(&upcxx::current_persona() == pers[per]);
+                    })
+                  );
+                }
               }
             }
+
+            all.wait();
+            std::cerr<<"done round="<<round<<" initiator="<<initiator<<'\n';
           }
-          
-          all.wait();
-          std::cerr<<"done round="<<round<<" initiator="<<initiator<<'\n';
         }
+        
+        upcxx::barrier();
       }
-      
-      upcxx::barrier();
+
+      UPCXX_ASSERT_ALWAYS(&upcxx::current_persona() == &upcxx::master_persona());
+      UPCXX_ASSERT_ALWAYS(upcxx::master_persona().active_with_caller());
     }
 
     if(me < 2) {
@@ -142,11 +157,13 @@ int main() {
           int sp = dp, sd = dd, sr = me;
           // compute source part,dev,rank for all rounds over all initiators
           for(int initiator=0; initiator < upcxx::rank_n(); initiator++) {
-            for(int round=0; round < rounds; round++) {
-              for(int r=0;  r < round+1; r++) {
-                sp = (sp + 1) % 8;
-                sd = (sd + (sp == 0 ? 1 : 0)) % (1+dev_n);
-                sr = (sr + (sd == 0 ? 1 : 0)) % 2;
+            for(int per=0; per < 2; per++) {
+              for(int round=0; round < rounds; round++) {
+                for(int r=0;  r < round+1; r++) {
+                  sp = (sp + 1) % 8;
+                  sd = (sd + (sp == 0 ? 1 : 0)) % (1+dev_n);
+                  sr = (sr + (sd == 0 ? 1 : 0)) % 2;
+                }
               }
             }
           }
@@ -202,6 +219,8 @@ int main() {
   }
     
   print_test_success();
+  UPCXX_ASSERT_ALWAYS(&upcxx::current_persona() == &upcxx::master_persona());
+  
   upcxx::finalize();
   return 0;
 }
