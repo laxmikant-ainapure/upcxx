@@ -527,10 +527,11 @@ namespace upcxx {
       
       tls.set_top_scope(this->next_);
       tls.set_top_persona(this->next_->get_persona(tls));
-      this->get_persona(tls)->set_owner(nullptr);
       
-      if(this->next_unique_ != reinterpret_cast<persona_scope*>(0x1))
+      if(this->next_unique_ != reinterpret_cast<persona_scope*>(0x1)) {
+        this->get_persona(tls)->set_owner(nullptr);
         tls.set_top_unique_scope(this->next_unique_);
+      }
       
       if(this->unlocker_)
         this->unlocker_(this->lock_);
