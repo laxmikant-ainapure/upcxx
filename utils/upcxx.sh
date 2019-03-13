@@ -72,7 +72,7 @@ if [[ $doversion ]] ; then
   echo "UPC++ version $version $githash$gexhash"
   echo "Copyright (c) 2018, The Regents of the University of California,"
   echo "through Lawrence Berkeley National Laboratory."
-  echo "http://upcxx.lbl.gov"
+  echo "https://upcxx.lbl.gov"
   echo ""
   $CXX --version
   exit 0

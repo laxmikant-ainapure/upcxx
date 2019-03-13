@@ -207,7 +207,7 @@ here are some things to consider:
     1.  Use TCP-based communication in MPI  
 	      We have compiled a list of the relevant configuration parameters for
         several common MPI implementations, which can be found
-        [here](http://gasnet.lbl.gov/dist/other/mpi-spawner/README) (look for
+        [here](https://gasnet.lbl.gov/dist/other/mpi-spawner/README) (look for
         the phrase "hybrid GASNet+MPI").
     2.  Use UDP for communication in UPC++  
         Set `export UPCXX_GASNET_CONDUIT=udp` when compiling UPC++ app code

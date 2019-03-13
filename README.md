@@ -66,7 +66,7 @@ For instructions on installing UPC++ and compiling programs, look at
 
 For recommendations on debugging, see [docs/debugging.md](docs/debugging.md)
 
-Please report any problems in the [issue tracker](http://upcxx-bugs.lbl.gov).
+Please report any problems in the [issue tracker](https://upcxx-bugs.lbl.gov).
 
 ## Testing
 
@@ -211,7 +211,7 @@ Notable bug fixes:
 
 This release is not yet performant, and may be unstable or buggy.
 
-Please report any problems in the [issue tracker](http://upcxx-bugs.lbl.gov).
+Please report any problems in the [issue tracker](https://upcxx-bugs.lbl.gov).
 
 ### 2018.01.31: Release 2018.1.0 BETA
 

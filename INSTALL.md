@@ -75,7 +75,7 @@ Performance will improve in an upcoming release.
 System Requirements:
 
 * NVIDIA-branded [CUDA-compatible GPU hardware](https://developer.nvidia.com/cuda-gpus)
-* NVIDIA CUDA toolkit v9.0 or later. Available for [download here](http://developer.nvidia.com/cuda-downloads).
+* NVIDIA CUDA toolkit v9.0 or later. Available for [download here](https://developer.nvidia.com/cuda-downloads).
 
 To activate the UPC++ support for CUDA, set environment variable `UPCXX_CUDA=1`
 when running the install script:

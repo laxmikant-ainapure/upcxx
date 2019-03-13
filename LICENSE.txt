@@ -73,7 +73,7 @@ as open-source software.
 
 The UPC++ package downloads and installs GASNet-EX, which is distributed
 subject to the following license.  For more details on GASNet licensing,
-visit http://gasnet.lbl.gov
+visit https://gasnet.lbl.gov
 
 * ---------------------------------------------------------------------------
 
