@@ -5,7 +5,7 @@ using namespace std;
 using namespace upcxx; 
 
 #if !UPCXX_CUDA_ENABLED
-#error "UPC++ should be build with CUDA support."
+#error "This example requires UPC++ to be built with CUDA support."
 #endif
 
 int main() {
@@ -13,7 +13,8 @@ int main() {
 
   std::size_t segsize = 4*1024*1024; // 4MB
   auto gpu_device = upcxx::cuda_device( 0 ); // open device 0
-  auto gpu_alloc = upcxx::device_allocator<upcxx::cuda_device>(gpu_device, segsize); // alloc GPU segment
+  auto gpu_alloc = // alloc GPU segment
+       upcxx::device_allocator<upcxx::cuda_device>(gpu_device, segsize); 
 
   // alloc an array of 1024 doubles on GPU and host
   global_ptr<double,memory_kind::cuda_device> gpu_array = gpu_alloc.allocate<double>(1024);
@@ -32,9 +33,9 @@ int main() {
   int neighbor = (rank_me() + 1) % rank_n();
   global_ptr<double,memory_kind::cuda_device> other_gpu_array = dobj.fetch(neighbor).wait();
 
-  // copy data from host to remote GPU
-  // To move data in the opposite direction, swap the first two arguments
+  // copy data from local host memory to remote GPU
   upcxx::copy(host_array1, other_gpu_array, 1024).wait();
+  // copy data back from remote GPU to local host memory
   upcxx::copy(other_gpu_array, host_array2, 1024).wait();
 
   upcxx::barrier();
