@@ -34,6 +34,8 @@ EXAMPLES = \
   view-histogram2 \
   view-matrix-tasks \
   non-contig-example \
+  team_simple \
+  team_advanced \
   persona-example-rputs \
   persona-example	
 
