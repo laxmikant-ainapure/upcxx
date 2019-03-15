@@ -11,8 +11,9 @@ cd <upcxx-source-path>
 This will build the UPC\+\+ library and install it to the `<upcxx-install-path>`
 directory. Users are recommended to use paths to non-existent or empty
 directories as the installation path so that uninstallation is as trivial as
-`rm -rf <upcxx-install-path>`.  Note that the install process downloads the
-GASNet communication library, so an Internet connection is needed. Depending on
+`rm -rf <upcxx-install-path>`.  Note the default installer downloads the
+GASNet-EX communication library, so an Internet connection is needed. 
+An offline installer is also available at the UPC\+\+ website.  Depending on
 the platform, additional configuration may be necessary before invoking
 `install`. See below.
 
