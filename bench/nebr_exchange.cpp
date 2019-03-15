@@ -216,19 +216,11 @@ std::size_t exchange_via_rdzv(mesh_t &m) {
 // AMLong based exchange zone
 
 #include <sched.h>
+#include <upcxx/upcxx_internal.hpp>
 
 #if !NOBS_DISCOVERY
   #include <gasnet.h>
 #endif
-
-// stolen from <upcxx/backend/gasnet/runtime_internal.hpp>
-namespace upcxx {
-  namespace backend {
-    namespace gasnet {
-      extern gex_TM_t world_team;
-    }
-  }
-}
 
 unordered_map<unsigned,int> amlong_acks_in;
 unsigned amlong_epoch = 0;
@@ -245,7 +237,7 @@ void amlong_handler(gex_Token_t, void *buf, size_t buf_size, gex_AM_Arg_t epoch_
 }
 
 void setup_exchange_via_amlong() {
-  gex_EP_t ep = gex_TM_QueryEP(upcxx::backend::gasnet::world_team);
+  gex_EP_t ep = gex_TM_QueryEP(upcxx::backend::gasnet::handle_of(upcxx::world()));
   
   gex_AM_Entry_t am_table[1] = {
     {amlong_handler_id, (gex_AM_Fn_t)amlong_handler, GEX_FLAG_AM_LONG | GEX_FLAG_AM_REQUEST, 1, nullptr, nullptr}
@@ -267,7 +259,7 @@ std::size_t exchange_via_amlong(mesh_t &m) {
     gex_Event_t lc;
     
     gex_AM_RequestLong1(
-      upcxx::backend::gasnet::world_team,
+      upcxx::backend::gasnet::handle_of(upcxx::world()),
       m.out_nebrs[i].rank,
       amlong_handler_id,
       local_buf,
@@ -356,11 +348,7 @@ void run_trial(Row r, std::unordered_map<Row,measure> &table, Fn fn_bytes_moved)
     rounds = (double(rounds)/dt) * .75*(wait_secs - total_secs);
     
     // take min over ranks
-    rounds = upcxx::allreduce(rounds,
-        [](int64_t a, int64_t b) {
-          return std::min(a, b);
-        }
-      ).wait();
+    rounds = upcxx::reduce_all(rounds, upcxx::op_fast_min).wait();
   }
 
   table[r] = {total_secs, bytes};
@@ -409,7 +397,7 @@ int main() {
     for(size_t buf_size: buf_sizes) {
       for(const char *via: {"rput","rdzv","long"}) {
         auto r = make_row(nebr_n, buf_size, via);
-        table[r] = upcxx::allreduce(table[r], measure::plus).wait();
+        table[r] = upcxx::reduce_all(table[r], measure::plus).wait();
       }
     }
   }
@@ -436,6 +424,7 @@ int main() {
     }
   }
   
+  if (!upcxx::rank_me())  std::cout << "SUCCESS" << std::endl;
   upcxx::finalize();
   return 0;
 }

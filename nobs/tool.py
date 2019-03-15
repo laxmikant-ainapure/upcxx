@@ -2,21 +2,11 @@
 
 import sys
 
-if sys.version_info < (2,7,5): # send to stderr to enure install visibility
-  sys.stdout.write('ERROR: Python2 >= 2.7.5 required.\n')
-  sys.stderr.write('ERROR: Python2 >= 2.7.5 required.\n')
+if sys.version_info < (2,7,5) or sys.version_info >= (3,0,0) : 
+  sys.stderr.write('Python version: ' + str(sys.version_info) + '\n')
+  sys.stderr.write('ERROR: Python2 >= 2.7.5 required. Please set $UPCXX_PYTHON to an appropriate python install.\n')
   exit(1)
-
-if sys.version_info[0] != 2:
-  import os
-  os.execv('/usr/bin/env', ['/usr/bin/env','python2'] + sys.argv)
 
 from nobs.tool_main import main
-from nobs.async import shutdown
 
-try:
-  main()
-except KeyboardInterrupt:
-  exit(1)
-else:
-  shutdown()
+main()

@@ -65,10 +65,14 @@ if [[ $doversion ]] ; then
   header="$prefix/upcxx.*/include/upcxx/upcxx.hpp"
   version=`(grep "#define UPCXX_VERSION" $header | head -1 | cut -d' ' -f 3 ) 2> /dev/null`
   githash=`(cat $prefix/share/doc/upcxx/docs/version.git ) 2> /dev/null`
-  echo "UPC++ version $version $githash"
+  gexhash=`(cat $prefix/gasnet.*/share/doc/GASNet/version.git | head -1 ) 2> /dev/null`
+  if [[ -n $gexhash ]] ; then
+    gexhash=" / $gexhash"
+  fi
+  echo "UPC++ version $version $githash$gexhash"
   echo "Copyright (c) 2018, The Regents of the University of California,"
   echo "through Lawrence Berkeley National Laboratory."
-  echo "http://upcxx.lbl.gov"
+  echo "https://upcxx.lbl.gov"
   echo ""
   $CXX --version
   exit 0

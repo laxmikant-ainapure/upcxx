@@ -7,13 +7,29 @@ def _everything():
   import os
   import sys
   
-  from . import async
-  
   len = __builtin__.len
   
   def export(fn):
     globals()[fn.__name__] = fn
     return fn
+
+  shutdown_cbs = []
+
+  @export
+  def at_shutdown(cb):
+    shutdown_cbs.append(cb)
+    return cb
+  
+  def shutdown():
+    while len(shutdown_cbs):
+      cbs = list(shutdown_cbs)
+      del shutdown_cbs[:]
+    
+      while len(cbs):
+        cbs.pop()()
+  
+  import atexit
+  atexit.register(shutdown)
   
   RESET = '\x1b[0m'
   RED = '\x1b[31m'
@@ -146,35 +162,14 @@ def _everything():
     """
     Called from the top-level main() code to indicate that an uncaught
     exception was about to abort execution. This call will then display
-    the error log and invoke sys.exit(1).
+    the error log and invoke os._exit(1).
     """
-    import re
-    from traceback import format_exception
-    
+    shutdown()
+      
     if isinstance(exception, KeyboardInterrupt):
-      sys.exit(1)
-    elif not isatty:
-      if exception is not None and not isinstance(exception, LoggedError):
-        if tb is None:
-          tb = sys.exc_info()[2]
-        
-        message = ''.join(format_exception(type(exception), exception, tb))
-        
-        BAR = 50*'~'
-        sys.stderr.write(''.join([
-          BAR, '\n',
-          RED + 'Uncaught exception' + RESET,
-          '\n\n'*(message != ''),
-          message,
-          '\n'*(not message.endswith('\n')),
-          #BAR, '\n'
-        ]))
-      
-      sys.exit(1)
-      
+      os._exit(1)
     else:
-      t_rows, t_cols = terminal_rows_cols()
-      BAR = '~'*t_cols
+      from traceback import format_exception
       
       if exception is not None and not isinstance(exception, LoggedError):
         from traceback import format_exception
@@ -184,7 +179,13 @@ def _everything():
           'Uncaught exception',
           ''.join(format_exception(type(exception), exception, tb))
         ))
-      
+
+      if isatty:
+        t_rows, t_cols = terminal_rows_cols()
+      else:
+        t_cols = 50
+
+      BAR = '~'*t_cols
       text = '\n'.join(
         ''.join([
           BAR, '\n',
@@ -195,17 +196,26 @@ def _everything():
         ])
         for title,message in _log
       )
+        
+      if isatty:
+        import re
+        text_plain = re.sub(r'(\x9b|\x1b\[)[0-?]*[ -\/]*[@-~]', '', text)
+      else:
+        text_plain = text
       
-      text_plain = re.sub(r'(\x9b|\x1b\[)[0-?]*[ -\/]*[@-~]', '', text)
       text_rows = sum(map(lambda line: (len(line)+t_cols-1)/t_cols, text_plain.split('\n')))
-      
-      if text_rows >= t_rows-3:
-        import subprocess as sp
-        pager = os.environ.get('PAGER','less -R').split()
-        less = sp.Popen(pager, stdin=sp.PIPE)
-        less.communicate(text)
+
+      if isatty and text_rows >= t_rows-3:
+        try:
+          import subprocess as sp
+          pager = os.environ.get('PAGER','less -R').split()
+          less = sp.Popen(pager, stdin=sp.PIPE)
+          less.communicate(text)
+        except KeyboardInterrupt:
+          pass
       else:
         sys.stderr.write(text)
+
       sys.exit(1)
 
 _everything()

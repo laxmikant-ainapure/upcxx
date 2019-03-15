@@ -35,6 +35,12 @@ else
   exit 1
 fi
 
+# Enable offline installers with an embedded GASNet-EX tarball
+gex_offline=`/bin/ls "$PWD"/src/GASNet-2???.*.tar.gz 2> /dev/null | sort -t. -k1,1 -k2,2n -k3n | tail -1`
+if [[ -z "$GASNET" && -r "$gex_offline" ]]; then
+  export GASNET="$gex_offline"
+fi
+
 trap failure_and_die ERR
 
 . sourceme
@@ -44,6 +50,11 @@ install_to=$(absify "$install_to")
 sys_info
 platform_sanity_checks
 platform_settings
+
+# Check that Python/nobs is usable
+if ! nobs gasnet_conduit >/dev/null ; then
+    echo_and_die "Error invoking Python"
+fi
 
 if [ "$single" -eq 1 ]; then
   nobs install src/upcxx.cpp "$install_to" \

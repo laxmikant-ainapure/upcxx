@@ -8,11 +8,15 @@ Failure is reported to `nobs.errorlog`.
 """
 def _everything():
   import __builtin__
+  import fcntl
   import os
   import re
+  import select
+  import signal
   import struct
   import sys
   import threading
+  import time
   
   from . import async
   from . import errorlog
@@ -22,7 +26,98 @@ def _everything():
   def export(fn):
     globals()[fn.__name__] = fn
     return fn
+
+  class Job(async.Job):
+    def __init__(me):
+      me.wait_n = 0
+      me.outputs = {}
+      me.io_done = threading.Lock()
+      me.io_done.acquire()
+
+    def satisfy(me):
+      me.wait_n -= 1
+      if me.wait_n == 0:
+        me.io_done.release()
+    
+    def join(me):
+      try:
+        _, status = os.waitpid(me.pid, 0)
+      except:
+        me.cancel()
+        raise
+      
+      me.io_done.acquire()
+
+      for fd in me.fds:
+        os.close(fd)
+      
+      return (status, me.outputs['stdout'], me.outputs['stderr'])
+
+    def cancel(me):
+      os.kill(me.pid, signal.SIGTERM)
   
+  io_cond = threading.Condition(threading.Lock())
+  io_r = {} # {fd:([buf],outname,job)}
+  io_w = {} # {fd:(rev_bufs,job)}
+  io_thread_box = [None]
+  
+  def io_thread_fn():
+    io_cond.acquire()
+    while 1:
+      if 0 == len(io_r) + len(io_w):
+        if io_thread_box[0] is None:
+          break
+        io_cond.wait()
+        continue
+      
+      io_cond.release()
+      
+      fds_r = list(io_r.keys())
+      fds_w = list(io_w.keys())
+      fds_r, fds_w, _ = select.select(fds_r, fds_w, [])
+      
+      for fd in fds_r:
+        try:
+          buf = os.read(fd, 32<<10)
+        except OSError:
+          buf = ''
+
+        chks, outname, job = io_r[fd]
+        
+        if len(buf) == 0:
+          del io_r[fd]
+          job.outputs[outname] = ''.join(chks)
+          job.satisfy()
+        else:
+          chks.append(buf)
+
+      for fd in fds_w:
+        rev_bufs, job = io_w[fd]
+        os.write(fd, rev_bufs.pop())
+        if len(rev_bufs) == 0:
+          del io_w[fd]
+          job.satisfy()
+
+      io_cond.acquire()
+    io_cond.release()
+  
+  def initialize():
+    if io_thread_box[0] is None:
+      with io_cond:
+        if io_thread_box[0] is None:
+          def kill_all():
+            with io_cond:
+              t = io_thread_box[0]
+              io_thread_box[0] = None
+              io_cond.notify()
+            t.join()
+            
+          errorlog.at_shutdown(kill_all)
+
+          io_thread_box[0] = threading.Thread(target=io_thread_fn, args=())
+          io_thread_box[0].daemon = True
+          io_thread_box[0].start()
+
   @export
   @async.coroutine
   def launch(args, capture_stdout=False, stdin='', cwd=None, env=None):
@@ -45,88 +140,99 @@ def _everything():
     future will be exceptional of type `errorlog.LoggedError`, thus
     indicating an aborting execution.
     """
-    
+
     @async.launched
     def go():
-      errorlog.raise_if_aborting()
+      initialize()
       
-      if False:
-        import subprocess as sp
-        p = sp.Popen(args, stdout=sp.PIPE, stderr=sp.PIPE, stdin=sp.PIPE, cwd=cwd, env=env)
-        out, err = p.communicate(stdin)
-        rc = p.returncode
-      else:
+      if capture_stdout:
+        pipe_r, pipe_w = os.pipe()
+        set_nonblock(pipe_r)
+      
+      pid, ptfd = os.forkpty()
+      
+      if pid == 0: # i am child
         if capture_stdout:
-          pipe_r, pipe_w = os.pipe()
+          os.close(pipe_r)
+          os.dup2(pipe_w, 1)
+          os.close(pipe_w)
+
+        child_close_fds()
         
-        pid, ptfd = os.forkpty()
+        if cwd is not None:
+          os.chdir(cwd)
         
-        if pid == 0: # i am child
-          if capture_stdout:
-            os.close(pipe_r)
-            os.dup2(pipe_w, 1)
-            os.close(pipe_w)
-          
-          if cwd is not None:
-            os.chdir(cwd)
-          
-          if env is not None:
-            os.execvpe(args[0], args, env)
-          else:
-            os.execvp(args[0], args)
+        if env is not None:
+          os.execvpe(args[0], args, env)
         else:
+          os.execvp(args[0], args)
+      else: # i am parent
+        with io_cond:
+          job = Job()
+          job.pid = pid
+          job.wait_n = 1
+          
+          if len(stdin) > 0:
+            job.wait_n += 1
+            io_w[ptfd] = (reversed_bufs(stdin), job)
+            
+          io_r[ptfd] = ([], 'stderr', job)
+          job.fds = [ptfd]
+          
           if capture_stdout:
+            job.wait_n += 1
             os.close(pipe_w)
-          
-          def start_reader(fd):
-            bufs = []
-            def reader():
-              while True:
-                try:
-                  buf = os.read(fd, 6*8192)
-                except OSError:
-                  buf = ''
-                if len(buf) == 0: break
-                bufs.append(buf)
-            t = threading.Thread(target=reader, args=())
-            t.daemon = True
-            t.start()
-            def joiner():
-              t.join()
-              return ''.join(bufs)
-            return joiner
-          
-          os.write(ptfd, stdin)
-          t0 = start_reader(ptfd)
-          if capture_stdout:
-            t1 = start_reader(pipe_r)
-          
-          err = t0()
-          os.close(ptfd)
-          
-          if capture_stdout:
-            out = t1()
-            os.close(pipe_r)
+            io_r[pipe_r] = ([], 'stdout', job)
+            job.fds.append(pipe_r)
           else:
-            out = ''
+            job.outputs['stdout'] = ''
           
-          _, rc = os.waitpid(pid, 0)
-      
-      if rc == 0:
-        return (out, err)
-      else:
-        raise errorlog.LoggedError(' '.join(args), err)
-    
+          io_cond.notify()
+        
+        return job
+  
     if cwd is not None:
       sys.stderr.write('(in '+ cwd + ')\n')
     sys.stderr.write(' '.join(args) + '\n\n')
-    
-    out, err = yield go()
+
+    status, out, err = yield go()
     
     if len(err) != 0:
       errorlog.show(' '.join(args), err)
+  
+    if status == 0:
+      yield out
+    else:
+      raise errorlog.LoggedError(' '.join(args), err)
+  
+  def child_close_fds():
+    try:
+      fds = os.listdir('/dev/fd')
+    except:
+      fds = range(100)
     
-    yield out
+    for fd in fds:
+      try: fd = int(fd)
+      except ValueError: continue
+      if fd > 2:
+        try: os.close(fd)
+        except OSError: pass
 
+  def reversed_bufs(s):
+    cn = select.PIPE_BUF
+    n = (len(s) + cn-1)/cn
+    ans = [None]*n
+    i = 0
+    while i < n:
+      ans[i] = s[i*cn : (i+1)*cn]
+      i += 1
+    ans.reverse()
+    return ans
+
+  def set_nonblock(fd):
+    fcntl.fcntl(fd, fcntl.F_SETFL,
+      fcntl.fcntl(fd, fcntl.F_GETFL) | os.O_NONBLOCK
+    )
+  
 _everything()
 del _everything

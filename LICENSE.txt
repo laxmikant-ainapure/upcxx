@@ -7,7 +7,7 @@ are subject to the following copyright and licensing terms.
 
 *** Copyright Notice ***
 
-UPC++ Copyright (c) 2017-2018, The Regents of the University of California,
+UPC++ Copyright (c) 2017-2019, The Regents of the University of California,
 through Lawrence Berkeley National Laboratory (subject to receipt of any
 required approvals from the U.S. Dept. of Energy). All rights reserved.
 
@@ -23,7 +23,7 @@ perform publicly and display publicly, and to permit other to do so.
 
 *** License Agreement ***
 
-UPC++ Copyright (c) 2017-2018, The Regents of the University of California,
+UPC++ Copyright (c) 2017-2019, The Regents of the University of California,
 through Lawrence Berkeley National Laboratory (subject to receipt of any
 required approvals from the U.S. Dept. of Energy).  All rights reserved.
 
@@ -73,11 +73,11 @@ as open-source software.
 
 The UPC++ package downloads and installs GASNet-EX, which is distributed
 subject to the following license.  For more details on GASNet licensing,
-visit http://gasnet.lbl.gov
+visit https://gasnet.lbl.gov
 
 * ---------------------------------------------------------------------------
 
-Global-Address Space Networking for Exascale (GASNet-EX) Copyright (c) 2000-2018,
+Global-Address Space Networking for Exascale (GASNet-EX) Copyright (c) 2000-2019,
 The Regents of the University of California, through Lawrence Berkeley National
 Laboratory (subject to receipt of any required approvals from the U.S. Dept. of
 Energy).  All rights reserved.

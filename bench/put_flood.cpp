@@ -49,7 +49,7 @@
  */
 
 #include <upcxx/upcxx.hpp>
-#include <upcxx/backend/gasnet/runtime_internal.hpp>
+#include <upcxx/upcxx_internal.hpp>
 
 #if !NOBS_DISCOVERY
   #include <gasnet.h>
@@ -242,7 +242,7 @@ int main() {
               while(iters--) {
                 gex_Event_t *e = new gex_Event_t(
                   gex_RMA_PutNB(
-                    upcxx::backend::gasnet::world_team, dest.rank_,
+                    upcxx::backend::gasnet::handle_of(upcxx::world()), dest.rank_,
                     dest.raw_ptr_, (void*)src, size,
                     GEX_EVENT_DEFER,
                     /*flags*/0
@@ -321,7 +321,7 @@ int main() {
             [&](char *src, global_ptr<char> dest, size_t size, int iters) {
               while(iters--) {
                 gex_Event_t e = gex_RMA_PutNB(
-                  upcxx::backend::gasnet::world_team, dest.rank_,
+                  upcxx::backend::gasnet::handle_of(upcxx::world()), dest.rank_,
                   dest.raw_ptr_, (void*)src, size,
                   GEX_EVENT_DEFER,
                   /*flags*/0
@@ -359,7 +359,7 @@ int main() {
             [&](char *src, global_ptr<char> dest, size_t size, int iters) {
               while(iters--) {
                 gex_RMA_PutNBI(
-                  upcxx::backend::gasnet::world_team, dest.rank_,
+                  upcxx::backend::gasnet::handle_of(upcxx::world()), dest.rank_,
                   dest.raw_ptr_, (void*)src, size,
                   GEX_EVENT_DEFER,
                   /*flags*/0
@@ -407,6 +407,8 @@ int main() {
   } // rank_me()==0
   
   upcxx::barrier();
+
+  if (!upcxx::rank_me())  std::cout << "SUCCESS" << std::endl;
   
   #if USE_GPROF
     _mcleanup();

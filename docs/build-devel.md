@@ -43,7 +43,7 @@ after building (comes in handy when you want nice paging of error messages in
 the case of build failure, which nobs does really well):
 
 ```
-GASNET_PSHM_NODES=2 nobs run test/hello_gasnet.cpp
+RANKS=2 nobs run test/hello_gasnet.cpp
 ```
 
 All object files and executables and all other artifacts of the build process

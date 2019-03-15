@@ -23,6 +23,7 @@ def required_libraries(cxt, src):
   elif src in [
       # Compiling anything that includes this requires gasnet.
       here('backend/gasnet/runtime_internal.hpp'),
+      here('backend/gasnet/upc_link.h'),
       
       # We pretend that anyone including "backend/gasnet/runtime.hpp" needs
       # gasnet pp-stuff, but that isn't really the case. This is just to
@@ -66,6 +67,15 @@ def required_libraries(cxt, src):
       }
     }}
     
+  elif src == here('cuda.hpp'):
+    if cxt.upcxx_cuda_enabled():
+      return cxt.libset_merge(
+        {'upcxx-cuda': {'ppdefs':{'UPCXX_CUDA_ENABLED':1}}},
+        cxt.cuda()
+      )
+    else:
+      return {}
+  
   else:
     # Parent "nobsrule.py" handles other cases.
     return cxt.required_libraries(src)

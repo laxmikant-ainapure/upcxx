@@ -12,7 +12,7 @@ upcxx::intrank_t owner_of(std::string const &key) {
   return h % upcxx::rank_n();
 }
 
-// This comparsion functor orders keys such that they are sorted by 
+// This comparison functor orders keys such that they are sorted by 
 // owning rank at the expense of rehashing the keys in each invocation.
 // A better strategy would be modify the map's key type to compute this
 // information once and store it in the map.

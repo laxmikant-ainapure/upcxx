@@ -25,25 +25,25 @@ a modern C++11/14 compiler and corresponding STL implementation.
 
 The current release is known to work on the following configurations:
 
-* macOS 10.11, 10.12 and 10.13 (El Capitan, Sierra and High Sierra,
-  respectively) with the most recent Xcode releases for each, though it is
+* macOS 10.11-10.14 (El Capitan, Sierra, High Sierra, or Mojave)
+  with the most recent Xcode releases for each, though it is
   suspected that any Xcode (ie Apple clang) release 8.0 or newer will work. 
   Free Software Foundation GCC (e.g., as installed by Homebrew or Fink)
-  version 5.1.0 or newer should also work (smp and udp conduits)
+  version 6.4.0 or newer should also work (smp and udp conduits)
 
 * Linux/x86_64 with one of the following compilers:    
-    - Gnu g++ 5.1.0 or newer    
-    - clang 3.7.0 or newer (with libstdc++ from gcc-5.1.0 or newer)    
-    - Intel C++ 17.0.2 or newer (with libstdc++ from gcc-5.1.0 or newer)    
+    - Gnu g++ 6.4.0 or newer    
+    - clang 4.0.0 or newer (with libstdc++ from gcc-6.4.0 or newer)    
+    - Intel C++ 17.0.2 or newer (with libstdc++ from gcc-6.4.0 or newer)    
   If your system compilers do not meet these requirements, please see the note
   in [docs/local-gcc.md](docs/local-gcc.md) regarding use of non-system
   compilers. (smp, udp and ibv conduits)
 
-* Linux/ppc64le with gcc-5.1.0 or newer (and see the note immediately above if
+* Linux/ppc64le with gcc-6.4.0 or newer (and see the note immediately above if
   you use a non-system compiler).
 
 * Cray XC x86_64 with the PrgEnv-gnu or PrgEnv-intel environment modules, 
-  as well as gcc/5.2.0 (or later) loaded. (smp and aries conduits)
+  as well as gcc/6.4.0 (or later) loaded. (smp and aries conduits)
 
 Miscellaneous software requirements:
 
@@ -66,7 +66,7 @@ For instructions on installing UPC++ and compiling programs, look at
 
 For recommendations on debugging, see [docs/debugging.md](docs/debugging.md)
 
-Please report any problems in the [issue tracker](https://bitbucket.org/berkeleylab/upcxx/issues).
+Please report any problems in the [issue tracker](https://upcxx-bugs.lbl.gov).
 
 ## Testing
 
@@ -88,10 +88,55 @@ For copyright notice and licensing agreement, see [LICENSE.txt](LICENSE.txt)
 
 ## ChangeLog
 
+### 2019.03.15: Release 2019.3.0
+
+This release of UPC++ v1.0 supports most of the functionality specified in the 
+[UPC++ 1.0 Draft 10 Specification](docs/spec.pdf).
+
+New features/enhancements: (see specification and programmer's guide for full details)
+
+* Prototype Memory Kinds support for CUDA-based NVIDIA GPUs, see [INSTALL.md](INSTALL.md).
+    Note the CUDA support in this UPC++ release is a proof-of-concept reference implementation
+    which has not been tuned for performance. In particular, the current implementation of
+    `upcxx::copy` does not utilize hardware offload and is expected to underperform 
+    relative to solutions using RDMA, GPUDirect and similar technologies.
+    Performance will improve in an upcoming release.
+* Support for interoperability with Berkeley UPC, see [upc-hybrid.md](docs/upc-hybrid.md)
+* There is now an offline installer package for UPC++, for systems lacking connectivity
+* Barrier synchronization performance has been improved
+* Installer now defaults to more build parallelism, improving efficiency (see `UPCXX_MAKE`)
+
+The following features from the specification are not yet implemented:
+
+* Non-Blocking collectives currently support only the default future-based completion
+* `atomic_domain<float>` and `atomic_domain<double>` are not yet implemented
+* `team_id::when_here()` is unimplemented
+* User-defined Serialization interface
+
+Notable bug fixes:
+
+* issue #100: Fix shared heap setting propagation on loosely-coupled clusters
+* issue #118: Enforce GEX version interlock at compile time
+* issue #177: Completion broken for non-fetching binary AMOs
+* issue #183: `bench/{put_flood,nebr_exchange}` were failing to compile
+* issue #185: Fix argument order for `dist_object` constructor to match spec
+* issue #187: Improve Python detection logic for the install script
+* issue #190: Teach upcxx-run to honor `UPCXX_PYTHON`
+* issue #202: Make `global_ptr::operator bool` conversion explicit 
+* issue #205: incorrect metadata handling in `~persona_scope()`
+
+Breaking changes:
+
+* envvar `UPCXX_SEGMENT_MB` has been renamed to `UPCXX_SHARED_HEAP_SIZE`.
+  For backwards compat, the former is still accepted when the latter is unset.
+* The minimum-supported version of GNU g++ is now 6.4.0
+    - This also applies to the stdlibc++ used by Clang or Intel compilers
+* The minimum-supported version of llvm/clang for Linux is now 4.0
+
 ### 2018.09.26: Release 2018.9.0
 
 This release of UPC++ v1.0 supports most of the functionality specified in the 
-[UPC++ 1.0 Draft 8 Specification](docs/spec.pdf).
+[UPC++ 1.0 Draft 8 Specification](https://bitbucket.org/berkeleylab/upcxx/downloads/upcxx-spec-V1.0-Draft8.pdf).
 
 New features/enhancements: (see specification and programmer's guide for full details)
 
@@ -136,7 +181,7 @@ This is a re-release of version 2018.3.0 (see below) that corrects a packaging e
 ### 2018.03.31: Release 2018.3.0
 
 This release of UPC++ v1.0 supports most of the functionality specified in the 
-[UPC++ 1.0 Draft 6 Specification](https://bitbucket.org/upcxx/upcxx/downloads/upcxx-spec-V1.0-Draft6.pdf).
+[UPC++ 1.0 Draft 6 Specification](https://bitbucket.org/berkeleylab/upcxx/downloads/upcxx-spec-V1.0-Draft6.pdf).
 
 New features/enhancements:
 
@@ -166,12 +211,12 @@ Notable bug fixes:
 
 This release is not yet performant, and may be unstable or buggy.
 
-Please report any problems in the [issue tracker](https://bitbucket.org/berkeleylab/upcxx/issues).
+Please report any problems in the [issue tracker](https://upcxx-bugs.lbl.gov).
 
 ### 2018.01.31: Release 2018.1.0 BETA
 
 This is a BETA preview release of UPC++ v1.0. This release supports most of the
-functionality specified in the [UPC++ 1.0 Draft 5 Specification](https://bitbucket.org/upcxx/upcxx/downloads/upcxx-spec-V1.0-Draft5.pdf).
+functionality specified in the [UPC++ 1.0 Draft 5 Specification](https://bitbucket.org/berkeleylab/upcxx/downloads/upcxx-spec-V1.0-Draft5.pdf).
 
 New features/enhancements:
 
@@ -199,7 +244,7 @@ This release is not performant, and may be unstable or buggy.
 ### 2017.09.30: Release 2017.9.0
 
 The initial public release of UPC++ v1.0. This release supports most of the
-functionality specified in the [UPC++ 1.0 Draft 4 Specification](https://bitbucket.org/upcxx/upcxx/downloads/upcxx-spec-V1.0-Draft4.pdf).
+functionality specified in the [UPC++ 1.0 Draft 4 Specification](https://bitbucket.org/berkeleylab/upcxx/downloads/upcxx-spec-V1.0-Draft4.pdf).
 
 The following features from that specification are not yet implemented:
 

@@ -2,6 +2,7 @@
 #define _850ece2c_7b55_43a8_9e57_8cbd44974055
 
 #include <upcxx/backend_fwd.hpp>
+#include <upcxx/cuda_fwd.hpp>
 #include <upcxx/future.hpp>
 #include <upcxx/intru_queue.hpp>
 #include <upcxx/lpc.hpp>
@@ -45,6 +46,7 @@ namespace upcxx {
     
   public:
     backend::persona_state backend_state_;
+    cuda::persona_state cuda_state_;
   
   private:
     persona* get_owner() const;
@@ -525,10 +527,11 @@ namespace upcxx {
       
       tls.set_top_scope(this->next_);
       tls.set_top_persona(this->next_->get_persona(tls));
-      this->get_persona(tls)->set_owner(nullptr);
       
-      if(this->next_unique_ != reinterpret_cast<persona_scope*>(0x1))
+      if(this->next_unique_ != reinterpret_cast<persona_scope*>(0x1)) {
+        this->get_persona(tls)->set_owner(nullptr);
         tls.set_top_unique_scope(this->next_unique_);
+      }
       
       if(this->unlocker_)
         this->unlocker_(this->lock_);

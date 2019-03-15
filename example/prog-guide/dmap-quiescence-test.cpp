@@ -39,8 +39,9 @@ int main(int argc, char *argv[])
   }
   // wait until all threads have updated insert counts
   upcxx::barrier();
+  long expected_inserts = *n_inserts;
   // wait until we have received all the expected updates, spinning on progress
-  while (dmap.local_size() < *n_inserts) upcxx::progress();
+  while (dmap.local_size() < expected_inserts) upcxx::progress();
 //SNIPPET  
   upcxx::future<> fut_all = upcxx::make_future();
   for (long i = 0; i < N; i++) {

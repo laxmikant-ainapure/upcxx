@@ -168,7 +168,7 @@ int main() {
           return worker.lpc([=]() {
             int i;
 
-            UPCXX_ASSERT_ALWAYS(hunk1.size() == hunk1_n);
+            UPCXX_ASSERT_ALWAYS(hunk1.size() == (size_t)hunk1_n);
             i = hunk1_n;
             for(list<tuple<int,int>> const& x: hunk1) {
               i--;
@@ -182,7 +182,7 @@ int main() {
               }
             }
 
-            UPCXX_ASSERT_ALWAYS(hunk1v.size() == hunk1_n);
+            UPCXX_ASSERT_ALWAYS(hunk1v.size() == (size_t)hunk1_n);
             i = hunk1_n;
             for(upcxx::view<tuple<int,int>> const& x: hunk1v) {
               i--;
@@ -196,7 +196,7 @@ int main() {
               }
             }
 
-            UPCXX_ASSERT_ALWAYS(hunk2.size() == hunk2_n);
+            UPCXX_ASSERT_ALWAYS(hunk2.size() == (size_t)hunk2_n);
             UPCXX_ASSERT_ALWAYS(hunk2.empty() == (hunk2.size() == 0));
 
             UPCXX_ASSERT_ALWAYS(&hunk2.front() == hunk2.begin());

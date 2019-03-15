@@ -35,14 +35,11 @@ int main(int argc, char *argv[])
     }
   }
   upcxx::barrier();
+  // Note: once a memory location is accessed with atomics, it should only be
+  // subsequently accessed using atomics to prevent unexpected results
+  int64_t expected_inserts = ad.load(*n_inserts, memory_order_relaxed).wait();
   // wait until we have received all the expected updates, spinning on progress
-  int64_t curr_inserts = 0;
-  do {
-    // Note: once a memory location is accessed with atomics, it should only be
-    // subsequently accessed using atomics to prevent unexpected results
-    curr_inserts = ad.load(*n_inserts, memory_order_relaxed).wait();
-    upcxx::progress();
-  } while (dmap.local_size() != curr_inserts);
+  while (dmap.local_size() < expected_inserts) upcxx::progress();
 //SNIPPET  
   // now try to fetch keys inserted by neighbor
   upcxx::future<> fut_all = upcxx::make_future();
