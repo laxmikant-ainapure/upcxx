@@ -1,17 +1,17 @@
 ## Guide to using a locally-built g++ with UPC++ on Linux
 
 Due to its use of C++11 features, UPC++ requires a fairly modern C++ compiler
-and associated standard library.  At this time of this writing, we believe the
-minimum requirement is GNU libstdc++ version 6.0.21 (first shipped with
-g++-5.1.0).  Unfortunately, not all current Linux distributions come with
+and associated standard library.  The minimum requirements are documented 
+in [README.md](../README.md).
+Unfortunately, not all current Linux distributions come with
 compilers that meet this minimum.  By default, Clang++ on Linux uses the
 libstdc++ of the default g++ and therefore is not a useful alternative.
 
-If at all possible, we recommended use of a g++ version 5.1.0 or newer provided
+If at all possible, we recommend use of a g++ provided
 by your Linux distribution.  However, if that is not possible then you may need
 to build g++ from sources.  Complete instructions for doing so are beyond the
 scope of this document.  This document assumes you have successfully installed
-g++-5.1.0 or newer, and provides additional steps that should be taken to ensure
+a g++ meeting the documented minimum, and provides additional steps that should be taken to ensure
 UPC++ applications find the proper libstdc++ at runtime.
 
 The problem to be addressed is that the selection of the actual libstdc++ to be
