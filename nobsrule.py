@@ -1194,8 +1194,6 @@ class gasnet_configured:
         env1['CXX'] = ' '.join(cxx)
       
       misc_conf_opts = [
-        # disable non-EX conduits to prevent configure failures when that hardware is detected
-        '--disable-psm','--disable-mxm','--disable-portals4','--disable-ofi',
         # disable the parsync mode which is not used by UPCXX
         '--disable-parsync',
       ]
