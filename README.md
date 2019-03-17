@@ -92,9 +92,18 @@ For copyright notice and licensing agreement, see [LICENSE.txt](LICENSE.txt)
 
 Notable bug fixes:
 
+Breaking changes:
+
+### 2019.05.27: Bug-fix release 2019.3.2
+
+Notable bug fixes:
+
 * issue #209: Broken install defaulting of CC/CXX on macOS
 
-Breaking changes:
+Fixes the following notable bug in the GASNet library
+  (see https://gasnet-bugs.lbl.gov for details):
+
+* bug3943: infrequent startup hang with PSHM and over 62 PPN
 
 ### 2019.03.15: Release 2019.3.0
 
