@@ -14,7 +14,7 @@ sys_info() {
         echo Date: `date 2>&1`
         echo Current directory: `pwd 2>&1`
         echo Install directory: $INSTALL_DIR
-        SETTINGS=
+        local SETTINGS=
         for var in CC CXX GASNET GASNET_CONFIGURE_ARGS CROSS OPTLEV DBGSYM \
 	           UPCXX_BACKEND GASNET_INSTALL_TO \
 		   UPCXX_CODEMODE UPCXX_THREADMODE \
@@ -38,13 +38,15 @@ sys_info() {
     ) fi
 }
 
+# platform_sanity_checks(): defaults $CC and $CXX if they are unset
+#   validates the compiler and system versions for compatibility
+#   setting UPCXX_INSTALL_NOCHECK=1 disables this function completely
 platform_sanity_checks() {
-    if test -z "$UPCXX_INSTALL_NOCHECK" ; then (
-        KERNEL=`uname -s 2> /dev/null`
+    if test -z "$UPCXX_INSTALL_NOCHECK" ; then
+        local KERNEL=`uname -s 2> /dev/null`
+        local KERNEL_GOOD=
         if test Linux = "$KERNEL" || test Darwin = "$KERNEL" ; then
             KERNEL_GOOD=1
-        else
-            KERNEL_GOOD=
         fi
         if test -n "$CRAY_PRGENVCRAY" ; then
             echo 'ERROR: UPC++ on Cray XC currently requires PrgEnv-gnu or PrgEnv-intel. Please do: `module switch PrgEnv-cray PrgEnv-gnu` or `module switch PrgEnv-cray PrgEnv-intel`'
@@ -69,9 +71,9 @@ platform_sanity_checks() {
             CC=${CC:-gcc}
             CXX=${CXX:-g++}
         fi
-        ARCH=`uname -m 2> /dev/null`
-        ARCH_GOOD=
-        ARCH_BAD=
+        local ARCH=`uname -m 2> /dev/null`
+        local ARCH_GOOD=
+        local ARCH_BAD=
         if test x86_64 = "$ARCH" ; then
             ARCH_GOOD=1
         elif test ppc64le = "$ARCH" ; then
@@ -88,10 +90,10 @@ platform_sanity_checks() {
             echo " "
         fi
 
-        CXXVERS=`$CXX --version 2>&1`
-        CCVERS=`$CC --version 2>&1`
-        COMPILER_BAD=
-        COMPILER_GOOD=
+        local CXXVERS=`$CXX --version 2>&1`
+        local CCVERS=`$CC --version 2>&1`
+        local COMPILER_BAD=
+        local COMPILER_GOOD=
         if echo "$CXXVERS" | egrep 'Apple LLVM version [1-7]\.' 2>&1 > /dev/null ; then
             COMPILER_BAD=1
         elif echo "$CXXVERS" | egrep 'Apple LLVM version ([8-9]\.|[1-9][0-9])' 2>&1 > /dev/null ; then
@@ -124,7 +126,7 @@ platform_sanity_checks() {
             fi
         fi
 
-        RECOMMEND='We recommend one of the following C++ compilers (or any later versions):
+        local RECOMMEND='We recommend one of the following C++ compilers (or any later versions):
            Linux on x86_64:   g++ 6.4.0, LLVM/clang 4.0.0, Intel C 17.0.2
            Linux on ppc64le:  g++ 6.4.0
            macOS on x86_64:   g++ 6.4.0, Xcode/clang 8.0.0
@@ -143,13 +145,12 @@ platform_sanity_checks() {
             echo 'WARNING: Your C++ compiler or platform has not been validated to run UPC++'
             echo "WARNING: $RECOMMEND"
         fi
-
-        exit 0
-    ) || exit 1 ; fi
+    fi
+    return 0
 }
 
 platform_settings() {
-   KERNEL=`uname -s 2> /dev/null`
+   local KERNEL=`uname -s 2> /dev/null`
    case "$KERNEL" in
      *)
        ;;
