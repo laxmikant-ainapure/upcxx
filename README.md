@@ -88,6 +88,14 @@ For copyright notice and licensing agreement, see [LICENSE.txt](LICENSE.txt)
 
 ## ChangeLog
 
+### 2019.XX.XX: PENDING
+
+Notable bug fixes:
+
+* issue #209: Broken install defaulting of CC/CXX on macOS
+
+Breaking changes:
+
 ### 2019.03.15: Release 2019.3.0
 
 This release of UPC++ v1.0 supports most of the functionality specified in the 
