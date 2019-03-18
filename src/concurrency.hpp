@@ -1,6 +1,8 @@
 #ifndef _3dad9bb9_dc96_4a7a_ae33_13d58d0d974f
 #define _3dad9bb9_dc96_4a7a_ae33_13d58d0d974f
 
+#include <upcxx/backend_fwd.hpp>
+
 #include <atomic>
 #include <mutex>
 
