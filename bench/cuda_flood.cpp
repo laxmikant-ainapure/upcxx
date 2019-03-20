@@ -63,7 +63,7 @@ int main(int argc, char **argv) {
        int partner = (rank_me() + 1) % rank_n();
 
        int max_msg_size = 4 * 1024 * 1024; // 4MB
-       std::size_t segsize = 256 * 1024 * 1024; // 256MB
+       std::size_t segsize = max_msg_size;
        auto gpu_device = upcxx::cuda_device( 0 ); // open device 0
 
        // alloc GPU segment
