@@ -1,7 +1,7 @@
 # UPC++ Interoperability with Berkeley UPC #
 
 UPC++ now has experimental support for interoperability with the 
-[Berkeley UPC Runtime](http://upc.lbl.gov) (a.k.a "UPCR"), 
+[Berkeley UPC Runtime](https://upc.lbl.gov) (a.k.a "UPCR"), 
 using any of the four UPC translators targetting that runtime.
 This makes it possible to run hybrid applications that use both UPC and UPC++
 (in separate object files, due to the difference in base languages).
@@ -93,5 +93,5 @@ For `UPCXX_USE_UPC_ALLOC=no` mode:
   UPC shared heap and statically-allocated shared UPC objects also consume space in the UPC shared heap,
   so one should generally allow some padding in addition to anticipated shared heap consumption from 
   dynamically allocated UPC shared objects.
-  For more details, see [UPCR memory management](http://upc.lbl.gov/docs/system/runtime_notes/memory_mgmt.shtml)
+  For more details, see [UPCR memory management](https://upc.lbl.gov/docs/system/runtime_notes/memory_mgmt.shtml)
 
