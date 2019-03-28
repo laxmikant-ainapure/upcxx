@@ -1675,3 +1675,9 @@ GASNETT_IDENT(UPCXX_IdentString_LibraryVersion, "$UPCXXLibraryVersion: " _STRING
 GASNETT_IDENT(UPCXX_IdentString_GitVersion, "$UPCXXGitVersion: " _STRINGIFY(UPCXX_GIT_VERSION) " $");
 #endif
 
+#if UPCXX_CUDA_ENABLED
+  GASNETT_IDENT(UPCXX_IdentString_CUDAEnabled, "$UPCXXCUDAEnabled: 1 $");
+#else
+  GASNETT_IDENT(UPCXX_IdentString_CUDAEnabled, "$UPCXXCUDAEnabled: 0 $");
+#endif
+
