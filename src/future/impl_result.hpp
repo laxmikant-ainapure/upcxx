@@ -29,15 +29,15 @@ namespace upcxx {
       
       bool ready() const { return true; }
       
-      upcxx::constant_function<std::tuple<T&...>> result_lrefs_getter() const {
+      detail::constant_function<std::tuple<T&...>> result_lrefs_getter() const {
         return {
-          upcxx::tuple_lrefs(const_cast<std::tuple<T...>&>(results_))
+          detail::tuple_lrefs(const_cast<std::tuple<T...>&>(results_))
         };
       }
       
       auto result_rvals()
-        -> decltype(upcxx::tuple_rvals(results_)) {
-        return upcxx::tuple_rvals(results_);
+        -> decltype(detail::tuple_rvals(results_)) {
+        return detail::tuple_rvals(results_);
       }
       
       typedef future_header_ops_result_ready header_ops;
@@ -51,7 +51,7 @@ namespace upcxx {
     struct future_impl_result<> {
       bool ready() const { return true; }
       
-      upcxx::constant_function<std::tuple<>> result_lrefs_getter() const {
+      detail::constant_function<std::tuple<>> result_lrefs_getter() const {
         return {std::tuple<>{}};
       }
       
@@ -83,9 +83,9 @@ namespace upcxx {
       
       void cleanup_early() {}
       
-      upcxx::constant_function<std::tuple<T&...>> result_lrefs_getter() const {
+      detail::constant_function<std::tuple<T&...>> result_lrefs_getter() const {
         return {
-          upcxx::tuple_lrefs(const_cast<std::tuple<T...>&>(results_))
+          detail::tuple_lrefs(const_cast<std::tuple<T...>&>(results_))
         };
       }
       
@@ -111,7 +111,7 @@ namespace upcxx {
       
       void cleanup_early() {}
       
-      upcxx::constant_function<std::tuple<>> result_lrefs_getter() const {
+      detail::constant_function<std::tuple<>> result_lrefs_getter() const {
         return {std::tuple<>{}};
       }
       

@@ -393,7 +393,7 @@ namespace upcxx {
     > {
     
     using results_type = typename decltype(upcxx::apply_as_future(fn))::results_type;
-    using results_promise = upcxx::tuple_types_into_t<results_type, promise>;
+    using results_promise = detail::tuple_types_into_t<results_type, promise>;
     
     detail::persona_tls &tls = detail::the_persona_tls;
     

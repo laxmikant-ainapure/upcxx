@@ -1,8 +1,7 @@
 #ifndef _3493eefe_7dec_42a4_b7dc_b98f99716dfe
 #define _3493eefe_7dec_42a4_b7dc_b98f99716dfe
 
-#include <upcxx/parcel.hpp>
-#include <upcxx/packing.hpp>
+#include <upcxx/serialization.hpp>
 
 #include <cstdint>
 #include <iterator>
@@ -12,7 +11,12 @@ namespace upcxx {
   //////////////////////////////////////////////////////////////////////////////
   // deserializing_iterator: Wraps a parcel_reader whose head is pointing to
   // a consecutive sequence of packed T's.
-  
+  namespace detail {
+    template<typename T,
+             bool skip_is_fast = serialization_complete<T>::skip_is_fast>
+    struct serialization_view_element;
+  }
+    
   template<typename T>
   class deserializing_iterator {
   public:
@@ -23,45 +27,45 @@ namespace upcxx {
     using iterator_category = std::input_iterator_tag;
     
   private:
-    parcel_reader r_;
+    detail::serialization_reader r_;
 
   public:
-    deserializing_iterator(char const *p = nullptr): r_(p) {}
+    deserializing_iterator(char const *p = nullptr) noexcept: r_(p) {}
     
-    T operator*() const {
-      parcel_reader r1{r_};
-      raw_storage<T> raw;
-      unpacking<T>::unpack(r1, &raw, std::true_type());
+    T operator*() const noexcept {
+      detail::serialization_reader r1(r_);
+      detail::raw_storage<T> raw;
+      detail::serialization_view_element<T>::deserialize(r1, &raw);
       return raw.value_and_destruct();
     }
     
-    deserializing_iterator operator++(int) {
+    deserializing_iterator operator++(int) noexcept {
       deserializing_iterator old = *this;
-      unpacking<T>::skip(r_);
+      detail::serialization_view_element<T>::skip(r_);
       return old;
     }
 
-    deserializing_iterator& operator++() {
-      unpacking<T>::skip(r_);
+    deserializing_iterator& operator++() noexcept {
+      detail::serialization_view_element<T>::skip(r_);
       return *this;
     }
 
-    friend bool operator==(deserializing_iterator a, deserializing_iterator b) {
+    friend bool operator==(deserializing_iterator a, deserializing_iterator b) noexcept {
       return a.r_.head() == b.r_.head();
     }
-    friend bool operator!=(deserializing_iterator a, deserializing_iterator b) {
+    friend bool operator!=(deserializing_iterator a, deserializing_iterator b) noexcept {
       return a.r_.head() != b.r_.head();
     }
-    friend bool operator<(deserializing_iterator a, deserializing_iterator b) {
+    friend bool operator<(deserializing_iterator a, deserializing_iterator b) noexcept {
       return a.r_.head() < b.r_.head();
     }
-    friend bool operator>(deserializing_iterator a, deserializing_iterator b) {
+    friend bool operator>(deserializing_iterator a, deserializing_iterator b) noexcept {
       return a.r_.head() > b.r_.head();
     }
-    friend bool operator<=(deserializing_iterator a, deserializing_iterator b) {
+    friend bool operator<=(deserializing_iterator a, deserializing_iterator b) noexcept {
       return a.r_.head() <= b.r_.head();
     }
-    friend bool operator>=(deserializing_iterator a, deserializing_iterator b) {
+    friend bool operator>=(deserializing_iterator a, deserializing_iterator b) noexcept {
       return a.r_.head() >= b.r_.head();
     }
   };
@@ -93,8 +97,8 @@ namespace upcxx {
   
   namespace detail {
     template<typename T, typename Iter,
-             bool trivial = packing_is_trivial<T>::value>
-    struct packing_view;
+             bool trivial = serialization_complete<T>::is_actually_trivially_serializable>
+    struct serialization_view;
 
     template<typename Me, typename T, typename Iter>
     struct view_pointerness {
@@ -125,21 +129,21 @@ namespace upcxx {
       using const_iterator = T const*;
       using const_reverse_iterator = std::reverse_iterator<T const*>;
 
-      constexpr const_pointer data() const {
+      constexpr const_pointer data() const noexcept {
         return static_cast<Me const*>(this)->beg_;
       }
       
-      constexpr const_iterator cbegin() const {
+      constexpr const_iterator cbegin() const noexcept {
         return static_cast<Me const*>(this)->beg_;
       }
-      constexpr const_iterator cend() const {
+      constexpr const_iterator cend() const noexcept {
         return static_cast<Me const*>(this)->end_;
       }
       
-      constexpr const_reverse_iterator crbegin() const {
+      constexpr const_reverse_iterator crbegin() const noexcept {
         return const_reverse_iterator(static_cast<Me const*>(this)->end_);
       }
-      constexpr const_reverse_iterator crend() const {
+      constexpr const_reverse_iterator crend() const noexcept {
         return const_reverse_iterator(static_cast<Me const*>(this)->beg_);
       }
     };
@@ -158,7 +162,7 @@ namespace upcxx {
 
       using reference = typename view_pointerness<Me,T,Iter>::reference;
       
-      reference operator[](std::size_t i) const {
+      reference operator[](std::size_t i) const noexcept {
         return *(static_cast<Me const*>(this)->beg_ + i);
       }
 
@@ -188,14 +192,14 @@ namespace upcxx {
       using iterator = typename view_pointerness<Me,T,Iter>::iterator;
       using reverse_iterator = std::reverse_iterator<iterator>;
 
-      constexpr reverse_iterator rbegin() const {
+      constexpr reverse_iterator rbegin() const noexcept {
         return reverse_iterator(static_cast<Me const*>(this)->end_);
       }
-      constexpr reverse_iterator rend() const {
+      constexpr reverse_iterator rend() const noexcept {
         return reverse_iterator(static_cast<Me const*>(this)->beg_);
       }
 
-      reference back() const {
+      reference back() const noexcept {
         Iter x(static_cast<Me const*>(this)->end_);
         return *--x;
       }
@@ -212,8 +216,8 @@ namespace upcxx {
     friend detail::view_randomness<view<T,Iter>, T, Iter>;
     friend detail::view_backwardness<view<T,Iter>, T, Iter>;
     
-    friend packing<view<T,Iter>>;
-    friend detail::packing_view<T,Iter>;
+    friend serialization<view<T,Iter>>;
+    friend detail::serialization_view<T,Iter>;
 
   public:
     using iterator = typename detail::view_pointerness<view<T,Iter>, T, Iter>::iterator;
@@ -228,18 +232,18 @@ namespace upcxx {
       beg_(), end_(), n_(0) {
     }
     constexpr view(Iter begin, Iter end, std::size_t n):
-      beg_{std::move(begin)},
-      end_{std::move(end)},
-      n_{n} {
+      beg_(std::move(begin)),
+      end_(std::move(end)),
+      n_(n) {
     }
     
-    constexpr iterator begin() const { return beg_; }
-    constexpr iterator end() const { return end_; }
+    constexpr iterator begin() const noexcept { return beg_; }
+    constexpr iterator end() const noexcept { return end_; }
 
-    constexpr std::size_t size() const { return n_; }
-    constexpr bool empty() const { return n_ == 0; }
+    constexpr std::size_t size() const noexcept { return n_; }
+    constexpr bool empty() const noexcept { return n_ == 0; }
 
-    constexpr reference front() const { return *beg_; }
+    constexpr reference front() const noexcept { return *beg_; }
   };
   
   //////////////////////////////////////////////////////////////////////////////
@@ -248,87 +252,122 @@ namespace upcxx {
   template<typename Bag,
            typename T = typename Bag::value_type,
            typename Iter = typename Bag::const_iterator>
-  view<T, Iter> make_view(Bag const &bag) {
-    return {bag.cbegin(), bag.cend(), bag.size()};
+  view<T,Iter> make_view(Bag const &bag) noexcept {
+    return view<T,Iter>(bag.cbegin(), bag.cend(), bag.size());
   }
 
   template<typename T, std::size_t n>
   constexpr view<T, T const*> make_view(T const(&bag)[n]) {
-    return {(T const*)bag, (T const*)bag + n, n};
+    return view<T,T const*>((T const*)bag, (T const*)bag + n, n);
   }
 
   template<typename Iter,
            typename T = typename std::iterator_traits<Iter>::value_type,
            typename = decltype(std::distance(std::declval<Iter>(), std::declval<Iter>()))>
-  view<T, Iter> make_view(Iter begin, Iter end) {
+  view<T,Iter> make_view(Iter begin, Iter end) noexcept {
     std::size_t n = std::distance(begin, end);
-    return {static_cast<Iter&&>(begin), static_cast<Iter&&>(end), n};
+    return view<T,Iter>(static_cast<Iter&&>(begin), static_cast<Iter&&>(end), n);
   }
   
   template<typename Iter,
            typename T = typename std::iterator_traits<Iter>::value_type>
-  constexpr view<T, Iter> make_view(Iter begin, Iter end, std::size_t n) {
-    return {static_cast<Iter&&>(begin), static_cast<Iter&&>(end), n};
+  constexpr view<T,Iter> make_view(Iter begin, Iter end, std::size_t n) {
+    return view<T,Iter>(static_cast<Iter&&>(begin), static_cast<Iter&&>(end), n);
   }
 
   //////////////////////////////////////////////////////////////////////////////
-  // packing<view>: specialization of packing.
+  // serialization<view>:
   
   namespace detail {
+    template<typename T>
+    struct serialization_view_element<T, /*skip_is_fast=*/true>:
+      serialization_complete<T> {
+    };
+
+    template<typename T>
+    struct serialization_view_element<T, /*skip_is_fast=*/false> {
+      template<typename SS>
+      static constexpr auto ubound(SS ub0, T const &x) noexcept
+        -> decltype(
+          ub0.template cat_size_of<std::size_t>()
+             .template cat_ubound_of<T>(x)
+        ) {
+        return ub0.template cat_size_of<std::size_t>()
+                  .template cat_ubound_of<T>(x);
+      }
+
+      static constexpr bool references_buffer = serialization_complete<T>::references_buffer;
+
+      template<typename Writer>
+      static void serialize(Writer &w, T const &x) noexcept {
+        void *delta = w.place(storage_size_of<std::size_t>());
+        std::size_t sz0 = w.size();
+        w.template push<T>(x);
+        std::size_t sz1 = w.size();
+        ::new(delta) std::size_t(sz1 - sz0);
+      }
+
+      template<typename Reader>
+      static T* deserialize(Reader &r, void *spot) noexcept {
+        r.template pop_trivial<std::size_t>();
+        return r.template pop_into<T>(spot);
+      }
+
+      static constexpr bool skip_is_fast = true;
+      
+      template<typename Reader>
+      static void skip(Reader &r) noexcept {
+        std::size_t delta = r.template pop_trivial<std::size_t>();
+        r.jump(delta);
+      }
+    };
+
     // Non-trivially packed T. On the wire this is two size_t's, one for the skip
     // delta and one for the sequence length and then the consecutively packed T's.
     template<typename T, typename Iter>
-    struct packing_view<T, Iter, /*trivial=*/false> {
-      template<typename Ub0, bool skippable>
-      static auto ubound(Ub0 ub0, view<T,Iter> const &x, std::integral_constant<bool,skippable>)
-        -> decltype(
-          detail::packing_sequence<T>::ubound_elts(
-            ub0./*delta*/template trivial_added<std::size_t>()
-               ./*n    */template trivial_added<std::size_t>(),
-            x.beg_, x.n_, std::true_type()
-          )
-        ) {
-        return detail::packing_sequence<T>::ubound_elts(
-          ub0./*delta*/template trivial_added<std::size_t>()
-             ./*n    */template trivial_added<std::size_t>(),
-          x.beg_, x.n_, std::true_type()
-        );
-      }
+    struct serialization_view<T, Iter, /*trivial=*/false> {
+      // no ubound
       
-      template<bool skippable>
-      static void pack(parcel_writer &w, view<T,Iter> const &x, std::integral_constant<bool,skippable>) {
-        std::size_t *delta = w.place_trivial_aligned<std::size_t>();
+      template<typename Writer>
+      static void serialize(Writer &w, view<T,Iter> const &x) noexcept {
+        void *delta = w.place(storage_size_of<std::size_t>());
         std::size_t size0 = w.size();
 
         std::size_t n = x.n_;
-        w.put_trivial_aligned<std::size_t>(n);
-        
-        for(Iter i=x.beg_; n-- != 0; ++i)
-          packing<T>::pack(w, *i, std::true_type());
+        w.template push_trivial<std::size_t>(n);
 
-        *delta = w.size() - size0;
+        for(auto elt = x.beg_; n != 0; n--, ++elt)
+          serialization_view_element<T>::serialize(w, *elt);
+        
+        std::size_t size1 = w.size();
+        ::new(delta) std::size_t(size1 - size0);
       }
 
-      using unpacked_t = view<unpacked_of_t<T>/*, default iterator*/>;
+      using deserialized_type = view<typename serialization_complete<T>::deserialized_type/*, default iterator*/>;
       
-      static void skip(parcel_reader &r) {
-        std::size_t delta = r.pop_trivial_aligned<std::size_t>();
-        r.jump(delta);
-      }
+      template<typename Reader>
+      static deserialized_type* deserialize(Reader &r, void *spot) noexcept {
+        std::size_t delta = r.template pop_trivial<std::size_t>();
+        
+        Reader r1(r);
+        std::size_t n = r1.template pop_trivial<std::size_t>();
 
-      template<bool skippable>
-      static void unpack(parcel_reader &r, void *into, std::integral_constant<bool,skippable>) {
-        std::size_t delta = r.pop_trivial_aligned<std::size_t>();
+        using Iter1 = typename deserialized_type::iterator;
         
-        parcel_reader r1{r};
-        std::size_t n = r1.pop_trivial_aligned<std::size_t>();
-        
-        ::new(into) view<T,Iter>(
-          Iter(r1.head_pointer()),
-          Iter(r.head_pointer() + delta),
+        deserialized_type *ans = ::new(spot) deserialized_type(
+          Iter1(r1.head()),
+          Iter1(r.head() + delta),
           n
         );
+        
+        r.jump(delta);
 
+        return ans;
+      }
+
+      template<typename Reader>
+      static void skip(Reader &r) noexcept {
+        std::size_t delta = r.template pop_trivial<std::size_t>();
         r.jump(delta);
       }
     };
@@ -336,53 +375,44 @@ namespace upcxx {
     // Trivially packed T's. On the wire this is a size_t for the element count
     // followed by the consecutively packed T's.
     template<typename T, typename Iter>
-    struct packing_view<T, Iter, /*trivial=*/true> {
-      template<typename Ub0, bool skippable>
-      static auto ubound(Ub0 ub0, view<T,Iter> const &x, std::integral_constant<bool,skippable>) ->
-        decltype(ub0.template trivial_added<std::size_t>()
-                    .template trivial_array_added<T>(x.n_)) {
-        return ub0.template trivial_added<std::size_t>()
-                  .template trivial_array_added<T>(x.n_);
+    struct serialization_view<T, Iter, /*trivial=*/true> {
+      template<typename SS>
+      static auto ubound(SS ub0, view<T,Iter> const &x) noexcept ->
+        decltype(ub0.template cat_size_of<std::size_t>()
+                    .cat(storage_size_of<T>().array(x.n_))) {
+        return ub0.template cat_size_of<std::size_t>()
+                  .cat(storage_size_of<T>().array(x.n_));
       }
 
-      template<bool skippable>
-      static void pack(parcel_writer &w, view<T,Iter> const &x, std::integral_constant<bool,skippable>) {
-        std::size_t n = x.n_;
-        w.put_trivial_aligned<std::size_t>(n);
-
-        T *y = w.place_trivial_aligned<T>(n);
-        for(Iter i=x.beg_; n-- != 0; ++i)
-          *y++ = *i;
+      template<typename Writer>
+      static void serialize(Writer &w, view<T,Iter> const &x) noexcept {
+        w.template push_trivial<std::size_t>(x.n_);
+        w.push_sequence(x.beg_, x.end_, x.n_);
       }
 
-      using unpacked_t = view<T/*, default iterator*/>;
+      using deserialized_type = view<T/*, default iterator*/>;
       
-      static void skip(parcel_reader &r) {
-        std::size_t n = r.pop_trivial_aligned<std::size_t>();
-        r.pop_trivial_aligned<T>(n);
+      template<typename Reader>
+      static void skip(Reader &r) noexcept {
+        std::size_t n = r.template pop_trivial<std::size_t>();
+        r.unplace(storage_size_of<T>().array(n));
       }
-
-      template<bool skippable>
-      static void unpack(parcel_reader &r, void *into, std::integral_constant<bool,skippable>) {
-        std::size_t n = r.pop_trivial_aligned<std::size_t>();
-        T *ys = const_cast<T*>(r.pop_trivial_aligned<T>(n));
-        ::new(into) view<T,Iter>(ys, ys + n, n);
+      
+      template<typename Reader>
+      static deserialized_type* deserialize(Reader &r, void *spot) noexcept {
+        std::size_t n = r.template pop_trivial<std::size_t>();
+        void *elts = r.unplace(storage_size_of<T>().array(n));
+        return ::new(spot) view<T>((T*)elts, (T*)elts + n, n);
       }
     };
   }
 
   template<typename T, typename Iter>
-  struct packing_screen_trivial<view<T,Iter>>:
-    std::false_type {
-  };
-  
-  template<typename T, typename Iter>
-  struct packing_screened<view<T,Iter>>:
-    // dispatch to detail::packing_view
-    detail::packing_view<T,Iter> {
-
-    static constexpr bool is_definitely_supported = packing_is_definitely_supported<T>::value;
-    static constexpr bool is_owning = false;
+  struct serialization<view<T,Iter>>:
+      detail::serialization_view<T,Iter> {
+    static constexpr bool is_definitely_serializable = serialization_complete<T>::is_definitely_serializable;
+    static constexpr bool references_buffer = true;
+    static constexpr bool skip_is_fast = true;
   };
 }
 

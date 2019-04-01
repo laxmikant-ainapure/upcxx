@@ -4,7 +4,7 @@
 #include <upcxx/backend.hpp>
 #include <upcxx/completion.hpp>
 #include <upcxx/global_ptr.hpp>
-#include <upcxx/packing.hpp>
+#include <upcxx/serialization.hpp>
 
 // For the time being, our implementation of put/get requires the
 // gasnet backend. Ideally we would detect gasnet via UPCXX_BACKEND_GASNET

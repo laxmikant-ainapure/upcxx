@@ -4,7 +4,7 @@
 #include <upcxx/diagnostic.hpp>
 #include <upcxx/future.hpp>
 #include <upcxx/global_fnptr.hpp>
-#include <upcxx/packing.hpp>
+#include <upcxx/serialization.hpp>
 
 // Commands are callable objects that have been packed into a parcel.
 
@@ -20,18 +20,18 @@ namespace upcxx {
       std::tuple<Arg...> a;
       template<typename ...T>
       void operator()(T&&...) {
-        upcxx::apply_tupled(cleanup, std::move(a));
+        detail::apply_tupled(cleanup, std::move(a));
       }
     };
     
-    template<typename Fn, parcel_reader(*reader)(Arg...), void(*cleanup)(Arg...)>
+    template<typename Fn, detail::serialization_reader(*reader)(Arg...), void(*cleanup)(Arg...)>
     static void the_executor(Arg ...a) {
-      parcel_reader r = reader(a...);
+      detail::serialization_reader r = reader(a...);
       
-      r.pop_trivial_aligned<executor_wire_t>();
+      r.template pop_trivial<executor_wire_t>();
       
-      raw_storage<unpacked_of_t<Fn>> fn;
-      unpacking<Fn>::unpack(r, &fn, /*skippable=*/std::false_type());
+      detail::raw_storage<typename serialization_complete<Fn>::deserialized_type> fn;
+      serialization_complete<Fn>::deserialize(r, &fn);
       
       upcxx::apply_as_future(fn.value_and_destruct())
         .then(after_execute<cleanup>{std::tuple<Arg...>(a...)});
@@ -40,40 +40,42 @@ namespace upcxx {
   public:
     using executor_t = void(*)(Arg...);
     
-    // Given a reader in the same state as the one passed into `command::pack`,
+    // Given a reader in the same state as the one passed into `command::serialize`,
     // this will retrieve the executor function.
-    static executor_t get_executor(parcel_reader r) {
-      executor_wire_t exec = r.pop_trivial_aligned<executor_wire_t>();
+    static executor_t get_executor(detail::serialization_reader r) {
+      executor_wire_t exec = r.template pop_trivial<executor_wire_t>();
       UPCXX_ASSERT(exec.u_ != 0);
       return exec.fnptr_non_null();
     }
 
-    // Update an upper-bound on the parcel size needed to accomadate adding the
+    // Update an upper-bound on the size needed to accomadate adding the
     // given callable as a command.
-    template<typename Fn1, typename Ub,
+    template<typename Fn1, typename SS,
              typename Fn = typename std::decay<Fn1>::type>
-    static constexpr auto ubound(Ub ub0, Fn1 &&fn)
+    static constexpr auto ubound(SS ub0, Fn1 &&fn)
       -> decltype(
-        packing<Fn>::ubound(ub0.template trivial_added<executor_wire_t>(), fn, std::false_type())
+        ub0.template cat_size_of<executor_wire_t>()
+           .template cat_ubound_of<Fn>(fn)
       ) {
-      return packing<Fn>::ubound(ub0.template trivial_added<executor_wire_t>(), fn, std::false_type());
+      return ub0.template cat_size_of<executor_wire_t>()
+                .template cat_ubound_of<Fn>(fn);
     }
 
-    // Pack the given callable and reader and cleanup actions onto the writer.
-    template<parcel_reader(*reader)(Arg...), void(*cleanup)(Arg...),
-             typename Fn1,
+    // Serialize the given callable and reader and cleanup actions onto the writer.
+    template<detail::serialization_reader(*reader)(Arg...), void(*cleanup)(Arg...),
+             typename Fn1, typename Writer,
              typename Fn = typename std::decay<Fn1>::type>
-    static void pack(parcel_writer &w, std::size_t size_ub, Fn1 &&fn) {
+    static void serialize(Writer &w, std::size_t size_ub, Fn1 &&fn) {
       executor_wire_t exec = executor_wire_t(&the_executor<Fn,reader,cleanup>);
       
-      w.template put_trivial_aligned<executor_wire_t>(exec);
+      w.template push_trivial<executor_wire_t>(exec);
       
-      packing<Fn>::pack(w, fn, /*skippable=*/std::false_type());
+      serialization_complete<Fn>::serialize(w, fn);
       
       UPCXX_ASSERT(
         size_ub == 0 || w.size() <= size_ub,
-        "Overflowed parcel buffer: buffer="<<size_ub<<", packed="<<w.size()
-      ); // blame packing<Fn>::ubound()
+        "Overflowed serialization buffer: buffer="<<size_ub<<", packed="<<w.size()
+      ); // blame serialization<Fn>::ubound()
     }
   };
 }

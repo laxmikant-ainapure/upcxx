@@ -33,10 +33,10 @@ namespace upcxx {
   }
   
   inline team& world() {
-    return detail::the_world_team.value;
+    return detail::the_world_team.value();
   }
   inline team& local_team() {
-    return detail::the_local_team.value;
+    return detail::the_local_team.value();
   }
 
   // team references are bound using their id's.

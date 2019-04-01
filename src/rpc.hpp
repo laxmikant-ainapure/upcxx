@@ -65,7 +65,7 @@ namespace upcxx {
     -> typename detail::rpc_ff_return<Fn(Arg...), completions<>>::type {
 
     static_assert(
-      upcxx::trait_forall<
+      detail::trait_forall<
           is_definitely_serializable,
           typename binding<Arg>::on_wire_type...
         >::value,
@@ -93,7 +93,7 @@ namespace upcxx {
     -> typename detail::rpc_ff_return<Fn(Arg...), Cxs>::type {
 
     static_assert(
-      upcxx::trait_forall<
+      detail::trait_forall<
           is_definitely_serializable,
           typename binding<Arg>::on_wire_type...
         >::value,
@@ -175,15 +175,15 @@ namespace upcxx {
       );
       
       static_assert(
-        (upcxx::trait_forall_tupled<binding_is_immediate, results_tuple>::value &&
-         upcxx::trait_forall_tupled<packing_is_owning, results_tuple>::value),
+        (detail::trait_forall_tupled<binding_is_immediate, results_tuple>::value &&
+         detail::trait_forall_tupled<serialization_references_buffer_not, results_tuple>::value),
         "rpc return values may not have type dist_object<T>&, team&, or view<T>."
       );
       
       template<typename Event>
       using tuple_t = typename std::conditional<
           std::is_same<Event, operation_cx_event>::value,
-          /*Event == operation_cx_event:*/unpacked_of_t<results_tuple>,
+          /*Event == operation_cx_event:*/deserialized_type_of_t<results_tuple>,
           /*Event != operation_cx_event:*/std::tuple<>
         >::type;
     };
@@ -210,7 +210,7 @@ namespace upcxx {
       -> typename detail::rpc_return<Fn(Arg...), Cxs>::type {
       
       static_assert(
-        upcxx::trait_forall<
+        detail::trait_forall<
             is_definitely_serializable,
             typename binding<Arg>::on_wire_type...
           >::value,
@@ -238,7 +238,7 @@ namespace upcxx {
       backend::template send_am_master<progress_level::user>(
         tm, recipient,
         upcxx::bind(
-          [=](unpacked_of_t<decltype(fn_bound)> &fn_bound1) {
+          [=](deserialized_type_of_t<decltype(fn_bound)> &fn_bound1) {
             return upcxx::apply_as_future(std::move(fn_bound1))
               .then(
                 // Wish we could just use a lambda here, but since it has

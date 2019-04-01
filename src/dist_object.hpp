@@ -107,7 +107,7 @@ namespace upcxx {
     
     dist_object(dist_object const&) = delete;
     
-    dist_object(dist_object &&that):
+    dist_object(dist_object &&that) noexcept:
       tm_(that.tm_),
       id_(that.id_),
       value_(std::move(that.value_)) {
