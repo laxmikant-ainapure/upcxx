@@ -1,5 +1,6 @@
 #include <iostream>
 #include <random>
+#include <cassert>
 #include <upcxx/upcxx.hpp>
 
 using namespace std;
@@ -12,13 +13,14 @@ int main(int argc, char **argv)
 {
   upcxx::init();
   // initialize parameters - simple test case
-  const long N = 1000;
+  const long N = 1024;
   const long MAX_ITER = N * N * 2; 
   const double EPSILON = 0.1;
   const int MAX_VAL = 100;
   const int EXPECTED_VAL = MAX_VAL / 2;
-  // get the bounds for the local panel, assuming number of processes divides N evenly
+  // get the bounds for the local panel, assuming num procs divides N into an even block size
   int block = N / upcxx::rank_n();
+  assert(block % 2 == 0); assert(N == block * upcxx::rank_n());
   // plus two for ghost cells
   int n_local = block + 2;
   // set up the distributed object
