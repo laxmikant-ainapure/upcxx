@@ -298,14 +298,14 @@ namespace backend {
     
     using Fn = typename std::decay<Fn1>::type;
     
-    auto ub = command<detail::lpc_base*>::ubound(empty_storage_size, fn);
+    auto ub = detail::command<detail::lpc_base*>::ubound(empty_storage_size, fn);
     
     constexpr bool definitely_eager = ub.static_size <= gasnet::am_size_rdzv_cutover_min;
     
     rpc_out_buffer<decltype(ub)> obuf;
     auto w = obuf.prepare_writer(ub);
     
-    command<detail::lpc_base*>::template serialize<
+    detail::command<detail::lpc_base*>::template serialize<
         rpc_as_lpc::reader_of,
         rpc_as_lpc::template cleanup</*never_rdzv=*/definitely_eager>
       >(w, ub.size, fn);
@@ -331,14 +331,14 @@ namespace backend {
     using gasnet::rpc_out_buffer;
     using gasnet::rpc_as_lpc;
     
-    auto ub = command<detail::lpc_base*>::ubound(empty_storage_size, fn);
+    auto ub = detail::command<detail::lpc_base*>::ubound(empty_storage_size, fn);
     
     constexpr bool definitely_eager = ub.static_size <= gasnet::am_size_rdzv_cutover_min;
 
     rpc_out_buffer<decltype(ub)> obuf;
     auto w = obuf.prepare_writer(ub);
     
-    command<detail::lpc_base*>::template serialize<
+    detail::command<detail::lpc_base*>::template serialize<
         rpc_as_lpc::reader_of,
         rpc_as_lpc::template cleanup</*never_rdzv=*/definitely_eager>
       >(w, ub.size, fn);
@@ -362,7 +362,7 @@ namespace backend {
     
     using Fn = typename std::decay<Fn1>::type;
     
-    auto ub = command<detail::lpc_base*>::ubound(
+    auto ub = detail::command<detail::lpc_base*>::ubound(
       empty_storage_size.cat_size_of<bcast_payload_header>(),
       fn
     );
@@ -374,7 +374,7 @@ namespace backend {
     auto w = obuf.prepare_writer(ub);
     w.place(storage_size_of<bcast_payload_header>());
     
-    command<detail::lpc_base*>::template serialize<
+    detail::command<detail::lpc_base*>::template serialize<
         bcast_as_lpc::reader_of,
         bcast_as_lpc::template cleanup</*never_rdzv=*/definitely_eager>
       >(w, ub.size, fn);
@@ -440,11 +440,11 @@ namespace gasnet {
   void send_am_restricted(team &tm, intrank_t recipient, Fn &&fn) {
     UPCXX_ASSERT(!UPCXX_BACKEND_GASNET_SEQ || backend::master.active_with_caller());
     
-    auto ub = command<detail::lpc_base*>::ubound(empty_storage_size, fn);
+    auto ub = detail::command<detail::lpc_base*>::ubound(empty_storage_size, fn);
     rpc_out_buffer<decltype(ub)> obuf;
 
     auto w = obuf.prepare_writer(ub);
-    command<void*>::serialize<
+    detail::command<void*>::serialize<
         restricted_reader_of,
         restricted_cleanup
       >(w, ub.size, fn);

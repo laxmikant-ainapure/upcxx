@@ -21,13 +21,14 @@ namespace detail  = upcxx::detail;
 namespace gasnet  = upcxx::backend::gasnet;
 namespace cuda    = upcxx::cuda;
 
-using upcxx::command;
 using upcxx::intrank_t;
 using upcxx::persona;
 using upcxx::persona_scope;
 using upcxx::progress_level;
 using upcxx::team;
 using upcxx::team_id;
+
+using detail::command;
 
 using backend::persona_state;
 

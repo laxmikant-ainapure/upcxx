@@ -395,6 +395,7 @@ namespace upcxx {
 ////////////////////////////////////////////////////////////////////////
 // upcxx::bind_last: bind except the function is last.
 
+#if 0
 namespace upcxx {
   namespace detail {
     template<typename ...P, int ...heads, int tail>
@@ -438,4 +439,6 @@ namespace upcxx {
     return bind(std::move(fn));
   }
 }
+#endif
+
 #endif

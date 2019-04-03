@@ -9,6 +9,7 @@
 // Commands are callable objects that have been packed into a parcel.
 
 namespace upcxx {
+namespace detail {
   // command<Arg...>: Collection of static functions for managing commands which
   // accept argument list of type Arg... when executed.
   template<typename ...Arg>
@@ -78,5 +79,5 @@ namespace upcxx {
       ); // blame serialization<Fn>::ubound()
     }
   };
-}
+}}
 #endif
