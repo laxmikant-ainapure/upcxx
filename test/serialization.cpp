@@ -1,4 +1,5 @@
 #include <upcxx/serialization.hpp>
+#include <upcxx/utility.hpp>
 #include "util.hpp"
 
 using namespace std;
@@ -26,7 +27,7 @@ void roundtrip(T const &x) {
 
   serialization_complete<T>::serialize(w, x);
 
-  void *buf1 = upcxx::aligned_alloc(std::max(sizeof(void*), w.align()), w.size());
+  void *buf1 = upcxx::detail::alloc_aligned(w.size(), std::max(sizeof(void*), w.align()));
   w.compact_and_invalidate(buf1);
   
   detail::serialization_reader r(buf1);
@@ -36,7 +37,7 @@ void roundtrip(T const &x) {
 
   UPCXX_ASSERT_ALWAYS(equals(*x1, x), "Serialization roundtrip failed. sizeof(T)="<<sizeof(T)<<" is_def_triv_serz="<<is_definitely_trivially_serializable<T>::value);
 
-  upcxx::destruct(*x1);
+  upcxx::detail::destruct(*x1);
   std::free(buf1);
 }
 

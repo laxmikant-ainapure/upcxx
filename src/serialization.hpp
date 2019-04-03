@@ -125,8 +125,9 @@ namespace upcxx {
       ) {
     }
 
-    constexpr std::size_t size_aligned() const {
-      return (this->size + this->align-1) & -this->align;
+    constexpr std::size_t size_aligned(std::size_t min_align=1) const {
+      std::size_t a = min_align > this->align ? min_align : this->align;
+      return (this->size + a-1) & -a;
     }
 
     constexpr storage_size<
@@ -136,9 +137,10 @@ namespace upcxx {
     static_otherwise_invalid() const {
       return {s_size, s_align};
     }
-    
+
+  private:
     template<std::size_t s_size1, std::size_t s_align1>
-    constexpr auto cat(storage_size<s_size1, s_align1> that) const
+    constexpr auto cat_help(std::size_t size1, std::size_t align1) const
       -> storage_size<
         /*s_size = */(
           s_size >= std::size_t(-2) || s_size1 >= std::size_t(-2)
@@ -150,11 +152,28 @@ namespace upcxx {
         )
       > {
       return {
-        ((this->size + that.align-1) & -that.align) + that.size,
-        this->align > that.align ? this->align : that.align
+        ((this->size + align1-1) & -align1) + size1,
+        this->align > align1 ? this->align : align1
       };
     }
 
+  public:
+    template<std::size_t s_size1, std::size_t s_align1>
+    constexpr auto cat(storage_size<s_size1, s_align1> that) const
+      -> decltype(this->template cat_help<s_size1, s_align1>(that.size, that.align)) {
+      return this->template cat_help<s_size1, s_align1>(that.size, that.align);
+    }
+
+    template<std::size_t s_size1, std::size_t s_align1>
+    constexpr auto cat()
+      -> decltype(this->template cat_help<s_size1, s_align1>(s_size1, s_align1)) {
+      return this->template cat_help<s_size1, s_align1>(s_size1, s_align1);
+    }
+    constexpr auto cat(std::size_t size1, std::size_t align1)
+      -> decltype(this->template cat_help<std::size_t(-2),std::size_t(-2)>(size1, align1)) {
+      return this->template cat_help<std::size_t(-2),std::size_t(-2)>(size1, align1);
+    }
+    
     template<typename T>
     constexpr auto cat_size_of() const
       -> decltype(this->cat(storage_size_of<T>())) {
@@ -249,12 +268,26 @@ namespace upcxx {
         std::memcpy(buf, buf_, size_);
       }
       
-      void* place(storage_size<> obj) {
-        size_ = (size_ + obj.align-1) & -obj.align;
+      void* place(std::size_t obj_size, std::size_t obj_align) {
+        size_ = (size_ + obj_align-1) & -obj_align;
         void *spot = reinterpret_cast<void*>(buf_ + size_);
-        size_ += obj.size;
-        align_ = obj.align > align_ ? obj.align : align_;
+        size_ += obj_size;
+        align_ = obj_align > align_ ? obj_align : align_;
         return spot;
+      }
+      void* place(storage_size<> obj) {
+        return this->place(obj.size, obj.align);
+      }
+
+      template<typename T>
+      T* place_new() {
+        static_assert(std::is_trivially_copyable<T>::value, "T must be TriviallyCopyable");
+        return ::new(this->place(sizeof(T), alignof(T))) T;
+      }
+      template<typename T>
+      T* place_new(T val) {
+        static_assert(std::is_trivially_copyable<T>::value, "T must be TriviallyCopyable");
+        return ::new(this->place(sizeof(T), alignof(T))) T(val);
       }
 
       template<typename T>
@@ -368,12 +401,12 @@ namespace upcxx {
         head_ = nullptr; // do this in inlineable code so the compiler can elide the destructor body
       }
       
-      void* place(storage_size<> obj) {
+      void* place(std::size_t obj_size, std::size_t obj_align) {
         std::size_t size0 = size_;
-        size0 = (size0 + obj.align-1) & -obj.align;
+        size0 = (size0 + obj_align-1) & -obj_align;
 
-        std::size_t size1 = size0 + obj.size;
-        std::size_t align1 = obj.align > align_ ? obj.align : align_;
+        std::size_t size1 = size0 + obj_size;
+        std::size_t align1 = obj_align > align_ ? obj_align : align_;
         
         if(size1 > edge_)
           this->grow(size0, size1);
@@ -383,6 +416,21 @@ namespace upcxx {
         return reinterpret_cast<void*>(base_ + size0);
       }
 
+      void* place(storage_size<> obj) {
+        return this->place(obj.size, obj.align);
+      }
+
+      template<typename T>
+      T* place_new() {
+        static_assert(std::is_trivially_copyable<T>::value, "T must be TriviallyCopyable");
+        return ::new(this->place(sizeof(T), alignof(T))) T;
+      }
+      template<typename T>
+      T* place_new(T val) {
+        static_assert(std::is_trivially_copyable<T>::value, "T must be TriviallyCopyable");
+        return ::new(this->place(sizeof(T), alignof(T))) T(val);
+      }
+      
       template<typename T>
       void push(T const &x) {
         upcxx::template serialization_complete<T>::serialize(*this, x);
@@ -529,11 +577,14 @@ namespace upcxx {
         return upcxx::template serialization_complete<T>::deserialize(*this, raw);
       }
 
-      void* unplace(storage_size<> obj) {
-        head_ = (head_ + obj.align-1) & -obj.align;
+      void* unplace(std::size_t obj_size, std::size_t obj_align) {
+        head_ = (head_ + obj_align-1) & -obj_align;
         void *ans = reinterpret_cast<void*>(head_);
-        head_ += obj.size;
+        head_ += obj_size;
         return ans;
+      }
+      void* unplace(storage_size<> obj) {
+        return this->unplace(obj.size, obj.align);
       }
       
       template<typename T>
