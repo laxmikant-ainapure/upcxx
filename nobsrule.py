@@ -271,9 +271,7 @@ def gasnet_user(cxt):
   value = env('GASNET', None)
   
   if not value:
-    default_gasnetex_url_b64 = 'aHR0cHM6Ly9nYXNuZXQubGJsLmdvdi9FWC9HQVNOZXQtMjAxOS4zLjAudGFyLmd6'
-    import base64
-    value = base64.b64decode(default_gasnetex_url_b64)
+    value = 'https://upcxx.lbl.gov/third-party/GASNet-2019.3.tar.gz'
   
   from urlparse import urlparse
   isurl = urlparse(value).netloc != ''
