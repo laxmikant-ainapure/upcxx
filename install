@@ -50,6 +50,8 @@ install_to=$(absify "$install_to")
 sys_info
 platform_sanity_checks
 platform_settings
+export CC
+export CXX
 
 # Check that Python/nobs is usable
 if ! nobs gasnet_conduit >/dev/null ; then
