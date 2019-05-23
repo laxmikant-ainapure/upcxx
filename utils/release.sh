@@ -2,9 +2,10 @@
 
 set -e
 
-REPO=origin
-BRANCH=master
+REPO=${REPO:-origin}
+BRANCH=${BRANCH:-master}
 
+REPOURL=$(git remote get-url $REPO)
 RELEASE=$(git describe ${REPO}/${BRANCH})
 OFFLINE=${RELEASE}-offline
 
@@ -24,6 +25,8 @@ else
   WWW_CMD='wget -q'
 fi
 
+echo "Building releases from BRANCH=$BRANCH in REPO=$REPO ($REPOURL)"
+
 set -x
 
 # Build main "online" installer:
@@ -36,7 +39,7 @@ fi
 UPCXX_HASH=$(zcat ${RELEASE_TGZ} | git get-tar-commit-id)
 
 # Extract GASNet-EX URL:
-GASNET_URL=$(tar xOfz ${RELEASE_TGZ} ${RELEASE}/nobsrule.py | grep -m1 default_gasnetex_url_b64 | cut -d\' -f2 | $B64_CMD)
+GASNET_URL=$(tar xOfz ${RELEASE_TGZ} ${RELEASE}/nobsrule.py | grep -m1 'GASNet-.*\.tar\.gz' | cut -d\' -f2)
 GASNET=$(basename "${GASNET_URL}" .tar.gz)
 
 # Build alternative "offline" installer:
@@ -49,6 +52,12 @@ if ! gzip -t $GASNET_TGZ; then
   echo 'ERROR: GASNet-EX tarball failed "gzip -t"' >&2
   exit 1
 fi
+# Rename GEX tarball to full version name (undo patch obfuscation)
+GASNET=$(tar tf $GASNET_TGZ | head -1 | cut -d/ -f1)
+GASNET_TGZ_NEW=${OFFLINE}/src/${GASNET}.tar.gz
+mv $GASNET_TGZ $GASNET_TGZ_NEW
+GASNET_TGZ=$GASNET_TGZ_NEW
+
 GEX_DESCRIBE=$(tar xOzf ${GASNET_TGZ} ${GASNET}/version.git)
 tar -r -f ${OFFLINE}.tar --owner=root --group=root ${OFFLINE}/src/${GASNET}.tar.gz
 gzip -9f ${OFFLINE}.tar
@@ -63,6 +72,8 @@ set +x
 echo
 echo "INPUT SUMMARY:"
 echo "-------------"
+echo "Repo:               $REPO ($REPOURL)"
+echo "Branch:             $BRANCH"
 echo "Release version:    ${RELEASE#upcxx-}"
 echo "UPC++ commit hash:  ${UPCXX_HASH}"
 echo "GASNet-EX describe: ${GEX_DESCRIBE}"
