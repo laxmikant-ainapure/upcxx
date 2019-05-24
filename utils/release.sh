@@ -55,8 +55,10 @@ fi
 # Rename GEX tarball to full version name (undo patch obfuscation)
 GASNET=$(tar tf $GASNET_TGZ | head -1 | cut -d/ -f1)
 GASNET_TGZ_NEW=${OFFLINE}/src/${GASNET}.tar.gz
-mv $GASNET_TGZ $GASNET_TGZ_NEW
-GASNET_TGZ=$GASNET_TGZ_NEW
+if test "$GASNET_TGZ" != "$GASNET_TGZ_NEW" ; then
+  mv $GASNET_TGZ $GASNET_TGZ_NEW
+  GASNET_TGZ=$GASNET_TGZ_NEW
+fi
 
 GEX_DESCRIBE=$(tar xOzf ${GASNET_TGZ} ${GASNET}/version.git)
 tar -r -f ${OFFLINE}.tar --owner=root --group=root ${OFFLINE}/src/${GASNET}.tar.gz
