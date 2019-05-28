@@ -2,6 +2,7 @@
 #define _0a792abf_0420_42b8_91a0_67a4b337f136
 
 #include <upcxx/backend_fwd.hpp>
+#include <upcxx/concurrency.hpp>
 #include <upcxx/cuda.hpp>
 #include <upcxx/global_ptr.hpp>
 #include <upcxx/segment_allocator.hpp>

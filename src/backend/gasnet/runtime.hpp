@@ -7,7 +7,6 @@
 #include <upcxx/backend_fwd.hpp>
 #include <upcxx/bind.hpp>
 #include <upcxx/command.hpp>
-#include <upcxx/concurrency.hpp>
 #include <upcxx/persona.hpp>
 #include <upcxx/team_fwd.hpp>
 
