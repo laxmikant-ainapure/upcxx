@@ -88,7 +88,7 @@ namespace gasnet {
     intrank_t rank_d_ub, // in range [0, 2*rank_n-1)
     intrank_t wrank_owner, // world team coordinates
     void *payload_sender,
-    detail::par_atomic<std::int64_t> *refs_sender,
+    std::atomic<std::int64_t> *refs_sender,
     size_t cmd_size,
     size_t cmd_align
   );
@@ -136,9 +136,9 @@ namespace gasnet {
   struct bcast_as_lpc: rpc_as_lpc {
     union {
       int eager_refs;
-      detail::par_atomic<std::int64_t> *rdzv_refs_s;
+      std::atomic<std::int64_t> *rdzv_refs_s;
     };
-    detail::par_atomic<std::int64_t> rdzv_refs_here;
+    std::atomic<std::int64_t> rdzv_refs_here;
     
     static parcel_reader reader_of(detail::lpc_base *me) {
       parcel_reader r(static_cast<bcast_as_lpc*>(me)->payload);
@@ -343,7 +343,7 @@ namespace backend {
     if(eager)
       buf = ebuf.allocate(ub);
     else {
-      auto ub1 = ub.template trivial_added<detail::par_atomic<std::int64_t>>();
+      auto ub1 = ub.template trivial_added<std::atomic<std::int64_t>>();
       buf = upcxx::allocate(ub1.size, ub1.align);
     }
     
@@ -363,9 +363,9 @@ namespace backend {
         );
     }
     else {
-      detail::par_atomic<std::int64_t> *rdzv_refs = new(
-          w.place_trivial_aligned<detail::par_atomic<std::int64_t>>()
-        ) detail::par_atomic<std::int64_t>(1<<30);
+      std::atomic<std::int64_t> *rdzv_refs = new(
+          w.place_trivial_aligned<std::atomic<std::int64_t>>()
+        ) std::atomic<std::int64_t>(1<<30);
       
       int refs_added = gasnet::template bcast_am_master_rdzv<level>(
           tm,

@@ -12,7 +12,6 @@
 #include <cstdlib>
 #include <cstring>
 #include <memory>
-#include <mutex>
 
 #include <sched.h>
 #include <unistd.h>
@@ -1119,7 +1118,7 @@ int gasnet::bcast_am_master_rdzv(
     intrank_t rank_d_ub, // in range [0, 2*rank_n-1)
     intrank_t wrank_owner, // self or a local peer (in world)
     void *payload_sender, // in my address space
-    detail::par_atomic<int64_t> *refs_sender, // in my address space
+    std::atomic<int64_t> *refs_sender, // in my address space
     size_t cmd_size,
     size_t cmd_align
   ) {
@@ -1130,7 +1129,7 @@ int gasnet::bcast_am_master_rdzv(
   void *payload_owner = reinterpret_cast<void*>(
       backend::globalize_memory_nonnull(wrank_owner, payload_sender)
     );
-  detail::par_atomic<int64_t> *refs_owner = reinterpret_cast<detail::par_atomic<int64_t>*>(
+  std::atomic<int64_t> *refs_owner = reinterpret_cast<std::atomic<int64_t>*>(
       backend::globalize_memory_nonnull(wrank_owner, refs_sender)
     );
   
@@ -1157,7 +1156,7 @@ int gasnet::bcast_am_master_rdzv(
       [=]() {
         if(backend::rank_is_local(wrank_sender)) {
           void *payload_target = backend::localize_memory_nonnull(wrank_owner, reinterpret_cast<std::uintptr_t>(payload_owner));
-          detail::par_atomic<int64_t> *refs_target = (detail::par_atomic<int64_t>*)backend::localize_memory_nonnull(wrank_owner, reinterpret_cast<std::uintptr_t>(refs_owner));
+          std::atomic<int64_t> *refs_target = (std::atomic<int64_t>*)backend::localize_memory_nonnull(wrank_owner, reinterpret_cast<std::uintptr_t>(refs_owner));
           
           parcel_reader r(payload_target);
           team_id tm_id = r.pop_trivial_aligned<team_id>();
@@ -1198,7 +1197,7 @@ int gasnet::bcast_am_master_rdzv(
             [=]() {
               intrank_t wrank_owner = m->rdzv_rank_s;
               
-              detail::par_atomic<int64_t> *refs_owner = m->rdzv_refs_s;
+              std::atomic<int64_t> *refs_owner = m->rdzv_refs_s;
               m->rdzv_refs_s = &m->rdzv_refs_here;
               
               parcel_reader r(m->payload);
@@ -1244,10 +1243,10 @@ int gasnet::bcast_am_master_rdzv(
 }
 
 template int gasnet::bcast_am_master_rdzv<progress_level::internal>(
-  upcxx::team&, intrank_t, intrank_t, void*, detail::par_atomic<int64_t>*, size_t, size_t
+  upcxx::team&, intrank_t, intrank_t, void*, std::atomic<int64_t>*, size_t, size_t
 );
 template int gasnet::bcast_am_master_rdzv<progress_level::user>(
-  upcxx::team&, intrank_t, intrank_t, void*, detail::par_atomic<int64_t>*, size_t, size_t
+  upcxx::team&, intrank_t, intrank_t, void*, std::atomic<int64_t>*, size_t, size_t
 );
 
 namespace upcxx {
