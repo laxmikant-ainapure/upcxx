@@ -92,6 +92,8 @@ For copyright notice and licensing agreement, see [LICENSE.txt](LICENSE.txt)
 
 Notable bug fixes:
 
+* issue #203: strict aliasing violations in device\_allocator
+
 Breaking changes:
 
 ### 2019.05.27: Bug-fix release 2019.3.2
@@ -159,14 +161,14 @@ New features/enhancements: (see specification and programmer's guide for full de
 
 * Subset teams and team-aware APIs are added and implemented
 * Non-Blocking Collective operations, with team support: barrier, broadcast, reduce
-* New atomic operations: mul, min, max, bit_{and,or,xor}
+* New atomic operations: `mul, min, max, bit_{and,or,xor}`
 * `future::{wait,result}*` return types are now "smarter", allowing more concise syntax
 * New `upcxx` compiler wrapper makes it easier to build UPC++ programs
 * `upcxx-run`: improved functionality and handling of -shared-heap arguments
 * New supported platforms:
     - GNU g++ compiler on macOS (e.g., as installed by Homebrew or Fink)
-    - PrgEnv-intel version 17.0.2 or later on Cray XC x86_64 systems
-    - Intel C++ version 17.0.2 or later on x86_64/Linux
+    - PrgEnv-intel version 17.0.2 or later on Cray XC x86-64 systems
+    - Intel C++ version 17.0.2 or later on x86-64/Linux
     - GNU g++ compiler on ppc64le/Linux
 * `rput_{strided,(ir)regular}` now provide asynchronous source completion
 * Performance improvements to futures, promises and LPCs
