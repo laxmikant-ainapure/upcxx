@@ -12,7 +12,6 @@
 #include <cstdlib>
 #include <cstring>
 #include <memory>
-#include <mutex>
 
 #include <sched.h>
 #include <unistd.h>
@@ -161,7 +160,7 @@ namespace {
   gex_TM_t world_tm;
   gex_TM_t local_tm;
 
-  std::mutex segment_lock_;
+  detail::par_mutex segment_lock_;
   intptr_t allocs_live_n_ = 0;
   mspace segment_mspace_;
 
@@ -768,9 +767,9 @@ void* upcxx::allocate(size_t size, size_t alignment) {
   UPCXX_ASSERT(shared_heap_isinit);
   #if UPCXX_BACKEND_GASNET_SEQ
     UPCXX_ASSERT(backend::master.active_with_caller());
-  #elif UPCXX_BACKEND_GASNET_PAR
-    std::lock_guard<std::mutex> locked{segment_lock_};
   #endif
+
+  std::lock_guard<detail::par_mutex> locked{segment_lock_};
   
   void *p;
   if (upcxx_use_upc_alloc) {
@@ -797,9 +796,10 @@ void upcxx::deallocate(void *p) {
   UPCXX_ASSERT(shared_heap_isinit);
   #if UPCXX_BACKEND_GASNET_SEQ
     UPCXX_ASSERT(backend::master.active_with_caller());
-  #elif UPCXX_BACKEND_GASNET_PAR
-    std::lock_guard<std::mutex> locked{segment_lock_};
   #endif
+
+  std::lock_guard<detail::par_mutex> locked{segment_lock_};
+  
   if_pf (!p) return;
   
   if (upcxx_use_upc_alloc) {
