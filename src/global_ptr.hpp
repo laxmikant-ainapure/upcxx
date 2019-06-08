@@ -244,7 +244,9 @@ namespace upcxx {
 
   template<typename T, memory_kind K>
   std::ostream& operator<<(std::ostream &os, global_ptr<T,K> ptr) {
-    return os << "(gp: " << ptr.rank_ << ", " << ptr.raw_ptr_ << ", dev=" << ptr.device_ << ")";
+    return os << "(gp: " << ptr.rank_ << ", " 
+              << reinterpret_cast<void*>(ptr.raw_ptr_) // issue #223
+	      << ", dev=" << ptr.device_ << ")";
   }
 
   template<typename T>
