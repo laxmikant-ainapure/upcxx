@@ -138,7 +138,7 @@ namespace upcxx {
     upcxx::team& team() const { return *tm_; }
     dist_id<T> id() const { return dist_id<T>{id_}; }
     
-    future<T> fetch(intrank_t rank) {
+    future<T> fetch(intrank_t rank) const {
       return upcxx::rpc(*tm_, rank, [](dist_object<T> &o) { return *o; }, *this);
     }
   };
