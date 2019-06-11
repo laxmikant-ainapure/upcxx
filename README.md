@@ -93,6 +93,7 @@ For copyright notice and licensing agreement, see [LICENSE.txt](LICENSE.txt)
 Notable bug fixes:
 
 * issue #203: strict aliasing violations in device\_allocator
+* issue #228: incorrect behavior for `upcxx -g -O`
 
 Breaking changes:
 
