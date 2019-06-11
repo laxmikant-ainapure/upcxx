@@ -24,17 +24,21 @@ dolink=1
 doversion=
 dodebug=
 doopt=
+docc=
+docxx=
 shopt -u nocasematch # ensure case-sensitive match below
 for arg in "$@" ; do
   case $arg in 
     -MD) : ;; # -MD does not imply preprocess
-    -E|-c|-S|-M*) dolink=0 ;;
+    -E|-c|-S|-M*) dolink='' ;;
     -v|-vv) doverbose=1 ;;
     -V|-version|--version) 
       doversion=1
     ;;
     -g*) dodebug=1 ;;
     -O*) doopt=1 ;;
+    *.c) docc=1 ;;
+    *.cxx|*.cpp|*.cc|*.c++|*.C++) docxx=1 ;;
   esac
 done
 verbose dolink=$dolink
@@ -51,11 +55,17 @@ else
 fi
 export UPCXX_CODEMODE
 
+if [[ $docxx && $docc ]] ; then
+  error "please do not specify a mix of C and C++ source files on the same invocation"
+elif [[ $docc && $dolink ]] ; then
+  error "please compile C language source files separately using -c"
+fi
+
 for var in UPCXX_CODEMODE UPCXX_GASNET_CONDUIT UPCXX_THREADMODE ; do
   eval verbose $var=\$$var
 done
 
-for var in CXX CXXFLAGS CPPFLAGS LDFLAGS LIBS ; do 
+for var in CC CXX CXXFLAGS CPPFLAGS LDFLAGS LIBS ; do 
   val=`$UPCXX_META $var`
   eval $var=\$val
   verbose "$UPCXX_META $var: $val"
@@ -82,8 +92,9 @@ function doit {
   verbose "$@"
   exec "$@"
 }
-
-if [[ $dolink == 0 ]] ; then
+if [[ $docc ]] ; then # C language compilation, for convenience
+  doit $CC $CPPFLAGS "$@"
+elif [[ ! $dolink ]] ; then
   doit $CXX $EXTRAFLAGS $CXXFLAGS $CPPFLAGS "$@"
 else
   doit $CXX $EXTRAFLAGS $CXXFLAGS $CPPFLAGS $LDFLAGS "$@" $LIBS
