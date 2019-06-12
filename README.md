@@ -96,6 +96,7 @@ Notable bug fixes:
 * issue #228: incorrect behavior for `upcxx -g -O`
 * issue #229: Teach upcxx wrapper to compile C language files
 * issue #224: missing const qualifier on `dist_object<T>.fetch()`
+* issue #223: `operator<<(std::ostream, global_ptr<T>)` does not match spec
 
 Breaking changes:
 
