@@ -31,8 +31,8 @@ namespace detail {
       
       r.template pop_trivial<executor_wire_t>();
       
-      detail::raw_storage<typename serialization_complete<Fn>::deserialized_type> fn;
-      serialization_complete<Fn>::deserialize(r, &fn);
+      detail::raw_storage<typename serialization_traits<Fn>::deserialized_type> fn;
+      serialization_traits<Fn>::deserialize(r, &fn);
       
       upcxx::apply_as_future(fn.value_and_destruct())
         .then(after_execute<cleanup>{std::tuple<Arg...>(a...)});
@@ -71,7 +71,7 @@ namespace detail {
       
       w.template push_trivial<executor_wire_t>(exec);
       
-      serialization_complete<Fn>::serialize(w, fn);
+      serialization_traits<Fn>::serialize(w, fn);
       
       UPCXX_ASSERT(
         size_ub == 0 || w.size() <= size_ub,

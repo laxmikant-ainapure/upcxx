@@ -13,7 +13,7 @@ namespace upcxx {
   // a consecutive sequence of packed T's.
   namespace detail {
     template<typename T,
-             bool skip_is_fast = serialization_complete<T>::skip_is_fast>
+             bool skip_is_fast = serialization_traits<T>::skip_is_fast>
     struct serialization_view_element;
   }
     
@@ -97,7 +97,7 @@ namespace upcxx {
   
   namespace detail {
     template<typename T, typename Iter,
-             bool trivial = serialization_complete<T>::is_actually_trivially_serializable>
+             bool trivial = serialization_traits<T>::is_actually_trivially_serializable>
     struct serialization_view;
 
     template<typename Me, typename T, typename Iter>
@@ -281,7 +281,7 @@ namespace upcxx {
   namespace detail {
     template<typename T>
     struct serialization_view_element<T, /*skip_is_fast=*/true>:
-      serialization_complete<T> {
+      serialization_traits<T> {
     };
 
     template<typename T>
@@ -296,7 +296,7 @@ namespace upcxx {
                   .template cat_ubound_of<T>(x);
       }
 
-      static constexpr bool references_buffer = serialization_complete<T>::references_buffer;
+      static constexpr bool references_buffer = serialization_traits<T>::references_buffer;
 
       template<typename Writer>
       static void serialize(Writer &w, T const &x) noexcept {
@@ -343,7 +343,7 @@ namespace upcxx {
         ::new(delta) std::size_t(size1 - size0);
       }
 
-      using deserialized_type = view<typename serialization_complete<T>::deserialized_type/*, default iterator*/>;
+      using deserialized_type = view<typename serialization_traits<T>::deserialized_type/*, default iterator*/>;
       
       template<typename Reader>
       static deserialized_type* deserialize(Reader &r, void *spot) noexcept {
@@ -410,7 +410,7 @@ namespace upcxx {
   template<typename T, typename Iter>
   struct serialization<view<T,Iter>>:
       detail::serialization_view<T,Iter> {
-    static constexpr bool is_definitely_serializable = serialization_complete<T>::is_definitely_serializable;
+    static constexpr bool is_definitely_serializable = serialization_traits<T>::is_definitely_serializable;
     static constexpr bool references_buffer = true;
     static constexpr bool skip_is_fast = true;
   };

@@ -85,7 +85,7 @@ namespace upcxx {
   template<typename Event, typename Fn>
   struct rpc_cx {
     using event_t = Event;
-    using deserialized_cx = rpc_cx<Event, typename serialization_complete<Fn>::deserialized_type>;
+    using deserialized_cx = rpc_cx<Event, typename serialization_traits<Fn>::deserialized_type>;
     
     Fn fn_;
     rpc_cx(Fn fn): fn_(std::move(fn)) {}
@@ -550,7 +550,7 @@ namespace upcxx {
     > {
     using type = detail::completions_state_head<true, EventValues, rpc_cx<Event,Fn>>;
 
-    static constexpr bool is_definitely_serializable = serialization_complete<Fn>::is_definitely_serializable;
+    static constexpr bool is_definitely_serializable = serialization_traits<Fn>::is_definitely_serializable;
     
     template<typename Ub>
     static auto ubound(Ub ub, type const &s) ->
@@ -565,11 +565,11 @@ namespace upcxx {
 
     using deserialized_type = detail::completions_state_head<
         true, EventValues,
-        rpc_cx<Event, typename serialization_complete<Fn>::deserialized_type>
+        rpc_cx<Event, typename serialization_traits<Fn>::deserialized_type>
       >;
     
-    static constexpr bool skip_is_fast = serialization_complete<Fn>::skip_is_fast;
-    static constexpr bool references_buffer = serialization_complete<Fn>::references_buffer;
+    static constexpr bool skip_is_fast = serialization_traits<Fn>::skip_is_fast;
+    static constexpr bool references_buffer = serialization_traits<Fn>::references_buffer;
     
     template<typename Reader>
     static void skip(Reader &r) {
@@ -613,8 +613,8 @@ namespace upcxx {
     using type = detail::completions_state<EventPredicate, EventValues, completions<CxH,CxT...>>;
 
     static constexpr bool is_definitely_serializable =
-      serialization_complete<typename type::head_t>::is_definitely_serializable &&
-      serialization_complete<typename type::tail_t>::is_definitely_serializable;
+      serialization_traits<typename type::head_t>::is_definitely_serializable &&
+      serialization_traits<typename type::tail_t>::is_definitely_serializable;
     
     template<typename Ub>
     static auto ubound(Ub ub, type const &cxs)
@@ -639,11 +639,11 @@ namespace upcxx {
       >;
 
     static constexpr bool skip_is_fast =
-      serialization_complete<typename type::head_t>::skip_is_fast &&
-      serialization_complete<typename type::tail_t>::skip_is_fast;
+      serialization_traits<typename type::head_t>::skip_is_fast &&
+      serialization_traits<typename type::tail_t>::skip_is_fast;
     static constexpr bool references_buffer =
-      serialization_complete<typename type::head_t>::references_buffer ||
-      serialization_complete<typename type::tail_t>::references_buffer;
+      serialization_traits<typename type::head_t>::references_buffer ||
+      serialization_traits<typename type::tail_t>::references_buffer;
 
     template<typename Reader>
     static void skip(Reader &r) {

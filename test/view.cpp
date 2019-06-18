@@ -18,7 +18,7 @@ using namespace std;
 
 template<typename T>
 struct is_actually_trivially_serializable {
-  static constexpr bool value = serialization_complete<T>::is_actually_trivially_serializable;
+  static constexpr bool value = serialization_traits<T>::is_actually_trivially_serializable;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

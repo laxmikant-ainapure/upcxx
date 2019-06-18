@@ -267,8 +267,8 @@ namespace upcxx {
   template<typename Fn, typename ...B>
   struct serialization<bound_function<Fn,B...>> {
     static constexpr bool is_definitely_serializable =
-      serialization_complete<typename binding<Fn>::on_wire_type>::is_definitely_serializable &&
-      serialization_complete<std::tuple<typename binding<B>::on_wire_type...>>::is_definitely_serializable;
+      serialization_traits<typename binding<Fn>::on_wire_type>::is_definitely_serializable &&
+      serialization_traits<std::tuple<typename binding<B>::on_wire_type...>>::is_definitely_serializable;
 
     template<typename Ub>
     static auto ubound(Ub ub, const bound_function<Fn,B...> &fn)
@@ -292,12 +292,12 @@ namespace upcxx {
       >;
     
     static constexpr bool references_buffer = 
-      serialization_complete<typename binding<Fn>::on_wire_type>::references_buffer &&
-      serialization_complete<std::tuple<typename binding<B>::on_wire_type...>>::references_buffer;
+      serialization_traits<typename binding<Fn>::on_wire_type>::references_buffer ||
+      serialization_traits<std::tuple<typename binding<B>::on_wire_type...>>::references_buffer;
     
     static constexpr bool skip_is_fast =
-      serialization_complete<typename binding<Fn>::on_wire_type>::skip_is_fast &&
-      serialization_complete<std::tuple<typename binding<B>::on_wire_type...>>::skip_is_fast;
+      serialization_traits<typename binding<Fn>::on_wire_type>::skip_is_fast &&
+      serialization_traits<std::tuple<typename binding<B>::on_wire_type...>>::skip_is_fast;
     
     template<typename Reader>
     static void skip(Reader &r) {
