@@ -20,6 +20,10 @@ extern void test_upcxx_finalize();
 extern int test_upc(int input);
 extern int test_upcxx(int input);
 
+// convenience helpers for -pthread tests
+extern void test_upc_barrier();
+extern int  test_upc_mythread();
+
 #undef ERROR
 #ifdef __cplusplus
   #define ERROR(stream) do { \

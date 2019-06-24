@@ -4,6 +4,7 @@
 
 #include "test.h"
 
+
 extern int test_upc(int input) {
   if (!MYTHREAD) printf("test_upc(%i): starting\n", input);
   upc_barrier;
@@ -21,6 +22,14 @@ extern int test_upc(int input) {
   upc_barrier;
   if (!MYTHREAD) printf("test_upc: ending\n");
   return input;
+}
+
+extern void test_upc_barrier() {
+  upc_barrier;
+}
+
+extern int  test_upc_mythread() {
+  return MYTHREAD;
 }
 
 extern val_t *construct_arr_upc(size_t cnt) {
