@@ -126,8 +126,9 @@ namespace upcxx {
     }
 
     constexpr std::size_t size_aligned(std::size_t min_align=1) const {
-      std::size_t a = min_align > this->align ? min_align : this->align;
-      return (this->size + a-1) & -a;
+      #define UPCXX_a (min_align > this->align ? min_align : this->align)
+      return (this->size + UPCXX_a-1) & -UPCXX_a;
+      #undef UPCXX_a
     }
 
     constexpr storage_size<
@@ -165,11 +166,11 @@ namespace upcxx {
     }
 
     template<std::size_t s_size1, std::size_t s_align1>
-    constexpr auto cat()
+    constexpr auto cat() const
       -> decltype(this->template cat_help<s_size1, s_align1>(s_size1, s_align1)) {
       return this->template cat_help<s_size1, s_align1>(s_size1, s_align1);
     }
-    constexpr auto cat(std::size_t size1, std::size_t align1)
+    constexpr auto cat(std::size_t size1, std::size_t align1) const
       -> decltype(this->template cat_help<std::size_t(-2),std::size_t(-2)>(size1, align1)) {
       return this->template cat_help<std::size_t(-2),std::size_t(-2)>(size1, align1);
     }
@@ -998,9 +999,6 @@ namespace upcxx {
   template<typename T>
   constexpr typename serialization_traits<T>::static_ubound_t serialization_traits<T>::static_ubound;
   
-  template<typename T>
-  struct serialization_traits<T const>: serialization_traits<T> {};
-  
   //////////////////////////////////////////////////////////////////////////////
 
   namespace detail {
@@ -1015,7 +1013,23 @@ namespace upcxx {
   struct serialization<T&&>: detail::serialization_not_supported {};
 
   template<typename T>
-  struct serialization<T const>: serialization<T> {};
+  struct serialization<T const>: serialization_traits<T> {
+    // inherit is_definitely_serializable
+    // inherit references_buffer
+    
+    using deserialized_type = const typename serialization_traits<T>::deserialized_type;
+
+    // inherit ubound
+    // inherit serialize
+    // inherit skip_is_fast
+
+    template<typename Reader>
+    static deserialized_type* deserialize(Reader &r, void *spot) {
+      return serialization_traits<T>::deserialize(r, spot);
+    }
+
+    // inherit skip
+  };
   
   //////////////////////////////////////////////////////////////////////////////
 
