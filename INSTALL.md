@@ -99,6 +99,14 @@ settings:
 * `UPCXX_CUDA_LIBFLAGS`: linker flags to use for linking CUDA executables.
    Eg `UPCXX_CUDA_LIBFLAGS='-Xlinker -force_load -Xlinker /Developer/NVIDIA/CUDA-10.0/lib/libcudart_static.a -L/Developer/NVIDIA/CUDA-10.0/lib -lcudadevrt -Xlinker -rpath -Xlinker /usr/local/cuda/lib -Xlinker -framework -Xlinker CoreFoundation -framework CUDA'`
 
+Note that you must build UPC++ with the same host compiler toolchain as is used
+by nvcc when compiling any UPC++ CUDA programs. That is, both UPC++ and your UPC++
+application must be compiled using the same host compiler toolchain.
+You can ensure this is the case by either (1) compiling UPC++ with the same
+compiler as your system nvcc uses, or (2) using the `-ccbin` command line
+argument to nvcc during application compilation to ensure it uses the same host
+compiler as was used during UPC++ installation.
+   
 UPC++ CUDA operation can be validated using the following programs in the source tree:
 
 * `test/copy.cpp`: correctness tester for the UPC++ `cuda_device`
