@@ -139,45 +139,43 @@ namespace upcxx {
       return {s_size, s_align};
     }
 
-  private:
+  public:
     template<std::size_t s_size1, std::size_t s_align1>
-    constexpr auto cat_help(std::size_t size1, std::size_t align1) const
-      -> storage_size<
-        /*s_size = */(
-          s_size >= std::size_t(-2) || s_size1 >= std::size_t(-2)
-            ? /*max*/(s_size > s_size1 ? s_size : s_size1)
-            : ((s_size + s_align1-1) & -s_align1) + s_size1
-        ),
-        /*s_align = max*/(
-          s_align > s_align1 ? s_align : s_align1
-        )
-      > {
+    using cat_return_t = storage_size<
+      /*s_size = */(
+        s_size >= std::size_t(-2) || s_size1 >= std::size_t(-2)
+          ? /*max*/(s_size > s_size1 ? s_size : s_size1)
+          : ((s_size + s_align1-1) & -s_align1) + s_size1
+      ),
+      /*s_align = max*/(
+        s_align > s_align1 ? s_align : s_align1
+      )
+    >;
+
+    template<std::size_t s_size1, std::size_t s_align1>
+    constexpr cat_return_t<s_size1, s_align1> cat_help(std::size_t size1, std::size_t align1) const {
       return {
         ((this->size + align1-1) & -align1) + size1,
         this->align > align1 ? this->align : align1
       };
     }
 
-  public:
     template<std::size_t s_size1, std::size_t s_align1>
-    constexpr auto cat(storage_size<s_size1, s_align1> that) const
-      -> decltype(this->template cat_help<s_size1, s_align1>(that.size, that.align)) {
+    constexpr cat_return_t<s_size1, s_align1> cat(storage_size<s_size1, s_align1> that) const {
       return this->template cat_help<s_size1, s_align1>(that.size, that.align);
     }
 
     template<std::size_t s_size1, std::size_t s_align1>
-    constexpr auto cat() const
-      -> decltype(this->template cat_help<s_size1, s_align1>(s_size1, s_align1)) {
+    constexpr cat_return_t<s_size1, s_align1> cat() const {
       return this->template cat_help<s_size1, s_align1>(s_size1, s_align1);
     }
-    constexpr auto cat(std::size_t size1, std::size_t align1) const
-      -> decltype(this->template cat_help<std::size_t(-2),std::size_t(-2)>(size1, align1)) {
-      return this->template cat_help<std::size_t(-2),std::size_t(-2)>(size1, align1);
+    
+    constexpr cat_return_t<std::size_t(-2), std::size_t(-2)> cat(std::size_t size1, std::size_t align1) const {
+      return this->template cat_help<std::size_t(-2), std::size_t(-2)>(size1, align1);
     }
     
     template<typename T>
-    constexpr auto cat_size_of() const
-      -> decltype(this->cat(storage_size_of<T>())) {
+    constexpr cat_return_t<sizeof(T), alignof(T)> cat_size_of() const {
       return this->cat(storage_size_of<T>());
     }
 
@@ -212,7 +210,7 @@ namespace upcxx {
       return {n*this->size, n==0 ? 1 : this->align};
     }
   };
-
+  
   template<typename T>
   constexpr storage_size<sizeof(T), alignof(T)> storage_size_of() {
     return {sizeof(T), alignof(T)};

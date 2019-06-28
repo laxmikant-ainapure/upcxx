@@ -159,8 +159,26 @@ int main() {
   roundtrip(std::make_tuple('a', 1, 3.14, std::string("abcdefghijklmnopqrstuvwxyz")));
   roundtrip(std::vector<int>{1,2,3});
   roundtrip(std::deque<nonpod1>{{'a','b'}, {'x','y'}});
-  roundtrip(std::vector<std::list<std::tuple<std::string,nonpod2>>>{{}, {{"hi",{'a','b'}}, {"bob",{'x','y'}}}});
-  roundtrip(std::vector<std::list<std::tuple<std::string,nonpod3>>>{{}, {{"hi",{'a','b'}}, {"bob",{'x','y'}}}});
+  roundtrip<std::vector<std::list<std::tuple<std::string,nonpod2>>>>(
+    std::initializer_list<std::list<std::tuple<std::string,nonpod2>>>{
+      {},
+      std::initializer_list<std::tuple<std::string,nonpod2>>{
+        std::tuple<std::string,nonpod2>("hi",{'a','b'}),
+        std::tuple<std::string,nonpod2>("bob",{'x','y'}),
+        std::tuple<std::string,nonpod2>("alice",{'\0','!'})
+      }
+    }
+  );
+  roundtrip<std::vector<std::list<std::tuple<std::string,nonpod3>>>>(
+    std::initializer_list<std::list<std::tuple<std::string,nonpod3>>>{
+      {},
+      std::initializer_list<std::tuple<std::string,nonpod3>>{
+        std::tuple<std::string,nonpod3>("hi",{'a','b'}),
+        std::tuple<std::string,nonpod3>("bob",{'x','y'}),
+        std::tuple<std::string,nonpod3>("alice",{'\0','!'})
+      }
+    }
+  );
 
   {
     std::unordered_map<int, std::pair<int,std::string>> m;
