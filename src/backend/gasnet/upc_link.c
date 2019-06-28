@@ -105,7 +105,18 @@ extern void upcxx_upc_free(void *ptr) {
   assert(upcxx_upc_is_init);
 
   if (upc_is_pthreads) { // need to lookup current thread
-    bupc_tentative_free(ptr, bupc_tentative_mythread());
+    if (bupc_tentative_version_major > 1 || 
+        bupc_tentative_version_minor >= 2) {
+      bupc_tentative_free(ptr, -1); // auto lookup added in 1.2
+    } else {
+      static int warned = 0;
+      if (!warned) {
+        fprintf(stderr, "WARNING: UPC++ interoperability with BUPC in -pthreads mode recommends use of Berkeley UPC v2019.4.5 or newer.\n");
+        fflush(stderr);
+        warned = 1;
+      }
+      bupc_tentative_free(ptr, bupc_tentative_mythread());
+    }
   } else {
     bupc_tentative_free(ptr, upcxx_upc_rank_me);
   }
