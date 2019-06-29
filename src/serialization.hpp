@@ -190,7 +190,10 @@ namespace upcxx {
         -s_size == 1 ? std::size_t(-1) : std::size_t(-2),
         -s_size == 1 ? std::size_t(-1) : s_align
       > {
-      return {n*this->size, n == 0 ? 1 : this->align};
+      return {
+        n==1 ? this->size : n*this->size_aligned(),
+        n==0 ? 1 : this->align
+      };
     }
 
     template<std::size_t n>
@@ -200,14 +203,17 @@ namespace upcxx {
         n==0 ? 0 :
         -s_size==1 ? std::size_t(-1) :
         -s_size==2 ? std::size_t(-2) :
-        n*s_size,
+        (n==1 ? s_size : n*((s_size + s_align-1) & -s_align)),
 
         // align_ub
         n==0 ? 1 :
         -s_align==1 ? std::size_t(-1) :
         s_align
       > {
-      return {n*this->size, n==0 ? 1 : this->align};
+      return {
+        n==1 ? this->size : n*this->size_aligned(),
+        n==0 ? 1 : this->align
+      };
     }
   };
   
@@ -1014,6 +1020,8 @@ namespace upcxx {
   struct serialization<T const>: serialization_traits<T> {
     // inherit is_definitely_serializable
     // inherit references_buffer
+
+    static constexpr bool is_specialized = detail::serialization_is_specialized<T>::value;
     
     using deserialized_type = const typename serialization_traits<T>::deserialized_type;
 

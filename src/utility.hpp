@@ -116,15 +116,17 @@ namespace detail {
   namespace help {
     template<typename T>
     T* construct_trivial(void *dest, const void *src, std::true_type deft_ctor, std::true_type triv_copy) {
-      T *ans = reinterpret_cast<T*>(::new(dest) T);
-      detail::template memcpy_aligned<alignof(T)>(ans, src, sizeof(T));
+      using T1 = typename std::remove_const<T>::type;
+      T1 *ans = reinterpret_cast<T1*>(::new(dest) T1);
+      detail::template memcpy_aligned<alignof(T1)>(ans, src, sizeof(T1));
       return ans;
     }
     template<typename T>
     T* construct_trivial(void *dest, const void *src, std::true_type deft_ctor, std::false_type triv_copy) {
-      ::new(dest) T;
-      detail::template memcpy_aligned<alignof(T)>(dest, src, sizeof(T));
-      return detail::template launder<T>(reinterpret_cast<T*>(dest));
+      using T1 = typename std::remove_const<T>::type;
+      ::new(dest) T1;
+      detail::template memcpy_aligned<alignof(T1)>(dest, src, sizeof(T1));
+      return detail::template launder<T1>(reinterpret_cast<T1*>(dest));
     }
     template<typename T, bool any>
     T* construct_trivial(void *dest, const void *src, std::false_type deft_ctor, std::integral_constant<bool,any> triv_copy) {
@@ -134,18 +136,20 @@ namespace detail {
     
     template<typename T>
     T* construct_trivial(void *dest, const void *src, std::size_t n, std::true_type deft_ctor, std::true_type triv_copy) {
-      T *ans = nullptr;
+      using T1 = typename std::remove_const<T>::type;
+      T1 *ans = nullptr;
       for(std::size_t i=n; i != 0;)
-        ans = ::new((T*)dest + --i) T;
-      detail::template memcpy_aligned<alignof(T)>(ans, src, n*sizeof(T));
+        ans = ::new((T1*)dest + --i) T1;
+      detail::template memcpy_aligned<alignof(T1)>(ans, src, n*sizeof(T1));
       return ans;
     }
     template<typename T>
     T* construct_trivial(void *dest, const void *src, std::size_t n, std::true_type deft_ctor, std::false_type triv_copy) {
+      using T1 = typename std::remove_const<T>::type;
       for(std::size_t i=n; i != 0;)
-        ::new((T*)dest + --i) T;
-      detail::template memcpy_aligned<alignof(T)>(dest, src, n*sizeof(T));
-      return detail::template launder<T>(reinterpret_cast<T*>(dest));
+        ::new((T1*)dest + --i) T1;
+      detail::template memcpy_aligned<alignof(T1)>(dest, src, n*sizeof(T1));
+      return detail::template launder<T1>(reinterpret_cast<T1*>(dest));
     }
     template<typename T, bool any>
     T* construct_trivial(void *dest, const void *src, std::size_t n, std::false_type deft_ctor, std::integral_constant<bool,any> triv_copy) {

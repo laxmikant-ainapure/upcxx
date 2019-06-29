@@ -140,6 +140,18 @@ namespace upcxx {
   };
 }
 
+static_assert(is_definitely_trivially_serializable<const int>::value, "Uh-oh.");static_assert(is_definitely_trivially_serializable<const int>::value, "Uh-oh.");
+
+static_assert(is_definitely_trivially_serializable<std::pair<int,char>>::value, "Uh-oh.");
+static_assert(is_definitely_trivially_serializable<std::pair<const int,char>>::value, "Uh-oh.");
+static_assert(serialization_traits<std::pair<int,char>>::is_actually_trivially_serializable, "Uh-oh.");
+static_assert(serialization_traits<std::pair<const int,char>>::is_actually_trivially_serializable, "Uh-oh.");
+
+static_assert(is_definitely_trivially_serializable<std::tuple<int,char>>::value, "Uh-oh.");
+static_assert(is_definitely_trivially_serializable<std::tuple<const int,char>>::value, "Uh-oh.");
+static_assert(serialization_traits<std::tuple<int,char>>::is_actually_trivially_serializable, "Uh-oh.");
+static_assert(serialization_traits<std::tuple<const int,char>>::is_actually_trivially_serializable, "Uh-oh.");
+
 int main() {
   print_test_header();
   
