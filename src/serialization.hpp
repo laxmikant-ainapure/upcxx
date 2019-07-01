@@ -54,6 +54,12 @@ namespace upcxx {
     };
   }
   
+  template<std::size_t s_size=std::size_t(-2),
+           std::size_t s_align=std::size_t(-2)>
+  struct storage_size;
+
+  using invalid_storage_size_t = storage_size<std::size_t(-1), std::size_t(-1)>;
+  
   namespace detail {
     template<std::size_t s_size, std::size_t s_align>
     struct storage_size_base;
@@ -65,6 +71,8 @@ namespace upcxx {
       static constexpr std::size_t static_align = -1;
       static constexpr std::size_t static_align_ub = -1;
       static constexpr std::size_t size = -1, align = -1;
+
+      using static_otherwise_invalid_t = invalid_storage_size_t;
       
       constexpr storage_size_base(std::size_t dyn_size, std::size_t dyn_align) {}
 
@@ -79,6 +87,8 @@ namespace upcxx {
       static constexpr std::size_t static_align = -2;
       static constexpr std::size_t static_align_ub = s_align_ub;
       
+      using static_otherwise_invalid_t = invalid_storage_size_t;
+
       std::size_t size, align;
 
       constexpr storage_size_base(std::size_t dyn_size, std::size_t dyn_align):
@@ -95,19 +105,19 @@ namespace upcxx {
     
     template<std::size_t s_size, std::size_t s_align>
     struct storage_size_base {
+      static_assert(s_align < std::size_t(-2), "Internal error: storage_size<size,align>: size is static but align is not.");
+      
       static constexpr bool is_valid = true, is_static = true;
       static constexpr std::size_t static_size = s_size;
       static constexpr std::size_t static_align = s_align;
       static constexpr std::size_t static_align_ub = s_align;
       static constexpr std::size_t size = s_size, align = s_align;
       
+      using static_otherwise_invalid_t = storage_size<s_size,s_align>;
+
       constexpr storage_size_base(std::size_t dyn_size, std::size_t dyn_align) {}
     };
   }
-
-  template<std::size_t s_size=std::size_t(-2),
-           std::size_t s_align=std::size_t(-2)>
-  struct storage_size;
 
   template<typename T>
   constexpr storage_size<sizeof(T), alignof(T)> storage_size_of();
@@ -131,10 +141,7 @@ namespace upcxx {
       #undef UPCXX_a
     }
 
-    constexpr storage_size<
-        s_size >= std::size_t(-2) || s_align >= std::size_t(-2) ? std::size_t(-1) : s_size,
-        s_size >= std::size_t(-2) || s_align >= std::size_t(-2) ? std::size_t(-1) : s_align
-      >
+    constexpr typename detail::storage_size_base<s_size, s_align>::static_otherwise_invalid_t
     static_otherwise_invalid() const {
       return {s_size, s_align};
     }
@@ -223,8 +230,6 @@ namespace upcxx {
   }
 
   constexpr storage_size<0,1> empty_storage_size(0,1);
-
-  using invalid_storage_size_t = storage_size<std::size_t(-1), std::size_t(-1)>;
   constexpr invalid_storage_size_t invalid_storage_size(-1,-1);
 
   namespace detail {
@@ -991,11 +996,11 @@ namespace upcxx {
   
   template<typename T>
   struct serialization_traits: detail::serialization_traits1<T> {
-    using static_ubound_t = decltype(
+    using static_ubound_t = typename decltype(
       detail::serialization_traits1<T>::ubound(
           empty_storage_size, std::declval<T const&>()
-        ).static_otherwise_invalid()
-    );
+        )
+      )::static_otherwise_invalid_t;
     
     static constexpr static_ubound_t static_ubound = static_ubound_t(static_ubound_t::static_size, static_ubound_t::static_align);
   };
