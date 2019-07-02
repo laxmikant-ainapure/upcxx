@@ -39,12 +39,12 @@ namespace upcxx {
     template<typename ...T>
     struct make_future:
       make_future_<
-        upcxx::trait_forall<
+        detail::trait_forall<
           // is_trivially_copyable isn't true (on some/all systems?)
           // for reference types (T& or T&&), but those are just
           // pointers so should still get the optimizations we're
           // trying to enable.
-          upcxx::trait_any<
+          detail::trait_any<
             std::is_trivially_copyable,
             std::is_reference
           >::type,

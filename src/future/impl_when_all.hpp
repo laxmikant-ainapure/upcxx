@@ -12,7 +12,7 @@ namespace upcxx {
   struct future_is_trivially_ready<
       future1<detail::future_kind_when_all<Arg...>, T...>
     > {
-    static constexpr bool value = upcxx::trait_forall<upcxx::future_is_trivially_ready, Arg...>::value;
+    static constexpr bool value = detail::trait_forall<upcxx::future_is_trivially_ready, Arg...>::value;
   };
   
   namespace detail {
@@ -33,7 +33,7 @@ namespace upcxx {
       static bool all_() { return true; }
       
       template<int ...i>
-      bool ready_(upcxx::index_sequence<i...>) const {
+      bool ready_(detail::index_sequence<i...>) const {
         return all_(std::get<i>(this->args_).impl_.ready()...);
       }
       
@@ -55,13 +55,13 @@ namespace upcxx {
       
       template<int ...i>
       result_lrefs_function<i...> result_lrefs_getter_(
-          upcxx::index_sequence<i...>
+          detail::index_sequence<i...>
         ) const {
         return result_lrefs_function<i...>{this->args_};
       }
       
       template<int ...i>
-      auto result_rvals_(upcxx::index_sequence<i...>)
+      auto result_rvals_(detail::index_sequence<i...>)
         -> decltype(std::tuple_cat(
             std::get<i>(this->args_).impl_.result_rvals()...
           )
@@ -77,17 +77,17 @@ namespace upcxx {
       }
       
       bool ready() const {
-        return this->ready_(upcxx::make_index_sequence<sizeof...(FuArg)>());
+        return this->ready_(detail::make_index_sequence<sizeof...(FuArg)>());
       }
       
       auto result_lrefs_getter() const
-        -> decltype(this->result_lrefs_getter_(upcxx::make_index_sequence<sizeof...(FuArg)>())) {
-        return this->result_lrefs_getter_(upcxx::make_index_sequence<sizeof...(FuArg)>());
+        -> decltype(this->result_lrefs_getter_(detail::make_index_sequence<sizeof...(FuArg)>())) {
+        return this->result_lrefs_getter_(detail::make_index_sequence<sizeof...(FuArg)>());
       }
       
       auto result_rvals()
-        -> decltype(this->result_rvals_(upcxx::make_index_sequence<sizeof...(FuArg)>())) {
-        return this->result_rvals_(upcxx::make_index_sequence<sizeof...(FuArg)>());
+        -> decltype(this->result_rvals_(detail::make_index_sequence<sizeof...(FuArg)>())) {
+        return this->result_rvals_(detail::make_index_sequence<sizeof...(FuArg)>());
       }
       
       //////////////////////////////////////////////////////////////////
@@ -135,14 +135,14 @@ namespace upcxx {
     template<typename ...Arg, typename ...T, int ...i>
     struct future_dependency_when_all_base<
         future1<future_kind_when_all<Arg...>, T...>,
-        upcxx::index_sequence<i...>
+        detail::index_sequence<i...>
       >:
       // variadically inherit from each future_dependency specialization
       private future_dependency_when_all_arg<i,Arg>... {
       
       typedef future_dependency_when_all_base<
           future1<future_kind_when_all<Arg...>, T...>,
-          upcxx::index_sequence<i...>
+          detail::index_sequence<i...>
         > this_t;
       
       future_dependency_when_all_base(
@@ -202,7 +202,7 @@ namespace upcxx {
       >:
       future_dependency_when_all_base<
         future1<future_kind_when_all<Arg...>, T...>,
-        upcxx::make_index_sequence<sizeof...(Arg)>
+        detail::make_index_sequence<sizeof...(Arg)>
       > {
       
       future_dependency(
@@ -211,7 +211,7 @@ namespace upcxx {
         ):
         future_dependency_when_all_base<
             future1<future_kind_when_all<Arg...>, T...>,
-            upcxx::make_index_sequence<sizeof...(Arg)>
+            detail::make_index_sequence<sizeof...(Arg)>
           >{suc_hdr, std::move(arg)} {
       }
       

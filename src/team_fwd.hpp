@@ -114,8 +114,8 @@ namespace upcxx {
   team& local_team();
   
   namespace detail {
-    extern raw_storage<team> the_world_team;
-    extern raw_storage<team> the_local_team;    
+    extern detail::raw_storage<team> the_world_team;
+    extern detail::raw_storage<team> the_local_team;    
   }
 }
 #endif

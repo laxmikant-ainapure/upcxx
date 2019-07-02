@@ -16,31 +16,36 @@
 using namespace upcxx;
 using namespace std;
 
+template<typename T>
+struct is_actually_trivially_serializable {
+  static constexpr bool value = serialization_traits<T>::is_actually_trivially_serializable;
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 // static tests
 
 // int is known trivial and implemented that way
 static_assert(is_definitely_trivially_serializable<int>::value, "ERROR");
-static_assert(packing_is_trivial<int>::value, "ERROR");
+static_assert(is_actually_trivially_serializable<int>::value, "ERROR");
 
 // tuple<float,double> is known trivial and implemented that way
 static_assert(is_definitely_trivially_serializable<tuple<float,double>>::value, "ERROR");
-static_assert(packing_is_trivial<tuple<float,double>>::value, "ERROR");
+static_assert(is_actually_trivially_serializable<tuple<float,double>>::value, "ERROR");
 
 // Nothing trivial about a type containing a vector, but still supported
 static_assert(!is_definitely_trivially_serializable<vector<int>>::value, "ERROR");
 static_assert(is_definitely_serializable<vector<int>>::value, "ERROR");
-static_assert(!packing_is_trivial<vector<int>>::value, "ERROR");
+static_assert(!is_actually_trivially_serializable<vector<int>>::value, "ERROR");
 
 static_assert(!is_definitely_trivially_serializable<tuple<int,vector<int>>>::value, "ERROR");
 static_assert(is_definitely_serializable<tuple<int,vector<int>>>::value, "ERROR");
-static_assert(!packing_is_trivial<tuple<int,vector<int>>>::value, "ERROR");
+static_assert(!is_actually_trivially_serializable<tuple<int,vector<int>>>::value, "ERROR");
 
 // User defined POD's are known trivial
 struct my_pod { int foo; };
 static_assert(is_definitely_trivially_serializable<my_pod>::value, "ERROR");
 static_assert(is_definitely_serializable<my_pod>::value, "ERROR");
-static_assert(packing_is_trivial<my_pod>::value, "ERROR");
+static_assert(is_actually_trivially_serializable<my_pod>::value, "ERROR");
 
 // We don't *know* T is trivially packed, but the implementation assumes it.
 struct my_nonpod1 {
@@ -51,7 +56,7 @@ struct my_nonpod1 {
 static_assert(!is_definitely_trivially_serializable<my_nonpod1>::value, "ERROR");
 static_assert(!is_definitely_serializable<my_nonpod1>::value, "ERROR");
 static_assert(!is_definitely_serializable<tuple<my_nonpod1>>::value, "ERROR");
-static_assert(packing_is_trivial<my_nonpod1>::value, "ERROR");
+static_assert(is_actually_trivially_serializable<my_nonpod1>::value, "ERROR");
 
 // We are told T is trivially packed
 struct my_nonpod2 {
@@ -65,45 +70,45 @@ namespace upcxx {
 }
 static_assert(is_definitely_trivially_serializable<my_nonpod2>::value, "ERROR");
 static_assert(is_definitely_serializable<my_nonpod2>::value, "ERROR");
-static_assert(packing_is_trivial<my_nonpod2>::value, "ERROR");
+static_assert(is_actually_trivially_serializable<my_nonpod2>::value, "ERROR");
 
 // test upcxx::view<T>
 static_assert(!is_definitely_trivially_serializable<upcxx::view<int>>::value, "ERROR");
 static_assert(is_definitely_serializable<upcxx::view<int>>::value, "ERROR");
-static_assert(!packing_is_trivial<upcxx::view<int>>::value, "ERROR");
+static_assert(!is_actually_trivially_serializable<upcxx::view<int>>::value, "ERROR");
 
 static_assert(!is_definitely_trivially_serializable<upcxx::view<vector<int>>>::value, "ERROR");
 static_assert(is_definitely_serializable<upcxx::view<vector<int>>>::value, "ERROR");
-static_assert(!packing_is_trivial<upcxx::view<vector<int>>>::value, "ERROR");
+static_assert(!is_actually_trivially_serializable<upcxx::view<vector<int>>>::value, "ERROR");
 
 #define view_t upcxx::view<upcxx::view<int, vector<int>::const_iterator>, vector<upcxx::view<int, vector<int>::const_iterator>>::const_iterator>
 static_assert(!is_definitely_trivially_serializable<view_t>::value, "ERROR");
 static_assert(is_definitely_serializable<view_t>::value, "ERROR");
-static_assert(!packing_is_trivial<view_t>::value, "ERROR");
+static_assert(!is_actually_trivially_serializable<view_t>::value, "ERROR");
 #undef view_t
 
 #define view_t upcxx::view<vector<int>, vector<int>::iterator>
 static_assert(!is_definitely_trivially_serializable<view_t>::value, "ERROR");
 static_assert(is_definitely_serializable<view_t>::value, "ERROR");
-static_assert(!packing_is_trivial<view_t>::value, "ERROR");
+static_assert(!is_actually_trivially_serializable<view_t>::value, "ERROR");
 #undef view_t
 
 #define view_t upcxx::view<vector<my_nonpod1>, vector<my_nonpod1>::iterator>
 static_assert(!is_definitely_trivially_serializable<view_t>::value, "ERROR");
 static_assert(!is_definitely_serializable<view_t>::value, "ERROR");
-static_assert(!packing_is_trivial<view_t>::value, "ERROR");
+static_assert(!is_actually_trivially_serializable<view_t>::value, "ERROR");
 #undef view_t
 
 #define view_t upcxx::view<vector<my_nonpod2>, vector<my_nonpod2>::iterator>
 static_assert(!is_definitely_trivially_serializable<view_t>::value, "ERROR");
 static_assert(is_definitely_serializable<view_t>::value, "ERROR");
-static_assert(!packing_is_trivial<view_t>::value, "ERROR");
+static_assert(!is_actually_trivially_serializable<view_t>::value, "ERROR");
 #undef view_t
 
 #define pair_t std::pair<std::string, double>
 static_assert(!is_definitely_trivially_serializable<pair_t>::value, "ERROR");
 static_assert(is_definitely_serializable<pair_t>::value, "ERROR");
-static_assert(!packing_is_trivial<pair_t>::value, "ERROR");
+static_assert(!is_actually_trivially_serializable<pair_t>::value, "ERROR");
 #undef pair_t
 
 ////////////////////////////////////////////////////////////////////////////////

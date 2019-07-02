@@ -116,9 +116,9 @@ namespace upcxx {
         return HeaderOps::is_trivially_ready_result || hdr_->status_ == future_header::status_ready;
       }
       
-      upcxx::constant_function<std::tuple<T&...>> result_lrefs_getter() const {
+      detail::constant_function<std::tuple<T&...>> result_lrefs_getter() const {
         return {
-          upcxx::tuple_lrefs(
+          detail::tuple_lrefs(
             future_header_result<T...>::results_of(hdr_->result_)
           )
         };
@@ -126,11 +126,11 @@ namespace upcxx {
       
       auto result_rvals()
         -> decltype(
-          upcxx::tuple_rvals(
+          detail::tuple_rvals(
             future_header_result<T...>::results_of(hdr_->result_)
           )
         ) {
-        return upcxx::tuple_rvals(
+        return detail::tuple_rvals(
           future_header_result<T...>::results_of(hdr_->result_)
         );
       }
@@ -230,9 +230,9 @@ namespace upcxx {
         future_header_ops_result_ready::template dropref<T...>(this->header_(), /*maybe_nil*/std::false_type());
       }
       
-      upcxx::constant_function<std::tuple<T&...>> result_lrefs_getter() const {
+      detail::constant_function<std::tuple<T&...>> result_lrefs_getter() const {
         return {
-          upcxx::tuple_lrefs(
+          detail::tuple_lrefs(
             future_header_result<T...>::results_of(this->header_())
           )
         };

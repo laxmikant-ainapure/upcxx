@@ -21,20 +21,21 @@ namespace detail  = upcxx::detail;
 namespace gasnet  = upcxx::backend::gasnet;
 namespace cuda    = upcxx::cuda;
 
-using upcxx::command;
 using upcxx::intrank_t;
-using upcxx::parcel_reader;
-using upcxx::parcel_writer;
 using upcxx::persona;
 using upcxx::persona_scope;
 using upcxx::progress_level;
 using upcxx::team;
 using upcxx::team_id;
 
+using detail::command;
+
 using backend::persona_state;
 
 using gasnet::handle_cb_queue;
 using gasnet::rpc_as_lpc;
+using gasnet::bcast_as_lpc;
+using gasnet::bcast_payload_header;
 
 using namespace std;
 
@@ -235,8 +236,8 @@ namespace {
         std::cerr
         <<std::string(70,'/')<<std::endl
         <<"heap_init_internal(): Shared heap statistics: \n"
-        << "  max size: 0x" << std::hex << maxsz << " (" << format_memsize(maxsz) << ")\n"
-        << "  min size: 0x" << std::hex << minsz << " (" << format_memsize(minsz) << ")\n"
+        << "  max size: 0x" << std::hex << maxsz << std::dec << " (" << format_memsize(maxsz) << ")\n"
+        << "  min size: 0x" << std::hex << minsz << std::dec << " (" << format_memsize(minsz) << ")\n"
         << "  P0 base:  " << shared_heap_base <<std::endl
         <<std::string(70,'/')<<std::endl;
       }
@@ -720,8 +721,8 @@ void upcxx::finalize() {
   if(backend::verbose_noise) {
     int64_t live_local = allocs_live_n_;
     
-    if(gasnet::handle_of(detail::the_local_team.value) !=
-       gasnet::handle_of(detail::the_world_team.value)
+    if(gasnet::handle_of(detail::the_local_team.value()) !=
+       gasnet::handle_of(detail::the_world_team.value())
        && !upcxx_upc_is_linked())
        live_local -= 1; // minus local_team scratch
     
@@ -739,16 +740,16 @@ void upcxx::finalize() {
   }
   
   { // Tear down local_team
-    if(gasnet::handle_of(detail::the_local_team.value) !=
-       gasnet::handle_of(detail::the_world_team.value))
+    if(gasnet::handle_of(detail::the_local_team.value()) !=
+       gasnet::handle_of(detail::the_world_team.value()))
       {/*TODO: add local team destruct once GEX has the API.*/}
     
-    detail::the_local_team.value.destroy();
+    detail::the_local_team.value().destroy();
     detail::the_local_team.destruct();
   }
   
   // can't just destroy world, it needs special attention
-  detail::registry.erase(detail::the_world_team.value.id().dig_);
+  detail::registry.erase(detail::the_world_team.value().id().dig_);
   
   if(backend::initial_master_scope != nullptr)
     delete backend::initial_master_scope;
@@ -1068,7 +1069,7 @@ void gasnet::bcast_am_master_eager(
     progress_level level,
     upcxx::team &tm,
     intrank_t rank_d_ub, // in range [0, 2*rank_n-1)
-    void *payload,
+    bcast_payload_header *payload,
     size_t cmd_size, size_t cmd_align
   ) {
   
@@ -1076,13 +1077,6 @@ void gasnet::bcast_am_master_eager(
   intrank_t rank_n = tm.rank_n();
   
   gex_TM_t tm_gex = handle_of(tm);
-  
-  parcel_writer w(payload);
-  team_id *p_tm_id = w.place_trivial_aligned<team_id>();
-  intrank_t *p_sub_ub = w.place_trivial_aligned<intrank_t>();
-  
-  UPCXX_ASSERT(*p_tm_id == tm.id());
-  if(p_tm_id) {/*silence "unused" warning*/}
   
   // loop over targets
   while(true) {
@@ -1098,7 +1092,7 @@ void gasnet::bcast_am_master_eager(
     intrank_t sub_lb = rank_d_mid - translate;
     intrank_t sub_ub = rank_d_ub - translate;
     
-    *p_sub_ub = sub_ub;
+    payload->eager_subrank_ub = sub_ub;
     gex_AM_RequestMedium1(
       tm_gex, sub_lb,
       id_am_bcast_master_eager, payload, cmd_size,
@@ -1112,13 +1106,13 @@ void gasnet::bcast_am_master_eager(
   gasnet::after_gasnet();
 }
 
-template<progress_level level>
-int gasnet::bcast_am_master_rdzv(
+void gasnet::bcast_am_master_rdzv(
+    progress_level level,
     upcxx::team &tm,
     intrank_t rank_d_ub, // in range [0, 2*rank_n-1)
     intrank_t wrank_owner, // self or a local peer (in world)
-    void *payload_sender, // in my address space
-    std::atomic<int64_t> *refs_sender, // in my address space
+    bcast_payload_header *payload_owner, // in owner address space
+    bcast_payload_header *payload_sender, // in my address space
     size_t cmd_size,
     size_t cmd_align
   ) {
@@ -1126,14 +1120,44 @@ int gasnet::bcast_am_master_rdzv(
   intrank_t rank_n = tm.rank_n();
   intrank_t rank_me = tm.rank_me();
   intrank_t wrank_sender = backend::rank_me;
-  void *payload_owner = reinterpret_cast<void*>(
-      backend::globalize_memory_nonnull(wrank_owner, payload_sender)
-    );
-  std::atomic<int64_t> *refs_owner = reinterpret_cast<std::atomic<int64_t>*>(
-      backend::globalize_memory_nonnull(wrank_owner, refs_sender)
-    );
-  
-  int refs_added = 0;
+
+  { // precompute number of references to add as num messages to be sent
+    int messages = 0;
+    intrank_t hi = rank_d_ub;
+    
+    while(true) {
+      intrank_t mid = rank_me + (hi - rank_me)/2;
+      // Send-to-self is stop condition.
+      if(mid == rank_me)
+        break;
+      messages += 1;
+      hi = mid;
+    }
+
+    if(payload_owner == payload_sender) {
+      // If we are the owner of the refcount, then nobody else could be concurrently
+      // decrementing until we do the message sends. Thus we can increment non-atomically now.
+      int64_t refs = payload_sender->rdzv_refs.load(std::memory_order_relaxed);
+      refs += messages;
+      payload_sender->rdzv_refs.store(refs, std::memory_order_relaxed);
+
+      if(messages == 0) { // leaf of bcast tree
+        if(refs == 0) { // no outstanding need of the rdzv buffer
+          // This can only happen for a bcast in a singleton team, in which case
+          // materializing the am payload was pointless since it is sent to
+          // nobody. Seeing this as an unlikely kind of bcast, we will forfeit
+          // optimizing out this wasted effort.
+          upcxx::deallocate((void*)payload_sender);
+        }
+        return;
+      }
+    }
+    else {
+      if(messages == 0) // leaf of bcast tree
+        return;
+      payload_sender->rdzv_refs.fetch_add(messages, std::memory_order_relaxed);
+    }
+  }
   
   // loop over targets
   while(true) {
@@ -1149,18 +1173,17 @@ int gasnet::bcast_am_master_rdzv(
     intrank_t sub_lb = rank_d_mid - translate;
     intrank_t sub_ub = rank_d_ub - translate;
     
-    refs_added += 1;
-    
     backend::send_am_master<progress_level::internal>(
       tm, sub_lb,
       [=]() {
         if(backend::rank_is_local(wrank_sender)) {
-          void *payload_target = backend::localize_memory_nonnull(wrank_owner, reinterpret_cast<std::uintptr_t>(payload_owner));
-          std::atomic<int64_t> *refs_target = (std::atomic<int64_t>*)backend::localize_memory_nonnull(wrank_owner, reinterpret_cast<std::uintptr_t>(refs_owner));
+          bcast_payload_header *payload_target =
+            (bcast_payload_header*)backend::localize_memory_nonnull(
+              wrank_owner, reinterpret_cast<std::uintptr_t>(payload_owner)
+            );
           
-          parcel_reader r(payload_target);
-          team_id tm_id = r.pop_trivial_aligned<team_id>();
-          /*ignore*/r.pop_trivial_aligned<intrank_t>();
+          detail::serialization_reader r(payload_target);
+          r.unplace(storage_size_of<bcast_payload_header>());
           
           bcast_as_lpc *m = new bcast_as_lpc;
           m->the_vtbl.execute_and_delete = command<detail::lpc_base*>::get_executor(r);
@@ -1169,64 +1192,49 @@ int gasnet::bcast_am_master_rdzv(
           m->is_rdzv = true;
           m->rdzv_rank_s = wrank_owner;
           m->rdzv_rank_s_local = true;
-          m->rdzv_refs_s = refs_target;
-          
-          auto &tls = detail::the_persona_tls;
-          tls.enqueue(*tls.get_top_persona(), level, m, /*known_active=*/std::true_type());
-          
-          int refs_added = bcast_am_master_rdzv<level>(
-              tm_id.here(), sub_ub,
-              wrank_owner, payload_target, refs_target,
+
+          bcast_am_master_rdzv(
+              level, payload_target->tm_id.here(), sub_ub,
+              wrank_owner, payload_owner, payload_target,
               cmd_size, cmd_align
             );
           
-          int64_t refs_now = refs_target->fetch_add(refs_added, std::memory_order_relaxed);
-          refs_now += refs_added;
-          // can't be done because enqueued rpc couldn't have run. (The `if(...)`
-          // prevents "unused variable" warnings when asserts are off.)
-          if(refs_now == 0) UPCXX_ASSERT(refs_now != 0);
+          auto &tls = detail::the_persona_tls;
+          tls.enqueue(*tls.get_top_persona(), level, m, /*known_active=*/std::true_type());
         }
         else {
           bcast_as_lpc *m = rpc_as_lpc::build_rdzv_lz<bcast_as_lpc>(cmd_size, cmd_align);
           m->rdzv_rank_s = wrank_owner;
           m->rdzv_rank_s_local = false;
-          m->rdzv_refs_s = refs_owner;
           
           rma_get(
             m->payload, wrank_owner, payload_owner, cmd_size,
             [=]() {
               intrank_t wrank_owner = m->rdzv_rank_s;
+              bcast_payload_header *payload_here = (bcast_payload_header*)m->payload;
+
+              new(&payload_here->rdzv_refs) std::atomic<int64_t>(1); // 1 ref for rpc execution
+
+              {
+                detail::serialization_reader r(payload_here);
+                r.unplace(storage_size_of<bcast_payload_header>());
+                m->the_vtbl.execute_and_delete = command<detail::lpc_base*>::get_executor(r);
+              }
               
-              std::atomic<int64_t> *refs_owner = m->rdzv_refs_s;
-              m->rdzv_refs_s = &m->rdzv_refs_here;
-              
-              parcel_reader r(m->payload);
-              team_id tm_id = r.pop_trivial_aligned<team_id>();
-              /*ignore*/r.pop_trivial_aligned<intrank_t>();
-              
-              auto &tls = detail::the_persona_tls;
-              m->the_vtbl.execute_and_delete = command<detail::lpc_base*>::get_executor(r);
-              UPCXX_ASSERT(&backend::master == tls.get_top_persona());
-              tls.enqueue(backend::master, level, m, /*known_active=*/std::true_type());
-              
-              m->rdzv_refs_here.store(1 + (1<<30), std::memory_order_relaxed);
-              
-              int refs_added = bcast_am_master_rdzv<level>(
-                  tm_id.here(), sub_ub,
-                  backend::rank_me, m->payload, &m->rdzv_refs_here,
+              bcast_am_master_rdzv(
+                  level, payload_here->tm_id.here(), sub_ub,
+                  backend::rank_me, payload_here, payload_here,
                   cmd_size, cmd_align
                 );
               
-              int64_t refs_now = m->rdzv_refs_here.fetch_add(refs_added - (1<<30), std::memory_order_relaxed);
-              refs_now += refs_added - (1<<30);
-              // enqueued rpc shouldn't have run yet
-              if(refs_now == 0) UPCXX_ASSERT(refs_now != 0);
+              auto &tls = detail::the_persona_tls;
+              tls.enqueue(*tls.get_top_persona(), level, m, /*known_active=*/std::true_type());
               
               // Notify source rank it can free buffer.
               send_am_restricted(
                 upcxx::world(), wrank_owner,
                 [=]() {
-                  if(0 == -1 + refs_owner->fetch_add(-1, std::memory_order_acq_rel))
+                  if(0 == -1 + payload_owner->rdzv_refs.fetch_add(-1, std::memory_order_acq_rel))
                     upcxx::deallocate(payload_owner);
                 }
               );
@@ -1238,16 +1246,7 @@ int gasnet::bcast_am_master_rdzv(
     
     rank_d_ub = rank_d_mid;
   }
-  
-  return refs_added;
 }
-
-template int gasnet::bcast_am_master_rdzv<progress_level::internal>(
-  upcxx::team&, intrank_t, intrank_t, void*, std::atomic<int64_t>*, size_t, size_t
-);
-template int gasnet::bcast_am_master_rdzv<progress_level::user>(
-  upcxx::team&, intrank_t, intrank_t, void*, std::atomic<int64_t>*, size_t, size_t
-);
 
 namespace upcxx {
 namespace backend {
@@ -1287,13 +1286,14 @@ namespace gasnet {
         std::free(me->payload);
     }
     else {
-      int64_t refs_now = -1 + me->rdzv_refs_s->fetch_add(-1, std::memory_order_acq_rel);
+      bcast_payload_header *hdr = (bcast_payload_header*)me->payload;
+      int64_t refs_now = -1 + hdr->rdzv_refs.fetch_add(-1, std::memory_order_acq_rel);
       
       if(me->rdzv_rank_s_local) {
         if(0 == refs_now) {
           // Notify source rank it can free buffer.
           void *buf_s = reinterpret_cast<void*>(
-              backend::globalize_memory_nonnull(me->rdzv_rank_s, me->payload)
+              backend::globalize_memory_nonnull(me->rdzv_rank_s, hdr)
             );
           
           send_am_restricted(
@@ -1325,9 +1325,7 @@ RpcAsLpc* rpc_as_lpc::build_eager(
   std::size_t msg_offset = msg_size;
   msg_size += sizeof(RpcAsLpc);
   
-  void *msg_buf;
-  int ok = posix_memalign(&msg_buf, cmd_alignment, msg_size);
-  UPCXX_ASSERT_ALWAYS(ok == 0);
+  void *msg_buf = detail::alloc_aligned(msg_size, cmd_alignment);
   
   // The (void**) casts *might* inform memcpy that it can assume word
   // alignment.
@@ -1500,16 +1498,14 @@ namespace {
     ) {
     
     if(0 == (reinterpret_cast<uintptr_t>(buf) & (buf_align-1))) {
-      command<void*>::get_executor(parcel_reader(buf))(buf);
+      command<void*>::get_executor(detail::serialization_reader(buf))(buf);
     }
     else {
-      void *tmp;
-      int ok = posix_memalign(&tmp, buf_align, buf_size);
-      UPCXX_ASSERT_ALWAYS(ok == 0);
+      void *tmp = detail::alloc_aligned(buf_size, buf_align);
       
       std::memcpy((void**)tmp, (void**)buf, buf_size);
       
-      command<void*>::get_executor(parcel_reader(buf))(buf);
+      command<void*>::get_executor(detail::serialization_reader(buf))(buf);
       
       std::free(tmp);
     }
@@ -1600,11 +1596,9 @@ namespace {
       backend::master,
       progress_level::internal,
       [=]() {
-        parcel_reader r(m->payload);
-        team_id tm_id = r.pop_trivial_aligned<team_id>();
-        intrank_t rank_d_ub = r.pop_trivial_aligned<intrank_t>();
+        bcast_payload_header *payload = (bcast_payload_header*)m->payload;
         
-        gasnet::bcast_am_master_eager(level, tm_id.here(), rank_d_ub, m->payload, buf_size, buf_align);
+        gasnet::bcast_am_master_eager(level, payload->tm_id.here(), payload->eager_subrank_ub, payload, buf_size, buf_align);
         
         if(0 == --m->eager_refs)
           std::free(m->payload);

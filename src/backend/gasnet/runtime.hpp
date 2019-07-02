@@ -11,7 +11,6 @@
 #include <upcxx/team_fwd.hpp>
 
 #include <cstdint>
-#include <cstdlib>
 
 ////////////////////////////////////////////////////////////////////////
 // declarations for: upcxx/backend/gasnet/runtime.cpp
@@ -72,22 +71,24 @@ namespace gasnet {
     void *command_buf,
     std::size_t buf_size, std::size_t buf_align
   );
+
+  struct bcast_payload_header;
   
   void bcast_am_master_eager(
     progress_level level,
     team &tm,
     intrank_t rank_d_ub, // in range [0, 2*rank_n-1)
-    void *payload,
+    bcast_payload_header *payload,
     size_t cmd_size,
     size_t cmd_align
   );
-  template<progress_level level>
-  int/*refs_added*/ bcast_am_master_rdzv(
+  void bcast_am_master_rdzv(
+    progress_level level,
     team &tm,
     intrank_t rank_d_ub, // in range [0, 2*rank_n-1)
     intrank_t wrank_owner, // world team coordinates
-    void *payload_sender,
-    std::atomic<std::int64_t> *refs_sender,
+    bcast_payload_header *payload_owner, // owner address of payload
+    bcast_payload_header *payload_sender, // sender (my) address of payload
     size_t cmd_size,
     size_t cmd_align
   );
@@ -105,8 +106,8 @@ namespace gasnet {
     // named template parameters to `command<lpc_base*>::pack()`. That will allow
     // the `executor` function of the command to be used as the `execute_and_delete`
     // of the lpc.
-    static parcel_reader reader_of(detail::lpc_base *me) {
-      return parcel_reader(static_cast<rpc_as_lpc*>(me)->payload);
+    static detail::serialization_reader reader_of(detail::lpc_base *me) {
+      return detail::serialization_reader(static_cast<rpc_as_lpc*>(me)->payload);
     }
     
     template<bool never_rdzv>
@@ -129,20 +130,23 @@ namespace gasnet {
       std::size_t cmd_alignment // alignment requirement of packing
     );
   };
+
+  struct bcast_payload_header {
+    team_id tm_id;
+    union {
+      int eager_subrank_ub;
+      std::atomic<std::int64_t> rdzv_refs;
+    };
+  };
   
   // The receiver-side bcast'd rpc message type. Inherits lpc base type since rpc's
   // reside in the lpc queues.
   struct bcast_as_lpc: rpc_as_lpc {
-    union {
-      int eager_refs;
-      std::atomic<std::int64_t> *rdzv_refs_s;
-    };
-    std::atomic<std::int64_t> rdzv_refs_here;
+    int eager_refs;
     
-    static parcel_reader reader_of(detail::lpc_base *me) {
-      parcel_reader r(static_cast<bcast_as_lpc*>(me)->payload);
-      r.pop_trivial_aligned<team_id>();
-      r.pop_trivial_aligned<intrank_t>();
+    static detail::serialization_reader reader_of(detail::lpc_base *me) {
+      detail::serialization_reader r(static_cast<bcast_as_lpc*>(me)->payload);
+      r.unplace(storage_size_of<bcast_payload_header>());
       return r;
     }
     
@@ -150,43 +154,85 @@ namespace gasnet {
     static void cleanup(detail::lpc_base *me);
   };
   
-  template<typename ParcelSize,
-           bool is_small = ParcelSize::all_static && (ParcelSize::static_size <= 1024)>
-  struct eager_buffer;
+  template<typename Ub,
+           bool is_static_and_small = (Ub::static_size <= 1024)>
+  struct rpc_out_buffer;
 
-  template<typename ParcelSize>
-  struct eager_buffer<ParcelSize, /*is_small=*/false> {
-    void *big_ = nullptr;
-    typename std::aligned_storage<
-        512,
-        ParcelSize::is_align_static ? ParcelSize::static_align : 64
-      >::type tiny_;
+  template<>
+  struct rpc_out_buffer</*Ub=*/invalid_storage_size_t, /*is_static_and_small=*/false> {
+    bool is_eager;
+    void *buffer;
+    typename std::aligned_storage<512, 64>::type tiny_;
     
-    void* allocate(ParcelSize ub) {
-      if(ub.size <= 512 && ub.align <= 64) {
-        big_ = nullptr;
-        return &tiny_;
-      }
-      else {
-        if(posix_memalign(&big_, ub.align, ub.size))
-          {/*Ignoring return value, casting to (void) is not enough!*/}
-        return big_;
-      }
+    detail::serialization_writer</*bounded=*/false> prepare_writer(invalid_storage_size_t) {
+      return detail::serialization_writer<false>(&tiny_, sizeof(tiny_));
     }
     
-    ~eager_buffer() {
-      if(big_ != nullptr)
-        std::free(big_);
+    void finalize_buffer(detail::serialization_writer<false> &&w) {
+      is_eager = w.size() <= gasnet::am_size_rdzv_cutover_min ||
+                 w.size() <= gasnet::am_size_rdzv_cutover;
+      
+      if(is_eager && w.contained_in_initial())
+        buffer = &tiny_;
+      else {
+        if(is_eager)
+          buffer = detail::alloc_aligned(w.size(), w.align());
+        else
+          buffer = upcxx::allocate(w.size(), w.align());
+        
+        w.compact_and_invalidate(buffer);
+      }
+    }
+
+    ~rpc_out_buffer() {
+      if(is_eager && buffer != (void*)&tiny_)
+        std::free(buffer);
     }
   };
 
-  template<typename ParcelSize>
-  struct eager_buffer<ParcelSize, /*is_small=*/true> {
-    typename std::aligned_storage<ParcelSize::size, ParcelSize::align>::type buf_;
-
-    void* allocate(ParcelSize) {
-      return &buf_;
+  template<typename Ub>
+  struct rpc_out_buffer<Ub, /*is_static_and_small=*/false> {
+    bool is_eager;
+    void *buffer;
+    typename std::aligned_storage<
+        512,
+        Ub::static_align_ub < 64 ? Ub::static_align_ub : 64
+      >::type tiny_;
+    
+    detail::serialization_writer</*bounded=*/true> prepare_writer(Ub ub) {
+      is_eager = ub.size <= gasnet::am_size_rdzv_cutover_min ||
+                 ub.size <= gasnet::am_size_rdzv_cutover;
+      
+      if(is_eager) {
+        if(ub.size <= 512 && ub.align <= 64)
+          buffer = &tiny_;
+        else
+          buffer = detail::alloc_aligned(ub.size, ub.align);
+      }
+      else
+        buffer = upcxx::allocate(ub.size, ub.align);
+      
+      return detail::serialization_writer<true>(buffer);
     }
+
+    void finalize_buffer(detail::serialization_writer<true>&&) {}
+    
+    ~rpc_out_buffer() {
+      if(is_eager && buffer != (void*)&tiny_)
+        std::free(buffer);
+    }
+  };
+
+  template<typename Ub>
+  struct rpc_out_buffer<Ub, /*is_static_and_small=*/true> {
+    typename std::aligned_storage<Ub::static_size, Ub::static_align>::type buf_;
+    static constexpr bool is_eager = true;
+    void *const buffer = &buf_;
+    
+    detail::serialization_writer</*bounded=*/true> prepare_writer(Ub) {
+      return detail::serialization_writer<true>(&buf_);
+    }
+    void finalize_buffer(detail::serialization_writer<true>&&) {}
   };
 }}}
 
@@ -247,35 +293,30 @@ namespace backend {
   void send_am_master(team &tm, intrank_t recipient, Fn1 &&fn) {
     UPCXX_ASSERT(!UPCXX_BACKEND_GASNET_SEQ || backend::master.active_with_caller());
     
-    using gasnet::eager_buffer;
+    using gasnet::rpc_out_buffer;
     using gasnet::rpc_as_lpc;
     
     using Fn = typename std::decay<Fn1>::type;
     
-    auto ub = command<detail::lpc_base*>::ubound(parcel_size_empty(), fn);
+    auto ub = detail::command<detail::lpc_base*>::ubound(empty_storage_size, fn);
     
     constexpr bool definitely_eager = ub.static_size <= gasnet::am_size_rdzv_cutover_min;
-    bool eager = ub.size <= gasnet::am_size_rdzv_cutover_min &&
-                 ub.size <= gasnet::am_size_rdzv_cutover;
-
-    eager_buffer<decltype(ub)> ebuf;
-    void *buf;
     
-    if(eager)
-      buf = ebuf.allocate(ub);
-    else
-      buf = upcxx::allocate(ub.size, ub.align);
+    rpc_out_buffer<decltype(ub)> obuf;
+    auto w = obuf.prepare_writer(ub);
     
-    parcel_writer w(buf);
-    command<detail::lpc_base*>::template pack<
+    detail::command<detail::lpc_base*>::template serialize<
         rpc_as_lpc::reader_of,
         rpc_as_lpc::template cleanup</*never_rdzv=*/definitely_eager>
       >(w, ub.size, fn);
 
-    if(eager)
-      gasnet::send_am_eager_master(level, tm, recipient, buf, w.size(), w.align());
+    std::size_t buf_size = w.size(), buf_align = w.align();
+    obuf.finalize_buffer(std::move(w));
+    
+    if(obuf.is_eager)
+      gasnet::send_am_eager_master(level, tm, recipient, obuf.buffer, buf_size, buf_align);
     else
-      gasnet::template send_am_rdzv<level>(tm, recipient, /*master*/nullptr, buf, w.size(), w.align());
+      gasnet::template send_am_rdzv<level>(tm, recipient, /*master*/nullptr, obuf.buffer, buf_size, buf_align);
   }
   
   template<upcxx::progress_level level, typename Fn>
@@ -287,98 +328,79 @@ namespace backend {
     ) {
     UPCXX_ASSERT(!UPCXX_BACKEND_GASNET_SEQ || backend::master.active_with_caller());
     
-    using gasnet::eager_buffer;
+    using gasnet::rpc_out_buffer;
     using gasnet::rpc_as_lpc;
     
-    auto ub = command<detail::lpc_base*>::ubound(parcel_size_empty(), fn);
+    auto ub = detail::command<detail::lpc_base*>::ubound(empty_storage_size, fn);
     
     constexpr bool definitely_eager = ub.static_size <= gasnet::am_size_rdzv_cutover_min;
-    bool eager = ub.size <= gasnet::am_size_rdzv_cutover_min ||
-                 ub.size <= gasnet::am_size_rdzv_cutover;
 
-    gasnet::eager_buffer<decltype(ub)> ebuf;
-    void *buf;
+    rpc_out_buffer<decltype(ub)> obuf;
+    auto w = obuf.prepare_writer(ub);
     
-    if(eager)
-      buf = ebuf.allocate(ub);
-    else
-      buf = upcxx::allocate(ub.size, ub.align);
-    
-    parcel_writer w(buf);
-    command<detail::lpc_base*>::template pack<
+    detail::command<detail::lpc_base*>::template serialize<
         rpc_as_lpc::reader_of,
         rpc_as_lpc::template cleanup</*never_rdzv=*/definitely_eager>
       >(w, ub.size, fn);
+
+    std::size_t buf_size = w.size(), buf_align = w.align();
+    obuf.finalize_buffer(std::move(w));
     
-    if(eager)
-      gasnet::send_am_eager_persona(level, tm, recipient_rank, recipient_persona, buf, w.size(), w.align());
+    if(obuf.is_eager)
+      gasnet::send_am_eager_persona(level, tm, recipient_rank, recipient_persona, obuf.buffer, buf_size, buf_align);
     else
-      gasnet::send_am_rdzv<level>(tm, recipient_rank, recipient_persona, buf, w.size(), w.align());
+      gasnet::send_am_rdzv<level>(tm, recipient_rank, recipient_persona, obuf.buffer, buf_size, buf_align);
   }
   
   template<progress_level level, typename Fn1>
   void bcast_am_master(team &tm, Fn1 &&fn) {
     UPCXX_ASSERT(!UPCXX_BACKEND_GASNET_SEQ || backend::master.active_with_caller());
     
-    using gasnet::eager_buffer;
+    using gasnet::rpc_out_buffer;
     using gasnet::bcast_as_lpc;
+    using gasnet::bcast_payload_header;
     
     using Fn = typename std::decay<Fn1>::type;
     
-    auto ub = command<detail::lpc_base*>::ubound(
-      parcel_size_empty()
-        .trivial_added<team_id>()
-        .trivial_added<intrank_t>(),
+    auto ub = detail::command<detail::lpc_base*>::ubound(
+      empty_storage_size.cat_size_of<bcast_payload_header>(),
       fn
     );
     
     constexpr bool definitely_eager = ub.static_size <= gasnet::am_size_rdzv_cutover_min;
-    bool eager = ub.size <= gasnet::am_size_rdzv_cutover_min &&
-                 ub.size <= gasnet::am_size_rdzv_cutover;
+
+    rpc_out_buffer<decltype(ub)> obuf;
+
+    auto w = obuf.prepare_writer(ub);
+    w.place(storage_size_of<bcast_payload_header>());
     
-    eager_buffer<decltype(ub)> ebuf;
-    void *buf;
-    
-    if(eager)
-      buf = ebuf.allocate(ub);
-    else {
-      auto ub1 = ub.template trivial_added<std::atomic<std::int64_t>>();
-      buf = upcxx::allocate(ub1.size, ub1.align);
-    }
-    
-    parcel_writer w(buf);
-    w.put_trivial_aligned<team_id>(tm.id());
-    w.place_trivial_aligned<intrank_t>();
-    
-    command<detail::lpc_base*>::template pack<
+    detail::command<detail::lpc_base*>::template serialize<
         bcast_as_lpc::reader_of,
         bcast_as_lpc::template cleanup</*never_rdzv=*/definitely_eager>
       >(w, ub.size, fn);
+
+    std::size_t buf_size = w.size(), buf_align = w.align();
+    obuf.finalize_buffer(std::move(w));
+
+    bcast_payload_header *payload = new(obuf.buffer) bcast_payload_header;
+    payload->tm_id = tm.id();
     
-    if(eager) {
+    if(obuf.is_eager) {
       gasnet::bcast_am_master_eager(
           level, tm, tm.rank_me() + tm.rank_n(),
-          buf, w.size(), w.align()
+          payload, buf_size, buf_align
         );
     }
     else {
-      std::atomic<std::int64_t> *rdzv_refs = new(
-          w.place_trivial_aligned<std::atomic<std::int64_t>>()
-        ) std::atomic<std::int64_t>(1<<30);
+      new(&payload->rdzv_refs) std::atomic<std::int64_t>(0);
       
-      int refs_added = gasnet::template bcast_am_master_rdzv<level>(
-          tm,
+      gasnet::bcast_am_master_rdzv(
+          level, tm,
           /*rank_d_ub*/tm.rank_me() + tm.rank_n(),
           /*rank_owner*/backend::rank_me,
-          /*payload_sender*/buf,
-          /*refs_sender*/rdzv_refs,
-          w.size(), w.align()
+          /*payload_owner/sender*/payload, payload,
+          buf_size, buf_align
         );
-      
-      int64_t refs_now = rdzv_refs->fetch_add(refs_added - (1<<30), std::memory_order_acq_rel);
-      refs_now += refs_added - (1<<30);
-      if(0 == refs_now)
-        upcxx::deallocate(buf);
     }
   }
 }}
@@ -409,24 +431,28 @@ namespace gasnet {
   //////////////////////////////////////////////////////////////////////
   // send_am_restricted
   
-  inline parcel_reader restricted_reader_of(void *p) { return parcel_reader(p); }
+  inline detail::serialization_reader restricted_reader_of(void *p) {
+    return detail::serialization_reader(p);
+  }
   inline void restricted_cleanup(void *p) {/*nop*/}
   
   template<typename Fn>
   void send_am_restricted(team &tm, intrank_t recipient, Fn &&fn) {
     UPCXX_ASSERT(!UPCXX_BACKEND_GASNET_SEQ || backend::master.active_with_caller());
     
-    auto ub = command<detail::lpc_base*>::ubound(parcel_size_empty(), fn);
-    eager_buffer<decltype(ub)> ebuf;
-    void *buf = ebuf.allocate(ub);
-    
-    parcel_writer w(buf);
-    command<void*>::pack<
+    auto ub = detail::command<detail::lpc_base*>::ubound(empty_storage_size, fn);
+    rpc_out_buffer<decltype(ub)> obuf;
+
+    auto w = obuf.prepare_writer(ub);
+    detail::command<void*>::serialize<
         restricted_reader_of,
         restricted_cleanup
       >(w, ub.size, fn);
     
-    gasnet::send_am_eager_restricted(tm, recipient, buf, w.size(), w.align());
+    std::size_t buf_size = w.size(), buf_align = w.align();
+    obuf.finalize_buffer(std::move(w));
+    
+    gasnet::send_am_eager_restricted(tm, recipient, obuf.buffer, buf_size, buf_align);
   }
   
   //////////////////////////////////////////////////////////////////////

@@ -128,7 +128,7 @@ namespace upcxx {
       return;
     }
     template<typename Tup, int i>
-    static typename upcxx::tuple_element_or_void<i,Tup>::type
+    static typename detail::tuple_element_or_void<i,Tup>::type
     get_at_(Tup const &tup, std::integral_constant<int,i>) {
       // Very odd that we need this cast since its exactly the same as the
       // return type, but we need it.
@@ -140,7 +140,7 @@ namespace upcxx {
     typename std::conditional<
         (i<0 && sizeof...(T) > 1),
           results_type,
-          typename upcxx::tuple_element_or_void<(i<0 ? 0 : i), results_type>::type
+          typename detail::tuple_element_or_void<(i<0 ? 0 : i), results_type>::type
       >::type
     result() const {
       return get_at_(
@@ -162,7 +162,7 @@ namespace upcxx {
     typename std::conditional<
         (i<0 && sizeof...(T) > 1),
           results_rvals_type,
-          typename upcxx::tuple_element_or_void<(i<0 ? 0 : i), results_rvals_type>::type
+          typename detail::tuple_element_or_void<(i<0 ? 0 : i), results_rvals_type>::type
       >::type
     result_moved() {
       return get_at_(

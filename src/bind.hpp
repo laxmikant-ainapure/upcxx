@@ -2,8 +2,8 @@
 #define _ddfd9ec8_a1f2_48b9_8797_fc579cedfb18
 
 #include <upcxx/future.hpp>
-#include <upcxx/packing.hpp>
 #include <upcxx/global_fnptr.hpp>
+#include <upcxx/serialization.hpp>
 #include <upcxx/utility.hpp>
 
 #include <tuple>
@@ -18,7 +18,7 @@ namespace upcxx {
   template<typename T>
   struct binding/*{
     // these must satisfy the type equality:
-    //   unpacked_of_t<binding<T>::on_wire_type>
+    //   deserialized_type_of_t<binding<T>::on_wire_type>
     //    ==
     //   binding<binding<T>::off_wire_type>::on_wire_type
     typedef on_wire_type;
@@ -38,7 +38,7 @@ namespace upcxx {
   struct binding_trivial {
     using stripped_type = T;
     using on_wire_type = T;
-    using off_wire_type = unpacked_of_t<T>;
+    using off_wire_type = deserialized_type_of_t<T>;
 
     template<typename T1>
     static T1&& on_wire(T1 &&x) {
@@ -76,7 +76,7 @@ namespace upcxx {
            typename Offed = decltype(
              binding<typename binding<T>::off_wire_type>
               ::off_wire(
-                std::declval<unpacked_of_t<typename binding<T>::on_wire_type>&>()
+                std::declval<deserialized_type_of_t<typename binding<T>::on_wire_type>&>()
               )
            )>
   struct binding_is_immediate: std::true_type {};
@@ -101,17 +101,17 @@ namespace upcxx {
     template<
       typename Fn, typename BndTup/*std::tuple<B...>*/,
 
-      typename BndIxs = upcxx::make_index_sequence<std::tuple_size<BndTup>::value>,
+      typename BndIxs = detail::make_index_sequence<std::tuple_size<BndTup>::value>,
       
       // whether all of Fn and B... immediately available off-wire?
       bool all_immediate = binding_is_immediate<Fn>::value
-                        && upcxx::trait_forall_tupled<binding_is_immediate, BndTup>::value
+                        && detail::trait_forall_tupled<binding_is_immediate, BndTup>::value
       >
     struct bound_function_base;
     
     template<typename Fn, typename ...B, int ...bi>
     struct bound_function_base<
-        Fn, std::tuple<B...>, upcxx::index_sequence<bi...>,
+        Fn, std::tuple<B...>, detail::index_sequence<bi...>,
         /*all_immediate=*/true
       > {
       
@@ -146,12 +146,12 @@ namespace upcxx {
     };
 
     template<typename Fn, typename BndTup, typename ArgTup,
-             typename ArgIxs = upcxx::make_index_sequence<std::tuple_size<ArgTup>::value>>
+             typename ArgIxs = detail::make_index_sequence<std::tuple_size<ArgTup>::value>>
     struct bound_function_applicator;
 
     template<typename Fn, typename ...B, typename ...Arg, int ...ai>
     struct bound_function_applicator<
-        Fn, std::tuple<B...>, std::tuple<Arg...>, upcxx::index_sequence<ai...>
+        Fn, std::tuple<B...>, std::tuple<Arg...>, detail::index_sequence<ai...>
       > {
 
       std::tuple<Arg...> a;
@@ -167,7 +167,7 @@ namespace upcxx {
     
     template<typename Fn, typename ...B, int ...bi>
     struct bound_function_base<
-        Fn, std::tuple<B...>, upcxx::index_sequence<bi...>,
+        Fn, std::tuple<B...>, detail::index_sequence<bi...>,
         /*all_immediate=*/false
       > {
       
@@ -263,90 +263,61 @@ namespace upcxx {
       typename binding<B>::stripped_type...
     >;
   
-  // make `bound_function` packable
-  namespace detail {
-    template<typename Fn, typename ...B>
-    struct packing_skippable_dumb<bound_function<Fn,B...>> {
-      static constexpr bool is_definitely_supported =
-        packing_is_definitely_supported<Fn>::value &&
-        packing_is_definitely_supported<std::tuple<B...>>::value;
+  // make `bound_function` serializable
+  template<typename Fn, typename ...B>
+  struct serialization<bound_function<Fn,B...>> {
+    static constexpr bool is_definitely_serializable =
+      serialization_traits<typename binding<Fn>::on_wire_type>::is_definitely_serializable &&
+      serialization_traits<std::tuple<typename binding<B>::on_wire_type...>>::is_definitely_serializable;
 
-      static constexpr bool is_owning = 
-        packing_is_owning<Fn>::value &&
-        packing_is_owning<std::tuple<B...>>::value;
+    template<typename Ub>
+    static auto ubound(Ub ub, const bound_function<Fn,B...> &fn)
+      -> decltype(
+        ub.template cat_ubound_of<typename binding<Fn>::on_wire_type>(fn.fn_)
+          .template cat_ubound_of<std::tuple<typename binding<B>::on_wire_type...>>(fn.b_)
+      ) {
+      return ub.template cat_ubound_of<typename binding<Fn>::on_wire_type>(fn.fn_)
+               .template cat_ubound_of<std::tuple<typename binding<B>::on_wire_type...>>(fn.b_);
+    }
+    
+    template<typename Writer>
+    static void serialize(Writer &w, const bound_function<Fn,B...> &fn) {
+      w.template push<typename binding<Fn>::on_wire_type>(fn.fn_);
+      w.template push<std::tuple<typename binding<B>::on_wire_type...>>(fn.b_);
+    }
 
-      static constexpr bool is_ubound_tight = 
-        packing_is_ubound_tight<Fn>::value &&
-        packing_is_ubound_tight<std::tuple<B...>>::value;
+    using deserialized_type = bound_function<
+        typename binding<Fn>::off_wire_type,
+        typename binding<B>::off_wire_type...
+      >;
+    
+    static constexpr bool references_buffer = 
+      serialization_traits<typename binding<Fn>::on_wire_type>::references_buffer ||
+      serialization_traits<std::tuple<typename binding<B>::on_wire_type...>>::references_buffer;
+    
+    static constexpr bool skip_is_fast =
+      serialization_traits<typename binding<Fn>::on_wire_type>::skip_is_fast &&
+      serialization_traits<std::tuple<typename binding<B>::on_wire_type...>>::skip_is_fast;
+    
+    template<typename Reader>
+    static void skip(Reader &r) {
+      r.template skip<typename binding<Fn>::on_wire_type>();
+      r.template skip<std::tuple<typename binding<B>::on_wire_type...>>();
+    }
+
+    template<typename Reader>
+    static deserialized_type* deserialize(Reader &r, void *spot) {
+      detail::raw_storage<deserialized_type_of_t<typename binding<Fn>::on_wire_type>> fn;
+      r.template pop_into<typename binding<Fn>::on_wire_type>(&fn);
+
+      detail::raw_storage<deserialized_type_of_t<std::tuple<typename binding<B>::on_wire_type...>>> b;
+      r.template pop_into<std::tuple<typename binding<B>::on_wire_type...>>(&b);
       
-      template<typename Ub, bool skippable>
-      static auto ubound(Ub ub, const bound_function<Fn,B...> &fn, std::integral_constant<bool,skippable>)
-        -> decltype(
-          packing<std::tuple<typename binding<B>::on_wire_type...>>::ubound(
-            packing<typename binding<Fn>::on_wire_type>::ubound(
-              ub, fn.fn_, std::false_type()
-            ),
-            fn.b_, std::false_type()
-          )
-        ) {
-        return packing<std::tuple<typename binding<B>::on_wire_type...>>::ubound(
-          packing<typename binding<Fn>::on_wire_type>::ubound(
-            ub, fn.fn_, /*skippable=*/std::false_type()
-          ),
-          fn.b_, /*skippable=*/std::false_type()
-        );
-      }
-      
-      template<bool skippable>
-      static void pack(parcel_writer &w, const bound_function<Fn,B...> &fn, std::integral_constant<bool,skippable>) {
-        packing<typename binding<Fn>::on_wire_type>::pack(w, fn.fn_, std::false_type());
-        packing<std::tuple<typename binding<B>::on_wire_type...>>::pack(w, fn.b_, std::false_type());
-      }
-
-      static void skip(parcel_reader &r) {
-        packing<typename binding<Fn>::on_wire_type>::skip(r);
-        packing<std::tuple<typename binding<B>::on_wire_type...>>::skip(r);
-      }
-
-      using unpacked_t = bound_function<
-          typename binding<Fn>::off_wire_type,
-          typename binding<B>::off_wire_type...
-        >;
-      
-      template<bool skippable>
-      static void unpack(parcel_reader &r, void *into, std::integral_constant<bool,skippable>) {
-        raw_storage<typename binding<Fn>::on_wire_type> fn;
-        packing<typename binding<Fn>::on_wire_type>::unpack(r, &fn, /*skippable=*/std::false_type());
-
-        raw_storage<std::tuple<typename binding<B>::on_wire_type...>> b;
-        packing<std::tuple<typename binding<B>::on_wire_type...>>::unpack(r, &b, /*skippable=*/std::false_type());
-        
-        ::new(into) bound_function<Fn,B...>(
-          fn.value_and_destruct(),
-          b.value_and_destruct()
-        );
-      }
-    };
-  }
-
-  template<typename Fn, typename ...B>
-  struct packing_screen_trivial<bound_function<Fn,B...>>:
-    upcxx::trait_forall<packing_is_trivial, Fn, B...> {
-  };
-  
-  template<typename Fn, typename ...B>
-  struct is_definitely_trivially_serializable<bound_function<Fn,B...>>:
-    upcxx::trait_forall<is_definitely_trivially_serializable, Fn, B...> {
-  };
-
-  template<typename Fn, typename ...B>
-  struct packing_is_definitely_supported<bound_function<Fn,B...>>:
-    upcxx::trait_forall<packing_is_definitely_supported, Fn, B...> {
-  };
-  
-  template<typename Fn, typename ...B>
-  struct packing_screened<bound_function<Fn,B...>>:
-    detail::packing_skippable_smart<bound_function<Fn,B...>> {
+      return ::new(spot) deserialized_type(
+        fn.value_and_destruct(),
+        b.value_and_destruct()
+      );
+    }
   };
 }
 
@@ -424,12 +395,13 @@ namespace upcxx {
 ////////////////////////////////////////////////////////////////////////
 // upcxx::bind_last: bind except the function is last.
 
+#if 0
 namespace upcxx {
   namespace detail {
     template<typename ...P, int ...heads, int tail>
     auto bind_last(
         std::tuple<P...> parms,
-        upcxx::index_sequence<heads...>,
+        detail::index_sequence<heads...>,
         std::integral_constant<int,tail>
       )
       -> decltype(
@@ -450,13 +422,13 @@ namespace upcxx {
     -> decltype(
       detail::bind_last(
         std::tuple<P&&...>{std::forward<P>(parm)...},
-        upcxx::make_index_sequence<sizeof...(P)-1>(),
+        detail::make_index_sequence<sizeof...(P)-1>(),
         std::integral_constant<int, sizeof...(P)-1>()
       )
     ) {
     return detail::bind_last(
       std::tuple<P&&...>{std::forward<P>(parm)...},
-      upcxx::make_index_sequence<sizeof...(P)-1>(),
+      detail::make_index_sequence<sizeof...(P)-1>(),
       std::integral_constant<int, sizeof...(P)-1>()
     );
   }
@@ -467,4 +439,6 @@ namespace upcxx {
     return bind(std::move(fn));
   }
 }
+#endif
+
 #endif

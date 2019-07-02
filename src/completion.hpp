@@ -41,12 +41,14 @@ namespace upcxx {
   template<typename Event, progress_level level = progress_level::user>
   struct future_cx {
     using event_t = Event;
+    using deserialized_cx = future_cx<Event,level>;
   };
 
   // Promise completion
   template<typename Event, typename ...T>
   struct promise_cx {
     using event_t = Event;
+    using deserialized_cx = promise_cx<Event,T...>;
     promise<T...> &pro_;
   };
 
@@ -54,18 +56,21 @@ namespace upcxx {
   template<typename Event>
   struct buffered_cx {
     using event_t = Event;
+    using deserialized_cx = buffered_cx<Event>;
   };
 
   // Synchronous completion via blocking on network/peers
   template<typename Event>
   struct blocking_cx {
     using event_t = Event;
+    using deserialized_cx = blocking_cx<Event>;
   };
 
   // LPC completion
   template<typename Event, typename Fn>
   struct lpc_cx {
     using event_t = Event;
+    using deserialized_cx = lpc_cx<Event,Fn>;
     
     persona *target_;
     Fn fn_;
@@ -80,6 +85,7 @@ namespace upcxx {
   template<typename Event, typename Fn>
   struct rpc_cx {
     using event_t = Event;
+    using deserialized_cx = rpc_cx<Event, typename serialization_traits<Fn>::deserialized_type>;
     
     Fn fn_;
     rpc_cx(Fn fn): fn_(std::move(fn)) {}
@@ -512,7 +518,11 @@ namespace upcxx {
         head_t(cxs.head_moved()),
         tail_t(cxs.tail_moved()) {
       }
-
+      completions_state(head_t &&head, tail_t &&tail):
+        head_t(std::move(head)),
+        tail_t(std::move(tail)) {
+      }
+      
       head_t& head() { return static_cast<head_t&>(*this); }
       head_t const& head() const { return *this; }
       
@@ -530,132 +540,125 @@ namespace upcxx {
   }
 
   //////////////////////////////////////////////////////////////////////
-  // Packing a completions_state of rpc_cx's
-
-  namespace detail {
-    template<typename EventValues, typename Event, typename Fn>
-    struct packing_skippable_dumb<
-        detail::completions_state_head<
-          /*event_enabled=*/true, EventValues, rpc_cx<Event,Fn>
-        >
-      > {
-      using type = detail::completions_state_head<true, EventValues, rpc_cx<Event,Fn>>;
-
-      template<typename Ub, bool skippable>
-      static auto ubound(Ub ub, type const &s, std::integral_constant<bool,skippable>) ->
-        decltype(packing<Fn>::ubound(ub, s.state_.fn_, std::false_type())) {
-        return packing<Fn>::ubound(ub, s.state_.fn_, std::false_type());
-      }
-      
-      template<bool skippable>
-      static void pack(parcel_writer &w, type const &s, std::integral_constant<bool,skippable>) {
-        packing<Fn>::pack(w, s.state_.fn_, std::false_type());
-      }
-
-      using unpacked_t = detail::completions_state_head<true, EventValues, rpc_cx<Event,unpacked_of_t<Fn>>>;
-      
-      static void skip(parcel_reader &r) {
-        packing<Fn>::skip(r);
-      }
-      
-      template<bool skippable>
-      static void unpack(parcel_reader &r, void *into, std::integral_constant<bool,skippable>) {
-        return packing<Fn>::unpack(r, into, std::false_type());
-      }
-    };
-  }
-
+  // Serialization of a completions_state of rpc_cx's
+  
   template<typename EventValues, typename Event, typename Fn>
-  struct packing<
-      detail::completions_state_head<
-        /*event_enabled=*/true, EventValues, rpc_cx<Event,Fn>
-      >
-    >: detail::packing_skippable_smart<
+  struct serialization<
       detail::completions_state_head<
         /*event_enabled=*/true, EventValues, rpc_cx<Event,Fn>
       >
     > {
+    using type = detail::completions_state_head<true, EventValues, rpc_cx<Event,Fn>>;
+
+    static constexpr bool is_definitely_serializable = serialization_traits<Fn>::is_definitely_serializable;
+    
+    template<typename Ub>
+    static auto ubound(Ub ub, type const &s) ->
+      decltype(ub.template cat_ubound_of<Fn>(s.state_.fn_)) {
+      return ub.template cat_ubound_of<Fn>(s.state_.fn_);
+    }
+
+    template<typename Writer>
+    static void serialize(Writer &w, type const &s) {
+      w.template push<Fn>(s.state_.fn_);
+    }
+
+    using deserialized_type = detail::completions_state_head<
+        true, EventValues,
+        rpc_cx<Event, typename serialization_traits<Fn>::deserialized_type>
+      >;
+    
+    static constexpr bool skip_is_fast = serialization_traits<Fn>::skip_is_fast;
+    static constexpr bool references_buffer = serialization_traits<Fn>::references_buffer;
+    
+    template<typename Reader>
+    static void skip(Reader &r) {
+      r.template skip<Fn>();
+    }
+
+    template<typename Reader>
+    static deserialized_type* deserialize(Reader &r, void *spot) {
+      return new(spot) deserialized_type(r.template pop<Fn>());
+    }
   };
 
   template<typename EventValues, typename Cx>
-  struct packing<
+  struct serialization<
       detail::completions_state_head</*event_enabled=*/false, EventValues, Cx>
     >:
-    packing_empty<
-      detail::completions_state_head</*event_enabled=*/false, EventValues, Cx>
+    detail::serialization_trivial<
+      detail::completions_state_head</*event_enabled=*/false, EventValues, Cx>,
+      /*empty=*/true
     > {
+    static constexpr bool is_definitely_serializable = true;
   };
   
   template<template<typename> class EventPredicate,
            typename EventValues>
-  struct packing<
+  struct serialization<
       detail::completions_state<EventPredicate, EventValues, completions<>>
     >:
-    packing_empty<
-      detail::completions_state<EventPredicate, EventValues, completions<>>
+    detail::serialization_trivial<
+      detail::completions_state<EventPredicate, EventValues, completions<>>,
+      /*empty=*/true
     > {
+    static constexpr bool is_definitely_serializable = true;
   };
-
-  namespace detail {
-    template<template<typename> class EventPredicate,
-             typename EventValues, typename CxH, typename ...CxT>
-    struct packing_skippable_dumb<
-        detail::completions_state<EventPredicate, EventValues, completions<CxH,CxT...>>
-      > {
-      using type = detail::completions_state<EventPredicate, EventValues, completions<CxH,CxT...>>;
-
-      template<typename Ub, bool skippable>
-      static auto ubound(Ub ub, type const &cxs, std::integral_constant<bool,skippable>)
-        -> decltype(packing<typename type::tail_t>::ubound(
-          packing<typename type::head_t>::ubound(
-            ub, cxs.head(), std::false_type()
-          ),
-          cxs.tail(), std::false_type()
-        )) {
-        return packing<typename type::tail_t>::ubound(
-          packing<typename type::head_t>::ubound(
-            ub, cxs.head(), std::false_type()
-          ),
-          cxs.tail(), std::false_type()
-        );
-      }
-
-      template<bool skippable>
-      static void pack(parcel_writer &w, type const &cxs, std::integral_constant<bool,skippable>) {
-        packing<typename type::head_t>::pack(w, cxs.head(), std::false_type());
-        packing<typename type::tail_t>::pack(w, cxs.tail(), std::false_type());
-      }
-
-      using unpacked_t = detail::completions_state<
-          EventPredicate, EventValues,
-          completions<unpacked_of_t<CxH>, unpacked_of_t<CxT>...>
-        >;
-      
-      static void skip(parcel_reader &r) {
-        packing<typename type::head_t>::skip(r);
-        packing<typename type::tail_t>::skip(r);
-      }
-
-      template<bool skippable>
-      static void unpack(parcel_reader &r, void *into, std::integral_constant<bool,skippable>) {
-        // DANGER: we never actually call any completions_state constructors, only
-        // the completions_state_head constructors in our inheritance chain.
-        packing<typename type::head_t>::unpack(r, (typename type::head_t*)(type*)into, std::false_type());
-        packing<typename type::tail_t>::unpack(r, (typename type::tail_t*)(type*)into, std::false_type());
-      }
-    };
-  }
 
   template<template<typename> class EventPredicate,
            typename EventValues, typename CxH, typename ...CxT>
-  struct packing<
-      detail::completions_state<EventPredicate, EventValues, completions<CxH,CxT...>>
-    >:
-    detail::packing_skippable_smart<
+  struct serialization<
       detail::completions_state<EventPredicate, EventValues, completions<CxH,CxT...>>
     > {
+    using type = detail::completions_state<EventPredicate, EventValues, completions<CxH,CxT...>>;
+
+    static constexpr bool is_definitely_serializable =
+      serialization_traits<typename type::head_t>::is_definitely_serializable &&
+      serialization_traits<typename type::tail_t>::is_definitely_serializable;
+    
+    template<typename Ub>
+    static auto ubound(Ub ub, type const &cxs)
+      -> decltype(
+        ub.template cat_ubound_of<typename type::head_t>(cxs.head())
+          .template cat_ubound_of<typename type::tail_t>(cxs.tail())
+      ) {
+      return ub.template cat_ubound_of<typename type::head_t>(cxs.head())
+               .template cat_ubound_of<typename type::tail_t>(cxs.tail());
+    }
+
+    template<typename Writer>
+    static void serialize(Writer &w, type const &cxs) {
+      w.template push<typename type::head_t>(cxs.head());
+      w.template push<typename type::tail_t>(cxs.tail());
+    }
+
+    using deserialized_type = detail::completions_state<
+        EventPredicate, EventValues,
+        completions<typename CxH::deserialized_cx,
+                    typename CxT::deserialized_cx...>
+      >;
+
+    static constexpr bool skip_is_fast =
+      serialization_traits<typename type::head_t>::skip_is_fast &&
+      serialization_traits<typename type::tail_t>::skip_is_fast;
+    static constexpr bool references_buffer =
+      serialization_traits<typename type::head_t>::references_buffer ||
+      serialization_traits<typename type::tail_t>::references_buffer;
+
+    template<typename Reader>
+    static void skip(Reader &r) {
+      r.template skip<typename type::head_t>();
+      r.template skip<typename type::tail_t>();
+    }
+
+    template<typename Reader>
+    static deserialized_type* deserialize(Reader &r, void *spot) {
+      typename type::head_t h = r.template pop<typename type::head_t>();
+      typename type::tail_t t = r.template pop<typename type::tail_t>();
+      return new(spot) deserialized_type(std::move(h), std::move(t));
+    }
   };
-  
+
   //////////////////////////////////////////////////////////////////////
   // detail::completions_returner: Manage return type for completions<...>
   // object. Construct one of these instances against a

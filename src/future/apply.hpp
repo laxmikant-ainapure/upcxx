@@ -21,7 +21,7 @@ namespace detail {
   template<typename Fn, typename Args, int ...ai>
   struct apply_tupled_as_future_dispatch<
       Fn, Args,
-      /*ArgIxs=*/upcxx::index_sequence<ai...>,
+      /*ArgIxs=*/detail::index_sequence<ai...>,
       /*Return=*/void
     > {
     using return_type = decltype(upcxx::make_future());
@@ -50,7 +50,7 @@ namespace detail {
   template<typename Fn, typename Args, int ...ai, typename Return>
   struct apply_tupled_as_future_dispatch<
       Fn, Args,
-      /*ArgIxs=*/upcxx::index_sequence<ai...>,
+      /*ArgIxs=*/detail::index_sequence<ai...>,
       Return
     > {
     using return_type = decltype(upcxx::make_future<Return>(std::declval<Return>()));
@@ -81,7 +81,7 @@ namespace detail {
   template<typename Fn, typename Args, int ...ai, typename Kind, typename ...T>
   struct apply_tupled_as_future_dispatch<
       Fn, Args,
-      /*ArgIxs=*/upcxx::index_sequence<ai...>,
+      /*ArgIxs=*/detail::index_sequence<ai...>,
       /*Return=*/future1<Kind,T...>
     > {
     using return_type = future1<Kind,T...>;
@@ -115,7 +115,7 @@ namespace detail {
     >:
     apply_tupled_as_future_dispatch<
       Fn, Args,
-      /*ArgIxs=*/upcxx::make_index_sequence<sizeof...(Arg)>,
+      /*ArgIxs=*/detail::make_index_sequence<sizeof...(Arg)>,
       /*Return=*/typename std::result_of<Fn(Arg...)>::type
     > {
   };
@@ -133,7 +133,7 @@ namespace detail {
   template<typename Fn, typename Arg, typename Kind, typename ...T>
   struct apply_futured_as_future_help<Fn, Arg, /*ArgD=*/future1<Kind,T...>> {
     using tupled = apply_tupled_as_future_help<
-      Fn, /*Args=*/std::tuple<typename upcxx::add_lref_if_nonref<T>::type...>
+      Fn, /*Args=*/std::tuple<typename detail::add_lref_if_nonref<T>::type...>
     >;
     
     using return_type = typename tupled::return_type;

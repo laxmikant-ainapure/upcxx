@@ -394,7 +394,7 @@ namespace upcxx {
         this->base_header.status_ = status_results_yes;
       }
       
-      static constexpr bool is_trivially_deletable = upcxx::trait_forall<std::is_trivially_destructible, T...>::value;
+      static constexpr bool is_trivially_deletable = detail::trait_forall<std::is_trivially_destructible, T...>::value;
 
       void delete_me_ready() {
         results_of(&this->base_header).~results_t();
