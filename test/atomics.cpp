@@ -1,14 +1,5 @@
 #include <iostream>
-#include <libgen.h>
-#include <upcxx/backend.hpp>
-#include <upcxx/barrier.hpp>
-#include <upcxx/allocate.hpp>
-#include <upcxx/global_ptr.hpp>
-#include <upcxx/rpc.hpp>
-#include <upcxx/future.hpp>
-#include <upcxx/rget.hpp>
-#include <upcxx/rput.hpp>
-#include <upcxx/atomic.hpp>
+#include <upcxx/upcxx.hpp>
 
 #include "util.hpp"
 
@@ -19,23 +10,17 @@ using upcxx::global_ptr;
 
 
 constexpr int ITERS = 10;
-global_ptr<int64_t> counter;
 
 // let's all hit the same rank
 upcxx::intrank_t target_rank(team &tm) {
   return 0xbeef % tm.rank_n();
 }
 
-void test_fetch_add(team &tm, global_ptr<int64_t> target_counter, bool use_atomics, 
+void test_fetch_add(team &tm, global_ptr<int64_t> target_counter,
                     upcxx::atomic_domain<int64_t> &dom) {
   int expected_val = tm.rank_n() * ITERS;
   if (tm.rank_me() == 0) {
-    if (!use_atomics) {
-      cout << "Test fetch_add: no atomics, expect value != " << expected_val
-              << " (with multiple ranks)" << endl;
-    } else {
-      cout << "Test fetch_add: atomics, expect value " << expected_val << endl;
-    }
+    cout << "Test fetch_add: atomics, expect value " << expected_val << endl;
     
     // always use atomics to access or modify counter - alternative API
     dom.store(target_counter, (int64_t)0, memory_order_relaxed).wait();
@@ -43,11 +28,7 @@ void test_fetch_add(team &tm, global_ptr<int64_t> target_counter, bool use_atomi
   upcxx::barrier(tm);
   for (int i = 0; i < ITERS; i++) {
     // increment the target
-    if (!use_atomics) {
-      auto prev = rget(target_counter).wait();
-      rput(prev + 1, target_counter).wait();
-    } else {
-     switch (i%4) { 
+    switch (i%4) { 
       case 0: {
         // This should cause an assert failure
         //auto prev = dom.fetch_sub(target_counter, (int64_t)1, memory_order_relaxed).wait();
@@ -75,16 +56,15 @@ void test_fetch_add(team &tm, global_ptr<int64_t> target_counter, bool use_atomi
         p.finalize().wait();
         break;
       }
-     }
     }
   }
   
   upcxx::barrier(tm);
   
   if (tm.rank_me() == target_rank(tm)) {
-    cout << "Final value is " << *counter.local() << endl;
-    if (use_atomics)
-      UPCXX_ASSERT_ALWAYS(*counter.local() == expected_val, 
+    int64_t val = dom.load(target_counter, memory_order_relaxed).wait();
+    cout << "Final value is " << val << endl;
+    UPCXX_ASSERT_ALWAYS(val == expected_val, 
               "incorrect final value for the counter");
   }
   
@@ -217,22 +197,17 @@ void test_team(upcxx::team &tm) {
   // this will fail with a null ptr message
   //ad_ul.store(nullptr, (unsigned long)0, memory_order_relaxed);
           
-  if(tm.rank_me() == target_rank(tm))
-    counter = upcxx::allocate<int64_t>();
-  
-  upcxx::barrier(tm);
-  
   // get the global pointer to the target counter
-  global_ptr<int64_t> target_counter = upcxx::rpc(tm, target_rank(tm), []() { return counter; }).wait();
+  global_ptr<int64_t> target_counter =
+    upcxx::broadcast(upcxx::allocate<int64_t>(1), target_rank(tm), tm).wait();
 
   test_all_ops(tm, target_counter, ad_i64);
-  test_fetch_add(tm, target_counter, false, ad_i64);
-  test_fetch_add(tm, target_counter, true, ad_i64);
+  test_fetch_add(tm, target_counter, ad_i64);
   test_put_get(tm, target_counter, ad_i64);
   ad_i64.destroy();
-  
-  if(tm.rank_me() == target_rank(tm))
-    upcxx::deallocate(counter);
+
+  // NOTE: target_counter is *deliberately* leaked here, to avoid the possibility
+  // of technically breaking atomicity semantics. See spec 13.1-2
 }
 
 int main(int argc, char **argv) {
