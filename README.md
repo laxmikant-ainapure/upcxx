@@ -90,6 +90,10 @@ For copyright notice and licensing agreement, see [LICENSE.txt](LICENSE.txt)
 
 ### 2019.XX.XX: PENDING
 
+New features/enhancements: (see specification and programmer's guide for full details)
+
+* `atomic_domain<float>` and `atomic_domain<double>` are now implemented
+
 Notable bug fixes:
 
 * issue #203: strict aliasing violations in device\_allocator
@@ -97,6 +101,12 @@ Notable bug fixes:
 * issue #229: Teach upcxx wrapper to compile C language files
 * issue #224: missing const qualifier on `dist_object<T>.fetch()`
 * issue #223: `operator<<(std::ostream, global_ptr<T>)` does not match spec
+
+The following features from the specification are not yet implemented:
+
+* `barrier_async()` and `broadcast()` only support default future-based completion (issue #234)
+* `team_id::when_here()` is unimplemented (issue #170)
+* User-defined Class Serialization interface (coming soon!)
 
 Breaking changes:
 
@@ -128,13 +138,6 @@ New features/enhancements: (see specification and programmer's guide for full de
 * There is now an offline installer package for UPC++, for systems lacking connectivity
 * Barrier synchronization performance has been improved
 * Installer now defaults to more build parallelism, improving efficiency (see `UPCXX_MAKE`)
-
-The following features from the specification are not yet implemented:
-
-* Non-Blocking collectives currently support only the default future-based completion
-* `atomic_domain<float>` and `atomic_domain<double>` are not yet implemented
-* `team_id::when_here()` is unimplemented
-* User-defined Serialization interface
 
 Notable bug fixes:
 
