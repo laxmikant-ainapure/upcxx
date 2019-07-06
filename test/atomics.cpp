@@ -195,6 +195,20 @@ void test_team(upcxx::team &tm) {
   ad.store(xi, (int32_t)0, memory_order_relaxed);
   ad.destroy();
   
+  upcxx::atomic_domain<float> ad_f({upcxx::atomic_op::store}, tm);
+  auto xf = upcxx::allocate<float>();
+  ad_f.store(xf, (float)0, memory_order_relaxed);
+  ad_f.destroy();
+
+  upcxx::atomic_domain<double> ad_d({upcxx::atomic_op::store}, tm);
+  auto xd = upcxx::allocate<double>();
+  ad_d.store(xd, (double)0, memory_order_relaxed);
+  ad_d.destroy();
+
+  // fails with illegal op
+  //upcxx::atomic_domain<double> ad_d2({upcxx::atomic_op::fetch_bit_and,upcxx::atomic_op::fetch_bit_or}, tm);
+  //ad_d2.fetch_bit_and(xd, (double)0, memory_order_relaxed);
+
   // will fail with an error message about no move assignment on a non-default constructed domain
   //ad = std::move(ad_i);
   
