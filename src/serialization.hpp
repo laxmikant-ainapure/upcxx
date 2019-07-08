@@ -28,7 +28,7 @@ namespace upcxx {
   namespace detail {
     template<typename T, typename=std::false_type>
     struct serialization_is_specialized;
-  };
+  }
   
   template<typename T>
   struct is_definitely_trivially_serializable {
