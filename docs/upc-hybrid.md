@@ -46,7 +46,8 @@ as there is currently no way to express a single atomic domain shared by both la
 * UPC++ must be version 2018.9.5 or newer (`UPCXX_VERSION=20180905`)
 * UPCR must be version 2018.5.3 or newer 
   (visible via `__BERKELEY_UPC{,_MINOR,PATCHLEVEL}__` or `UPCR_RUNTIME_SPEC_{MAJOR,MINOR}=3,13`)
-* Both packages must be configured with the same release version of GASNet-EX,
+* Both packages must be configured with the same release version of GASNet-EX
+  (see the [GASNet-EX version table](http://upcxx.lbl.gov/wiki/GASNet-EX%20Version%20Table)),
   and compatible settings for any non-default GASNet configure options.
 * The C++ compiler used for UPC++ must be ABI compatible with the backend C compiler configured for UPCR.
 * All object files linked into one executable must agree upon GASNet conduit, debug mode and thread-safety setting.
