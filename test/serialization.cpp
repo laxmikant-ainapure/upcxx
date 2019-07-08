@@ -20,10 +20,11 @@ bool equals(T const (&a)[n], T const (&b)[n]) {
 
 template<typename T>
 void roundtrip(T const &x) {
-  alignas(64) char buf0[128];
+  void *buf0 = upcxx::detail::alloc_aligned(128, 64);
+  
   detail::serialization_writer<
       decltype(serialization_traits<T>::static_ubound)::is_valid
-    > w(buf0, sizeof(buf0));
+    > w(buf0, 128);
 
   serialization_traits<T>::serialize(w, x);
 
@@ -39,6 +40,7 @@ void roundtrip(T const &x) {
 
   upcxx::detail::destruct(*x1);
   std::free(buf1);
+  std::free(buf0);
 }
 
 struct nonpod1 {
