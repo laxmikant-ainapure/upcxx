@@ -379,9 +379,9 @@ namespace upcxx {
       template<typename SS>
       static auto ubound(SS ub0, view<T,Iter> const &x) noexcept ->
         decltype(ub0.template cat_size_of<std::size_t>()
-                    .cat(storage_size_of<T>().array(x.n_))) {
+                    .cat(storage_size_of<T>().arrayed(x.n_))) {
         return ub0.template cat_size_of<std::size_t>()
-                  .cat(storage_size_of<T>().array(x.n_));
+                  .cat(storage_size_of<T>().arrayed(x.n_));
       }
 
       template<typename Writer>
@@ -395,13 +395,13 @@ namespace upcxx {
       template<typename Reader>
       static void skip(Reader &r) noexcept {
         std::size_t n = r.template pop_trivial<std::size_t>();
-        r.unplace(storage_size_of<T>().array(n));
+        r.unplace(storage_size_of<T>().arrayed(n));
       }
       
       template<typename Reader>
       static deserialized_type* deserialize(Reader &r, void *spot) noexcept {
         std::size_t n = r.template pop_trivial<std::size_t>();
-        void *elts = r.unplace(storage_size_of<T>().array(n));
+        void *elts = r.unplace(storage_size_of<T>().arrayed(n));
         return ::new(spot) view<T>((T*)elts, (T*)elts + n, n);
       }
     };
