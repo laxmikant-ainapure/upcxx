@@ -28,9 +28,10 @@ UPCXX_CMD = $(shell echo $(UPCXX)) $(OPTLVL) $(UPCXX_FLAGS)
 
 export UPCXX_GASNET_CONDUIT
 
-TARGETS = main_upc main_upcxx alloc arrval_upc arrval_upcxx
+PTH_TARGETS = pth_main_upc pth_arrval_upc
+TARGETS = main_upc main_upcxx alloc arrval_upc arrval_upcxx $(PTH_TARGETS)
 
-TEST_OBJS = test_upc.o test_upcxx.o
+TEST_OBJS = $(PTH)test_upc.o $(PTH)test_upcxx.o
 
 all: $(TARGETS)
 
@@ -48,6 +49,15 @@ $(TEST_OBJS) $(TARGETS:=.o): test.h
 .cpp.o:
 	$(UPCXX_CMD) -c $<
 
+ifeq ($(strip $(PTH)),)
+pth_%: force
+	$(MAKE) PTH=pth_ UPC_THREAD_FLAGS=-pthreads UPCXX_THREADMODE=par $@
+else
+.INTERMEDIATE: pth_*.upc
+pth_%.upc: %.upc
+	ln -s $^ $@
+endif
+
 %_upc: %_upc.o $(TEST_OBJS)
 	$(UPCC_CMD) -link-with='$(UPCXX_CMD)' $^ -o $@
 
@@ -59,6 +69,7 @@ alloc.o: ../alloc.cpp
 
 alloc: alloc.o test_upc.o
 	$(UPCC_CMD) -link-with='$(UPCXX_CMD)' -extern-main $^ -o $@
+
 
 clean: force
 	rm -f *.o $(TARGETS)

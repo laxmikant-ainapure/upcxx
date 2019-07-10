@@ -196,7 +196,11 @@ namespace {
       if (firstcall) {
         firstcall = false;
         // UPCXX_USE_UPC_ALLOC enables the use of the UPC allocator to replace our allocator
-        upcxx_use_upc_alloc = upcxx::os_env<bool>("UPCXX_USE_UPC_ALLOC" , upcxx_use_upc_alloc);
+        upcxx_use_upc_alloc = upcxx::os_env<bool>("UPCXX_USE_UPC_ALLOC" , (upcxx_upc_is_pthreads() || upcxx_use_upc_alloc));
+        if (upcxx_upc_is_pthreads() && !upcxx_use_upc_alloc) {
+          cerr << "WARNING: UPCXX_USE_UPC_ALLOC=no is not supported in UPC -pthreads mode. Forcing UPCXX_USE_UPC_ALLOC=yes" << endl;
+          upcxx_use_upc_alloc = 1;
+        }
         if (!upcxx_use_upc_alloc) {
           // UPCXX_UPC_HEAP_COLL: selects the use of the collective or non-collective UPC shared heap to host the UPC++ allocator
           upcxx_upc_heap_coll = upcxx::os_env<bool>("UPCXX_UPC_HEAP_COLL" , upcxx_upc_heap_coll);
@@ -205,7 +209,9 @@ namespace {
       if (local_scratch_sz && !local_scratch_ptr) { 
         // allocate local scratch separately from the heap to ensure it persists
         // we do this before segment allocation to prevent fragmentation issues
-        local_scratch_ptr = upcxx_upc_all_alloc(local_scratch_sz);
+        if (upcxx_upc_is_pthreads()) // cannot use all_alloc with -pthreads
+             local_scratch_ptr = upcxx_upc_alloc(local_scratch_sz);
+        else local_scratch_ptr = upcxx_upc_all_alloc(local_scratch_sz);
       }
       if (upcxx_use_upc_alloc) {
         shared_heap_base = segment_base;
