@@ -34,13 +34,14 @@ namespace upcxx {
   template<typename T>
   class atomic_domain {
     private:
-      // for checking type is 32 or 64-bit non-const integral type
+      // for checking type is 32 or 64-bit non-const integral/floating type
       static constexpr bool is_atomic =
-        std::is_integral<T>::value && !std::is_const<T>::value &&
+        (std::is_integral<T>::value || std::is_floating_point<T>::value) && 
+	!std::is_const<T>::value &&
         (sizeof(T) * CHAR_BIT == 32 || sizeof(T) * CHAR_BIT == 64);
       
       static_assert(is_atomic,
-          "Atomic domains only supported on non-const 32 and 64-bit integral types");
+          "Atomic domains only supported on non-const 32 and 64-bit integral or floating-point types");
 
       // Our encoding is that if both fields are zero than this is a
       // non-constructed object. Otherwise, if atomic_gex_ops is zero then
@@ -256,26 +257,33 @@ namespace upcxx {
         return fop(atomic_op::compare_exchange, gptr, order, val1, val2, cxs);
       }
       
-      #define UPCXX_AD_METHODS(name)\
+      #define UPCXX_AD_METHODS(name, constraint)\
         template<typename Cxs = FUTURE_CX>\
-        FETCH_RTYPE<Cxs> fetch_##name(global_ptr<T> gptr, T val, std::memory_order order,\
+        constraint(FETCH_RTYPE<Cxs>) \
+	fetch_##name(global_ptr<T> gptr, T val, std::memory_order order,\
                                       Cxs cxs = Cxs{{}}) {\
           return fop(atomic_op::fetch_##name, gptr, order, val, (T)0, cxs);\
         }\
         template<typename Cxs = FUTURE_CX>\
-        NOFETCH_RTYPE<Cxs> name(global_ptr<T> gptr, T val, std::memory_order order,\
+        constraint(NOFETCH_RTYPE<Cxs>) \
+	name(global_ptr<T> gptr, T val, std::memory_order order,\
                                 Cxs cxs = Cxs{{}}) {\
           return op(atomic_op::name, gptr, order, val, (T)0, cxs);\
         }
-      UPCXX_AD_METHODS(add)
-      UPCXX_AD_METHODS(sub)
-      UPCXX_AD_METHODS(mul)
-      UPCXX_AD_METHODS(min)
-      UPCXX_AD_METHODS(max)
-      UPCXX_AD_METHODS(bit_and)
-      UPCXX_AD_METHODS(bit_or)
-      UPCXX_AD_METHODS(bit_xor)
+      // sfinae helpers to disable unsupported typo/op combos
+      #define UPCXX_AD_INTONLY(R) typename std::enable_if<std::is_integral<T>::value,R>::type
+      #define UPCXX_AD_ANYTYPE(R) R
+      UPCXX_AD_METHODS(add,    UPCXX_AD_ANYTYPE)
+      UPCXX_AD_METHODS(sub,    UPCXX_AD_ANYTYPE)
+      UPCXX_AD_METHODS(mul,    UPCXX_AD_ANYTYPE)
+      UPCXX_AD_METHODS(min,    UPCXX_AD_ANYTYPE)
+      UPCXX_AD_METHODS(max,    UPCXX_AD_ANYTYPE)
+      UPCXX_AD_METHODS(bit_and,UPCXX_AD_INTONLY)
+      UPCXX_AD_METHODS(bit_or, UPCXX_AD_INTONLY)
+      UPCXX_AD_METHODS(bit_xor,UPCXX_AD_INTONLY)
       #undef UPCXX_AD_METHODS
+      #undef UPCXX_AD_INTONLY
+      #undef UPCXX_AD_ANYTYPE
   };
 } // namespace upcxx
 
