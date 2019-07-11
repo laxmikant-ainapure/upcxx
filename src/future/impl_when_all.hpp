@@ -3,6 +3,7 @@
 
 #include <upcxx/future/core.hpp>
 #include <upcxx/future/body_pure.hpp>
+#include <upcxx/utility.hpp>
 
 namespace upcxx {
   //////////////////////////////////////////////////////////////////////
@@ -48,7 +49,7 @@ namespace upcxx {
         }
         
         auto operator()() const
-          -> decltype(std::tuple_cat(std::get<i>(getters_)()...)) {
+          UPCXX_RETURN_DECLTYPE(std::tuple_cat(std::get<i>(getters_)()...)) {
           return std::tuple_cat(std::get<i>(getters_)()...);
         }
       };
@@ -62,7 +63,7 @@ namespace upcxx {
       
       template<int ...i>
       auto result_rvals_(detail::index_sequence<i...>)
-        -> decltype(std::tuple_cat(
+        UPCXX_RETURN_DECLTYPE(std::tuple_cat(
             std::get<i>(this->args_).impl_.result_rvals()...
           )
         ) {
@@ -81,12 +82,12 @@ namespace upcxx {
       }
       
       auto result_lrefs_getter() const
-        -> decltype(this->result_lrefs_getter_(detail::make_index_sequence<sizeof...(FuArg)>())) {
+        UPCXX_RETURN_DECLTYPE(this->result_lrefs_getter_(detail::make_index_sequence<sizeof...(FuArg)>())) {
         return this->result_lrefs_getter_(detail::make_index_sequence<sizeof...(FuArg)>());
       }
       
       auto result_rvals()
-        -> decltype(this->result_rvals_(detail::make_index_sequence<sizeof...(FuArg)>())) {
+        UPCXX_RETURN_DECLTYPE(this->result_rvals_(detail::make_index_sequence<sizeof...(FuArg)>())) {
         return this->result_rvals_(detail::make_index_sequence<sizeof...(FuArg)>());
       }
       
@@ -186,7 +187,7 @@ namespace upcxx {
         }
         
         auto operator()() const
-          -> decltype(std::tuple_cat(std::get<i>(getters_)()...)) {
+          UPCXX_RETURN_DECLTYPE(std::tuple_cat(std::get<i>(getters_)()...)) {
           return std::tuple_cat(std::get<i>(getters_)()...);
         }
       };

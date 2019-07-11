@@ -25,7 +25,7 @@ namespace upcxx {
     if(tm.rank_me() == root) {
       backend::bcast_am_master<progress_level::user>(
         tm,
-        upcxx::bind([=](T &value) {
+        upcxx::bind([=](T &&value) {
             promise<T> *pro = detail::registered_promise<T>(id, /*anon=*/1);
             backend::fulfill_during<progress_level::user>(*pro, std::tuple<T>(std::move(value)));
           },

@@ -69,7 +69,7 @@ namespace upcxx {
       //void destruct_early();
       
       void leave_active(future_header_dependent *hdr) {
-        auto proxied = apply_futured_as_future<Fn&, FuArg&>()(this->fn_, this->dep_);
+        auto proxied = apply_futured_as_future<Fn&&, FuArg&>()(std::move(this->fn_), this->dep_);
         
         void *me_mem = this->storage_;
         this->dep_.cleanup_ready();
@@ -105,7 +105,7 @@ namespace upcxx {
       }
       
       void leave_active(future_header_dependent *hdr) {
-        auto proxied = apply_futured_as_future<Fn&, FuArg&>()(this->fn_, this->dep_);
+        auto proxied = apply_futured_as_future<Fn&&, FuArg&>()(std::move(this->fn_), this->dep_);
         
         void *me_mem = this->storage_;
         this->dep_.cleanup_ready();
@@ -173,39 +173,41 @@ namespace upcxx {
       }
     };
   } // namespace detail
-  
-  // a>>b === a.then(b)
-  template<typename ArgKind, typename Fn1, typename ...ArgT>
-  inline auto operator>>(future1<ArgKind,ArgT...> arg, Fn1 &&fn)
-    -> decltype(
-      detail::future_then<
-        future1<ArgKind,ArgT...>,
-        typename std::decay<Fn1>::type
-      >()(
-        std::move(arg),
-        std::forward<Fn1>(fn)
-      )
-    ) {
-    return detail::future_then<
-        future1<ArgKind,ArgT...>,
-        typename std::decay<Fn1>::type
-      >()(
-        std::move(arg),
-        std::forward<Fn1>(fn)
-      );
-  }
-  
-  template<typename Fn1, typename ...ArgT>
-  inline future<ArgT...>& operator>>=(future<ArgT...> &arg, Fn1 &&fn) {
-    arg = detail::future_then<
-        future<ArgT...>,
-        typename std::decay<Fn1>::type
-      >()(
-        std::move(arg),
-        std::forward<Fn1>(fn)
-      );
-    return arg;
-  }
+
+  #if 0
+    // a>>b === a.then(b)
+    template<typename ArgKind, typename Fn1, typename ...ArgT>
+    inline auto operator>>(future1<ArgKind,ArgT...> arg, Fn1 &&fn)
+      -> decltype(
+        detail::future_then<
+          future1<ArgKind,ArgT...>,
+          typename std::decay<Fn1>::type
+        >()(
+          std::move(arg),
+          std::forward<Fn1>(fn)
+        )
+      ) {
+      return detail::future_then<
+          future1<ArgKind,ArgT...>,
+          typename std::decay<Fn1>::type
+        >()(
+          std::move(arg),
+          std::forward<Fn1>(fn)
+        );
+    }
+    
+    template<typename Fn1, typename ...ArgT>
+    inline future<ArgT...>& operator>>=(future<ArgT...> &arg, Fn1 &&fn) {
+      arg = detail::future_then<
+          future<ArgT...>,
+          typename std::decay<Fn1>::type
+        >()(
+          std::move(arg),
+          std::forward<Fn1>(fn)
+        );
+      return arg;
+    }
+  #endif
     
   namespace detail {
     template<typename Arg, typename Fn, typename FnRetKind, typename ...FnRetT>

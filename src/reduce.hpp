@@ -667,7 +667,7 @@ namespace upcxx {
         // We have all of our expected contributions.
         if(rank_me == 0) {
           // We are root, time to broadcast result.
-          auto bound = upcxx::bind([=](T &value) {
+          auto bound = upcxx::bind([=](T &&value) {
                 auto it = detail::registry.find(id);
                 reduce_state *me = static_cast<reduce_state*>(it->second);
                 
@@ -698,7 +698,8 @@ namespace upcxx {
           backend::template send_am_master<progress_level::internal>(
             tm, parent,
             upcxx::bind(
-              [=](T &value, decltype(detail::globalize_fnptr(std::declval<Op>())) const &op) {
+              //[=](T &value, decltype(detail::globalize_fnptr(std::declval<Op>())) const &op) {
+              [=](T &&value, typename detail::globalize_fnptr_return<Op>::type const &op)->void {
                 reduce_state::contribute(tm_id.here(), root, id, op, static_cast<T&&>(value), nullptr);
               },
               state->accum, detail::globalize_fnptr(op)

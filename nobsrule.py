@@ -69,19 +69,18 @@ def upcxx_backend_id():
 def upcxx_make():
   return shplit(env("UPCXX_MAKE", "make -j 8"))
 
-@cached # only execute once per nobs invocation
-def _pthread():
-  """
-  Platform specific logic for finding pthreads flags goes here.
-  """
-  return {'pthread':{'libflags':['-pthread']}}
-  
 @rule(cli='pthread')
+@coroutine
 def pthread(cxt):
   """
   Return the library-set for building against pthreads. 
   """
-  return _pthread()
+  cxx = yield cxt.cxx()
+  if is_pgi(cxx):
+    flag = '-lpthread'
+  else:
+    flag = '-pthread'
+  yield {'pthread':{'libflags':[flag]}}
 
 @rule(cli='omp')
 def openmp(cxt):
@@ -242,7 +241,7 @@ def requires_pthread(cxt, src):
 def requires_openmp(cxt, src):
   return False
 
-@rule(cli='required_libraries', path_arg='src')
+@rule(cli='q', path_arg='src')
 @coroutine
 def required_libraries(cxt, src):
   """
@@ -255,7 +254,7 @@ def required_libraries(cxt, src):
     maybe_gasnet = {}
   
   if cxt.requires_pthread(src):
-    maybe_pthread = cxt.pthread()
+    maybe_pthread = yield cxt.pthread()
   else:
     maybe_pthread = {}
 
@@ -409,16 +408,23 @@ def cc(cxt):
   # Otherwise use intelligent defaults.
   yield ans_cross or ans_user or ans_default
 
+def is_pgi(cmd):
+  _,out,_ = version_of(cmd)
+  import re
+  return re.search('PGI', out) is not None
+
 @rule(cli='ldflags')
 def ldflags(cxt):
   return shplit(env('LDFLAGS',''))
 
 @rule()
+@coroutine
 def lang_c11(cxt):
   """
   String list to engage C11 language dialect for the C compiler.
   """
-  return ['-std=c11']
+  cc = yield cxt.cc()
+  yield ['-std=c11'] if not is_pgi(cc) else []
 
 @rule()
 @coroutine
@@ -429,7 +435,8 @@ def lang_cxx11(cxt):
   cxx = yield cxt.cxx()
   _,out,_ = yield version_of(cxx)
   
-  if '(ICC)' in out.split():
+  if any(token in out for token in ['(ICC)']):
+  #if any(token in out for token in ['PGI Compilers and Tools','(ICC)']):
     yield ['-std=c++14']
   else:
     yield ['-std=c++11']
@@ -448,7 +455,8 @@ def comp_lang(cxt, src):
     yield cxx + cxx11
   elif ext in c_exts:
     cc = yield cxt.cc()
-    yield cc + cxt.lang_c11()
+    c11 = yield cxt.lang_c11()
+    yield cc + c11
   else:
     raise Exception("Unrecognized source file extension: "+src)
 
@@ -531,7 +539,7 @@ def comp_lang_pp_cg(cxt, src, libset):
     comp +
     ['-O%d'%optlev] +
     (['-g'] if dbgsym else []) +
-    ['-Wall'] +
+    (['-Wall'] if not is_pgi(comp) else []) +
     libset_cgflags(libset)
   )
 
@@ -580,7 +588,7 @@ class includes:
   Ask compiler for all the non-system headers pulled in by preprocessing
   the given source file. Returns the list of paths to included files.
   """
-  version_bump = 6
+  version_bump = 7
   
   @traced
   @coroutine
@@ -593,23 +601,38 @@ class includes:
     comp_pp = yield cxt.comp_lang_pp(src, global_libset)
     
     yield (src, comp_pp)
-  
+
   @coroutine
   def execute(me):
     src, comp_pp = yield me.src_and_compiler()
     
     # See here for getting this to work with other compilers:
     #  https://projects.coin-or.org/ADOL-C/browser/trunk/autoconf/depcomp?rev=357
-    cmd = comp_pp + ['-DNOBS_DISCOVERY','-MM','-MT','x',src]
+    cmd = comp_pp + ['-DNOBS_DISCOVERY','-M','-MT','x']
+    
+    if is_pgi(comp_pp):
+      cmd += ['-E']
+    cmd += [src]
     
     mk = yield subexec.launch(cmd, capture_stdout=True)
     mk = mk[mk.index(":")+1:]
     
     deps = shplit(mk.replace("\\\n",""))[1:] # first is source file
     deps = map(os.path.abspath, deps)
+
+    # prune files not in the upcxx tree (would be accomplished by -MM in compiler
+    # command above except PGI doesn't implement that correctly)
+    top_dir = here()
+    deps = [d for d in deps if
+      path_within_dir(d, top_dir) or
+      path_within_dir(d, me.memodb.path_art)
+    ]
+    
     me.depend_files(*deps)
     deps = map(os_extra.realpath, deps)
-    
+    deps = sorted(set(deps))
+
+    #print>>sys.stderr, 'INC DEPS:',deps
     yield deps
 
 @rule_memoized(path_arg=0)

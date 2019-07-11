@@ -145,14 +145,14 @@ namespace upcxx {
       struct operation_satisfier {
         CxsState *state;
         template<typename ...T>
-        void operator()(T &&...vals) {
+        void operator()(T &&...vals) const {
           state->template operator()<operation_cx_event>(std::forward<T>(vals)...);
           delete state;
         }
       };
       
       template<typename ...Arg>
-      void operator()(Arg &&...args) {
+      void operator()(Arg &&...args) const {
         backend::template send_am_persona<progress_level::user>(
           upcxx::world(),
           initiator_,
@@ -175,7 +175,7 @@ namespace upcxx {
       );
       
       static_assert(
-        (detail::trait_forall_tupled<binding_is_immediate, results_tuple>::value &&
+        (detail::binding_all_immediate<results_tuple>::value &&
          detail::trait_forall_tupled<serialization_references_buffer_not, results_tuple>::value),
         "rpc return values may not have type dist_object<T>&, team&, or view<T>."
       );
@@ -233,12 +233,14 @@ namespace upcxx {
 
       intrank_t initiator = backend::rank_me;
       persona *initiator_persona = &upcxx::current_persona();
-      auto fn_bound = upcxx::bind(std::forward<Fn>(fn), std::forward<Arg>(args)...);
+
+      using fn_bound_t = bound_function_of<Fn&&, Arg&&...>;
+      fn_bound_t fn_bound = upcxx::bind(std::forward<Fn>(fn), std::forward<Arg>(args)...);
       
       backend::template send_am_master<progress_level::user>(
         tm, recipient,
         upcxx::bind(
-          [=](deserialized_type_of_t<decltype(fn_bound)> &fn_bound1) {
+          [=](deserialized_type_of_t<fn_bound_t> &&fn_bound1) {
             return upcxx::apply_as_future(std::move(fn_bound1))
               .then(
                 // Wish we could just use a lambda here, but since it has

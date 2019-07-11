@@ -2,6 +2,7 @@
 #define _3493eefe_7dec_42a4_b7dc_b98f99716dfe
 
 #include <upcxx/serialization.hpp>
+#include <upcxx/utility.hpp>
 
 #include <cstdint>
 #include <iterator>
@@ -288,7 +289,7 @@ namespace upcxx {
     struct serialization_view_element<T, /*skip_is_fast=*/false> {
       template<typename SS>
       static constexpr auto ubound(SS ub0, T const &x) noexcept
-        -> decltype(
+        UPCXX_RETURN_DECLTYPE(
           ub0.template cat_size_of<std::size_t>()
              .template cat_ubound_of<T>(x)
         ) {

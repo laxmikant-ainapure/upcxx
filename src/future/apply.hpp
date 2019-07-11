@@ -3,6 +3,7 @@
 
 #include <upcxx/future/core.hpp>
 #include <upcxx/future/make_future.hpp>
+#include <upcxx/utility.hpp>
 
 namespace upcxx {
 namespace detail {
@@ -24,7 +25,7 @@ namespace detail {
       /*ArgIxs=*/detail::index_sequence<ai...>,
       /*Return=*/void
     > {
-    using return_type = decltype(upcxx::make_future());
+    using return_type = detail::make_future<>::return_type;
     
     return_type operator()(Fn fn, Args args) {
       static_cast<Fn&&>(fn)(std::get<ai>(static_cast<Args&&>(args))...);
@@ -36,7 +37,7 @@ namespace detail {
   struct apply_variadic_as_future_dispatch<
       Fn, /*Args=*/std::tuple<Arg...>, /*Return=*/void
     > {
-    using return_type = decltype(upcxx::make_future());
+    using return_type = detail::make_future<>::return_type;
     
     return_type operator()(Fn fn, Arg ...arg) {
       static_cast<Fn&&>(fn)(static_cast<Arg&&>(arg)...);
@@ -53,7 +54,7 @@ namespace detail {
       /*ArgIxs=*/detail::index_sequence<ai...>,
       Return
     > {
-    using return_type = decltype(upcxx::make_future<Return>(std::declval<Return>()));
+    using return_type = typename detail::make_future<Return>::return_type;
     
     return_type operator()(Fn fn, Args args) {
       return upcxx::make_future<Return>(
@@ -66,7 +67,7 @@ namespace detail {
   struct apply_variadic_as_future_dispatch<
       Fn, /*Args=*/std::tuple<Arg...>, Return
     > {
-    using return_type = decltype(upcxx::make_future<Return>(std::declval<Return>()));
+    using return_type = typename detail::make_future<Return>::return_type;
     
     return_type operator()(Fn fn, Arg ...arg) {
       return upcxx::make_future<Return>(
@@ -160,7 +161,7 @@ namespace detail {
 namespace upcxx {
   template<typename Fn, typename ...Arg>
   auto apply_as_future(Fn &&fn, Arg &&...arg)
-    -> decltype(
+    UPCXX_RETURN_DECLTYPE(
       detail::apply_variadic_as_future_dispatch<
           Fn&&, std::tuple<Arg&&...>,
           typename std::result_of<Fn&&(Arg&&...)>::type
@@ -174,7 +175,7 @@ namespace upcxx {
 
   template<typename Fn, typename Args>
   auto apply_tupled_as_future(Fn &&fn, Args &&args)
-    -> decltype(
+    UPCXX_RETURN_DECLTYPE(
       detail::apply_tupled_as_future<Fn&&,Args&&>()(
         static_cast<Fn&&>(fn), static_cast<Args&&>(args)
       )

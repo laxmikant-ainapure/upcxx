@@ -28,15 +28,12 @@ int main() {
     
     future<int> f = when_all(
       upcxx::rpc(nebr,
-        upcxx::bind(
-          [=](dist_object<int> &his1, dist_object<int> &his2) {
-            cout << me << "'s nebr values = "<< *his1 << ", " << *his2 << '\n';
-            UPCXX_ASSERT_ALWAYS(*his1 == 100 + upcxx::rank_me(), "incorrect value for neighbor 1");
-            UPCXX_ASSERT_ALWAYS(*his2 == 200 + upcxx::rank_me(), "incorrect value for neighbor 2");
-          },
-          obj1
-        ),
-        obj2
+        [=](dist_object<int> &his1, dist_object<int> &his2) {
+          cout << me << "'s nebr values = "<< *his1 << ", " << *his2 << '\n';
+          UPCXX_ASSERT_ALWAYS(*his1 == 100 + upcxx::rank_me(), "incorrect value for neighbor 1");
+          UPCXX_ASSERT_ALWAYS(*his2 == 200 + upcxx::rank_me(), "incorrect value for neighbor 2");
+        },
+        obj1, obj2
       ),
       obj3.fetch(nebr)
     );
@@ -44,15 +41,12 @@ int main() {
     f.wait();
     
     upcxx::rpc_ff(nebr,
-        upcxx::bind(
-          [=](dist_object<int> &his1, dist_object<int> &his2) {
-            UPCXX_ASSERT_ALWAYS(*his1 == 100 + upcxx::rank_me(), "incorrect value for neighbor 1");
-            UPCXX_ASSERT_ALWAYS(*his2 == 200 + upcxx::rank_me(), "incorrect value for neighbor 2");
-            got_ff = true;
-          },
-          obj1
-        ),
-        obj2
+        [=](dist_object<int> &his1, dist_object<int> &his2) {
+          UPCXX_ASSERT_ALWAYS(*his1 == 100 + upcxx::rank_me(), "incorrect value for neighbor 1");
+          UPCXX_ASSERT_ALWAYS(*his2 == 200 + upcxx::rank_me(), "incorrect value for neighbor 2");
+          got_ff = true;
+        },
+        obj1, obj2
       );
     
     while(!got_ff)

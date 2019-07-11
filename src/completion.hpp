@@ -195,9 +195,7 @@ namespace upcxx {
   namespace detail {
     template<typename Event>
     struct support_as_future {
-      using as_future_t = completions<future_cx<Event>>;
-
-      static constexpr as_future_t as_future() {
+      static constexpr completions<future_cx<Event>> as_future() {
         return {future_cx<Event>{}};
       }
     };
@@ -205,10 +203,7 @@ namespace upcxx {
     template<typename Event>
     struct support_as_promise {
       template<typename ...T>
-      using as_promise_t = completions<promise_cx<Event, T...>>;
-
-      template<typename ...T>
-      static constexpr as_promise_t<T...> as_promise(promise<T...> &pro) {
+      static constexpr completions<promise_cx<Event, T...>> as_promise(promise<T...> &pro) {
         return {promise_cx<Event, T...>{pro}};
       }
     };
@@ -216,30 +211,23 @@ namespace upcxx {
     template<typename Event>
     struct support_as_lpc {
       template<typename Fn>
-      using as_lpc_t = completions<lpc_cx<Event, Fn>>;
-
-      template<typename Fn>
-      static constexpr as_lpc_t<Fn> as_lpc(persona &target, Fn func) {
+      static constexpr completions<lpc_cx<Event, Fn>> as_lpc(persona &target, Fn func) {
         return {
-          lpc_cx<Event, Fn>{target, static_cast<Fn&&>(func)}
+          lpc_cx<Event, Fn>{target, std::forward<Fn>(func)}
         };
       }
     };
 
     template<typename Event>
     struct support_as_buffered {
-      using as_buffered_t = completions<buffered_cx<Event>>;
-
-      static constexpr as_buffered_t as_buffered() {
+      static constexpr completions<buffered_cx<Event>> as_buffered() {
         return {buffered_cx<Event>{}};
       }
     };
 
     template<typename Event>
     struct support_as_blocking {
-      using as_blocking_t = completions<blocking_cx<Event>>;
-
-      static constexpr as_blocking_t as_blocking() {
+      static constexpr completions<blocking_cx<Event>> as_blocking() {
         return {blocking_cx<Event>{}};
       }
     };
@@ -247,19 +235,13 @@ namespace upcxx {
     template<typename Event>
     struct support_as_rpc {
       template<typename Fn, typename ...Args>
-      using rpc_cx_t =
-        rpc_cx<Event,
-               decltype(upcxx::bind(std::declval<Fn>(),
-                                    std::declval<Args>()...))>;
-
-      template<typename Fn, typename ...Args>
-      using as_rpc_t = completions<rpc_cx_t<Fn, Args...>>;
-      
-      template<typename Fn, typename ...Args>
-      static as_rpc_t<Fn&&, Args&&...> as_rpc(Fn &&fn, Args &&...args) {
+      static completions<
+          rpc_cx<Event, upcxx::bound_function_of<Fn&&, Args&&...>>
+        >
+      as_rpc(Fn &&fn, Args &&...args) {
         return {
-          rpc_cx_t<Fn&&, Args&&...>{
-            upcxx::bind(static_cast<Fn&&>(fn), static_cast<Args&&>(args)...)
+          rpc_cx<Event, upcxx::bound_function_of<Fn&&, Args&&...>>{
+            upcxx::bind(std::forward<Fn>(fn), std::forward<Args>(args)...)
           }
         };
       }
@@ -385,9 +367,9 @@ namespace upcxx {
         fn_{std::move(cx.fn_)} {
       }
       
-      auto operator()(T ...vals) ->
-        decltype(fn_(std::forward<T>(vals)...)) {
-        return fn_(std::forward<T>(vals)...);
+      typename std::result_of<Fn(T&&...)>::type
+      operator()(T ...vals) {
+        return std::move(fn_)(std::forward<T>(vals)...);
       }
     };
   }
@@ -553,8 +535,10 @@ namespace upcxx {
     static constexpr bool is_definitely_serializable = serialization_traits<Fn>::is_definitely_serializable;
     
     template<typename Ub>
-    static auto ubound(Ub ub, type const &s) ->
-      decltype(ub.template cat_ubound_of<Fn>(s.state_.fn_)) {
+    static auto ubound(Ub ub, type const &s)
+      UPCXX_RETURN_DECLTYPE(
+        ub.template cat_ubound_of<Fn>(s.state_.fn_)
+      ) {
       return ub.template cat_ubound_of<Fn>(s.state_.fn_);
     }
 
@@ -618,7 +602,7 @@ namespace upcxx {
     
     template<typename Ub>
     static auto ubound(Ub ub, type const &cxs)
-      -> decltype(
+      UPCXX_RETURN_DECLTYPE(
         ub.template cat_ubound_of<typename type::head_t>(cxs.head())
           .template cat_ubound_of<typename type::tail_t>(cxs.tail())
       ) {

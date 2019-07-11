@@ -5,11 +5,12 @@
 
 #include "util.hpp"
 
+#include <cmath>
+
 #include <atomic>
 #include <deque>
 #include <list>
 #include <vector>
-#include <cmath>
 #include <string>
 #include <thread>
 
@@ -154,23 +155,25 @@ int main() {
       // send those hunks
       auto rpc_done1 = upcxx::rpc(
         /*target*/(rank_me() + 1)%rank_n(),
-        
+
         [=](dist_object<int> &dobj,
-           view<list<tuple<int,int>>> hunk1,
-           view<view<tuple<int,int>>> hunk1v,
+           view<list<tuple<int,int>>> hunk1
+           /*view<view<tuple<int,int>>> hunk1v,
            view<int> hunk2,
            vector<char> const &abc,
            std::string const &hey,
            std::pair<std::string, double> const &hi123,
            my_pod,
-           my_nonpod2
+           my_nonpod2*/
         ) {
+          #if 0
           UPCXX_ASSERT_ALWAYS(*dobj == rank_me());
           UPCXX_ASSERT_ALWAYS(abc.size()==3 && abc[0]=='a'&&abc[1]=='b'&&abc[2]=='c');
           UPCXX_ASSERT_ALWAYS(hey == "hey");
           UPCXX_ASSERT_ALWAYS(hi123.first == "hi" && int(hi123.second)==123);
-          
+          #endif
           return worker.lpc([=]() {
+          #if 0
             int i;
 
             UPCXX_ASSERT_ALWAYS(hunk1.size() == (size_t)hunk1_n);
@@ -223,6 +226,8 @@ int main() {
               UPCXX_ASSERT_ALWAYS(*(hunk2.crbegin() + hunk2_n-1 - i) == i*i);
               UPCXX_ASSERT_ALWAYS(*(hunk2.crend()-1 - i) == i*i);
             }
+          #endif
+            
           #if 1
             });
           #elif 1
@@ -234,7 +239,7 @@ int main() {
           #endif
         },
         dobj,
-        upcxx::make_view(hunk1.rbegin(), hunk1.rend()),
+        upcxx::make_view(hunk1.rbegin(), hunk1.rend())/*,
         upcxx::make_view(hunk1v.crbegin(), hunk1v.crend()),
         upcxx::make_view(hunk2),
         vector<char>{'a','b','c'},
@@ -242,11 +247,13 @@ int main() {
         std::pair<std::string,double>("hi", 123),
         my_pod{},
         my_nonpod2{} // change to my_nonpod1 and watch the static_assert for is_definitely_serializable fail!
+        */
       );
 
       // wait til hunks are processed by remote worker thread
       rpc_done1.wait();
 
+      #if 0
       // verify that network buffer lifetime extends to returned future in rpc_ff.
       int origin = rank_me();
       int target[1] = {(rank_me() + 1)%rank_n()};
@@ -272,6 +279,7 @@ int main() {
 
       rpc_done2->get_future().wait();
       delete rpc_done2;
+      #endif
     }
 
     // quiesce the world

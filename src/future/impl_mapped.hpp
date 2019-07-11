@@ -4,6 +4,7 @@
 #include <upcxx/future/core.hpp>
 #include <upcxx/future/apply.hpp>
 #include <upcxx/future/body_pure.hpp>
+#include <upcxx/utility.hpp>
 
 namespace upcxx {
   //////////////////////////////////////////////////////////////////////
@@ -68,7 +69,7 @@ namespace upcxx {
         }
         
         auto operator()() const
-          -> decltype(getter_()) {
+          UPCXX_RETURN_DECLTYPE(getter_()) {
           return getter_();
         }
       };

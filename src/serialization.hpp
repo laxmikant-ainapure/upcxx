@@ -3,20 +3,24 @@
 
 #include <upcxx/utility.hpp>
 
-#include <array>
 #include <algorithm>
 #include <cstdint>
-#include <deque>
-#include <forward_list>
-#include <list>
-#include <map>
-#include <set>
+
 #include <tuple>
 #include <type_traits>
-#include <unordered_map>
-#include <unordered_set>
 #include <utility>
-#include <vector>
+
+#ifndef UPCXX_CREDUCE_SLIM
+  #include <array>
+  #include <deque>
+  #include <forward_list>
+  #include <list>
+  #include <map>
+  #include <set>
+  #include <unordered_map>
+  #include <unordered_set>
+  #include <vector>
+#endif
 
 namespace upcxx {
   template<typename T>
@@ -188,10 +192,9 @@ namespace upcxx {
 
     template<typename T>
     constexpr auto cat_ubound_of(T const &x) const
-    #ifndef __INTEL_COMPILER
-      -> decltype(serialization_traits<T>::ubound(*this, x))
-    #endif
-    {
+      UPCXX_RETURN_DECLTYPE(
+        serialization_traits<T>::ubound(*this, x)
+      ) {
       return serialization_traits<T>::ubound(*this, x);
     }
 
@@ -243,13 +246,16 @@ namespace upcxx {
         std::is_same<Iter, T*>::value ||
         std::is_same<Iter, T const*>::value ||
 
+        #ifndef UPCXX_CREDUCE_SLIM
         std::is_same<Iter, typename std::array<T,1>::iterator>::value ||
         std::is_same<Iter, typename std::array<T,1>::const_iterator>::value ||
-
         (!std::is_same<T,bool>::value && (
           std::is_same<Iter, typename std::vector<T>::iterator>::value ||
           std::is_same<Iter, typename std::vector<T>::const_iterator>::value
         ))
+        #else
+        false
+        #endif
       > {
     };
     
@@ -683,10 +689,9 @@ namespace upcxx {
       
       template<typename Prefix>
       static constexpr auto ubound(Prefix pre, T const&)
-      #ifndef __INTEL_COMPILER
-        -> decltype(pre.template cat_size_of<T>())
-      #endif
-      {
+        UPCXX_RETURN_DECLTYPE(
+          pre.template cat_size_of<T>()
+        ) {
         return pre.template cat_size_of<T>();
       }
 
@@ -737,18 +742,13 @@ namespace upcxx {
       static void skip(Reader&) {}
     };
 
-    #ifndef __INTEL_COMPILER
-      #define UPCXX_SERIALIZED_FIELDS(...) \
-        auto upcxx_serialized_fields() -> \
-          decltype(std::forward_as_tuple(__VA_ARGS__)) { \
-          return std::forward_as_tuple(__VA_ARGS__); \
-        }
-    #else
-      #define UPCXX_SERIALIZED_FIELDS(...) \
-        auto upcxx_serialized_fields() { \
-          return std::forward_as_tuple(__VA_ARGS__); \
-        }
-    #endif
+    #define UPCXX_SERIALIZED_FIELDS(...) \
+      auto upcxx_serialized_fields() \
+        UPCXX_RETURN_DECLTYPE( \
+          std::forward_as_tuple(__VA_ARGS__) \
+        ) { \
+        return std::forward_as_tuple(__VA_ARGS__); \
+      }
 
     template<typename TupRefs,
              int i = 0,
@@ -767,15 +767,12 @@ namespace upcxx {
 
       template<typename Prefix>
       static auto ubound(Prefix pre, TupRefs const &refs)
-      #ifndef __INTEL_COMPILER
-        -> decltype(
+        UPCXX_RETURN_DECLTYPE(
           serialization_fields_each<TupRefs, i+1, n>::ubound(
             pre.cat_ubound_of(std::template get<i>(refs)),
             refs
           )
-        )
-      #endif
-      {
+        ) {
         return serialization_fields_each<TupRefs, i+1, n>::ubound(
           pre.cat_ubound_of(std::template get<i>(refs)),
           refs
@@ -837,12 +834,9 @@ namespace upcxx {
       
       template<typename Prefix>
       static auto ubound(Prefix pre, T const &x)
-      #ifndef __INTEL_COMPILER
-        -> decltype(
+        UPCXX_RETURN_DECLTYPE(
           serialization_fields_each<refs_tup_type>::ubound(pre, const_cast<T&>(x).upcxx_serialized_fields())
-        )
-      #endif
-      {
+        ) {
         return serialization_fields_each<refs_tup_type>::ubound(pre, const_cast<T&>(x).upcxx_serialized_fields());
       }
 
@@ -1072,10 +1066,9 @@ namespace upcxx {
 
     template<typename Prefix>
     static constexpr auto ubound(Prefix pre, R(&)(A...))
-    #ifndef __INTEL_COMPILER
-      -> decltype(pre.template cat_size_of<deserialized_type>())
-    #endif
-    {
+      UPCXX_RETURN_DECLTYPE(
+        pre.template cat_size_of<deserialized_type>()
+      ) {
       return pre.template cat_size_of<deserialized_type>();
     }
 
@@ -1124,15 +1117,12 @@ namespace upcxx {
 
       template<typename Prefix>
       static auto ubound(Prefix pre, std::tuple<T...> const &x)
-      #ifndef __INTEL_COMPILER
-        -> decltype(
+        UPCXX_RETURN_DECLTYPE(
           recurse_tail::ubound(
             pre.template cat_ubound_of<Ti>(std::template get<i>(x)),
             x
           )
-        )
-      #endif
-      {
+        ) {
         return recurse_tail::ubound(
           pre.template cat_ubound_of<Ti>(std::template get<i>(x)),
           x
@@ -1248,10 +1238,9 @@ namespace upcxx {
 
     template<typename Prefix>
     static auto ubound(Prefix pre, std::pair<A,B> const &x)
-    #ifndef __INTEL_COMPILER
-      -> decltype(pre.cat_ubound_of(x.first).cat_ubound_of(x.second))
-    #endif
-    {
+      UPCXX_RETURN_DECLTYPE(
+        pre.cat_ubound_of(x.first).cat_ubound_of(x.second)
+      ) {
       return pre.cat_ubound_of(x.first).cat_ubound_of(x.second);
     }
     
@@ -1290,6 +1279,7 @@ namespace upcxx {
 
   //////////////////////////////////////////////////////////////////////////////
 
+  #ifndef UPCXX_CREDUCE_SLIM
   template<typename T, std::size_t n>
   struct is_definitely_trivially_serializable<std::array<T,n>>:
     is_definitely_trivially_serializable<T> {
@@ -1302,10 +1292,9 @@ namespace upcxx {
 
     template<typename Prefix>
     static constexpr auto ubound(Prefix pre, std::array<T,n> const &x)
-    #ifndef __INTEL_COMPILER
-      -> decltype(pre.cat(serialization_traits<T>::static_ubound.template arrayed<n>()))
-    #endif
-    {
+      UPCXX_RETURN_DECLTYPE(
+        pre.cat(serialization_traits<T>::static_ubound.template arrayed<n>())
+      ) {
       return pre.cat(serialization_traits<T>::static_ubound.template arrayed<n>());
     }
     
@@ -1332,6 +1321,7 @@ namespace upcxx {
       r.template skip_sequence<T>(n);
     }
   };
+  #endif
   
   //////////////////////////////////////////////////////////////////////////////
 
@@ -1347,10 +1337,9 @@ namespace upcxx {
 
     template<typename Prefix>
     static constexpr auto ubound(Prefix pre, T const(&x)[n])
-    #ifndef __INTEL_COMPILER
-      -> decltype(pre.cat(serialization_traits<T>::static_ubound.template arrayed<n>()))
-    #endif
-    {
+      UPCXX_RETURN_DECLTYPE(
+        pre.cat(serialization_traits<T>::static_ubound.template arrayed<n>())
+      ) {
       return pre.cat(serialization_traits<T>::static_ubound.template arrayed<n>());
     }
     
@@ -1380,6 +1369,7 @@ namespace upcxx {
 
   //////////////////////////////////////////////////////////////////////////////
 
+  #ifndef UPCXX_CREDUCE_SLIM
   template<typename CharT, typename Traits, typename Alloc>
   struct serialization<std::basic_string<CharT, Traits, Alloc>> {
     static_assert(std::is_trivial<CharT>::value, "Bad string character type.");
@@ -1390,13 +1380,10 @@ namespace upcxx {
     
     template<typename Prefix>
     static auto ubound(Prefix pre, Str const &s)
-    #ifndef __INTEL_COMPILER
-      -> decltype(
+      UPCXX_RETURN_DECLTYPE(
         pre.template cat_ubound_of<std::size_t>(1)
            .cat(storage_size_of<CharT>().arrayed(1))
-      )
-    #endif
-    {
+      ) {
       std::size_t n = s.size();
       return pre.template cat_ubound_of<std::size_t>(n)
                 .cat(storage_size_of<CharT>().arrayed(n));
@@ -1426,9 +1413,11 @@ namespace upcxx {
       r.unplace(storage_size_of<CharT>().arrayed(n));
     }
   };
+  #endif
   
   //////////////////////////////////////////////////////////////////////////////
 
+  #ifndef UPCXX_CREDUCE_SLIM
   namespace detail {
     template<typename Bag, typename=void>
     struct reserve_if_supported {
@@ -1462,13 +1451,10 @@ namespace upcxx {
       
       template<typename Prefix>
       static auto ubound(Prefix pre, BagIn const &bag)
-      #ifndef __INTEL_COMPILER
-        -> decltype(
+        UPCXX_RETURN_DECLTYPE(
           pre.template cat_ubound_of<std::size_t>(1)
              .cat(serialization_traits<T0>::static_ubound.arrayed(1))
-        )
-      #endif
-      {
+        ) {
         std::size_t n = bag.size();
         return pre.template cat_ubound_of<std::size_t>(n)
                   .cat(serialization_traits<T0>::static_ubound.arrayed(n));
@@ -1636,5 +1622,6 @@ namespace upcxx {
 
     static constexpr bool skip_is_fast = detail::serialization_reader::template skip_sequence_is_fast<T>();
   };
+  #endif
 }
 #endif

@@ -2,6 +2,7 @@
 #define _9a741fd1_dcc1_4fe9_829f_ae86fa6b86ab
 
 #include <upcxx/future/core.hpp>
+#include <upcxx/utility.hpp>
 
 // TODO: Consider adding debug checks for operations against a moved-out of
 // future_impl_shref.
@@ -125,7 +126,7 @@ namespace upcxx {
       }
       
       auto result_rvals()
-        -> decltype(
+        UPCXX_RETURN_DECLTYPE(
           detail::tuple_rvals(
             future_header_result<T...>::results_of(hdr_->result_)
           )
