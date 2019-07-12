@@ -41,7 +41,7 @@ upcxx::intrank_t target_rank(team &tm) {
 template <typename T>
 void test_fetch_add(team &tm, global_ptr<T> target_counter,
                     upcxx::atomic_domain<T> &dom) {
-  int expected_val = tm.rank_n() * ITERS;
+  T expected_val = static_cast<T>(tm.rank_n() * ITERS);
   if (tm.rank_me() == 0) {
     cout << "Test fetch_add: atomics, expect value " << expected_val << endl;
     
@@ -55,7 +55,8 @@ void test_fetch_add(team &tm, global_ptr<T> target_counter,
       case 0: {
         // This should cause an assert failure
         //auto prev = dom.fetch_sub(target_counter, (T)1, memory_order_relaxed).wait();
-        auto prev = dom.fetch_add(target_counter, (T)1, memory_order_relaxed).wait();
+        auto prevT = dom.fetch_add(target_counter, (T)1, memory_order_relaxed).wait();
+        int prev = int(prevT);
         UPCXX_ASSERT_ALWAYS(prev >= 0 && prev < tm.rank_n() * ITERS, 
               "atomic::fetch_add result out of range");
         break;
@@ -63,7 +64,8 @@ void test_fetch_add(team &tm, global_ptr<T> target_counter,
       case 1: {
         upcxx::promise<T> p;
         dom.fetch_add(target_counter, (T)1, memory_order_relaxed, upcxx::operation_cx::as_promise(p));
-        auto prev = p.finalize().wait();
+        auto prevT = p.finalize().wait();
+        int prev = int(prevT);
         UPCXX_ASSERT_ALWAYS(prev >= 0 && prev < tm.rank_n() * ITERS, 
               "atomic::fetch_add result out of range");
         break;
@@ -105,12 +107,12 @@ void test_put_get(team &tm, global_ptr<T> target_counter, upcxx::atomic_domain<T
   
   if (tm.rank_me() == target_rank(tm)) {
     UPCXX_ASSERT_ALWAYS(target_counter.where() == upcxx::rank_me());
-    UPCXX_ASSERT_ALWAYS(*target_counter.local() == 0);
+    UPCXX_ASSERT_ALWAYS(dom.load(target_counter, memory_order_relaxed).wait() == 0);
   }
   upcxx::barrier(tm);
   
   for (int i = 0; i < ITERS * 10; i++) {
-    auto v = dom.load(target_counter, memory_order_relaxed).wait();
+    int v = int(dom.load(target_counter, memory_order_relaxed).wait());
     UPCXX_ASSERT_ALWAYS(v >=0 && v < tm.rank_n(), "atomic_get out of range: " << v);
     dom.store(target_counter, (T)tm.rank_me(), memory_order_relaxed).wait();
   }
@@ -118,10 +120,10 @@ void test_put_get(team &tm, global_ptr<T> target_counter, upcxx::atomic_domain<T
   upcxx::barrier(tm);
   
   if (tm.rank_me() == target_rank(tm)) {
-    cout << "Final value is " << *target_counter.local() << endl;
-    UPCXX_ASSERT_ALWAYS(
-        *target_counter.local() >= 0 && *target_counter.local() < tm.rank_n(),
-        "atomic put and get test result out of range: got="<<*target_counter.local()<<" range=[0,"<<tm.rank_n()<<")"
+    int v = int(dom.load(target_counter, memory_order_relaxed).wait());
+    cout << "Final value is " << v << endl;
+    UPCXX_ASSERT_ALWAYS( v >= 0 && v < tm.rank_n(),
+        "atomic put and get test result out of range: got="<<v<<" range=[0,"<<tm.rank_n()<<")"
       );
   }
   
