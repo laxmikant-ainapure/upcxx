@@ -83,10 +83,17 @@ def pthread(cxt):
   yield {'pthread':{'libflags':[flag]}}
 
 @rule(cli='omp')
+@coroutine
 def openmp(cxt):
-  return {'openmp': {
-    'ppflags': ['-fopenmp'],
-    'libflags': ['-fopenmp']
+  cxx = yield cxt.cxx()
+  if is_pgi(cxx):
+    flags = ['-mp']
+  else:
+    flags = ['-fopenmp']
+  
+  yield {'openmp': {
+    'ppflags': flags,
+    'libflags': flags
   }}
 
 def invoke(cmd):
@@ -259,7 +266,7 @@ def required_libraries(cxt, src):
     maybe_pthread = {}
 
   if cxt.requires_openmp(src):
-    maybe_openmp = cxt.openmp()
+    maybe_openmp = yield cxt.openmp()
   else:
     maybe_openmp = {}
 
@@ -411,7 +418,7 @@ def cc(cxt):
 def is_pgi(cmd):
   _,out,_ = version_of(cmd)
   import re
-  return re.search('PGI', out) is not None
+  return re.search('PGI Compilers and Tools', out) is not None
 
 @rule(cli='ldflags')
 def ldflags(cxt):
