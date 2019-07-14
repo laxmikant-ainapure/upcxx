@@ -96,6 +96,7 @@ New features/enhancements: (see specification and programmer's guide for full de
 
 Notable bug fixes:
 
+* issue #184: `bench/put_flood` crashes on opt/Linux
 * issue #203: strict aliasing violations in device\_allocator
 * issue #228: incorrect behavior for `upcxx -g -O`
 * issue #229: Teach upcxx wrapper to compile C language files
