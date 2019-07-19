@@ -72,10 +72,13 @@ Please report any problems in the [issue tracker](https://upcxx-bugs.lbl.gov).
 
 To run a UPC++ correctness test, see [docs/testing.md](docs/testing.md)
 
-## Using UPC++ with MPI
+## Using UPC++ with other programming models
 
-For guidance on using UPC++ and MPI in the same application, see
+**MPI**: For guidance on using UPC++ and MPI in the same application, see 
 [docs/hybrid.md](docs/hybrid.md).
+
+**UPC**: For guidance on using UPC++ and UPC in the same application, see 
+[docs/upc-hybrid.md](docs/upc-hybrid.md).
 
 ## Implementation-defined behavior
 
