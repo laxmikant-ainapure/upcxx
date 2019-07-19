@@ -175,31 +175,36 @@ prior to invoking compilation. See the `UPC++ Backends` section below.
 
 # Compiling Against UPC\+\+ in Makefiles #
 
-With UPC\+\+ installed, the application's build process can query for the
-appropriate compiler flags to enable building against upcxx by invoking the
+The simplest way to build UPC++ programs from a Makefile is to use the 
+`upcxx` compiler wrapper documented in the section above to replace your
+normal C++ compiler command.
+
+If your Makefile structure prevents this and/or requires extraction of the 
+underlying compiler flags to build against UPC++, your build process can 
+query this information by invoking the
 `<upcxx-install-path>/bin/upcxx-meta <what>` script, where `<what>` indicates
 which form of flags are desired. Valid values are:
 
+* `CXX`: The C++ compiler used to install UPC++, which must also be used for
+  building application code.
 * `CPPFLAGS`: Preprocessor flags which will put the upcxx headers in the
   compiler's search path and define macros required by those headers.
-* `CXXFLAGS`: (optional) Compiler flags which set debug/optimization settings.
+* `CXXFLAGS`: Compiler flags which set debug/optimization settings, and
+  set the minimum C++ language level required by the UPC++ headers.
 * `LDFLAGS`: Linker flags usually belonging at the front of the link command
   line (before the list of object files).
 * `LIBS`: Linker flags belonging at the end of the link command line. These
   will make libupcxx and its dependencies available to the linker.
 
 For example, to build an application consisting of `my-app1.cpp` and
-`my-app2.cpp`:
+`my-app2.cpp` using extracted arguments:
 
 ```bash
-upcxx="<upcxx-install-path>/bin/upcxx-meta"
-<c++ compiler> -std=c++11 $($upcxx CPPFLAGS) $($upcxx CXXFLAGS) -c my-app1.cpp
-<c++ compiler> -std=c++11 $($upcxx CPPFLAGS) $($upcxx CXXFLAGS) -c my-app2.cpp
-<c++ compiler> $($upcxx LDFLAGS) my-app1.o my-app2.o $($upcxx LIBS)
+meta="<upcxx-install-path>/bin/upcxx-meta"
+$($meta CXX) $($meta CPPFLAGS) $($meta CXXFLAGS) -c my-app1.cpp
+$($meta CXX) $($meta CPPFLAGS) $($meta CXXFLAGS) -c my-app2.cpp
+$($meta CXX) $($meta LDFLAGS) my-app1.o my-app2.o $($meta LIBS)
 ```
-
-The `<c++ compiler>` used to build the application must be the same as the one
-used for the UPC\+\+ installation.
 
 For an example of a Makefile which builds UPC++ applications, look at
 [example/prog-guide/Makefile](example/prog-guide/Makefile). This directory also
