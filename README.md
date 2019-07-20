@@ -39,8 +39,10 @@ The current release is known to work on the following configurations:
   in [docs/local-gcc.md](docs/local-gcc.md) regarding use of non-system
   compilers. (smp, udp and ibv conduits)
 
-* Linux/ppc64le with gcc-6.4.0 or newer (and see the note immediately above if
-  you use a non-system compiler).
+* Linux/ppc64le with one of the following compilers:
+    - gcc-6.4.0 or newer (and see the note immediately above if
+      you use a non-system compiler).
+    - clang 5.0.0 or newer (with libstdc++ from gcc-6.4.0 or newer)    
 
 * Cray XC x86_64 with the PrgEnv-gnu or PrgEnv-intel environment modules, 
   as well as gcc/6.4.0 (or later) loaded. (smp and aries conduits)
@@ -96,6 +98,7 @@ For copyright notice and licensing agreement, see [LICENSE.txt](LICENSE.txt)
 New features/enhancements: (see specification and programmer's guide for full details)
 
 * `atomic_domain<float>` and `atomic_domain<double>` are now implemented
+* clang v5.0+ has been added to the list of supported compilers on Linux/ppc64le platforms
 
 Notable bug fixes:
 
