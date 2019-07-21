@@ -15,7 +15,13 @@ using namespace std;
 int main(int argc, char *argv[])
 {
   upcxx::init();
-  const long N = 100000;
+  long N = 0;
+  if (argc > 1) N = atol(argv[1]);
+  if (N < 1) N = 100000;
+  if (!upcxx::rank_me())
+    cout << "Running persona-example on " << upcxx::rank_n() 
+         << " procs with " << N << " iterations." << endl;
+
   DistrMap dmap;
 
   // insert all key, value pairs into the hash map, wait for operation to complete
