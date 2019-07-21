@@ -146,6 +146,13 @@ New features/enhancements: (see specification and programmer's guide for full de
 * Barrier synchronization performance has been improved
 * Installer now defaults to more build parallelism, improving efficiency (see `UPCXX_MAKE`)
 
+The following features from the specification are not yet implemented:
+
+* `barrier_async()` and `broadcast()` only support default future-based completion (issue #234)
+* `atomic_domain<float>` and `atomic_domain<double>` are not yet implemented (issue #235)
+* `team_id::when_here()` is unimplemented (issue #170)
+* User-defined Class Serialization interface 
+
 Notable bug fixes:
 
 * issue #100: Fix shared heap setting propagation on loosely-coupled clusters
