@@ -300,50 +300,52 @@ namespace upcxx {
     // `bind(bind(f, a...), b...)` and flattens it to `bind(f,a...,b...)`.
     // This optimization results in fewer chained futures for non-trivial
     // bindings.
+
+    template<typename Fn, typename FnStripped, typename ...B>
+    struct bind1;
     
+    template<typename Fn, typename ...B>
+    struct bind: bind1<Fn, typename binding<Fn>::stripped_type, B...> {};
+
     // general case
-    template<typename FnStripped>
-    struct bind {
-      template<typename ...B>
+    template<typename Fn, typename FnStripped, typename ...B>
+    struct bind1 {
       using return_type = bound_function_of<
           typename detail::globalize_fnptr_return<FnStripped>::type,
           B...
         >;
 
-      template<typename Fn, typename ...B>
       bound_function_of<
           typename detail::globalize_fnptr_return<FnStripped>::type,
-          B&&...
+          B...
         >
-      operator()(Fn &&fn, B &&...b) const {
+      operator()(Fn fn, B ...b) const {
         using globalized_fn_t = typename detail::globalize_fnptr_return<FnStripped>::type;
 
         globalized_fn_t gfn = detail::globalize_fnptr(std::forward<Fn>(fn));
         
-        return bound_function_of<globalized_fn_t, B&&...>{
+        return bound_function_of<globalized_fn_t, B...>{
           binding<globalized_fn_t>::on_wire(static_cast<globalized_fn_t>(gfn)),
-          std::tuple<typename binding<B&&>::on_wire_type...>{
-            binding<B&&>::on_wire(std::forward<B>(b))...
+          std::tuple<typename binding<B>::on_wire_type...>{
+            binding<B>::on_wire(std::forward<B>(b))...
           }
         };
       }
     };
 
     // nested bind(bind(...),...) case.
-    template<typename Fn0, typename ...B0>
-    struct bind<bound_function<Fn0, B0...>> {
-      template<typename ...B1>
+    template<typename Bf, typename Fn0, typename ...B0, typename ...B1>
+    struct bind<Bf, bound_function<Fn0, B0...>, B1...> {
       using return_type = bound_function_of<Fn0, B0..., B1...>;
       
-      template<typename Bf, typename ...B1>
-      bound_function_of<Fn0, B0..., B1&&...>
-      operator()(Bf &&bf, B1 &&...b1) const {
-        return bound_function_of<Fn0, B0..., B1&&...>{
+      bound_function_of<Fn0, B0..., B1...>
+      operator()(Bf bf, B1 ...b1) const {
+        return bound_function_of<Fn0, B0..., B1...>{
           std::forward<Bf>(bf).fn_,
           std::tuple_cat(
             std::forward<Bf>(bf).b_, 
-            std::tuple<typename binding<B1&&>::on_wire_type...>{
-              binding<B1&&>::on_wire(std::forward<B1>(b1))...
+            std::tuple<typename binding<B1>::on_wire_type...>{
+              binding<B1>::on_wire(std::forward<B1>(b1))...
             }
           )
         };
@@ -352,9 +354,9 @@ namespace upcxx {
   }
   
   template<typename Fn, typename ...B>
-  typename detail::template bind<typename binding<Fn&&>::stripped_type>::template return_type<B&&...>
+  typename detail::template bind<Fn&&, B&&...>::return_type
   bind(Fn &&fn, B &&...b) {
-    return detail::bind<typename binding<Fn&&>::stripped_type>()(
+    return detail::bind<Fn&&, B&&...>()(
       std::forward<Fn>(fn), std::forward<B>(b)...
     );
   }

@@ -162,7 +162,7 @@ namespace gasnet {
   struct rpc_out_buffer</*Ub=*/invalid_storage_size_t, /*is_static_and_small=*/false> {
     bool is_eager;
     void *buffer;
-    typename std::aligned_storage<512, 64>::type tiny_;
+    typename std::aligned_storage<512, serialization_align_max>::type tiny_;
     
     detail::serialization_writer</*bounded=*/false> prepare_writer(invalid_storage_size_t) {
       return detail::serialization_writer<false>(&tiny_, sizeof(tiny_));
@@ -196,7 +196,7 @@ namespace gasnet {
     void *buffer;
     typename std::aligned_storage<
         512,
-        Ub::static_align_ub < 64 ? Ub::static_align_ub : 64
+        Ub::static_align_ub < serialization_align_max ? Ub::static_align_ub : serialization_align_max
       >::type tiny_;
     
     detail::serialization_writer</*bounded=*/true> prepare_writer(Ub ub) {
@@ -204,7 +204,7 @@ namespace gasnet {
                  ub.size <= gasnet::am_size_rdzv_cutover;
       
       if(is_eager) {
-        if(ub.size <= 512 && ub.align <= 64)
+        if(ub.size <= 512 && ub.align <= serialization_align_max)
           buffer = &tiny_;
         else
           buffer = detail::alloc_aligned(ub.size, ub.align);

@@ -213,6 +213,13 @@ namespace detail {
   }
 
   //////////////////////////////////////////////////////////////////////////////
+  // detail::is_aligned
+
+  inline bool is_aligned(void *x, std::size_t align) {
+    return 0 == (reinterpret_cast<std::uintptr_t>(x) & (align-1));
+  }
+  
+  //////////////////////////////////////////////////////////////////////////////
   // detail::raw_storage<T>: Like std::aligned_storage, except more convenient.
   // The typed value exists in the `value()` member, but isnt implicitly
   // constructed. Construction should be done by user with placement new like:

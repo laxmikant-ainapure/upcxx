@@ -236,11 +236,11 @@ namespace upcxx {
     struct support_as_rpc {
       template<typename Fn, typename ...Args>
       static completions<
-          rpc_cx<Event, upcxx::bound_function_of<Fn&&, Args&&...>>
+          rpc_cx<Event, typename detail::bind<Fn&&, Args&&...>::return_type>
         >
       as_rpc(Fn &&fn, Args &&...args) {
         return {
-          rpc_cx<Event, upcxx::bound_function_of<Fn&&, Args&&...>>{
+          rpc_cx<Event, typename detail::bind<Fn&&, Args&&...>::return_type>{
             upcxx::bind(std::forward<Fn>(fn), std::forward<Args>(args)...)
           }
         };

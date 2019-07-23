@@ -23,6 +23,8 @@
 #endif
 
 namespace upcxx {
+  constexpr std::uintptr_t serialization_align_max = 64;
+
   template<typename T>
   struct serialization;
 
@@ -288,6 +290,8 @@ namespace upcxx {
       }
       
       void* place(std::size_t obj_size, std::size_t obj_align) {
+        UPCXX_ASSERT(detail::is_aligned(buf_, obj_align));
+        
         size_ = (size_ + obj_align-1) & -obj_align;
         void *spot = reinterpret_cast<void*>(buf_ + size_);
         size_ += obj_size;
@@ -359,12 +363,12 @@ namespace upcxx {
       std::size_t edge_;
       std::size_t size_, align_;
 
-      struct hunk_t {
-        hunk_t *next;
+      struct hunk_footer {
+        hunk_footer *next;
         void *front;
         std::size_t size0;
       };
-      hunk_t *head_, *tail_;
+      hunk_footer *head_, *tail_;
       
       void grow(std::size_t size0, std::size_t size1);
       void compact_and_invalidate_(void *buf);
@@ -372,12 +376,13 @@ namespace upcxx {
     public:
       serialization_writer(void *initial_buf, std::size_t initial_capacity):
         base_(reinterpret_cast<std::uintptr_t>(initial_buf)),
-        edge_((initial_capacity & -alignof(hunk_t)) - sizeof(hunk_t)),
+        edge_((initial_capacity & -alignof(hunk_footer)) - sizeof(hunk_footer)),
         size_(0), align_(1),
-        head_(::new((char*)initial_buf + edge_) hunk_t),
+        head_(::new((char*)initial_buf + edge_) hunk_footer),
         tail_(head_) {
 
-        UPCXX_ASSERT(sizeof(hunk_t) <= initial_capacity);
+        UPCXX_ASSERT(sizeof(hunk_footer) <= initial_capacity);
+        UPCXX_ASSERT(detail::is_aligned(initial_buf, serialization_align_max));
         
         head_->next = nullptr;
         head_->front = initial_buf;
@@ -385,9 +390,9 @@ namespace upcxx {
       }
 
       ~serialization_writer() {
-        hunk_t *h = head_ ? head_->next : nullptr;
+        hunk_footer *h = head_ ? head_->next : nullptr;
         while(h != nullptr) {
-          hunk_t *h1 = h->next;
+          hunk_footer *h1 = h->next;
           std::free(h->front);
           h = h1;
         }

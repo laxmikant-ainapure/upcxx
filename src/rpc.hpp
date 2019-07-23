@@ -234,7 +234,7 @@ namespace upcxx {
       intrank_t initiator = backend::rank_me;
       persona *initiator_persona = &upcxx::current_persona();
 
-      using fn_bound_t = bound_function_of<Fn&&, Arg&&...>;
+      using fn_bound_t = typename detail::bind<Fn&&, Arg&&...>::return_type;
       fn_bound_t fn_bound = upcxx::bind(std::forward<Fn>(fn), std::forward<Arg>(args)...);
       
       backend::template send_am_master<progress_level::user>(
