@@ -215,7 +215,8 @@ namespace detail {
   //////////////////////////////////////////////////////////////////////////////
   // detail::is_aligned
 
-  inline bool is_aligned(void *x, std::size_t align) {
+  inline bool is_aligned(void const *x, std::size_t align) {
+    UPCXX_ASSERT((align & (align-1)) == 0, "align must be a power of 2");
     return 0 == (reinterpret_cast<std::uintptr_t>(x) & (align-1));
   }
   
