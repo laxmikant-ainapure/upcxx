@@ -83,6 +83,10 @@ platform_sanity_checks() {
             ARCH_GOOD=1
         elif test aarch64 = "$ARCH" ; then
             ARCH_GOOD=1
+            # ARM-based Cray XC not yet tested
+            if test -n "$CRAY_PEVERSION" ; then
+              ARCH_GOOD=
+            if
         elif expr "$ARCH" : 'i.86' >/dev/null 2>&1 ; then
             ARCH_BAD=1
         fi
