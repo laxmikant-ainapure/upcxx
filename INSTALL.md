@@ -51,8 +51,8 @@ compiler installation for a supported compiler before running `./install`.
 To run on the compute nodes of a Cray XC, the `CROSS` environment variable needs
 to be set before the install command is invoked,
 i.e. `CROSS=cray-aries-slurm`. Additionally, if the Intel compilers are being
-used (usually the default for these systems), the gcc/5.2.0 or newer module
-must be loaded, e.g.:
+used (usually the default for these systems), a gcc environment module (6.4.0
+or newer) is also required, and may need to be explicitly loaded, e.g.:
 
 ```bash
 module load gcc/7.1.0
