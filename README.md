@@ -108,6 +108,7 @@ New features/enhancements: (see specification and programmer's guide for full de
 * `atomic_domain<float>` and `atomic_domain<double>` are now implemented
 * clang v5.0+ has been added to the list of supported compilers on Linux/ppc64le platforms
 * New define `UPCXX_SPEC_VERSION` documents the implemented revision of the UPC++ specification
+* `upcxx` has several new convenience options (see `upcxx -help`)
 
 Notable bug fixes:
 
