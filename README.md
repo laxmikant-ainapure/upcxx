@@ -46,6 +46,17 @@ The current release is known to work on the following configurations:
     - clang 5.0.0 or newer (with libstdc++ from gcc-6.4.0 or newer)    
     - PGI C++ 18.10 or newer (with libstdc++ from gcc-6.4.0 or newer)    
 
+* Linux/aarch64 (aka "arm64" or "armv8") with one of the following compilers:
+    - gcc-6.4.0 or newer (and see the note under Linux/x86_64 if
+      you use a non-system compiler).
+    - clang 4.0.0 or newer (with libstdc++ from gcc-6.4.0 or newer)
+    Note that gcc- and clang-based toolchains from Arm Ltd. exist, but have
+    not been tested with UPC++.
+
+    Support for InfiniBand on Linux/aarch64 should be considered experimental.
+    For more information, please see
+    [GASNet bug 3997](https://upc-bugs.lbl.gov/bugzilla/show_bug.cgi?id=3997).
+
 * Cray XC x86_64 with one of the following PrgEnv environment modules and
   its dependencies.  (smp and aries conduits)
     - PrgEnv-gnu with gcc/6.4.0 (or later) loaded.
