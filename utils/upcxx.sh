@@ -29,8 +29,8 @@ docxx=
 shopt -u nocasematch # ensure case-sensitive match below
 for arg in "$@" ; do
   case $arg in 
-    -MD) : ;; # -MD does not imply preprocess
-    -E|-c|-S|-M*) dolink='' ;;
+    -E|-c|-S) dolink='' ;;
+    -M|-MM) dolink='' ;; # gcc: these imply no compilation or linking (-MD/-MMD deliberately omitted)
     -v|-vv) doverbose=1 ;;
     -V|-version|--version) 
       doversion=1
