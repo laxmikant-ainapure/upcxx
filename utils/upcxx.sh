@@ -71,6 +71,9 @@ for var in CC CXX CXXFLAGS CPPFLAGS LDFLAGS LIBS ; do
   val=`$UPCXX_META $var`
   eval $var=\$val
   verbose "$UPCXX_META $var: $val"
+  if [[ -z "$CC" ]] ; then
+    error "upcxx-meta failed."
+  fi
 done
 EXTRAFLAGS=""
 if [[ $doversion ]] ; then
