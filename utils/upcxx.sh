@@ -35,7 +35,9 @@ for arg in "$@" ; do
     -V|-version|--version) 
       doversion=1
     ;;
+    -g0) dodebug='' ;; # -g0 negates -g
     -g*) dodebug=1 ;;
+    -O0) doopt='' ;; # -O0 negates -O
     -O*) doopt=1 ;;
     *.c) docc=1 ;;
     *.cxx|*.cpp|*.cc|*.c++|*.C++) docxx=1 ;;
