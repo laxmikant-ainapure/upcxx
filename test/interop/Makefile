@@ -5,7 +5,7 @@
 
 SHELL = /bin/bash
 
-UPCXX_GASNET_CONDUIT ?= smp
+UPCXX_NETWORK ?= smp
 OPTLVL ?= -g
 
 UPC_FLAGS=
@@ -21,12 +21,12 @@ else
   UPC_THREAD_FLAGS = -nopthreads -uses-threads
 endif
 
-UPCC_CMD  = $(shell echo $(UPCC))  $(OPTLVL) -network $(UPCXX_GASNET_CONDUIT) $(UPC_THREAD_FLAGS) $(UPC_FLAGS)
+UPCC_CMD  = $(shell echo $(UPCC))  $(OPTLVL) -network $(UPCXX_NETWORK) $(UPC_THREAD_FLAGS) $(UPC_FLAGS)
 UPCXX_CMD = $(shell echo $(UPCXX)) $(OPTLVL) $(UPCXX_FLAGS)
 
 # ===========================================
 
-export UPCXX_GASNET_CONDUIT
+export UPCXX_NETWORK
 
 PTH_TARGETS = pth_main_upc pth_arrval_upc
 TARGETS = main_upc main_upcxx alloc arrval_upc arrval_upcxx $(PTH_TARGETS)

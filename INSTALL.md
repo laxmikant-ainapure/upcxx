@@ -170,8 +170,9 @@ performance runs), or a -g option to select the debugging version of UPC++
 (for tracking down bugs in your application).
 
 To select a non-default network backend or thread-safe version of the library, 
-you'll need to set the `UPCXX_GASNET_CONDUIT` or `UPCXX_THREADMODE` variables
-prior to invoking compilation. See the `UPC++ Backends` section below.
+you'll need to pass the -network= or -threadmode= options, or set the
+`UPCXX_NETWORK` or `UPCXX_THREADMODE` variables prior to invoking compilation.
+See the `UPC++ Backends` section below.
 
 # Compiling Against UPC\+\+ in Makefiles #
 
@@ -224,13 +225,13 @@ script will assume sensible defaults for these parameters based on the
 installation configuration. The following environment variables can be set to
 influence which backend `upcxx-meta` selects:
 
-* `UPCXX_GASNET_CONDUIT=[smp|udp|aries|ibv]`: The GASNet conduit to use (the
-  default value is platform dependent):
-    * `smp` is the typical high-performance choice for single-node multi-core
-      runs .
-    * `udp` is a useful low-performance alternative for testing and debugging. 
+* `UPCXX_NETWORK=[aries|ibv|smp|udp|mpi]`: The GASNet network backend to use
+  for communication (the default and available values are system-dependent):
     * `aries` is the high-performance Cray XC network.
     * `ibv` is the high-performance InfiniBand network.
+    * `smp` is the high-performance choice for single-node multi-core runs.
+    * `udp` is a portable low-performance alternative for testing and debugging.
+    * `mpi` is a portable low-performance alternative for testing and debugging. 
 
 * `UPCXX_THREADMODE=[seq|par]`: The value `seq` limits the application to only
   calling "communicating" upcxx routines from the thread that invoked

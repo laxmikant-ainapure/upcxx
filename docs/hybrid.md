@@ -2,7 +2,7 @@
 
 With care, it is possible to construct applications which use both UPC++ and MPI
 explicitly in user code (note that this is different from UPC++ programs which
-do not explicitly use MPI, but are compiled with `UPCXX_GASNET_CONDUIT=mpi`: such programs do
+do not explicitly use MPI, but are compiled with `UPCXX_NETWORK=mpi`: such programs do
 not require any special treatment). Note however, that strict programming
 conventions (below) must be adhered to when switching between MPI and UPC++
 network communication, otherwise deadlock can result on many systems.
@@ -121,7 +121,7 @@ The details of correctly spawning parallel jobs are often site-specific,
 especially for distributed systems. Correctly spawning a hybrid MPI / UPC++
 application carries additional wrinkles on some systems. The details also
 differ based on which GASNet conduit your UPC++ application was compiled for
-(via `$UPCXX_GASNET_CONDUIT` or the default value determined at installation
+(via `$UPCXX_NETWORK` or the default value determined at installation
 time).
 
 #### aries-conduit and gemini-conduit for Cray XC/XE/XK systems
@@ -148,7 +148,7 @@ for your MPI distribution if this is not the case.
 
 When running hybrid applications on a single-node system (e.g., your laptop) or on
 Ethernet-based clusters, the recommended GASNet backend is udp-conduit (ie
-`UPCXX_GASNET_CONDUIT=udp` at app compile time). A few additional run-time
+`UPCXX_NETWORK=udp` at app compile time). A few additional run-time
 settings are recommended for MPI integration, and
 then the job can be spawned using `upcxx-run`:
 
@@ -210,9 +210,9 @@ here are some things to consider:
         [here](https://gasnet.lbl.gov/dist/other/mpi-spawner/README) (look for
         the phrase "hybrid GASNet+MPI").
     2.  Use UDP for communication in UPC++  
-        Set `export UPCXX_GASNET_CONDUIT=udp` when compiling UPC++ app code
+        Set `export UPCXX_NETWORK=udp` when compiling UPC++ app code
     3.  Use MPI for communication in UPC++  
-        Set `export UPCXX_GASNET_CONDUIT=mpi` when compling UPC++ app code
+        Set `export UPCXX_NETWORK=mpi` when compling UPC++ app code
 
 2.  The Aries network adapter on the Cray XC platform has approximately 120
     hardware contexts for communications.  With MPI and UPC++ each consuming one

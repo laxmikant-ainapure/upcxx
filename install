@@ -178,14 +178,15 @@ seq|par)
   ;;
 esac
 
-case "\${UPCXX_GASNET_CONDUIT}" in
+UPCXX_NETWORK=\${UPCXX_NETWORK:-\$UPCXX_GASNET_CONDUIT} # backwards-compat
+case "\${UPCXX_NETWORK}" in
 '')
-  UPCXX_GASNET_CONDUIT="${conduit_default}"
+  UPCXX_NETWORK="${conduit_default}"
   ;;
 ${conduits_pipes})
   ;;
 *)
-  echo_and_die "UPCXX_GASNET_CONDUIT must be one of: ${conduits_commas}"
+  echo_and_die "UPCXX_NETWORK must be one of: ${conduits_commas}"
   ;;
 esac
 
@@ -198,7 +199,7 @@ par)
   ;;
 esac
 
-${install_to}/upcxx.\${UPCXX_CODEMODE}.\${UPCXX_BACKEND}.\${UPCXX_GASNET_CONDUIT}/bin/upcxx-meta \$*
+${install_to}/upcxx.\${UPCXX_CODEMODE}.\${UPCXX_BACKEND}.\${UPCXX_NETWORK}/bin/upcxx-meta \$*
 EOF
   chmod 755 "${install_to}/bin/upcxx-meta"
   cat <<EOF >| "${install_to}/bin/upcxx"

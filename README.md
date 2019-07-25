@@ -128,6 +128,9 @@ Breaking changes:
 * Applications are recommended to replace calls to `std::getenv` with `upcxx::getenv_console`,
   to maximize portability to loosely coupled distributed systems.
 
+* envvar `UPCXX_GASNET_CONDUIT` has been renamed to `UPCXX_NETWORK`.
+  For backwards compat, the former is still accepted when the latter is unset.
+
 ### 2019.05.27: Bug-fix release 2019.3.2
 
 Notable bug fixes:

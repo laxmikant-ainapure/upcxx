@@ -14,7 +14,7 @@ any rank crash.
 
 3. Otherwise, if the problem occurs with a single rank, you can spawn
 smp-conduit jobs in a serial debugger just like any other process.  
-E.g., build with `UPCXX_GASNET_CONDUIT=smp` and then start your debugger
+E.g., build with `UPCXX_NETWORK=smp` and then start your debugger
 with a command like: `env GASNET_PSHM_NODES=1 gdb yourprogram`.
 
 4. Otherwise, if you need multiple ranks and/or a distributed backend, we

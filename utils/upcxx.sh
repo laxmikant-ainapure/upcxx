@@ -20,6 +20,8 @@ if ! test -d "$prefix" ; then
   error install prefix $prefix not found
 fi
 
+UPCXX_NETWORK=${UPCXX_NETWORK:-$UPCXX_GASNET_CONDUIT} # backwards-compat
+
 dolink=1
 doversion=
 dodebug=
@@ -63,7 +65,7 @@ elif [[ $docc && $dolink ]] ; then
   error "please compile C language source files separately using -c"
 fi
 
-for var in UPCXX_CODEMODE UPCXX_GASNET_CONDUIT UPCXX_THREADMODE ; do
+for var in UPCXX_CODEMODE UPCXX_NETWORK UPCXX_THREADMODE ; do
   eval verbose $var=\$$var
 done
 
