@@ -47,6 +47,14 @@ The current release is known to work on the following configurations:
 * Cray XC x86_64 with the PrgEnv-gnu or PrgEnv-intel environment modules, 
   as well as gcc/6.4.0 (or later) loaded. (smp and aries conduits)
 
+  ALCF's PrgEnv-llvm is also supported on the Cray XC.  Unlike Cray's
+  PrgEnv-* modules, PrgEnv-llvm is versioned to match the llvm toolchain
+  it includes, rather than the Cray PE version.  UPC++ has been tested
+  against PrgEnv-llvm/4.0 (clang 4.0) and newer.  When using PrgEnv-llvm,
+  it is recommended to `module unload xalt` to avoid a large volume of
+  verbose linker output in this configuration.  Mixing with OpenMP in this
+  configuration is not currently supported.  (smp and aries conduits).
+
 Miscellaneous software requirements:
 
 * Python2 version 2.7.5 or newer
