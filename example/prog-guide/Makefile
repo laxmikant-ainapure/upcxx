@@ -11,7 +11,9 @@ $(error Please set UPCXX_INSTALL=/path/to/upcxx/install)
 endif
 
 UPCXX_THREADMODE ?= seq
-ENV = env UPCXX_THREADMODE=$(UPCXX_THREADMODE)
+export UPCXX_THREADMODE
+UPCXX_CODEMODE ?= debug
+export UPCXX_CODEMODE
 CXX = $(UPCXX_INSTALL)/bin/upcxx
 
 PTHREAD_FLAGS = -pthread
@@ -57,6 +59,7 @@ persona-example: export UPCXX_THREADMODE=par
 persona-example: EXTRA_FLAGS += $(PTHREAD_FLAGS)
 persona-example-rputs: export UPCXX_THREADMODE=par
 persona-example-rputs: EXTRA_FLAGS += $(PTHREAD_FLAGS)
+view-matrix-tasks: export UPCXX_THREADMODE=par
 view-matrix-tasks: EXTRA_FLAGS += $(PTHREAD_FLAGS)
 
 clean:
