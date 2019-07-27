@@ -125,13 +125,16 @@ platform_sanity_checks() {
             COMPILER_GOOD=1
         fi
 
-        local RECOMMEND='We recommend one of the following C++ compilers (or any later versions):
+        local RECOMMEND
+        read -r -d '' RECOMMEND<<'EOF'
+We recommend one of the following C++ compilers (or any later versions):
            Linux on x86_64:   g++ 6.4.0, LLVM/clang 4.0.0, Intel C 17.0.2
            Linux on ppc64le:  g++ 6.4.0, LLVM/clang 5.0.0
            macOS on x86_64:   g++ 6.4.0, Xcode/clang 8.0.0
            Cray XC systems:   PrgEnv-gnu with gcc/6.4.0 environment module loaded
                               PrgEnv-intel with Intel C 17.0.2 and gcc/6.4.0 environment module loaded
-                              ALCF'\''s PrgEnv-llvm/4.0'
+                              ALCF's PrgEnv-llvm/4.0
+EOF
         if test -n "$ARCH_BAD" ; then
             echo "ERROR: This version of UPC++ does not support the '$ARCH' architecture."
             echo "ERROR: $RECOMMEND"
