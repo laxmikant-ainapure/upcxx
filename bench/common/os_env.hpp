@@ -15,6 +15,12 @@ namespace bench {
   T os_env(const std::string &name, const T &otherwise);
 
   namespace detail {
+    const char *getenv(const char *var) {
+      #if UPCXX_VERSION >= 20190307
+        if (upcxx::initialized()) return upcxx::getenv_console(var); 
+      #endif
+      return std::getenv(var);
+    }
     template<class T,
              bool is_arithmetic = std::is_arithmetic<T>::value>
     struct os_env_parse;
@@ -122,7 +128,7 @@ template<class T>
 T bench::os_env(const std::string &name) {
   std::string sval;
   
-  char const *p = std::getenv(name.c_str());
+  char const *p = detail::getenv(name.c_str());
   UPCXX_ASSERT(p != 0x0);
   sval = p;
   
@@ -133,7 +139,7 @@ template<class T>
 T bench::os_env(const std::string &name, const T &otherwise) {
   std::string sval;
   
-  char const *p = std::getenv(name.c_str());
+  char const *p = detail::getenv(name.c_str());
   if(p) sval = p;
   
   if(sval.size() != 0)

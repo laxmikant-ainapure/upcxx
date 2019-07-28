@@ -47,7 +47,8 @@ int main(int argc, char **argv) {
 
   // determine an upper bound on the shared heap size
   size_t heapsz = 128<<20;
-  const char *szstr = getenv("UPCXX_SEGMENT_MB");
+  const char *szstr = upcxx::getenv_console("UPCXX_SHARED_HEAP_SIZE");
+  if (!szstr) szstr = upcxx::getenv_console("UPCXX_SEGMENT_MB");
   if (szstr) {
     float val = atof(szstr);
     if (val > 0) heapsz = val * (1<<20);

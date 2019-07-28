@@ -2,6 +2,7 @@
 #define _7969554b_5147_4e01_a84a_9809eaf22e8a
 
 #include <upcxx/diagnostic.hpp>
+#include <upcxx/backend_fwd.hpp>
 
 #include <iostream>
 #include <sstream>
@@ -62,6 +63,13 @@ namespace upcxx {
         return ss.str();
       }
     };
+  }
+  inline char *getenv_console(const char *env_var) {
+    #ifdef UPCXX_BACKEND
+      UPCXX_ASSERT(initialized(), "UPC++ is not currently initialized");
+    #endif
+    UPCXX_ASSERT(detail::getenv);
+    return detail::getenv(env_var);
   }
 }
 
