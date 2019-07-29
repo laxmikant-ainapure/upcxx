@@ -3,7 +3,7 @@
 
 // UPCXX_VERSION release identifier format:
 // YYYYMMPPL = [YEAR][MONTH][PATCH]
-#define UPCXX_VERSION 20190305L
+#define UPCXX_VERSION 20190307L
 
 // UPCXX_SPEC_VERSION release identifier format:
 // YYYYMM00L = [YEAR][MONTH]
@@ -19,6 +19,7 @@
 #include <upcxx/dist_object.hpp>
 #include <upcxx/future.hpp>
 #include <upcxx/global_ptr.hpp>
+#include <upcxx/os_env.hpp>
 #include <upcxx/persona.hpp>
 #include <upcxx/reduce.hpp>
 #include <upcxx/rget.hpp>

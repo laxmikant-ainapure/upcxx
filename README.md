@@ -125,6 +125,8 @@ The following features from the specification are not yet implemented:
 * User-defined Class Serialization interface (coming soon!)
 
 Breaking changes:
+* Applications are recommended to replace calls to `std::getenv` with `upcxx::getenv_console`,
+  to maximize portability to loosely coupled distributed systems.
 
 ### 2019.05.27: Bug-fix release 2019.3.2
 
