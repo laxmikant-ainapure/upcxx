@@ -12,6 +12,24 @@ function verbose {
   fi
 }
 
+function set_upcxx_var {
+  local var=UPCXX_`echo "$1" | awk '{ print toupper($0) }'`
+  local val=`echo "$2" | awk '{ print tolower($0) }'`
+  # per-var processing
+  case $var in
+    UPCXX_CODEMODE)
+      # apply some (deliberately undocumented) "fuzzy" leniency to value spelling
+      case $val in
+        opt|o|o[1-9]) val=O3 ; ;;
+        debug|g|o0) val=debug ;;
+        *) error "Unrecognized -codemode value, must be 'O3' or 'debug'" ;; 
+      esac
+      codemode_override=1
+    ;;
+  esac
+  eval $var='$val'
+}
+
 if ! test -x "$UPCXX_META" ; then
   error UPCXX_META not found
 fi
@@ -20,22 +38,55 @@ if ! test -d "$prefix" ; then
   error install prefix $prefix not found
 fi
 
+UPCXX_NETWORK=${UPCXX_NETWORK:-$UPCXX_GASNET_CONDUIT} # backwards-compat
+export UPCXX_NETWORK
+export UPCXX_THREADMODE
+export UPCXX_CODEMODE
+
 dolink=1
 doversion=
 dodebug=
 doopt=
+codemode_override=
 docc=
 docxx=
 shopt -u nocasematch # ensure case-sensitive match below
-for arg in "$@" ; do
+shopt -s extglob # enable extended regexp below
+for ((i = 1 ; i <= $# ; i++)); do
+  arg="${@:i:1}"
   case $arg in 
-    -MD) : ;; # -MD does not imply preprocess
-    -E|-c|-S|-M*) dolink='' ;;
+    +(-)network=*|+(-)threadmode=*|+(-)codemode=*)
+      var=`echo "$arg" | cut -d= -f1 | awk -F- '{print $NF}'`
+      val=`echo "$arg" | cut -d= -f2-`
+      eval set_upcxx_var "$var" "$val"
+      # swallow current arg
+      set -- "${@:1:i-1}" "${@:i+1}"
+      i=$((i-1))
+    ;;
+    +(-)network|+(-)threadmode|+(-)codemode)
+      var=`echo "$arg" | awk -F- '{print $NF}'`
+      val="${@:i+1:1}"
+      eval set_upcxx_var "$var" "$val"
+      # swallow current and next arg
+      set -- "${@:1:i-1}" "${@:i+2}"
+      i=$((i-1))
+    ;;
+    -Wc,*) # -Wc,anything : anything is passed-thru uninterpreted
+      val=`echo "$arg" | cut -d, -f2-`
+      set -- "${@:1:i-1}" "$val" "${@:i+1}"
+    ;;
+    -E|-c|-S) dolink='' ;;
+    -M|-MM) dolink='' ;; # gcc: these imply no compilation or linking (-MD/-MMD deliberately omitted)
     -v|-vv) doverbose=1 ;;
-    -V|-version|--version) 
+    -V|+(-)version) 
       doversion=1
     ;;
+    +(-)help) 
+      dohelp=1
+    ;;
+    -g0) dodebug='' ;; # -g0 negates -g
     -g*) dodebug=1 ;;
+    -O0) doopt='' ;; # -O0 negates -O
     -O*) doopt=1 ;;
     *.c) docc=1 ;;
     *.cxx|*.cpp|*.cc|*.c++|*.C++) docxx=1 ;;
@@ -44,16 +95,17 @@ done
 verbose dolink=$dolink
 verbose UPCXX_META=$UPCXX_META
 
-if [[ $dodebug && ! $doopt ]] ; then
+if [[ $codemode_override ]] ; then
+  :  # -codemode is highest priority and ignores other args
+elif [[ $dodebug && ! $doopt ]] ; then
   UPCXX_CODEMODE=debug
 elif [[ ( $doopt && ! $dodebug ) || $doversion ]] ; then
   UPCXX_CODEMODE=O3
 elif [[ $UPCXX_CODEMODE ]] ; then
-  :
+  : # last resort : user environment
 else
-  error "please specify exactly one of -O or -g, otherwise set UPCXX_CODEMODE={O3,debug}"
+  error "please specify exactly one of -O or -g, otherwise pass -codemode={O3,debug} or set UPCXX_CODEMODE={O3,debug}"
 fi
-export UPCXX_CODEMODE
 
 if [[ $docxx && $docc ]] ; then
   error "please do not specify a mix of C and C++ source files on the same invocation"
@@ -61,7 +113,7 @@ elif [[ $docc && $dolink ]] ; then
   error "please compile C language source files separately using -c"
 fi
 
-for var in UPCXX_CODEMODE UPCXX_GASNET_CONDUIT UPCXX_THREADMODE ; do
+for var in UPCXX_CODEMODE UPCXX_NETWORK UPCXX_THREADMODE ; do
   eval verbose $var=\$$var
 done
 
@@ -69,9 +121,35 @@ for var in CC CXX CXXFLAGS CPPFLAGS LDFLAGS LIBS ; do
   val=`$UPCXX_META $var`
   eval $var=\$val
   verbose "$UPCXX_META $var: $val"
+  if [[ -z "$CC" ]] ; then
+    error "upcxx-meta failed."
+  fi
 done
 EXTRAFLAGS=""
-if [[ $doversion ]] ; then
+if [[ $dohelp ]] ; then
+  cat<<EOF
+upcxx is a compiler wrapper that is intended as a drop-in replacement for your
+C++ compiler that appends the flags necessary to compile/link with the UPC++ library.
+Most arguments are passed through without change to the C++ compiler.
+
+Usage: upcxx [options] file...
+upcxx Wrapper Options:
+  -help           This message
+  -network={ibv|aries|smp|udp|mpi}
+                   Use the indicated GASNet network backend for communication.
+		   The default and availability of backends is system-dependent.
+  -codemode={O3|debug}
+                   Select the optimized or debugging variant of the UPC++ library.
+  -threadmode={seq|par}
+                   Select the single-threaded or thread-safe variant of the UPC++ library.
+  -Wc,<anything>   <anything> is passed-through uninterpreted to the underlying compiler
+  <anything-else>  Passed-through uninterpreted to the underlying compiler
+
+C++ compiler --help:
+EOF
+  $CXX --help
+  exit 0
+elif [[ $doversion ]] ; then
   header="$prefix/upcxx.*/include/upcxx/upcxx.hpp"
   version=`(grep "#define UPCXX_VERSION" $header | head -1 | cut -d' ' -f 3 ) 2> /dev/null`
   githash=`(cat $prefix/share/doc/upcxx/docs/version.git ) 2> /dev/null`

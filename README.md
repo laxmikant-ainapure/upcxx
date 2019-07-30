@@ -108,6 +108,7 @@ New features/enhancements: (see specification and programmer's guide for full de
 * `atomic_domain<float>` and `atomic_domain<double>` are now implemented
 * clang v5.0+ has been added to the list of supported compilers on Linux/ppc64le platforms
 * New define `UPCXX_SPEC_VERSION` documents the implemented revision of the UPC++ specification
+* `upcxx` has several new convenience options (see `upcxx -help`)
 
 Notable bug fixes:
 
@@ -127,6 +128,9 @@ The following features from the specification are not yet implemented:
 Breaking changes:
 * Applications are recommended to replace calls to `std::getenv` with `upcxx::getenv_console`,
   to maximize portability to loosely coupled distributed systems.
+
+* envvar `UPCXX_GASNET_CONDUIT` has been renamed to `UPCXX_NETWORK`.
+  For backwards compat, the former is still accepted when the latter is unset.
 
 ### 2019.05.27: Bug-fix release 2019.3.2
 
