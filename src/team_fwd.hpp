@@ -33,6 +33,17 @@ namespace upcxx {
     team& here() const {
       return *static_cast<team*>(detail::registry[dig_]);
     }
+
+    future<team&> when_here() const {
+      team *pteam = static_cast<team*>(detail::registry[dig_]);
+      // issue170: Currently the only form of team construction has barrier semantics,
+      // such that a newly created team_id cannot arrive at user-level progress anywhere
+      // until after the local representative has been constructed.
+      UPCXX_ASSERT(pteam != nullptr);
+      // cannot use public make_future here, because team still incomplete
+      detail::make_future_<true/*trivial*/, team&> result;
+      return result(*pteam);
+    }
     
     #define UPCXX_COMPARATOR(op) \
       friend bool operator op(team_id a, team_id b) {\
