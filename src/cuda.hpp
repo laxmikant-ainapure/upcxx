@@ -44,6 +44,11 @@ namespace upcxx {
     int device_id() const { return device_; }
     bool is_active() const { return device_ != invalid_device_id; }
 
+    template<typename T>
+    static constexpr std::size_t default_alignment() {
+      return alignof(T) < 256 ? 256 : alignof(T);
+    }
+
     void destroy(upcxx::entry_barrier eb = entry_barrier::user);
   };
 
@@ -52,11 +57,6 @@ namespace upcxx {
     struct device_allocator_core<cuda_device>: device_allocator_base {
       static constexpr std::size_t min_alignment = 16;
 
-      template<typename T>
-      static constexpr std::size_t default_alignment() {
-        return alignof(T) < 256 ? 256 : alignof(T);
-      }
-      
       device_allocator_core(cuda_device *dev, void *base, std::size_t size);
       device_allocator_core(device_allocator_core&&) = default;
       ~device_allocator_core();

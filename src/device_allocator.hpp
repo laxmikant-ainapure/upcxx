@@ -63,7 +63,7 @@ namespace upcxx {
     }
 
     template<typename T,
-             std::size_t align = detail::device_allocator_core<Device>::template default_alignment<T>()>
+             std::size_t align = Device::template default_alignment<T>()>
     global_ptr<T,Device::kind> allocate(std::size_t n=1) {
       lock_.lock();
       void *ptr = this->seg_.allocate(
