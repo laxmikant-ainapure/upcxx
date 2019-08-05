@@ -112,6 +112,7 @@ New features/enhancements: (see specification and programmer's guide for full de
 
 Notable bug fixes:
 
+* issue #170: `team_id::when_here()` is unimplemented
 * issue #184: `bench/put_flood` crashes on opt/Linux
 * issue #210: `cuda_device::default_alignment()` not implemented
 * issue #203: strict aliasing violations in device\_allocator
@@ -123,7 +124,6 @@ Notable bug fixes:
 The following features from the specification are not yet implemented:
 
 * `barrier_async()` and `broadcast()` only support default future-based completion (issue #234)
-* `team_id::when_here()` is unimplemented (issue #170)
 * User-defined Class Serialization interface (coming soon!)
 
 Breaking changes:
