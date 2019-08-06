@@ -50,7 +50,9 @@ compiler installation for a supported compiler before running `./install`.
 
 To run on the compute nodes of a Cray XC, the `CROSS` environment variable needs
 to be set before the install command is invoked,
-i.e. `CROSS=cray-aries-slurm`. Additionally, if the Intel compilers are being
+i.e. `CROSS=cray-aries-slurm`.
+
+When Intel compilers are being
 used (usually the default for these systems), a gcc environment module (6.4.0
 or newer) is also required, and may need to be explicitly loaded, e.g.:
 
@@ -59,6 +61,11 @@ module load gcc/7.1.0
 cd <upcxx-source-path>
 CROSS=cray-aries-slurm ./install <upcxx-install-path>
 ```
+
+If using PrgEnv-cray, then version 9.0 or newer of the Cray compilers is
+required.  This means the cce/9.0.0 or later environment module must be
+loaded, and not "cce/9.0.0-classic" (the "-classic" Cray compilers are not
+supported).
 
 The installer will use the `cc` and `CC` compiler aliases of the Cray
 programming environment loaded.

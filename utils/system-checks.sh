@@ -48,16 +48,19 @@ platform_sanity_checks() {
         if test Linux = "$KERNEL" || test Darwin = "$KERNEL" ; then
             KERNEL_GOOD=1
         fi
-        if test -n "$CRAY_PRGENVCRAY" ; then
-            echo 'ERROR: UPC++ on Cray XC currently requires PrgEnv-gnu or PrgEnv-intel. Please do: `module switch PrgEnv-cray PrgEnv-gnu` or `module switch PrgEnv-cray PrgEnv-intel`'
+        if test -n "$CRAY_PRGENVCRAY" && expr "$CRAY_CC_VERSION" : "^[78]" > /dev/null; then
+            echo 'ERROR: UPC++ on Cray XC with PrgEnv-cray requires cce/9.0 or newer.'
+            exit 1
+        elif test -n "$CRAY_PRGENVCRAY" && expr x"$CRAY_PE_CCE_VARIANT" : "xCC=Classic" > /dev/null; then
+            echo 'ERROR: UPC++ on Cray XC with PrgEnv-cray does not support the "-classic" compilers such as' $(grep -o 'cce/[^:]*' <<<$LOADEDMODULES)
             exit 1
         elif test -n "$CRAY_PRGENVPGI" ; then
-            echo 'ERROR: UPC++ on Cray XC currently requires PrgEnv-gnu or PrgEnv-intel. Please do: `module switch PrgEnv-pgi PrgEnv-gnu` or `module switch PrgEnv-pgi PrgEnv-intel`'
+            echo 'ERROR: UPC++ on Cray XC currently requires PrgEnv-gnu, intel or cray. Please do: `module switch PrgEnv-pgi PrgEnv-FAMILY` for your preferred compiler FAMILY'
             exit 1
         elif test -n "$CRAY_PRGENVINTEL" && ( test -z "$GCC_VERSION" || expr "$GCC_VERSION" : "^[2345]" > /dev/null || expr "$GCC_VERSION" : "^6.[123]" > /dev/null ) ; then
             echo 'ERROR: UPC++ on Cray XC with PrgEnv-intel must also have the gcc module loaded (version 6.4 or newer). Please do: `module load gcc`'
             exit 1
-        elif test -n "$CRAY_PRGENVGNU" || test -n "$CRAY_PRGENVINTEL" ; then
+        elif test -n "$CRAY_PRGENVCRAY$CRAY_PRGENVINTEL$CRAY_PRGENVCRAY" ; then
             CC=${CC:-cc}
             CXX=${CXX:-CC}
 	    # second condition eliminates build warnings in CI for: GASNET=build_or_inst_dir install -single
@@ -146,6 +149,7 @@ We recommend one of the following C++ compilers (or any later versions):
            macOS on x86_64:   g++ 6.4.0, Xcode/clang 8.0.0
            Cray XC systems:   PrgEnv-gnu with gcc/6.4.0 environment module loaded
                               PrgEnv-intel with Intel C 17.0.2 and gcc/6.4.0 environment module loaded
+                              PrgEnv-cray with cce/9.0.0 environment module loaded
                               ALCF's PrgEnv-llvm/4.0
 EOF
         if test -n "$ARCH_BAD" ; then

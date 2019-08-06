@@ -46,8 +46,12 @@ The current release is known to work on the following configurations:
     - clang 5.0.0 or newer (with libstdc++ from gcc-6.4.0 or newer)    
     - PGI C++ 18.10 or newer (with libstdc++ from gcc-6.4.0 or newer)    
 
-* Cray XC x86_64 with the PrgEnv-gnu or PrgEnv-intel environment modules, 
-  as well as gcc/6.4.0 (or later) loaded. (smp and aries conduits)
+* Cray XC x86_64 with one of the following PrgEnv environment modules and
+  its dependencies.  (smp and aries conduits)
+    - PrgEnv-gnu with gcc/6.4.0 (or later) loaded.
+    - PrgEnv-intel with gcc/6.4.0 (or later) loaded.
+    - PrgEnv-cray with cce/9.0.0 (or later) loaded.
+      Note that does not include support for "cce/9.x.y-classic".
 
   ALCF's PrgEnv-llvm is also supported on the Cray XC.  Unlike Cray's
   PrgEnv-* modules, PrgEnv-llvm is versioned to match the llvm toolchain
