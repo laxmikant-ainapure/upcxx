@@ -101,7 +101,7 @@ namespace upcxx {
   user to expecxt anything else. The other call types ought to be supported,
   but I've deferred that as it seemed to be breaking compilation with overload
   resolution issues.
-  ////////////////////////////////////////////////////////////////////////////*/
+  */////////////////////////////////////////////////////////////////////////////
   
   namespace detail {
     template<typename Tup>
