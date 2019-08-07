@@ -99,7 +99,7 @@ platform_sanity_checks() {
         elif echo "$CXXVERS" | egrep 'Apple LLVM version ([8-9]\.|[1-9][0-9])' 2>&1 > /dev/null ; then
             COMPILER_GOOD=1
         elif echo "$CXXVERS" | egrep 'PGI Compilers and Tools'  > /dev/null ; then
-            COMPILER_BAD=1
+            :
         elif echo "$CXXVERS" | egrep 'IBM XL'  > /dev/null ; then
             COMPILER_BAD=1
         elif echo "$CXXVERS" | egrep 'Free Software Foundation' 2>&1 > /dev/null &&

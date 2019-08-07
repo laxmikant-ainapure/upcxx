@@ -139,7 +139,7 @@ namespace upcxx {
     dist_id<T> id() const { return dist_id<T>{id_}; }
     
     future<T> fetch(intrank_t rank) const {
-      return upcxx::rpc(*tm_, rank, [](dist_object<T> &o) { return *o; }, *this);
+      return upcxx::rpc(*tm_, rank, [](dist_object<T> const &o) { return *o; }, *this);
     }
   };
 }
@@ -152,13 +152,18 @@ namespace upcxx {
   struct binding<dist_object<T>&> {
     using on_wire_type = dist_id<T>;
     using off_wire_type = dist_object<T>&;
+    using off_wire_future_type = future<dist_object<T>&>;
     using stripped_type = dist_object<T>&;
+    static constexpr bool immediate = false;
     
     static dist_id<T> on_wire(dist_object<T> const &o) {
       return o.id();
     }
     
     static future<dist_object<T>&> off_wire(dist_id<T> id) {
+      return id.when_here();
+    }
+    static future<dist_object<T>&> off_wire_future(dist_id<T> id) {
       return id.when_here();
     }
   };

@@ -129,9 +129,9 @@ void future_header::entered_ready_with_sucs(future_header *result, dependency_li
     result_refs -= result_refs_unit;
   
   // write back this->ref_n_
-  {int trash; (this_refs_unit == 1 ? this->ref_n_ : trash) = this_refs;}
+  if(this_refs_unit == 1) this->ref_n_ = this_refs;
   // write back result->ref_n_
-  {int trash; (result_refs_unit == 1 ? result->ref_n_ : trash) = result_refs;}
+  if(result_refs_unit == 1) result->ref_n_ = result_refs;
   
   if(0 == this_refs) {
     // we know result != this, hence we're a future_header_dependent
@@ -228,7 +228,7 @@ void future_header_dependent::enter_proxying(
     
     // write back proxied->ref_n_
     // we know it wont be zero because either we're referencing it or our successors are
-    {int trash; (proxied_refs_wb ? proxied->ref_n_ : trash) = proxied_refs;}
+    if(proxied_refs_wb) proxied->ref_n_ = proxied_refs;
     
     if(this_refs == 0) {
       // nobody points to us, so we die...

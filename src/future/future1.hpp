@@ -2,6 +2,7 @@
 #define _1e7a65b7_b8d1_4def_98a3_76038c9431cf
 
 #include <upcxx/future/core.hpp>
+#include <upcxx/utility.hpp>
 #if UPCXX_BACKEND
   #include <upcxx/backend_fwd.hpp>
 #endif
@@ -177,13 +178,11 @@ namespace upcxx {
     }
     
     template<typename Fn>
-    auto then(Fn &&fn)
-      -> decltype(
-        detail::future_then<future1<Kind,T...>, typename std::decay<Fn>::type>()(
-          *this,
-          std::forward<Fn>(fn)
-        )
-      ) {
+    typename detail::future_then<
+        future1<Kind,T...>,
+        typename std::decay<Fn>::type
+      >::return_type
+    then(Fn &&fn) {
       return detail::future_then<future1<Kind,T...>, typename std::decay<Fn>::type>()(
         *this,
         std::forward<Fn>(fn)
@@ -191,13 +190,11 @@ namespace upcxx {
     }
     
     template<typename Fn>
-    auto then_pure(Fn &&pure_fn)
-      -> decltype(
-        detail::future_then_pure<future1<Kind,T...>, typename std::decay<Fn>::type>()(
-          *this,
-          std::forward<Fn>(pure_fn)
-        )
-      ) {
+    typename detail::future_then_pure<
+        future1<Kind,T...>,
+        typename std::decay<Fn>::type
+      >::return_type
+    then_pure(Fn &&pure_fn) {
       return detail::future_then_pure<future1<Kind,T...>, typename std::decay<Fn>::type>()(
         *this,
         std::forward<Fn>(pure_fn)
@@ -211,7 +208,11 @@ namespace upcxx {
     template<int i=-1, typename Fn>
     auto wait(Fn &&progress)
     #endif
-      -> decltype(this->template result<i>()) {
+      -> typename std::conditional<
+        (i<0 && sizeof...(T) > 1),
+          results_type,
+          typename detail::tuple_element_or_void<(i<0 ? 0 : i), results_type>::type
+      >::type {
       
       while(!impl_.ready())
         progress();
@@ -221,13 +222,12 @@ namespace upcxx {
     
     #ifdef UPCXX_BACKEND
     template<typename Fn=detail::future_wait_upcxx_progress_user>
-    auto wait_tuple(Fn &&progress = detail::future_wait_upcxx_progress_user{})
+    results_type wait_tuple(Fn &&progress = detail::future_wait_upcxx_progress_user{})
     #else
     template<typename Fn>
-    auto wait_tuple(Fn &&progress)
+    results_type wait_tuple(Fn &&progress)
     #endif
-      -> decltype(this->result_tuple()) {
-      
+    {
       while(!impl_.ready())
         progress();
       
@@ -241,7 +241,11 @@ namespace upcxx {
     template<int i=-1, typename Fn>
     auto wait_moved(Fn &&progress)
     #endif
-      -> decltype(this->template result_moved<i>()) {
+      -> typename std::conditional<
+        (i<0 && sizeof...(T) > 1),
+          results_rvals_type,
+          typename detail::tuple_element_or_void<(i<0 ? 0 : i), results_rvals_type>::type
+      >::type {
       
       while(!impl_.ready())
         progress();

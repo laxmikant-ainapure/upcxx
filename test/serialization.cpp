@@ -20,11 +20,11 @@ bool equals(T const (&a)[n], T const (&b)[n]) {
 
 template<typename T>
 void roundtrip(T const &x) {
-  void *buf0 = upcxx::detail::alloc_aligned(128, 64);
+  void *buf0 = upcxx::detail::alloc_aligned(8*serialization_align_max, serialization_align_max);
   
   detail::serialization_writer<
       decltype(serialization_traits<T>::static_ubound)::is_valid
-    > w(buf0, 128);
+    > w(buf0, 8*serialization_align_max);
 
   serialization_traits<T>::serialize(w, x);
 
@@ -160,7 +160,7 @@ int main() {
   roundtrip<std::int8_t>(1);
   roundtrip<std::uint16_t>(1000);
   roundtrip<std::int32_t>(1<<29);
-  roundtrip<std::uint32_t>(1<<31);
+  roundtrip<std::uint32_t>(1u<<31);
   roundtrip<float>(3.14f);
   roundtrip<double>(3.14);
   roundtrip(nonpod1('h','i'));

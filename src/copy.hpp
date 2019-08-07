@@ -221,7 +221,7 @@ namespace upcxx {
           backend::send_am_master<progress_level::internal>(
             upcxx::world(), rank_d,
             upcxx::bind(
-              [=](cxs_remote_t &cxs_remote) {
+              [=](cxs_remote_t &&cxs_remote) {
                 void *bounce_d = dev_d == host_device ? buf_d : upcxx::allocate(size, 64);
                 UPCXX_ASSERT_ALWAYS(dev_d == host_device || bounce_d != nullptr, "UPC++ failed to allocate a temporary internal buffer form shared heap. Please run with a bigger shared heap.");
                 

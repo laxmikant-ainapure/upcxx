@@ -2,6 +2,7 @@
 #define _c1e666db_a184_42a1_8492_49b8a1d9259d
 
 #include <upcxx/future/core.hpp>
+#include <upcxx/utility.hpp>
 
 namespace upcxx {
   //////////////////////////////////////////////////////////////////////
@@ -36,7 +37,7 @@ namespace upcxx {
       }
       
       auto result_rvals()
-        -> decltype(detail::tuple_rvals(results_)) {
+        UPCXX_RETURN_DECLTYPE(detail::tuple_rvals(results_)) {
         return detail::tuple_rvals(results_);
       }
       

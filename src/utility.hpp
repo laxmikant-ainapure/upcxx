@@ -14,6 +14,15 @@
 
 #include <cstdlib> // std::aligned_alloc, posix_memalign
 
+// UPCXX_RETURN_DECLTYPE(type): use this inplace of "-> decltype(type)" so that
+// for compilers which choke on such return types (icc) it can be elided in
+// the presence of C++14.
+#if !defined(__INTEL_COMPILER) || __cplusplus <= 201199L
+  #define UPCXX_RETURN_DECLTYPE(...) -> decltype(__VA_ARGS__)
+#else
+  #define UPCXX_RETURN_DECLTYPE(...)
+#endif
+
 namespace upcxx {
 namespace detail {
   //////////////////////////////////////////////////////////////////////
@@ -204,6 +213,14 @@ namespace detail {
   }
 
   //////////////////////////////////////////////////////////////////////////////
+  // detail::is_aligned
+
+  inline bool is_aligned(void const *x, std::size_t align) {
+    UPCXX_ASSERT((align & (align-1)) == 0, "align must be a power of 2");
+    return 0 == (reinterpret_cast<std::uintptr_t>(x) & (align-1));
+  }
+  
+  //////////////////////////////////////////////////////////////////////////////
   // detail::raw_storage<T>: Like std::aligned_storage, except more convenient.
   // The typed value exists in the `value()` member, but isnt implicitly
   // constructed. Construction should be done by user with placement new like:
@@ -328,9 +345,9 @@ namespace detail {
   template<int n>
   using make_index_sequence = typename help::make_index_sequence<n>::type;
 
-  //////////////////////////////////////////////////////////////////////
-  // add_lref_if_nonref: Add a lvalue-reference (&) to type T if T isn't
-  // already a reference (& or &&) type.
+  //////////////////////////////////////////////////////////////////////////////
+  // add_lref_if_nonref: Add a lvalue-reference (&) to type T if T isn't already
+  // a reference (& or &&) type.
   
   template<typename T>
   struct add_lref_if_nonref { using type = T&; };
@@ -340,6 +357,32 @@ namespace detail {
   
   template<typename T>
   struct add_lref_if_nonref<T&&> { using type = T&&; };
+
+  //////////////////////////////////////////////////////////////////////////////
+  // add_clref_if_nonref: Add a const-lvalue-reference (const &) to type T if T
+  // isn't already a reference (& or &&) type.
+  
+  template<typename T>
+  struct add_clref_if_nonref { using type = T const&; };
+  
+  template<typename T>
+  struct add_clref_if_nonref<T&> { using type = T&; };
+  
+  template<typename T>
+  struct add_clref_if_nonref<T&&> { using type = T&&; };
+
+  //////////////////////////////////////////////////////////////////////////////
+  // add_rref_if_nonref: Add a rvalue-reference (&&) to type T if T isn't
+  // already a reference (& or &&) type.
+  
+  template<typename T>
+  struct add_rref_if_nonref { using type = T&&; };
+  
+  template<typename T>
+  struct add_rref_if_nonref<T&> { using type = T&; };
+  
+  template<typename T>
+  struct add_rref_if_nonref<T&&> { using type = T&&; };
   
   //////////////////////////////////////////////////////////////////////
 

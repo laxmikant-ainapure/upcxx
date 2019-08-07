@@ -10,10 +10,11 @@ def requires_pthread(cxt, src):
   ]
 
 @rule()
+@coroutine
 def required_libraries(cxt, src):
   if src == here('backend.hpp'):
     # Anyone including "backend.hpp" needs UPCXX_BACKEND defined.
-    return {'upcxx-backend': {
+    yield {'upcxx-backend': {
       'ppdefs': {
         'UPCXX_BACKEND': 1,
         'UPCXX_BACKEND_%s'%cxt.upcxx_backend_id().upper(): 1
@@ -30,7 +31,7 @@ def required_libraries(cxt, src):
       # be nice so clients can include the same gasnet headers we do.
       here('backend/gasnet/runtime.hpp')
     ]:
-    return cxt.gasnet()
+    yield cxt.gasnet()
   
   elif src == here('intru_queue.hpp'):
     # Anyone including "intru_queue.hpp" needs UPCXX_MPSC_QUEUE_<impl> defined.
@@ -48,20 +49,25 @@ def required_libraries(cxt, src):
         }[lpc_inbox]
     
     mpsc = mpsc.upper()
+
+    # we need pthreads for biglock queue
+    if mpsc == 'BIGLOCK':
+      maybe_pthread = yield cxt.pthread()
+    else:
+      maybe_pthread = {}
     
-    return cxt.libset_merge(
+    yield cxt.libset_merge(
       {'upcxx-mpsc-queue': {
         'ppdefs': {
           'UPCXX_MPSC_QUEUE_%s'%mpsc: 1
         }
       }},
-      # we need pthreads for biglock queue
-      cxt.pthread() if mpsc == 'BIGLOCK' else {}
+      maybe_pthread
     )
 
   elif src == here('diagnostic.hpp'):
     # Anyone including "diagnostic.hpp" gets UPCXX_ASSERT_ENABLED defined.
-    return {'upcxx-diagnostic': {
+    yield {'upcxx-diagnostic': {
       'ppdefs': {
         'UPCXX_ASSERT_ENABLED': 1 if cxt.upcxx_assert_enabled() else 0
       }
@@ -69,13 +75,13 @@ def required_libraries(cxt, src):
     
   elif src == here('cuda.hpp'):
     if cxt.upcxx_cuda_enabled():
-      return cxt.libset_merge(
+      yield cxt.libset_merge(
         {'upcxx-cuda': {'ppdefs':{'UPCXX_CUDA_ENABLED':1}}},
         cxt.cuda()
       )
     else:
-      return {}
+      yield {}
   
   else:
     # Parent "nobsrule.py" handles other cases.
-    return cxt.required_libraries(src)
+    yield cxt.required_libraries(src)

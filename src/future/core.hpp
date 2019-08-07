@@ -782,9 +782,9 @@ namespace upcxx {
         b_refs -= b_unit;
       
       // write back a->ref_n_
-      {int trash; (a_unit == 1 ? a->ref_n_ : trash) = a_refs;}
+      if(a_unit == 1) a->ref_n_ = a_refs;
       // write back b->ref_n_
-      {int trash; (b_unit == 1 ? b->ref_n_ : trash) = b_refs;}
+      if(b_unit == 1) b->ref_n_ = b_refs;
       
       if(0 == a_refs) {
         // must be a dependent since if it were a result it couldn't have zero refs
@@ -812,7 +812,7 @@ namespace upcxx {
       // write back a->ref_n_
       a->ref_n_ = a_refs;
       // write back b->ref_n_
-      {int trash; (b_unit == 1 ? b->ref_n_ : trash) = b_refs;}
+      if(b_unit == 1) b->ref_n_ = b_refs;
       
       if(0 == a_refs) {
         if(a->status_ == status_proxying)
