@@ -35,6 +35,7 @@ The current release is known to work on the following configurations:
     - Gnu g++ 6.4.0 or newer    
     - clang 4.0.0 or newer (with libstdc++ from gcc-6.4.0 or newer)    
     - Intel C++ 17.0.2 or newer (with libstdc++ from gcc-6.4.0 or newer)    
+    - PGI C++ 19.1 or newer (with libstdc++ from gcc-6.4.0 or newer)    
   If your system compilers do not meet these requirements, please see the note
   in [docs/local-gcc.md](docs/local-gcc.md) regarding use of non-system
   compilers. (smp, udp and ibv conduits)
@@ -43,6 +44,7 @@ The current release is known to work on the following configurations:
     - gcc-6.4.0 or newer (and see the note immediately above if
       you use a non-system compiler).
     - clang 5.0.0 or newer (with libstdc++ from gcc-6.4.0 or newer)    
+    - PGI C++ 18.10 or newer (with libstdc++ from gcc-6.4.0 or newer)    
 
 * Cray XC x86_64 with the PrgEnv-gnu or PrgEnv-intel environment modules, 
   as well as gcc/6.4.0 (or later) loaded. (smp and aries conduits)
