@@ -40,9 +40,7 @@ namespace upcxx {
       // such that a newly created team_id cannot arrive at user-level progress anywhere
       // until after the local representative has been constructed.
       UPCXX_ASSERT(pteam != nullptr);
-      // cannot use public make_future here, because team still incomplete
-      detail::make_future_<true/*trivial*/, team&> result;
-      return result(*pteam);
+      return make_future<team&>(*pteam);
     }
     
     #define UPCXX_COMPARATOR(op) \
