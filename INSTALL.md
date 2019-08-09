@@ -70,6 +70,10 @@ supported).
 The installer will use the `cc` and `CC` compiler aliases of the Cray
 programming environment loaded.
 
+Currently only Intel-based Cray XC systems have been tested, including Xeon
+and Xeon Phi (aka "KNL").  Note that UPC++ has not yet been tested on an
+ARM-based Cray XC.
+
 **Installation: CUDA GPU support**
 
 UPC++ now includes *prototype* support for communication operations on memory buffers

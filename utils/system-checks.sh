@@ -81,6 +81,12 @@ platform_sanity_checks() {
             ARCH_GOOD=1
         elif test ppc64le = "$ARCH" ; then
             ARCH_GOOD=1
+        elif test aarch64 = "$ARCH" ; then
+            ARCH_GOOD=1
+            # ARM-based Cray XC not yet tested
+            if test -n "$CRAY_PEVERSION" ; then
+              ARCH_GOOD=
+            if
         elif expr "$ARCH" : 'i.86' >/dev/null 2>&1 ; then
             ARCH_BAD=1
         fi
@@ -132,6 +138,10 @@ platform_sanity_checks() {
             #     g++-7 (Homebrew GCC 7.2.0) 7.2.0
             #     foo (GCC) 7.2.0
             COMPILER_GOOD=1
+            # Arm Ltd's gcc not yet tested
+            if test aarch64 = "$ARCH" && echo "$CXXVERS" | head -1 | egrep ' +\(ARM' 2>&1 > /dev/null ; then
+              COMPILER_GOOD=
+            fi
         elif echo "$CXXVERS" | egrep 'clang version [23]' 2>&1 > /dev/null ; then
             COMPILER_BAD=1
         elif test x86_64 = "$ARCH" && echo "$CXXVERS" | egrep 'clang version ([4-9]\.|[1-9][0-9])' 2>&1 > /dev/null ; then
@@ -139,6 +149,12 @@ platform_sanity_checks() {
         elif test ppc64le = "$ARCH" && echo "$CXXVERS" | egrep 'clang version ([5-9]\.|[1-9][0-9])' 2>&1 > /dev/null ; then
 	    # Issue #236: ppc64le/clang support floor is 5.x. clang-4.x/ppc has correctness issues and is deliberately left "unvalidated"
             COMPILER_GOOD=1
+        elif test aarch64 = "$ARCH" && echo "$CXXVERS" | egrep 'clang version ([4-9]\.|[1-9][0-9])' 2>&1 > /dev/null ; then
+            COMPILER_GOOD=1
+            # Arm Ltd's clang not yet tested
+            if echo "$CXXVERS" | egrep '^Arm C' 2>&1 > /dev/null ; then
+              COMPILER_GOOD=
+            fi
         fi
 
         local RECOMMEND
@@ -146,6 +162,7 @@ platform_sanity_checks() {
 We recommend one of the following C++ compilers (or any later versions):
            Linux on x86_64:   g++ 6.4.0, LLVM/clang 4.0.0, PGI 19.1, Intel C 17.0.2
            Linux on ppc64le:  g++ 6.4.0, LLVM/clang 5.0.0, PGI 18.10
+           Linux on aarch64:  g++ 6.4.0, LLVM/clang 4.0.0
            macOS on x86_64:   g++ 6.4.0, Xcode/clang 8.0.0
            Cray XC systems:   PrgEnv-gnu with gcc/6.4.0 environment module loaded
                               PrgEnv-intel with Intel C 17.0.2 and gcc/6.4.0 environment module loaded
