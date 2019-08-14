@@ -19,7 +19,7 @@ function upcxx_sourceme {
   }
   
   # use the current directory as the root for the build tree
-  NOBS_ROOT=`pwd`
+  NOBS_ROOT=`pwd -P`
   NOBS_PATH="${NOBS_ROOT}/nobs"
   
   if [ ! -e "$NOBS_PATH" ]; then
