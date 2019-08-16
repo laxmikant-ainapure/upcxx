@@ -80,7 +80,17 @@ namespace detail {
   }
 
   //////////////////////////////////////////////////////////////////////////////
-  // detail::launder
+  // detail::launder & detail::launder_unconstructed
+
+  // *Hopefully*, make it impossible for the compiler to prove to itself that
+  // that `p` doesn't point to an object of type T. This can be used when you
+  // know the underlying bytes encode a valid T, but it hasn't been actually
+  // constructed as such.
+  template<typename T>
+  T* launder_unconstructed(T *p) noexcept {
+    asm("" : "+rm"(p) : "rm"(p) :);
+    return p;
+  }
 
   #if __cpp_lib_launder >= 201606 // std::launder is not reliably available in C++17 (eg clang 8)
     template<typename T>
@@ -90,8 +100,7 @@ namespace detail {
   #else
     template<typename T>
     T* launder(T *p) noexcept {
-      asm("" : "+rm"(p) : "rm"(p) :);
-      return p;
+      return launder_unconstructed(p);
     }
   #endif
   
@@ -106,7 +115,7 @@ namespace detail {
     }
     template<typename T>
     T* construct_default(void *spot, std::false_type deft_ctor) {
-      return detail::template launder<T>(reinterpret_cast<T*>(spot));
+      return detail::template launder_unconstructed<T>(reinterpret_cast<T*>(spot));
     }
   }
   
@@ -141,7 +150,7 @@ namespace detail {
     template<typename T, bool any>
     T* construct_trivial(void *dest, const void *src, std::false_type deft_ctor, std::integral_constant<bool,any> triv_copy) {
       detail::template memcpy_aligned<alignof(T)>(dest, src, sizeof(T));
-      return detail::launder(reinterpret_cast<T*>(dest));
+      return detail::launder_unconstructed(reinterpret_cast<T*>(dest));
     }
     
     template<typename T>
@@ -164,7 +173,7 @@ namespace detail {
     template<typename T, bool any>
     T* construct_trivial(void *dest, const void *src, std::size_t n, std::false_type deft_ctor, std::integral_constant<bool,any> triv_copy) {
       detail::template memcpy_aligned<alignof(T)>(dest, src, n*sizeof(T));
-      return detail::launder(reinterpret_cast<T*>(dest));
+      return detail::launder_unconstructed(reinterpret_cast<T*>(dest));
     }
   }
   

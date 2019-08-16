@@ -16,7 +16,165 @@
 
 namespace upcxx
 {
-  
+  namespace detail {
+    // In the following classes, FinalType will be one of:
+    //   rput_cbs_byref<CxStateHere, CxStateRemote>
+    //   rput_cbs_byval<T, CxStateHere, CxStateRemote>
+    // So there is a pattern of a class inheriting a base-class which has
+    // the derived class as a template argument. This allows the base
+    // class to access the derived class without using virtual functions.
+    
+    // rput_cb_source: rput_cbs_{byref|byval} inherits this to hold
+    // source-copmletion details.
+    template<typename FinalType, typename CxStateHere, typename CxStateRemote,
+             bool sync = completions_is_event_sync<
+                 typename CxStateHere::completions_t,
+                 source_cx_event
+               >::value,
+             // only use handle when the user has asked for source_cx
+             // notification AND hasn't specified that it be sync.
+             bool use_handle = !sync && completions_has_event<
+                 typename CxStateHere::completions_t,
+                 source_cx_event
+               >::value
+            >
+    struct rput_cb_source;
+
+    // rput_cb_operation: rput_cbs_{byref|byval} inherits this to hold
+    // operation-completion details.
+    template<typename FinalType, typename CxStateHere, typename CxStateRemote,
+             bool definitely_static_scope = completions_is_event_sync<
+                 typename CxStateHere::completions_t,
+                 operation_cx_event
+               >::value
+            >
+    struct rput_cb_operation;
+
+    ////////////////////////////////////////////////////////////////////
+
+    // rput_cb_source: Case when the user has an action for source_cx_event.
+    // We extend a handle_cb which will fire the completions and transition
+    // control to rput_cb_operation.
+    template<typename FinalType, typename CxStateHere, typename CxStateRemote>
+    struct rput_cb_source<
+        FinalType, CxStateHere, CxStateRemote,
+        /*sync=*/false, /*use_handle=*/true
+      >:
+      backend::gasnet::handle_cb {
+      
+      static constexpr auto mode = rma_put_sync::src_cb;
+
+      backend::gasnet::handle_cb* source_cb() {
+        return this;
+      }
+      backend::gasnet::handle_cb* first_handle_cb() {
+        return this;
+      }
+      
+      void execute_and_delete(backend::gasnet::handle_cb_successor add_succ) {
+        auto *cbs = static_cast<FinalType*>(this);
+        
+        cbs->state_here.template operator()<source_cx_event>();
+        
+        add_succ(
+          static_cast<
+              rput_cb_operation<FinalType, CxStateHere, CxStateRemote>*
+            >(cbs)
+        );
+      }
+    };
+
+    // rput_cb_source: Case user does not care about source_cx_event.
+    template<typename FinalType, typename CxStateHere, typename CxStateRemote,
+             bool sync>
+    struct rput_cb_source<
+        FinalType, CxStateHere, CxStateRemote,
+        sync, /*use_handle=*/false
+      > {
+      static constexpr auto mode =
+        sync ? rma_put_sync::src_now : rma_put_sync::src_into_op_cb;
+      
+      backend::gasnet::handle_cb* source_cb() {
+        return nullptr;
+      }
+      backend::gasnet::handle_cb* first_handle_cb() {
+        return static_cast<FinalType*>(this)->operation_cb();
+      }
+    };
+
+    ////////////////////////////////////////////////////////////////////
+
+    // rput_cb_remote: Inherited by rput_cb_operation to handle sending
+    // remote rpc events upon operation completion.
+    template<typename FinalType, typename CxStateHere, typename CxStateRemote,
+             bool has_remote = !CxStateRemote::empty>
+    struct rput_cb_remote;
+    
+    template<typename FinalType, typename CxStateHere, typename CxStateRemote>
+    struct rput_cb_remote<FinalType, CxStateHere, CxStateRemote, /*has_remote=*/true> {
+      void send_remote() {
+        auto *cbs = static_cast<FinalType*>(this);
+        
+        backend::send_am_master<progress_level::user>(
+          upcxx::world(), cbs->rank_d,
+          upcxx::bind(
+            [](CxStateRemote &&st) {
+              return st.template operator()<remote_cx_event>();
+            },
+            std::move(cbs->state_remote)
+          )
+        );
+      }
+    };
+    
+    template<typename FinalType, typename CxStateHere, typename CxStateRemote>
+    struct rput_cb_remote<FinalType, CxStateHere, CxStateRemote, /*has_remote=*/false> {
+      void send_remote() {/*nop*/}
+    };
+    
+    // rput_cb_operation: Case when the user wants synchronous operation
+    // completion.
+    template<typename FinalType, typename CxStateHere, typename CxStateRemote>
+    struct rput_cb_operation<
+        FinalType, CxStateHere, CxStateRemote, /*definitely_static_scope=*/true
+      >:
+      rput_cb_remote<FinalType, CxStateHere, CxStateRemote> {
+
+      static constexpr bool definitely_static_scope = true;
+      
+      backend::gasnet::handle_cb* operation_cb() {
+        return nullptr;
+      }
+    };
+
+    // rput_cb_operation: Case with non-blocking operation completion. We
+    // inherit from rput_cb_remote which will dispatch to either sending remote
+    // completion events or nop.
+    template<typename FinalType, typename CxStateHere, typename CxStateRemote>
+    struct rput_cb_operation<
+        FinalType, CxStateHere, CxStateRemote, /*definitely_static_scope=*/false
+      >:
+      rput_cb_remote<FinalType, CxStateHere, CxStateRemote>,
+      backend::gasnet::handle_cb {
+
+      static constexpr bool definitely_static_scope = false;
+      
+      backend::gasnet::handle_cb* operation_cb() {
+        return this;
+      }
+      
+      void execute_and_delete(backend::gasnet::handle_cb_successor) {
+        auto *cbs = static_cast<FinalType*>(this);
+        
+        this->send_remote(); // may nop depending on rput_cb_remote case.
+        
+        cbs->state_here.template operator()<operation_cx_event>();
+        
+        delete cbs; // cleanup object, no more events
+      }
+    };
+  }
+
   namespace detail {
 
     struct memvec_t {

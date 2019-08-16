@@ -4,26 +4,26 @@
 namespace gasnet = upcxx::backend::gasnet;
 namespace detail = upcxx::detail;
 
-template<detail::rma_put_mode mode>
-detail::rma_put_done detail::rma_put(
+template<detail::rma_put_sync sync_lb>
+detail::rma_put_sync detail::rma_put(
     upcxx::intrank_t rank_d, void *buf_d,
     const void *buf_s, std::size_t size,
-    gasnet::handle_cb *source_cb,
-    gasnet::handle_cb *operation_cb
+    gasnet::handle_cb *src_cb,
+    gasnet::handle_cb *op_cb
   ) {
 
-  if(mode != rma_put_mode::op_now) {
+  if(sync_lb != rma_put_sync::op_now) {
     gex_Event_t src_h = GEX_EVENT_INVALID, *src_ph;
 
-    switch(mode) {
-    case rma_put_mode::src_handle:
+    switch(sync_lb) {
+    case rma_put_sync::src_cb:
       src_ph = &src_h;
       break;
-    case rma_put_mode::src_defer:
+    case rma_put_sync::src_into_op_cb:
       src_ph = GEX_EVENT_DEFER;
       break;
-    case rma_put_mode::src_now:
-    default:
+    case rma_put_sync::src_now:
+    case rma_put_sync::op_now: // silence switch(enum) exhaustiveness warning
       src_ph = GEX_EVENT_NOW;
       break;
     }
@@ -35,21 +35,18 @@ detail::rma_put_done detail::rma_put(
       /*flags*/0
     );
     
-    operation_cb->handle = reinterpret_cast<uintptr_t>(op_h);
+    op_cb->handle = reinterpret_cast<uintptr_t>(op_h);
     
-    if(mode == rma_put_mode::src_handle)
-      source_cb->handle = reinterpret_cast<uintptr_t>(src_h);
+    if(sync_lb == rma_put_sync::src_cb)
+      src_cb->handle = reinterpret_cast<uintptr_t>(src_h);
     
     if(0 == gex_Event_Test(op_h))
-      return rma_put_done::operation;
+      return rma_put_sync::op_now;
     
-    if(mode == rma_put_mode::src_now)
-      return rma_put_done::source;
+    if(sync_lb == rma_put_sync::src_cb && 0 == gex_Event_Test(src_h))
+      return rma_put_sync::src_now;
     
-    if(mode == rma_put_mode::src_handle && 0 == gex_Event_Test(src_h))
-      return rma_put_done::source;
-    
-    return rma_put_done::none;
+    return sync_lb;
   }
   else {
     (void)gex_RMA_PutBlocking(
@@ -58,47 +55,47 @@ detail::rma_put_done detail::rma_put(
       /*flags*/0
     );
     
-    return rma_put_done::operation;
+    return rma_put_sync::op_now;
   }
 }
 
 // instantiate all four cases of rma_put
 template
-detail::rma_put_done detail::rma_put<
-  /*mode=*/detail::rma_put_mode::src_handle
+detail::rma_put_sync detail::rma_put<
+  /*mode=*/detail::rma_put_sync::src_cb
   >(
     upcxx::intrank_t rank_d, void *buf_d,
     const void *buf_s, std::size_t size,
-    gasnet::handle_cb *source_cb,
-    gasnet::handle_cb *operation_cb
+    gasnet::handle_cb *src_cb,
+    gasnet::handle_cb *op_cb
   );
 
 template
-detail::rma_put_done detail::rma_put<
-  /*mode=*/detail::rma_put_mode::src_defer
+detail::rma_put_sync detail::rma_put<
+  /*mode=*/detail::rma_put_sync::src_into_op_cb
   >(
     upcxx::intrank_t rank_d, void *buf_d,
     const void *buf_s, std::size_t size,
-    gasnet::handle_cb *source_cb,
-    gasnet::handle_cb *operation_cb
+    gasnet::handle_cb *src_cb,
+    gasnet::handle_cb *op_cb
   );
 
 template
-detail::rma_put_done detail::rma_put<
-  /*mode=*/detail::rma_put_mode::src_now
+detail::rma_put_sync detail::rma_put<
+  /*mode=*/detail::rma_put_sync::src_now
   >(
     upcxx::intrank_t rank_d, void *buf_d,
     const void *buf_s, std::size_t size,
-    gasnet::handle_cb *source_cb,
-    gasnet::handle_cb *operation_cb
+    gasnet::handle_cb *src_cb,
+    gasnet::handle_cb *op_cb
   );
 
 template
-detail::rma_put_done detail::rma_put<
-  /*mode=*/detail::rma_put_mode::op_now
+detail::rma_put_sync detail::rma_put<
+  /*mode=*/detail::rma_put_sync::op_now
   >(
     upcxx::intrank_t rank_d, void *buf_d,
     const void *buf_s, std::size_t size,
-    gasnet::handle_cb *source_cb,
-    gasnet::handle_cb *operation_cb
+    gasnet::handle_cb *src_cb,
+    gasnet::handle_cb *op_cb
   );

@@ -402,8 +402,9 @@ namespace upcxx {
       template<typename Reader>
       static deserialized_type* deserialize(Reader &r, void *spot) noexcept {
         std::size_t n = r.template pop_trivial<std::size_t>();
-        void *elts = r.unplace(storage_size_of<T>().arrayed(n));
-        return ::new(spot) view<T>((T*)elts, (T*)elts + n, n);
+        void *elts_mem = r.unplace(storage_size_of<T>().arrayed(n));
+        T *elts = detail::launder_unconstructed((T*)elts_mem);
+        return ::new(spot) view<T>(elts, elts + n, n);
       }
     };
   }

@@ -354,7 +354,7 @@ namespace upcxx {
       
       void operator()(T ...vals) {
         target_->lpc_ff(
-          std::bind(std::move(fn_), std::forward<T>(vals)...)
+          std::bind(std::move(fn_), static_cast<T>(vals)...)
         );
       }
     };
@@ -367,9 +367,9 @@ namespace upcxx {
         fn_{std::move(cx.fn_)} {
       }
       
-      typename std::result_of<Fn(T&&...)>::type
+      typename std::result_of<Fn&&(T...)>::type
       operator()(T ...vals) {
-        return std::move(fn_)(std::forward<T>(vals)...);
+        return std::move(fn_)(static_cast<T>(vals)...);
       }
     };
   }
@@ -418,6 +418,16 @@ namespace upcxx {
       
       template<typename Event, typename ...V>
       void operator()(V &&...vals) {/*nop*/}
+
+      struct event_bound {
+        template<typename ...V>
+        void operator()(V &&...vals) {/*nop*/}
+      };
+      
+      template<typename Event>
+      event_bound bind_event() && {
+        return event_bound{};
+      }
     };
 
     template<bool event_selected, typename EventValues, typename Cx>
@@ -430,7 +440,7 @@ namespace upcxx {
       > {
       static constexpr bool empty = true;
 
-      completions_state_head(Cx cx) {}
+      completions_state_head(Cx &&cx) {}
       
       template<typename Event, typename ...V>
       void operator()(V&&...) {/*nop*/}
@@ -447,7 +457,7 @@ namespace upcxx {
 
       cx_state<Cx, typename EventValues::template tuple_t<cx_event_t<Cx>>> state_;
       
-      completions_state_head(Cx cx):
+      completions_state_head(Cx &&cx):
         state_(std::move(cx)) {
       }
       
@@ -514,9 +524,26 @@ namespace upcxx {
       template<typename Event, typename ...V>
       void operator()(V &&...vals) {
         // fire the head element
-        head_t::template operator()<Event>(vals...);
+        head_t::template operator()<Event>(std::forward<V>(vals)...);
         // recurse to fire remaining elements
-        tail_t::template operator()<Event>(std::move(vals)...);
+        tail_t::template operator()<Event>(std::forward<V>(vals)...);
+      }
+
+      template<typename Event>
+      struct event_bound {
+        template<typename ...V>
+        void operator()(completions_state &&me, V &&...vals) {
+          // fire the head element
+          static_cast<head_t&>(me).template operator()<Event>(std::forward<V>(vals)...);
+          // recurse to fire remaining elements
+          static_cast<tail_t&>(me).template operator()<Event>(std::forward<V>(vals)...);
+        }
+      };
+      
+      template<typename Event>
+      typename detail::template bind<event_bound<Event>, completions_state>::return_type
+      bind_event() && {
+        return upcxx::bind(event_bound<Event>(), std::move(*this));
       }
     };
   }

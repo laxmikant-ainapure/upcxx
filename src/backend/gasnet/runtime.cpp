@@ -2,6 +2,7 @@
 #include <upcxx/backend/gasnet/runtime_internal.hpp>
 #include <upcxx/backend/gasnet/upc_link.h>
 
+#include <upcxx/concurrency.hpp>
 #include <upcxx/cuda_internal.hpp>
 #include <upcxx/os_env.hpp>
 #include <upcxx/reduce.hpp>
@@ -29,6 +30,8 @@ using upcxx::team;
 using upcxx::team_id;
 
 using detail::command;
+using detail::par_atomic;
+using detail::par_mutex;
 
 using backend::persona_state;
 
@@ -122,13 +125,17 @@ namespace {
 namespace {
   // we statically allocate the top of the AM handler space, 
   // to improve interoperability with UPCR that uses the bottom
-  #define UPCXX_NUM_AM_HANDLERS 4
+  #define UPCXX_NUM_AM_HANDLERS 8
   #define UPCXX_AM_INDEX_BASE   (256 - UPCXX_NUM_AM_HANDLERS)
   enum {
     id_am_eager_restricted = UPCXX_AM_INDEX_BASE,
     id_am_eager_master,
     id_am_eager_persona,
     id_am_bcast_master_eager,
+    id_am_long_master_packed_cmd,
+    id_am_long_master_payload_part,
+    id_am_long_master_cmd_part,
+    id_am_reply_restricted_cb,
     _id_am_endpost
   };
   static_assert(UPCXX_AM_INDEX_BASE >= GEX_AM_INDEX_BASE, "Incorrect UPCXX_AM_INDEX_BASE");
@@ -140,7 +147,32 @@ namespace {
                         gex_AM_Arg_t persona_ptr_lo, gex_AM_Arg_t persona_ptr_hi);
 
   void am_bcast_master_eager(gex_Token_t, void *buf, size_t buf_size, gex_AM_Arg_t buf_align_and_level);
+
+  void am_long_master_packed_cmd(gex_Token_t,
+    void *payload, size_t payload_size,
+    gex_AM_Arg_t reply_cb_lo, gex_AM_Arg_t reply_cb_hi,
+    gex_AM_Arg_t cmd_size_align15_level1,
+    gex_AM_Arg_t cmd0, gex_AM_Arg_t cmd1, gex_AM_Arg_t cmd2, gex_AM_Arg_t cmd3,
+    gex_AM_Arg_t cmd4, gex_AM_Arg_t cmd5, gex_AM_Arg_t cmd6, gex_AM_Arg_t cmd7,
+    gex_AM_Arg_t cmd8, gex_AM_Arg_t cmd9, gex_AM_Arg_t cmd10, gex_AM_Arg_t cmd11,
+    gex_AM_Arg_t cmd12);
+
+  void am_long_master_payload_part(gex_Token_t,
+    void *payload_part, size_t payload_part_size,
+    gex_AM_Arg_t payload_lo, gex_AM_Arg_t payload_hi,
+    gex_AM_Arg_t cmd_size,
+    gex_AM_Arg_t cmd_align_level1,
+    gex_AM_Arg_t reply_cb_lo, gex_AM_Arg_t reply_cb_hi);
+
+  void am_long_master_cmd_part(gex_Token_t,
+    void *cmd_part, size_t cmd_part_size,
+    gex_AM_Arg_t payload_lo, gex_AM_Arg_t payload_hi,
+    gex_AM_Arg_t cmd_size,
+    gex_AM_Arg_t cmd_align_level1,
+    gex_AM_Arg_t cmd_part_offset);
   
+  void am_reply_restricted_cb(gex_Token_t, gex_AM_Arg_t cb_lo, gex_AM_Arg_t cb_hi);
+
   #define AM_ENTRY(name, arg_n) \
     {id_##name, (void(*)())name, GEX_FLAG_AM_MEDIUM | GEX_FLAG_AM_REQUEST, arg_n, nullptr, #name}
   
@@ -148,8 +180,51 @@ namespace {
     AM_ENTRY(am_eager_restricted, 1),
     AM_ENTRY(am_eager_master, 1),
     AM_ENTRY(am_eager_persona, 3),
-    AM_ENTRY(am_bcast_master_eager, 1)
+    AM_ENTRY(am_bcast_master_eager, 1),
+    {id_am_long_master_packed_cmd, (void(*)())am_long_master_packed_cmd, GEX_FLAG_AM_LONG | GEX_FLAG_AM_REQUEST, 16, nullptr, "am_long_master_packed_cmd"},
+    {id_am_long_master_payload_part, (void(*)())am_long_master_payload_part, GEX_FLAG_AM_LONG | GEX_FLAG_AM_REQUEST, 6, nullptr, "am_long_master_payload_part"},
+    {id_am_long_master_cmd_part, (void(*)())am_long_master_cmd_part, GEX_FLAG_AM_MEDIUM | GEX_FLAG_AM_REQUEST, 5, nullptr, "am_long_master_cmd_part"},
+    {id_am_reply_restricted_cb, (void(*)())am_reply_restricted_cb, GEX_FLAG_AM_SHORT | GEX_FLAG_AM_REPLY, 2, nullptr, "id_am_reply_restricted_cb"}
   };
+}
+
+////////////////////////////////////////////////////////////////////////
+
+namespace {
+  template<typename T>
+  gex_AM_Arg_t am_arg_encode_ptr_lo(T *p) {
+    intptr_t i = reinterpret_cast<intptr_t>(p);
+    return gex_AM_Arg_t(i & 0xffffffffu);
+  }
+  template<typename T>
+  gex_AM_Arg_t am_arg_encode_ptr_hi(T *p) {
+    intptr_t i = reinterpret_cast<intptr_t>(p);
+    return gex_AM_Arg_t(i >> 31 >> 1);
+  }
+  template<typename T>
+  T* am_arg_decode_ptr(gex_AM_Arg_t lo, gex_AM_Arg_t hi) {
+    // Reconstructing a pointer from two gex_AM_Arg_t is nuanced
+    // since the size of gex_AM_Arg_t is unspecified. The high
+    // bits (per_hi) can be safely upshifted into place, on a 32-bit
+    // system the result will just be zero. The low bits (per_lo) must
+    // not be permitted to sign-extend. Masking against 0xf's achieves
+    // this because all literals are non-negative. So the result of the
+    // AND could either be signed or unsigned depending on if the mask
+    // (a positive value) can be expressed in the desitination signed
+    // type (intptr_t).
+    intptr_t i = (intptr_t(hi)<<31<<1) | (intptr_t(lo) & 0xffffffffu);
+    return reinterpret_cast<T*>(i);
+  }
+
+  gex_AM_Arg_t am_arg_encode_i64_lo(int64_t i) {
+    return gex_AM_Arg_t(i & 0xffffffffu);
+  }
+  gex_AM_Arg_t am_arg_encode_i64_hi(int64_t i) {
+    return gex_AM_Arg_t(i >> 31 >> 1);
+  }
+  int64_t am_arg_decode_i64(gex_AM_Arg_t lo, gex_AM_Arg_t hi) {
+    return (int64_t(hi)<<31<<1) | (int64_t(lo) & 0xffffffffu);
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -980,7 +1055,7 @@ void gasnet::send_am_eager_persona(
     id_am_eager_persona, buf, buf_size,
     GEX_EVENT_NOW, /*flags*/0,
     buf_align<<1 | (level == progress_level::user ? 1 : 0),
-    per_lo, per_hi
+    am_arg_encode_ptr_lo(recipient_persona), am_arg_encode_ptr_hi(recipient_persona)
   );
   
   after_gasnet();
@@ -1012,8 +1087,8 @@ namespace {
   }
 }
 
-template<progress_level level>
 void gasnet::send_am_rdzv(
+    progress_level level,
     team &tm,
     intrank_t rank_d,
     persona *persona_d,
@@ -1066,9 +1141,6 @@ void gasnet::send_am_rdzv(
     }
   );
 }
-
-template void gasnet::send_am_rdzv<progress_level::internal>(team&, intrank_t, persona*, void*, size_t, size_t);
-template void gasnet::send_am_rdzv<progress_level::user>(team&, intrank_t, persona*, void*, size_t, size_t);
 
 void gasnet::bcast_am_master_eager(
     progress_level level,
@@ -1332,15 +1404,19 @@ RpcAsLpc* rpc_as_lpc::build_eager(
   
   void *msg_buf = detail::alloc_aligned(msg_size, cmd_alignment);
   
-  // The (void**) casts *might* inform memcpy that it can assume word
-  // alignment.
-  std::memcpy((void**)msg_buf, (void**)cmd_buf, cmd_size);
-  
+  if(cmd_buf != nullptr) {
+    // The (void**) casts *might* inform memcpy that it can assume word
+    // alignment.
+    std::memcpy((void**)msg_buf, (void**)cmd_buf, cmd_size);
+  }
+
   RpcAsLpc *m = ::new((char*)msg_buf + msg_offset) RpcAsLpc;
   m->payload = msg_buf;
-  m->the_vtbl.execute_and_delete = command<detail::lpc_base*>::get_executor(RpcAsLpc::reader_of(m));
   m->vtbl = &m->the_vtbl;
   m->is_rdzv = false;
+  
+  if(cmd_buf != nullptr)
+    m->the_vtbl.execute_and_delete = command<detail::lpc_base*>::get_executor(RpcAsLpc::reader_of(m));
   
   return m;
 }
@@ -1552,19 +1628,7 @@ namespace {
     size_t buf_align = buf_align_and_level>>1;
     bool level_user = buf_align_and_level & 1;
     
-    // Reconstructing a pointer from two gex_AM_Arg_t is nuanced
-    // since the size of gex_AM_Arg_t is unspecified. The high
-    // bits (per_hi) can be safely upshifted into place, on a 32-bit
-    // system the result will just be zero. The low bits (per_lo) must
-    // not be permitted to sign-extend. Masking against 0xf's achieves
-    // this because all literals are non-negative. So the result of the
-    // AND could either be signed or unsigned depending on if the mask
-    // (a positive value) can be expressed in the desitination signed
-    // type (intptr_t).
-    persona *per = reinterpret_cast<persona*>(
-      static_cast<intptr_t>(per_hi)<<31<<1 |
-      (per_lo & 0xffffffff)
-    );
+    persona *per = am_arg_decode_ptr<persona>(per_lo, per_hi);
     per = per == nullptr ? &backend::master : per; 
     
     rpc_as_lpc *m = rpc_as_lpc::build_eager(buf, buf_size, buf_align);
@@ -1612,6 +1676,292 @@ namespace {
     );
     
     tls.enqueue(backend::master, level, m, known_active);
+  }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// rma_put_then_am_master
+
+template<bool src_now, bool packed_protocol>
+bool/*src_done*/ gasnet::rma_put_then_am_master_protocol(
+    team &tm, intrank_t rank_d,
+    void *buf_d, void const *buf_s, std::size_t buf_size,
+    progress_level am_level, void *am_cmd, std::size_t am_size, std::size_t am_align,
+    gasnet::handle_cb *src_cb,
+    gasnet::reply_cb *rem_cb
+  ) {
+
+  gex_TM_t tm_h = gasnet::handle_of(tm);
+  gex_Event_t src_h = GEX_EVENT_INVALID, *src_ph;
+
+  if(src_now)
+    src_ph = GEX_EVENT_NOW;
+  else
+    src_ph = &src_h;
+  
+  size_t am_long_max = gex_AM_MaxRequestLong(tm_h, rank_d, src_ph, /*flags*/0, 16);
+  
+  if(am_long_max < buf_size) {
+    (void)gex_RMA_PutBlocking(
+      tm_h, rank_d,
+      buf_d, const_cast<void*>(buf_s), buf_size - am_long_max,
+      /*flags*/0
+    );
+    buf_d = (char*)buf_d + (buf_size - am_long_max);
+    buf_s = (char const*)buf_s + (buf_size - am_long_max);
+    buf_size = am_long_max;
+  }
+  
+  if(packed_protocol) {
+    gex_AM_Arg_t cmd_size_align15_level1 = am_size<<16 | am_align<<1 |
+                                           (am_level == progress_level::user ? 1 : 0);
+    gex_AM_Arg_t cmd_arg[13];
+    std::memcpy((void*)cmd_arg, am_cmd, am_size);
+    
+    gex_AM_RequestLong16(
+      tm_h, rank_d,
+      id_am_long_master_packed_cmd,
+      const_cast<void*>(buf_s), buf_size, buf_d,
+      src_ph,
+      /*flags*/0,
+      am_arg_encode_ptr_lo(rem_cb), am_arg_encode_ptr_hi(rem_cb),
+      cmd_size_align15_level1,
+      cmd_arg[0], cmd_arg[1], cmd_arg[2], cmd_arg[3],
+      cmd_arg[4], cmd_arg[5], cmd_arg[6], cmd_arg[7],
+      cmd_arg[8], cmd_arg[9], cmd_arg[10], cmd_arg[11],
+      cmd_arg[12]
+    );
+  }
+  else {
+    int credits = 1 + am_size;
+    
+    gex_AM_Arg_t am_align_level1 =
+      am_align<<1 |
+      (am_level == progress_level::user ? 1 : 0);
+    
+    (void)gex_AM_RequestLong6(
+      tm_h, rank_d,
+      id_am_long_master_payload_part,
+      const_cast<void*>(buf_s), buf_size, buf_d,
+      src_ph,
+      /*flags*/0,
+      am_arg_encode_ptr_lo(buf_d), am_arg_encode_ptr_hi(buf_d),
+      am_size, am_align_level1,
+      am_arg_encode_ptr_lo(rem_cb), am_arg_encode_ptr_hi(rem_cb)
+    );
+
+    size_t part_size_max = gex_AM_MaxRequestMedium(
+      tm_h, rank_d, GEX_EVENT_NOW, /*flags*/0, /*num_args*/6
+    );
+    size_t part_offset = 0;
+    
+    while(part_offset < am_size) {
+      size_t part_size = std::min(part_size_max, am_size - part_offset);
+      
+      (void)gex_AM_RequestMedium5(
+        tm_h, rank_d,
+        id_am_long_master_cmd_part,
+        (char*)am_cmd + part_offset, part_size,
+        GEX_EVENT_NOW,
+        /*flags*/0,
+        am_arg_encode_ptr_lo(buf_d), am_arg_encode_ptr_hi(buf_d),
+        am_size, am_align_level1,
+        part_offset
+      );
+      
+      part_offset += part_size;
+    }
+  }
+  
+  if(!src_now) {
+    src_cb->handle = reinterpret_cast<uintptr_t>(src_h);
+    return 0 == gex_Event_Test(src_h);
+  }
+  else
+    return true;
+}
+
+// instantiate all cases of rma_put_then_am_master_protocol
+#define INSTANTIATE(src_now, packed_protocol) \
+  template \
+  bool gasnet::rma_put_then_am_master_protocol<src_now, packed_protocol>( \
+      team &tm, intrank_t rank_d, \
+      void *buf_d, void const *buf_s, std::size_t buf_size, \
+      progress_level am_level, void *am_cmd, std::size_t am_size, std::size_t am_align, \
+      gasnet::handle_cb *src_cb, \
+      gasnet::reply_cb *rem_cb \
+    );
+
+INSTANTIATE(true, true)
+INSTANTIATE(true, false)
+INSTANTIATE(false, true)
+INSTANTIATE(false, false)
+#undef INSTANTIATE
+
+namespace {
+  void am_long_master_packed_cmd(
+      gex_Token_t token,
+      void *payload, size_t payload_size,
+      gex_AM_Arg_t reply_cb_lo, gex_AM_Arg_t reply_cb_hi,
+      gex_AM_Arg_t cmd_size_align15_level1,
+      gex_AM_Arg_t a0, gex_AM_Arg_t a1, gex_AM_Arg_t a2, gex_AM_Arg_t a3,
+      gex_AM_Arg_t a4, gex_AM_Arg_t a5, gex_AM_Arg_t a6, gex_AM_Arg_t a7,
+      gex_AM_Arg_t a8, gex_AM_Arg_t a9, gex_AM_Arg_t a10, gex_AM_Arg_t a11,
+      gex_AM_Arg_t a12
+    ) {
+    
+    size_t cmd_size = cmd_size_align15_level1>>(1+15);
+    size_t cmd_align = (cmd_size_align15_level1>>1) & ((1<<15)-1);
+    bool level_user = cmd_size_align15_level1 & 1;
+    
+    gex_AM_Arg_t buf[13] = {a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12};
+    rpc_as_lpc *m = rpc_as_lpc::build_eager((void*)buf, cmd_size, cmd_align);
+    
+    detail::persona_tls &tls = detail::the_persona_tls;
+    
+    tls.enqueue(
+      backend::master,
+      level_user ? progress_level::user : progress_level::internal,
+      m,
+      /*known_active=*/std::integral_constant<bool, !UPCXX_BACKEND_GASNET_PAR>()
+    );
+
+    if(!(reply_cb_lo == 0x0 && reply_cb_hi == 0x0))
+      gex_AM_ReplyShort2(token, id_am_reply_restricted_cb, 0, reply_cb_lo, reply_cb_hi);
+  }
+
+  struct am_long_reassembly_state: rpc_as_lpc {
+    par_atomic<int> credits{0};
+    gex_AM_Arg_t reply_cb_lo, reply_cb_hi;
+  };
+
+  par_mutex am_long_reassembly_lock;
+  std::unordered_map<void*, am_long_reassembly_state*> am_long_reassembly_table;
+  
+  void am_long_master_payload_part(
+      gex_Token_t token,
+      void *payload_part, size_t payload_part_size,
+      gex_AM_Arg_t payload_lo, gex_AM_Arg_t payload_hi,
+      gex_AM_Arg_t cmd_size,
+      gex_AM_Arg_t cmd_align_level1,
+      gex_AM_Arg_t reply_cb_lo, gex_AM_Arg_t reply_cb_hi
+    ) {
+
+    void *payload = am_arg_decode_ptr<void>(payload_lo, payload_hi);
+    int credits_total = 1 + cmd_size;
+
+    int cmd_align = cmd_align_level1 >> 1;
+    int cmd_level = cmd_align_level1 & 1;
+    
+    am_long_reassembly_state *st;
+
+    am_long_reassembly_lock.lock();
+    {
+      auto got = am_long_reassembly_table.insert({payload, nullptr});
+      if(got.second) {
+        st = rpc_as_lpc::build_eager<am_long_reassembly_state>(nullptr, cmd_size, cmd_align);
+        got.first->second = st;
+      }
+      else
+        st = got.first->second;
+
+      st->reply_cb_lo = reply_cb_lo;
+      st->reply_cb_hi = reply_cb_hi;
+      int credits_after = 1 + st->credits.fetch_add(1, std::memory_order_acq_rel);
+      
+      if(credits_after == credits_total) {
+        am_long_reassembly_table.erase(got.first);
+        // completion handled outside of lock below...
+      }
+      else
+        st = nullptr; // disable completion below
+    }
+    am_long_reassembly_lock.unlock();
+
+    if(st != nullptr) {
+      // completion
+      detail::persona_tls &tls = detail::the_persona_tls;
+      tls.enqueue(
+        backend::master,
+        cmd_level ? progress_level::user : progress_level::internal,
+        st,
+        /*known_active=*/std::integral_constant<bool, !UPCXX_BACKEND_GASNET_PAR>()
+      );
+      
+      if(!(reply_cb_lo == 0x0 && reply_cb_hi == 0x0))
+        gex_AM_ReplyShort2(token, id_am_reply_restricted_cb, 0, reply_cb_lo, reply_cb_hi);
+    }
+  }
+
+  void am_long_master_cmd_part(
+      gex_Token_t token,
+      void *cmd_part, size_t cmd_part_size,
+      gex_AM_Arg_t payload_lo, gex_AM_Arg_t payload_hi,
+      gex_AM_Arg_t cmd_size,
+      gex_AM_Arg_t cmd_align_level1,
+      gex_AM_Arg_t cmd_part_offset
+    ) {
+
+    void *payload = am_arg_decode_ptr<void>(payload_lo, payload_hi);
+    int credits_total = 1 + cmd_size;
+    int credits_after_optimistic;
+    
+    int cmd_align = cmd_align_level1 >> 1;
+    int cmd_level = cmd_align_level1 & 1;
+
+    am_long_reassembly_state *st;
+
+    am_long_reassembly_lock.lock();
+    {
+      auto got = am_long_reassembly_table.insert({payload, nullptr});
+      if(got.second) {
+        st = rpc_as_lpc::build_eager<am_long_reassembly_state>(nullptr, cmd_size, cmd_align);
+        got.first->second = st;
+      }
+      else
+        st = got.first->second;
+
+      credits_after_optimistic = cmd_part_size + st->credits.load(std::memory_order_relaxed);
+      
+      if(credits_after_optimistic == credits_total)
+        am_long_reassembly_table.erase(got.first);
+    }
+    am_long_reassembly_lock.unlock();
+
+    std::memcpy((char*)st->payload + cmd_part_offset, cmd_part, cmd_part_size);
+
+    if(cmd_part_offset == 0)
+      st->the_vtbl.execute_and_delete = command<detail::lpc_base*>::get_executor(am_long_reassembly_state::reader_of(st));
+    
+    int credits_after = cmd_part_size + st->credits.fetch_add(cmd_part_size, std::memory_order_acq_rel);
+
+    if(credits_after == credits_total) {
+      if(credits_after_optimistic != credits_total) {
+        am_long_reassembly_lock.lock();
+        am_long_reassembly_table.erase(payload);
+        am_long_reassembly_lock.unlock();
+      }
+      
+      // completion
+      gex_AM_Arg_t reply_cb_lo = st->reply_cb_lo;
+      gex_AM_Arg_t reply_cb_hi = st->reply_cb_hi;
+      
+      detail::persona_tls &tls = detail::the_persona_tls;
+      tls.enqueue(
+        backend::master,
+        cmd_level ? progress_level::user : progress_level::internal,
+        st,
+        /*known_active=*/std::integral_constant<bool, !UPCXX_BACKEND_GASNET_PAR>()
+      );
+      
+      if(!(reply_cb_lo == 0x0 && reply_cb_hi == 0x0))
+        gex_AM_ReplyShort2(token, id_am_reply_restricted_cb, 0, reply_cb_lo, reply_cb_hi);
+    }
+  }
+    
+  void am_reply_restricted_cb(gex_Token_t, gex_AM_Arg_t cb_lo, gex_AM_Arg_t cb_hi) {
+    gasnet::reply_cb *cb = am_arg_decode_ptr<gasnet::reply_cb>(cb_lo, cb_hi);
+    cb->execute_and_delete();
   }
 }
 
