@@ -61,7 +61,7 @@ void do_put(int round, int peer, int *outgoing) {
   for(int i=0; i < size; i++)
     check[i] = src[i];
   
-  outgoing += 1;
+  *outgoing += 1;
   upcxx::rput(src, dest, size,
     SourceCx::as_lpc(upcxx::current_persona(),
       [=]() {
@@ -136,8 +136,10 @@ int main() {
 
     while(true) {
       bool done = outgoing == 0;
-      for(int peer=0; peer < peer_n; peer++)
+      for(int peer=0; peer < peer_n; peer++) {
         done &= my_slot_recv[round_n%2][peer] == round_n;
+        done &= my_slot_recv[(round_n-1)%2][peer] == round_n-1;
+      }
       if(done) break;
       
       upcxx::progress();
