@@ -3,6 +3,7 @@
 
 #include <upcxx/backend/gasnet/runtime_fwd.hpp>
 #include <upcxx/backend/gasnet/handle_cb.hpp>
+#include <upcxx/backend/gasnet/reply_cb.hpp>
 
 #include <upcxx/backend_fwd.hpp>
 #include <upcxx/bind.hpp>
@@ -93,10 +94,6 @@ namespace gasnet {
     size_t cmd_size,
     size_t cmd_align
   );
-
-  struct reply_cb {
-    virtual void execute_and_delete() = 0;
-  };
 
   template<bool src_now, typename AmFn>
   bool/*src_done*/ rma_put_then_am_master(

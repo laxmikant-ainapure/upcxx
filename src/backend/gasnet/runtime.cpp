@@ -135,7 +135,7 @@ namespace {
     id_am_long_master_packed_cmd,
     id_am_long_master_payload_part,
     id_am_long_master_cmd_part,
-    id_am_reply_restricted_cb,
+    id_am_reply_cb,
     _id_am_endpost
   };
   static_assert(UPCXX_AM_INDEX_BASE >= GEX_AM_INDEX_BASE, "Incorrect UPCXX_AM_INDEX_BASE");
@@ -171,7 +171,7 @@ namespace {
     gex_AM_Arg_t cmd_align_level1,
     gex_AM_Arg_t cmd_part_offset);
   
-  void am_reply_restricted_cb(gex_Token_t, gex_AM_Arg_t cb_lo, gex_AM_Arg_t cb_hi);
+  void am_reply_cb(gex_Token_t, gex_AM_Arg_t cb_lo, gex_AM_Arg_t cb_hi);
 
   #define AM_ENTRY(name, arg_n) \
     {id_##name, (void(*)())name, GEX_FLAG_AM_MEDIUM | GEX_FLAG_AM_REQUEST, arg_n, nullptr, #name}
@@ -184,7 +184,7 @@ namespace {
     {id_am_long_master_packed_cmd, (void(*)())am_long_master_packed_cmd, GEX_FLAG_AM_LONG | GEX_FLAG_AM_REQUEST, 16, nullptr, "am_long_master_packed_cmd"},
     {id_am_long_master_payload_part, (void(*)())am_long_master_payload_part, GEX_FLAG_AM_LONG | GEX_FLAG_AM_REQUEST, 6, nullptr, "am_long_master_payload_part"},
     {id_am_long_master_cmd_part, (void(*)())am_long_master_cmd_part, GEX_FLAG_AM_MEDIUM | GEX_FLAG_AM_REQUEST, 5, nullptr, "am_long_master_cmd_part"},
-    {id_am_reply_restricted_cb, (void(*)())am_reply_restricted_cb, GEX_FLAG_AM_SHORT | GEX_FLAG_AM_REPLY, 2, nullptr, "id_am_reply_restricted_cb"}
+    {id_am_reply_cb, (void(*)())am_reply_cb, GEX_FLAG_AM_SHORT | GEX_FLAG_AM_REPLY, 2, nullptr, "id_am_reply_cb"}
   };
 }
 
@@ -1827,7 +1827,7 @@ namespace {
     );
 
     if(!(reply_cb_lo == 0x0 && reply_cb_hi == 0x0))
-      gex_AM_ReplyShort2(token, id_am_reply_restricted_cb, 0, reply_cb_lo, reply_cb_hi);
+      gex_AM_ReplyShort2(token, id_am_reply_cb, 0, reply_cb_lo, reply_cb_hi);
   }
 
   struct am_long_reassembly_state: rpc_as_lpc {
@@ -1889,7 +1889,7 @@ namespace {
       );
       
       if(!(reply_cb_lo == 0x0 && reply_cb_hi == 0x0))
-        gex_AM_ReplyShort2(token, id_am_reply_restricted_cb, 0, reply_cb_lo, reply_cb_hi);
+        gex_AM_ReplyShort2(token, id_am_reply_cb, 0, reply_cb_lo, reply_cb_hi);
     }
   }
 
@@ -1955,13 +1955,17 @@ namespace {
       );
       
       if(!(reply_cb_lo == 0x0 && reply_cb_hi == 0x0))
-        gex_AM_ReplyShort2(token, id_am_reply_restricted_cb, 0, reply_cb_lo, reply_cb_hi);
+        gex_AM_ReplyShort2(token, id_am_reply_cb, 0, reply_cb_lo, reply_cb_hi);
     }
   }
     
-  void am_reply_restricted_cb(gex_Token_t, gex_AM_Arg_t cb_lo, gex_AM_Arg_t cb_hi) {
+  void am_reply_cb(gex_Token_t, gex_AM_Arg_t cb_lo, gex_AM_Arg_t cb_hi) {
     gasnet::reply_cb *cb = am_arg_decode_ptr<gasnet::reply_cb>(cb_lo, cb_hi);
-    cb->execute_and_delete();
+    detail::persona_tls &tls = detail::the_persona_tls;
+    tls.enqueue(
+      *cb->target, progress_level::internal, cb,
+      /*known_active=*/std::integral_constant<bool, !UPCXX_BACKEND_GASNET_PAR>()
+    );
   }
 }
 

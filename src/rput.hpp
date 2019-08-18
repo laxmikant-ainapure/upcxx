@@ -163,11 +163,20 @@ namespace upcxx {
 
       void reply_hook() {/*default is nop*/}
 
-      void execute_and_delete() {
-        static_cast<Obj*>(this)->reply_hook(); // potentially overriden by Obj
+      static void the_execute_and_delete(lpc_base *me_lpc) {
+        auto *me = static_cast<rput_reply_cb*>(me_lpc);
+        Obj *o = static_cast<Obj*>(me);
+        o->reply_hook(); // potentially overriden by Obj
       }
+
+      static constexpr lpc_vtable the_vtbl = {&the_execute_and_delete};
+
+      rput_reply_cb(): reply_cb(&the_vtbl, &upcxx::current_persona()) {}
     };
     
+    template<typename Obj, typename Traits>
+    constexpr lpc_vtable rput_reply_cb<Obj,Traits,true>::the_vtbl;
+
     template<typename Obj, typename Traits>
     struct rput_reply_cb<Obj, Traits, /*replies=*/false> {
       constexpr backend::gasnet::reply_cb* the_reply_cb() { return nullptr; }
