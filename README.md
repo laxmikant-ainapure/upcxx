@@ -141,6 +141,7 @@ Notable bug fixes:
 * issue #224: missing const qualifier on `dist_object<T>.fetch()`
 * issue #223: `operator<<(std::ostream, global_ptr<T>)` does not match spec
 * issue #243: Honor `$UPCXX_PYTHON` during install
+* issue #204: No support for `nvcc --compiler-bindir=...`
 
 The following features from the specification are not yet implemented:
 

@@ -96,10 +96,12 @@ def openmp(cxt):
     'libflags': flags
   }}
 
-def invoke(cmd):
+def invoke(cmd, shell=False):
   import subprocess as subp
   try:
-    p = subp.Popen(cmd, stdin=subp.PIPE, stdout=subp.PIPE, stderr=subp.PIPE, close_fds=True)
+    # Need to use shell=True so that commands parsed from nvcc are executed as
+    # if in a shell.
+    p = subp.Popen(' '.join(cmd), stdin=subp.PIPE, stdout=subp.PIPE, stderr=subp.PIPE, close_fds=True, shell=shell)
   except OSError as e:
     return (e.errno, '', '')
   out,err = p.communicate()
@@ -112,7 +114,7 @@ def invoke_on_file(suffix, contents, file_to_cmd, file_to_outs=lambda x:[]):
   fd,name = tempfile.mkstemp(suffix=suffix)
   os.write(fd, contents)
   os.close(fd)
-  ans = invoke(file_to_cmd(name))
+  ans = invoke(file_to_cmd(name), shell=True)
   for f in [name] + list(file_to_outs(name)):
     try: os.remove(f)
     except OSError: pass
@@ -133,7 +135,7 @@ def cuda_cached():
   
   ##############################################################################
   # scrape the preprocessor flags and backend compiler
-  res,out,err = invoke(nvcc+['--dryrun','-c','foo.cpp','-o','foo.o'])
+  res,out,err = invoke(nvcc+['--dryrun','-c','foo.cpp','-o','foo.o'], shell=True)
   if res != 0:
     raise errorlog.LoggedError(
       'nvcc error',
@@ -147,13 +149,15 @@ def cuda_cached():
   
   for line in lines:
     m1 = re.match(r'^#\$ INCLUDES=(.*)$', line)
-    m2 = re.match(r'^#\$ ([A-Za-z_+-]+) ', line)
+    m2 = re.match(r'^#\$ ([A-Za-z0-9_+-/."]+) ', line)
     if m1:
       flags = m1.group(1).split()
       flags = [flag[1:-1] if flag.startswith('"') else flag for flag in flags]
       ppflags += [flag for flag in flags if re.match('^(-D|-I)', flag)]
     elif m2:
-      compiler = {'gcc':'g++', 'clang':'clang++', 'icc':'icpc'}[m2.group(1)]
+      compiler_bindir = os.path.dirname(m2.group(1))
+      compiler_binary = {'gcc':'g++', 'clang':'clang++', 'icc':'icpc', 'pgcc':'pgc++'}[os.path.basename(m2.group(1))]
+      compiler = os.path.join(compiler_bindir, compiler_binary)
 
   if env('UPCXX_CUDA_CPPFLAGS', None) is not None:
     # override scraped ppflags
@@ -165,12 +169,12 @@ def cuda_cached():
     libflags = libflags.split()
   else:
     # scrape the link flags
-    res,out,err = invoke(nvcc+['--dryrun','foo.o'])
+    res,out,err = invoke(nvcc+['--dryrun','foo.o'], shell=True)
     if res != 0:
       raise errorlog.LoggedError('nvcc error', 'Failed to invoke nvcc (exit=%d).\nMake sure CUDA is installed and nvcc is in your PATH.'%res)
     line = [line for line in err.split('\n') if line != ''][-1] # last line
     m1 = re.match(r'^#\$ ([A-Z_]+)=', line)
-    m2 = re.match(r'^#\$ ([A-Za-z_+-]+) ', line)
+    m2 = re.match(r'^#\$ ([A-Za-z0-9_+-/."]+) ', line)
     libflags = []
     
     if not(m1 is None and m2):
