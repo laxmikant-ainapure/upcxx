@@ -126,6 +126,9 @@ New features/enhancements: (see specification and programmer's guide for full de
 * clang v5.0+ has been added to the list of supported compilers on Linux/ppc64le platforms
 * New define `UPCXX_SPEC_VERSION` documents the implemented revision of the UPC++ specification
 * `upcxx` has several new convenience options (see `upcxx -help`)
+* Release tarball downloads now embed a copy of GASNet-EX that is used by default during install.
+  Git clones of the repo will still default to downloading GASNet-EX during install.
+  The `GASNET` envvar can still be set at install time to change the default behavior.
 
 Notable bug fixes:
 
