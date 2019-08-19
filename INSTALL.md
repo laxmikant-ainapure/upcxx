@@ -11,11 +11,14 @@ cd <upcxx-source-path>
 This will build the UPC\+\+ library and install it to the `<upcxx-install-path>`
 directory. Users are recommended to use paths to non-existent or empty
 directories as the installation path so that uninstallation is as trivial as
-`rm -rf <upcxx-install-path>`.  Note the default installer downloads the
-GASNet-EX communication library, so an Internet connection is needed. 
-An offline installer is also available at the UPC\+\+ website.  Depending on
-the platform, additional configuration may be necessary before invoking
-`install`. See below.
+`rm -rf <upcxx-install-path>`.  Depending on the platform, additional
+configuration may be necessary before invoking `install`. See below.
+
+If you are using a source tarball release downloaded from the website, it
+should include an embedded copy of GASNet-EX and `install` will default to
+using that.  However if you are using a git clone or other repo snapshot of
+UPC++, then `install` may default to downloading the GASNet-EX communication
+library, in which case an Internet connection is needed at install time.
 
 Note: The install script requires Python 2.7 and does its best to automatically
 invoke that version even if it isn't the current default on the system. If
@@ -141,7 +144,7 @@ environment variables:
   script will build its own version of GASNet-EX. This can be a path to a tarball,
   URL to a tarball, or path to a full source tree. If provided, this must correspond 
   to a recent and compatible version of GASNet-EX (NOT GASNet-1).
-  Defaults to a URL to a publicly available GASNet-EX tarball. 
+  Defaults to an embedded copy of GASNet-EX, or the GASNet-EX download URL.
 * `GASNET_CONFIGURE_ARGS`: List of additional command line arguments passed to
   GASNet's configure phase.
 * `UPCXX_PYTHON`: Python2 interpreter to use.
