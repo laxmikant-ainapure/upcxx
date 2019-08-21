@@ -159,14 +159,14 @@ namespace {
 
   void am_long_master_payload_part(gex_Token_t,
     void *payload_part, size_t payload_part_size,
-    gex_AM_Arg_t payload_lo, gex_AM_Arg_t payload_hi,
+    gex_AM_Arg_t nonce,
     gex_AM_Arg_t cmd_size,
     gex_AM_Arg_t cmd_align_level1,
     gex_AM_Arg_t reply_cb_lo, gex_AM_Arg_t reply_cb_hi);
 
   void am_long_master_cmd_part(gex_Token_t,
     void *cmd_part, size_t cmd_part_size,
-    gex_AM_Arg_t payload_lo, gex_AM_Arg_t payload_hi,
+    gex_AM_Arg_t nonce,
     gex_AM_Arg_t cmd_size,
     gex_AM_Arg_t cmd_align_level1,
     gex_AM_Arg_t cmd_part_offset);
@@ -182,8 +182,8 @@ namespace {
     AM_ENTRY(am_eager_persona, 3),
     AM_ENTRY(am_bcast_master_eager, 1),
     {id_am_long_master_packed_cmd, (void(*)())am_long_master_packed_cmd, GEX_FLAG_AM_LONG | GEX_FLAG_AM_REQUEST, 16, nullptr, "am_long_master_packed_cmd"},
-    {id_am_long_master_payload_part, (void(*)())am_long_master_payload_part, GEX_FLAG_AM_LONG | GEX_FLAG_AM_REQUEST, 6, nullptr, "am_long_master_payload_part"},
-    {id_am_long_master_cmd_part, (void(*)())am_long_master_cmd_part, GEX_FLAG_AM_MEDIUM | GEX_FLAG_AM_REQUEST, 5, nullptr, "am_long_master_cmd_part"},
+    {id_am_long_master_payload_part, (void(*)())am_long_master_payload_part, GEX_FLAG_AM_LONG | GEX_FLAG_AM_REQUEST, 5, nullptr, "am_long_master_payload_part"},
+    {id_am_long_master_cmd_part, (void(*)())am_long_master_cmd_part, GEX_FLAG_AM_MEDIUM | GEX_FLAG_AM_REQUEST, 4, nullptr, "am_long_master_cmd_part"},
     {id_am_reply_cb, (void(*)())am_reply_cb, GEX_FLAG_AM_SHORT | GEX_FLAG_AM_REPLY, 2, nullptr, "id_am_reply_cb"}
   };
 }
@@ -203,8 +203,7 @@ namespace {
   }
   template<typename T>
   T* am_arg_decode_ptr(gex_AM_Arg_t lo, gex_AM_Arg_t hi) {
-    // Reconstructing a pointer from two gex_AM_Arg_t is nuanced
-    // since the size of gex_AM_Arg_t is unspecified. The high
+    // Reconstruct a pointer from two gex_AM_Arg_t. The high
     // bits (per_hi) can be safely upshifted into place, on a 32-bit
     // system the result will just be zero. The low bits (per_lo) must
     // not be permitted to sign-extend. Masking against 0xf's achieves
@@ -1716,6 +1715,7 @@ bool/*src_done*/ gasnet::rma_put_then_am_master_protocol(
     gex_AM_Arg_t cmd_size_align15_level1 = am_size<<16 | am_align<<1 |
                                            (am_level == progress_level::user ? 1 : 0);
     gex_AM_Arg_t cmd_arg[13];
+    UPCXX_ASSERT(am_size <= 13*sizeof(gex_AM_Arg_t));
     std::memcpy((void*)cmd_arg, am_cmd, am_size);
     
     gex_AM_RequestLong16(
@@ -1733,20 +1733,22 @@ bool/*src_done*/ gasnet::rma_put_then_am_master_protocol(
     );
   }
   else {
-    int credits = 1 + am_size;
-    
     gex_AM_Arg_t am_align_level1 =
       am_align<<1 |
       (am_level == progress_level::user ? 1 : 0);
+
+    static std::uint32_t nonce_bumper = 0;
+    gex_AM_Arg_t nonce;
+    std::memcpy(&nonce, &nonce_bumper, sizeof(gex_AM_Arg_t));
+    nonce_bumper += 1;
     
-    (void)gex_AM_RequestLong6(
+    (void)gex_AM_RequestLong5(
       tm_h, rank_d,
       id_am_long_master_payload_part,
       const_cast<void*>(buf_s), buf_size, buf_d,
       src_ph,
       /*flags*/0,
-      am_arg_encode_ptr_lo(buf_d), am_arg_encode_ptr_hi(buf_d),
-      am_size, am_align_level1,
+      nonce, am_size, am_align_level1,
       am_arg_encode_ptr_lo(rem_cb), am_arg_encode_ptr_hi(rem_cb)
     );
 
@@ -1758,14 +1760,13 @@ bool/*src_done*/ gasnet::rma_put_then_am_master_protocol(
     while(part_offset < am_size) {
       size_t part_size = std::min(part_size_max, am_size - part_offset);
       
-      (void)gex_AM_RequestMedium5(
+      (void)gex_AM_RequestMedium4(
         tm_h, rank_d,
         id_am_long_master_cmd_part,
         (char*)am_cmd + part_offset, part_size,
         GEX_EVENT_NOW,
         /*flags*/0,
-        am_arg_encode_ptr_lo(buf_d), am_arg_encode_ptr_hi(buf_d),
-        am_size, am_align_level1,
+        nonce, am_size, am_align_level1,
         part_offset
       );
       
@@ -1836,18 +1837,21 @@ namespace {
   };
 
   par_mutex am_long_reassembly_lock;
-  std::unordered_map<void*, am_long_reassembly_state*> am_long_reassembly_table;
+  std::unordered_map<std::uint64_t, am_long_reassembly_state*> am_long_reassembly_table;
   
   void am_long_master_payload_part(
       gex_Token_t token,
       void *payload_part, size_t payload_part_size,
-      gex_AM_Arg_t payload_lo, gex_AM_Arg_t payload_hi,
+      gex_AM_Arg_t nonce,
       gex_AM_Arg_t cmd_size,
       gex_AM_Arg_t cmd_align_level1,
       gex_AM_Arg_t reply_cb_lo, gex_AM_Arg_t reply_cb_hi
     ) {
 
-    void *payload = am_arg_decode_ptr<void>(payload_lo, payload_hi);
+    gex_Token_Info_t info;
+    gex_Token_Info(token, &info, GEX_TI_SRCRANK);
+    uint64_t key = uint64_t(info.gex_srcrank)<<32 ^ nonce;
+    
     int credits_total = 1 + cmd_size;
 
     int cmd_align = cmd_align_level1 >> 1;
@@ -1857,7 +1861,7 @@ namespace {
 
     am_long_reassembly_lock.lock();
     {
-      auto got = am_long_reassembly_table.insert({payload, nullptr});
+      auto got = am_long_reassembly_table.insert({key, nullptr});
       if(got.second) {
         st = rpc_as_lpc::build_eager<am_long_reassembly_state>(nullptr, cmd_size, cmd_align);
         got.first->second = st;
@@ -1896,13 +1900,16 @@ namespace {
   void am_long_master_cmd_part(
       gex_Token_t token,
       void *cmd_part, size_t cmd_part_size,
-      gex_AM_Arg_t payload_lo, gex_AM_Arg_t payload_hi,
+      gex_AM_Arg_t nonce,
       gex_AM_Arg_t cmd_size,
       gex_AM_Arg_t cmd_align_level1,
       gex_AM_Arg_t cmd_part_offset
     ) {
 
-    void *payload = am_arg_decode_ptr<void>(payload_lo, payload_hi);
+    gex_Token_Info_t info;
+    gex_Token_Info(token, &info, GEX_TI_SRCRANK);
+    uint64_t key = uint64_t(info.gex_srcrank)<<32 ^ nonce;
+    
     int credits_total = 1 + cmd_size;
     int credits_after_optimistic;
     
@@ -1913,7 +1920,7 @@ namespace {
 
     am_long_reassembly_lock.lock();
     {
-      auto got = am_long_reassembly_table.insert({payload, nullptr});
+      auto got = am_long_reassembly_table.insert({key, nullptr});
       if(got.second) {
         st = rpc_as_lpc::build_eager<am_long_reassembly_state>(nullptr, cmd_size, cmd_align);
         got.first->second = st;
@@ -1938,7 +1945,7 @@ namespace {
     if(credits_after == credits_total) {
       if(credits_after_optimistic != credits_total) {
         am_long_reassembly_lock.lock();
-        am_long_reassembly_table.erase(payload);
+        am_long_reassembly_table.erase(key);
         am_long_reassembly_lock.unlock();
       }
       
