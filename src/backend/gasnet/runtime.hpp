@@ -231,7 +231,7 @@ namespace gasnet {
     static constexpr std::size_t cmd_size_static_ub = std::size_t(-1);
     
     static constexpr std::size_t tiny_size = 512 < serialization_align_max ? 512 : serialization_align_max;
-    static constexpr std::size_t tiny_align = Ub::static_align_ub < serialization_align_max ? Ub::static_align_ub : serialization_align_max;
+    static constexpr std::size_t tiny_align = (Ub::static_align_ub < serialization_align_max) ? Ub::static_align_ub : serialization_align_max;
     typename std::aligned_storage<tiny_size, tiny_align>::type tiny_;
 
     detail::serialization_writer</*bounded=*/true> prepare_writer(Ub ub, std::size_t rdzv_cutover_size) {
