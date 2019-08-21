@@ -1681,6 +1681,10 @@ namespace {
 ////////////////////////////////////////////////////////////////////////////////
 // rma_put_then_am_master
 
+namespace {
+  par_atomic<std::uint32_t> rma_put_then_am_nonce_bumper(0);
+}
+
 template<bool src_now, bool packed_protocol>
 bool/*src_done*/ gasnet::rma_put_then_am_master_protocol(
     team &tm, intrank_t rank_d,
@@ -1737,10 +1741,9 @@ bool/*src_done*/ gasnet::rma_put_then_am_master_protocol(
       am_align<<1 |
       (am_level == progress_level::user ? 1 : 0);
 
-    static std::uint32_t nonce_bumper = 0;
+    uint32_t nonce_u = rma_put_then_am_nonce_bumper.fetch_add(1, std::memory_order_relaxed);
     gex_AM_Arg_t nonce;
-    std::memcpy(&nonce, &nonce_bumper, sizeof(gex_AM_Arg_t));
-    nonce_bumper += 1;
+    std::memcpy(&nonce, &nonce_u, sizeof(gex_AM_Arg_t));
     
     (void)gex_AM_RequestLong5(
       tm_h, rank_d,
