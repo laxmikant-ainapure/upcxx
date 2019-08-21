@@ -128,7 +128,7 @@ namespace upcxx {
     
     template<typename Obj, typename Traits, bool op_is_handle>
     struct rput_src_handle_cb<Obj, Traits, /*src_is_handle=*/false, op_is_handle> {
-      backend::gasnet::handle_cb* the_src_cb(backend::gasnet::handle_cb *otherwise=nullptr) {
+      constexpr backend::gasnet::handle_cb* the_src_cb(backend::gasnet::handle_cb *otherwise=nullptr) const {
         return otherwise;
       }
 
@@ -151,7 +151,7 @@ namespace upcxx {
 
     template<typename Obj, typename Traits>
     struct rput_op_handle_cb<Obj, Traits, /*op_is_handle=*/false> {
-      constexpr backend::gasnet::handle_cb* the_op_cb() { return nullptr; }
+      constexpr backend::gasnet::handle_cb* the_op_cb() const { return nullptr; }
     };
 
     ////////////////////////////////////////////////////////////////////////////
@@ -179,7 +179,7 @@ namespace upcxx {
 
     template<typename Obj, typename Traits>
     struct rput_reply_cb<Obj, Traits, /*replies=*/false> {
-      constexpr backend::gasnet::reply_cb* the_reply_cb() { return nullptr; }
+      constexpr backend::gasnet::reply_cb* the_reply_cb() const { return nullptr; }
       
       void reply_hook() {/*default is nop*/}
     };
