@@ -378,7 +378,7 @@ namespace backend {
 
     am_buf.finalize_buffer(std::move(w), rdzv_cutover_size);
     
-    return std::move(am_buf);
+    return am_buf;
   }
 
   template<typename AmBuf>
