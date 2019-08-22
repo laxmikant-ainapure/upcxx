@@ -166,11 +166,11 @@ namespace gasnet {
   };
   
   template<typename Ub,
-           bool is_static_and_small = (Ub::static_size <= 1024)>
+           bool is_static_and_eager = (Ub::static_size <= gasnet::am_size_rdzv_cutover_min)>
   struct am_send_buffer;
 
   template<>
-  struct am_send_buffer</*Ub=*/invalid_storage_size_t, /*is_static_and_small=*/false> {
+  struct am_send_buffer</*Ub=*/invalid_storage_size_t, /*is_static_and_eager=*/false> {
     void *buffer;
     bool is_eager;
     std::uint16_t cmd_align;
@@ -222,7 +222,7 @@ namespace gasnet {
   };
 
   template<typename Ub>
-  struct am_send_buffer<Ub, /*is_static_and_small=*/false> {
+  struct am_send_buffer<Ub, /*is_static_and_eager=*/false> {
     void *buffer;
     bool is_eager;
     std::uint16_t cmd_align;
@@ -275,7 +275,7 @@ namespace gasnet {
   };
 
   template<typename Ub>
-  struct am_send_buffer<Ub, /*is_static_and_small=*/true> {
+  struct am_send_buffer<Ub, /*is_static_and_eager=*/true> {
     detail::xaligned_storage<Ub::static_size, Ub::static_align> buf_;
     static constexpr bool is_eager = true;
     std::uint16_t cmd_align;
