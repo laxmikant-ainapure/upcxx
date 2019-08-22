@@ -78,14 +78,6 @@ namespace upcxx {
           "error. You'll have know way of ever knowing when the target memory is "
           "safe to read or write again."
         );
-
-        if(!want_remote) {
-          UPCXX_ASSERT_ALWAYS((want_op | want_src),
-            "Not requesting either operation or source completion in the presence of "
-            "remote completion is surely an error. You'll have know way of knowing "
-            "when your source memory is safe to use again."
-          );
-        }
       }
     };
 
@@ -279,16 +271,23 @@ namespace upcxx {
       }
     };
 
-    template<typename Obj, typename Traits>
+    template<typename Obj, typename Traits, bool want_src>
     struct rput_obj_base<Obj, Traits,
         /*want_remote=*/true,
         /*want_op=*/false, /*op_is_sync=*/false,
-        /*want_src=*/true
+        want_src
       >:
-      rput_src_handle_cb<Obj, Traits, /*src_is_handle=*/!Traits::src_is_sync, /*op_is_handle=*/false>,
+      rput_src_handle_cb<Obj, Traits, /*src_is_handle=*/want_src && !Traits::src_is_sync, /*op_is_handle=*/false>,
       rput_op_handle_cb<Obj, Traits, /*op_is_handle=*/false> {
 
-      static constexpr rma_put_sync sync_lb = Traits::src_is_sync
+      // We handle absence of source_cx as assuming synchronous completion as
+      // opposed to asynchronous (with an ignored notification) since this (naked
+      // remote_cx) is a bizarre thing to ask for. So bizarre that I feel its more
+      // likely a user mistake rather than they actually have a source buffer
+      // that they feel safe giving over to us forever.
+      static constexpr bool src_now = !want_src || Traits::src_is_sync;
+      
+      static constexpr rma_put_sync sync_lb = src_now
         ? rma_put_sync::src_now
         : rma_put_sync::src_cb;
       
@@ -299,7 +298,7 @@ namespace upcxx {
         ) {
         //upcxx::say()<<"amlong without reply";
         auto *o = static_cast<Obj*>(this);
-        bool src_done = backend::gasnet::template rma_put_then_am_master</*src_now=*/Traits::src_is_sync>(
+        bool src_done = backend::gasnet::template rma_put_then_am_master<src_now>(
           upcxx::world(), rank_d, buf_d, buf_s, buf_size,
           progress_level::user, std::move(remote),
           this->the_src_cb(), nullptr
@@ -351,8 +350,7 @@ namespace upcxx {
     ////////////////////////////////////////////////////////////////////////////
     
     template<typename Obj, typename Traits>
-    __attribute__((always_inline))
-    inline void rput_post_inject(Obj *o, rma_put_sync sync_returned) {
+    void rput_post_inject(Obj *o, rma_put_sync sync_returned) {
       backend::gasnet::handle_cb *first_cb;
 
       // `Obj::sync_lb` is the sync level that was given to injection routine.
