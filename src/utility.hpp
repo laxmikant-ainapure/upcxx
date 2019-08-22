@@ -13,7 +13,7 @@
 #include <utility>
 #include <new> // launder
 
-#include <cstdlib> // std::aligned_alloc, posix_memalign
+#include <cstdlib> // posix_memalign
 
 // UPCXX_RETURN_DECLTYPE(type): use this inplace of "-> decltype(type)" so that
 // for compilers which choke on such return types (icc) it can be elided in
@@ -210,16 +210,28 @@ namespace detail {
   // detail::alloc_aligned
 
   inline void* alloc_aligned(std::size_t size, std::size_t align) noexcept {
-  #if __cplusplus >= 201703L && !__APPLE__ // missing on at least XCode 10.3
-    void *p = std::aligned_alloc(align, size);
-    UPCXX_ASSERT(p != nullptr, "std::aligned_alloc returned nullptr");
-    return p;
-  #else
+    UPCXX_ASSERT(
+      align != 0 && (align & (align-1)) == 0,
+      "upcxx::detail::alloc_aligned: Invalid align="<<align
+    );
+
+    // Note: do not use std::aligned_alloc (C++17) since it does not *portably*
+    // support extended alignments (those greater than std::max_align_t), and
+    // thus is no better than ::operator new().
+
+    // Make align = max(align, sizeof(void*))
+    align -= 1;
+    align |= sizeof(void*)-1;
+    align += 1;
+    // Round size up to a multiple of alignment
+    size = (size + align-1) & -align;
+    
     void *p;
     int err = posix_memalign(&p, align, size);
-    if(err != 0) UPCXX_ASSERT(false, "posix_memalign failed with return="<<err);
+    UPCXX_ASSERT_ALWAYS(err == 0,
+      "upcxx::detail::alloc_aligned: posix_memalign(align="<<align<<", size="<<size<<"): failed with return="<<err
+    );
     return p;
-  #endif
   }
 
   //////////////////////////////////////////////////////////////////////////////
