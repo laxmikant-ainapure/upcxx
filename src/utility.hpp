@@ -4,6 +4,7 @@
 #include <upcxx/diagnostic.hpp>
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <functional>
@@ -243,7 +244,57 @@ namespace detail {
   }
   
   //////////////////////////////////////////////////////////////////////////////
-  // detail::raw_storage<T>: Like std::aligned_storage, except more convenient.
+  // xaligned_storage: like std::aligned_storage::type except:
+  //   1. Supports extended alignemnts greater than alignof(std::max_align_t)
+  //   2. Does not guarantee that `sizeof(xaligned_storage<S,A>::type) == S` since it might
+  //      include padding space to achieve the alignemnt dynamically.
+  //   3. Does not guarantee to be a trivial type.
+  //   4. Access to the aligned memory is provided by the `storage()` member,
+  //      alignment of the xaligned_storage object itself is unspecified.
+  //
+  // The intenteded use case is for small stack-allocated serialization buffers.
+  // The other potential use case is to hold overly-aligned types, but currently
+  // we have none so for that usage we stick to `std::aligned_storage<>::type`.
+  
+  template<std::size_t size, std::size_t align,
+           bool valid = 0 == (align & (align-1)),
+           bool extended = (align > alignof(std::max_align_t))>
+  struct xaligned_storage;
+
+  template<std::size_t size, std::size_t align>
+  struct xaligned_storage<size, align, /*valid=*/true, /*extended=*/false> {
+    typename std::aligned_storage<(size + align-1) & -align, align>::type storage_;
+
+    void const* storage() const noexcept { return &storage_; }
+    void*       storage()       noexcept { return &storage_; }
+  };
+  
+  template<std::size_t size, std::size_t align>
+  struct xaligned_storage<size, align, /*valid=*/true, /*extended=*/true> {
+    char xbuf_[size + align-1];
+    
+    void const* storage() const noexcept {
+      std::uintptr_t u = reinterpret_cast<std::uintptr_t>(&xbuf_);
+      return &xbuf_[-u & (align-1)];
+    }
+    void*       storage()       noexcept {
+      std::uintptr_t u = reinterpret_cast<std::uintptr_t>(&xbuf_);
+      return &xbuf_[-u & (align-1)];
+    }
+
+    xaligned_storage() noexcept = default;
+    xaligned_storage(xaligned_storage const &that) noexcept {
+      detail::memcpy_aligned<align>(this->storage(), that.storage(), size);
+    }
+    xaligned_storage& operator=(xaligned_storage const &that) noexcept {
+      if(this != &that)
+        detail::memcpy_aligned<align>(this->storage(), that.storage(), size);
+      return *this;
+    }
+  };
+
+  //////////////////////////////////////////////////////////////////////////////
+  // detail::raw_storage<T>: Like std::aligned_storage<>::type, except more convenient.
   // The typed value exists in the `value()` member, but isnt implicitly
   // constructed. Construction should be done by user with placement new like:
   //   `::new(&my_storage) T(...)`.
@@ -251,11 +302,16 @@ namespace detail {
   // responsibility.
 
   template<typename T>
-  struct raw_storage {
-    typename std::aligned_storage<sizeof(T), alignof(T)>::type raw;
+  class raw_storage {
+    typename std::aligned_storage<sizeof(T), alignof(T)>::type raw_;
 
+  public:
+    void* raw() noexcept {
+      return &raw_;
+    }
+    
     T& value() noexcept {
-      return *detail::launder(reinterpret_cast<T*>(&raw));
+      return *detail::launder(reinterpret_cast<T*>(&raw_));
     }
     
     // Invoke value's destructor.

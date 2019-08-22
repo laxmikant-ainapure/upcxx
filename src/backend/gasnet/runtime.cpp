@@ -503,7 +503,7 @@ void upcxx::init() {
   UPCXX_ASSERT_ALWAYS(backend::master.active_with_caller());
   
   // Build team upcxx::world()
-  ::new(&detail::the_world_team.raw) upcxx::team(
+  ::new(detail::the_world_team.raw()) upcxx::team(
     detail::internal_only(),
     backend::team_base{reinterpret_cast<uintptr_t>(world_tm)},
     digest{0x1111111111111111, 0x1111111111111111},
@@ -656,7 +656,7 @@ void upcxx::init() {
   backend::pshm_peer_n = peer_n;
   
   // Build upcxx::local_team()
-  ::new(&detail::the_local_team.raw) upcxx::team(
+  ::new(detail::the_local_team.raw()) upcxx::team(
     detail::internal_only(),
     backend::team_base{reinterpret_cast<uintptr_t>(local_tm)},
     // we use different digests even if local_tm==world_tm

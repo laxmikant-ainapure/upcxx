@@ -179,10 +179,10 @@ namespace gasnet {
     static constexpr std::size_t cmd_size_static_ub = std::size_t(-1);
     
     static constexpr std::size_t tiny_size = 512 < serialization_align_max ? 512 : serialization_align_max;
-    typename std::aligned_storage<tiny_size, serialization_align_max>::type tiny_;
+    detail::xaligned_storage<tiny_size, serialization_align_max> tiny_;
     
     detail::serialization_writer</*bounded=*/false> prepare_writer(invalid_storage_size_t, std::size_t rdzv_cutover_size) {
-      return detail::serialization_writer<false>(&tiny_, sizeof(tiny_));
+      return detail::serialization_writer<false>(tiny_.storage(), tiny_size);
     }
     
     void finalize_buffer(detail::serialization_writer<false> &&w, std::size_t rdzv_cutover_size) {
@@ -192,7 +192,7 @@ namespace gasnet {
       cmd_align = w.align();
       
       if(is_eager && w.contained_in_initial())
-        buffer = &tiny_;
+        buffer = tiny_.storage();
       else {
         if(is_eager)
           buffer = detail::alloc_aligned(w.size(), w.align());
@@ -208,7 +208,7 @@ namespace gasnet {
     
     am_send_buffer(am_send_buffer &&that) {
       this->is_eager = that.is_eager;
-      this->buffer = that.buffer == &that.tiny_ ? &this->tiny_ : that.buffer;
+      this->buffer = that.buffer == that.tiny_.storage() ? this->tiny_.storage() : that.buffer;
       this->tiny_ = that.tiny_;
       this->cmd_size = that.cmd_size;
       this->cmd_align = that.cmd_align;
@@ -216,7 +216,7 @@ namespace gasnet {
     }
 
     ~am_send_buffer() {
-      if(is_eager && buffer != (void*)&tiny_)
+      if(is_eager && buffer != tiny_.storage())
         std::free(buffer);
     }
   };
@@ -232,7 +232,7 @@ namespace gasnet {
     
     static constexpr std::size_t tiny_size = 512 < serialization_align_max ? 512 : serialization_align_max;
     static constexpr std::size_t tiny_align = (Ub::static_align_ub < serialization_align_max) ? Ub::static_align_ub : serialization_align_max;
-    typename std::aligned_storage<tiny_size, tiny_align>::type tiny_;
+    detail::xaligned_storage<tiny_size, tiny_align> tiny_;
 
     detail::serialization_writer</*bounded=*/true> prepare_writer(Ub ub, std::size_t rdzv_cutover_size) {
       is_eager = ub.size <= gasnet::am_size_rdzv_cutover_min ||
@@ -241,7 +241,7 @@ namespace gasnet {
       if(is_eager) {
         UPCXX_ASSERT(ub.align <= serialization_align_max);
         if(ub.size <= tiny_size)
-          buffer = &tiny_;
+          buffer = tiny_.storage();
         else
           buffer = detail::alloc_aligned(ub.size, ub.align);
       }
@@ -261,7 +261,7 @@ namespace gasnet {
 
     am_send_buffer(am_send_buffer &&that) {
       this->is_eager = that.is_eager;
-      this->buffer = that.buffer == &that.tiny_ ? &this->tiny_ : that.buffer;
+      this->buffer = that.buffer == that.tiny_.storage() ? this->tiny_.storage() : that.buffer;
       this->tiny_ = that.tiny_;
       this->cmd_size = that.cmd_size;
       this->cmd_align = that.cmd_align;
@@ -269,23 +269,23 @@ namespace gasnet {
     }
     
     ~am_send_buffer() {
-      if(is_eager && buffer != (void*)&tiny_)
+      if(is_eager && buffer != tiny_.storage())
         std::free(buffer);
     }
   };
 
   template<typename Ub>
   struct am_send_buffer<Ub, /*is_static_and_small=*/true> {
-    typename std::aligned_storage<Ub::static_size, Ub::static_align>::type buf_;
+    detail::xaligned_storage<Ub::static_size, Ub::static_align> buf_;
     static constexpr bool is_eager = true;
     std::uint16_t cmd_align;
     std::size_t cmd_size;
-    void *const buffer = &buf_;
+    void *const buffer = buf_.storage();
 
     static constexpr std::size_t cmd_size_static_ub = Ub::static_size;
     
     detail::serialization_writer</*bounded=*/true> prepare_writer(Ub, std::size_t rdzv_cutover_size) {
-      return detail::serialization_writer<true>(&buf_);
+      return detail::serialization_writer<true>(buf_.storage());
     }
     
     void finalize_buffer(detail::serialization_writer<true> &&w, std::size_t rdzv_cutover_size) {
