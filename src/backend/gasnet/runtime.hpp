@@ -22,10 +22,20 @@ namespace gasnet {
   static constexpr std::size_t am_size_rdzv_cutover_min = 256;
   extern std::size_t am_size_rdzv_cutover;
   extern std::size_t am_long_size_max;
-  
+
+  struct sheap_footprint_t {
+    std::size_t count, bytes;
+  };
+  extern sheap_footprint_t sheap_footprint_rdzv;
+  extern sheap_footprint_t sheap_footprint_misc;
+  extern sheap_footprint_t sheap_footprint_user;
+
   #if UPCXX_BACKEND_GASNET_SEQ
     extern handle_cb_queue master_hcbs;
   #endif
+
+  void* allocate(std::size_t size, std::size_t align, sheap_footprint_t *foot);
+  void  deallocate(void *p, sheap_footprint_t *foot);
   
   void after_gasnet();
 
@@ -146,6 +156,7 @@ namespace gasnet {
     // into our `execute_and_delete`.
     template<typename RpcAsLpc = rpc_as_lpc>
     static RpcAsLpc* build_rdzv_lz(
+      bool use_sheap,
       std::size_t cmd_size,
       std::size_t cmd_alignment // alignment requirement of packing
     );
@@ -206,7 +217,7 @@ namespace gasnet {
         if(is_eager)
           buffer = detail::alloc_aligned(w.size(), w.align());
         else
-          buffer = upcxx::allocate(w.size(), w.align());
+          buffer = gasnet::allocate(w.size(), w.align(), &gasnet::sheap_footprint_rdzv);
         
         w.compact_and_invalidate(buffer);
       }
@@ -255,7 +266,7 @@ namespace gasnet {
           buffer = detail::alloc_aligned(ub.size, ub.align);
       }
       else
-        buffer = upcxx::allocate(ub.size, ub.align);
+        buffer = gasnet::allocate(ub.size, ub.align, &gasnet::sheap_footprint_rdzv);
       
       return detail::serialization_writer<true>(buffer);
     }
@@ -549,7 +560,7 @@ namespace backend {
 namespace gasnet {
   //////////////////////////////////////////////////////////////////////
   // register_handle_cb
-  
+
   inline handle_cb_queue& get_handle_cb_queue() {
     UPCXX_ASSERT(!UPCXX_BACKEND_GASNET_SEQ || backend::master.active_with_caller());
 
