@@ -26,6 +26,8 @@ namespace gasnet {
   struct sheap_footprint_t {
     std::size_t count, bytes;
   };
+
+  // Addresses of these passed to gasnet::allocate/deallocate
   extern sheap_footprint_t sheap_footprint_rdzv;
   extern sheap_footprint_t sheap_footprint_misc;
   extern sheap_footprint_t sheap_footprint_user;
@@ -34,7 +36,12 @@ namespace gasnet {
     extern handle_cb_queue master_hcbs;
   #endif
 
+  // Allocate from shared heap with accounting dumped to given footprint struct
+  // (not optional). Failure mode is null return  for foot == &gasnet::sheap_footprint_user
+  // and job death with diagnostic dump otherwise.
   void* allocate(std::size_t size, std::size_t align, sheap_footprint_t *foot);
+
+  // Deallocate shared heap buffer, foot must match that given to allocate.
   void  deallocate(void *p, sheap_footprint_t *foot);
   
   void after_gasnet();
