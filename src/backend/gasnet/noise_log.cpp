@@ -33,7 +33,7 @@ void noise_log::show() {
     std::stringstream ss1;
     ss1 << std::string(50,'/') << '\n';
     ss1 << fn_name;
-    if(r.rank_n != (unsigned)upcxx::rank_n())
+    if(r.rank_n != upcxx::rank_n())
       ss1 << " on rank "<<r.rank_least<<" (among "<<r.rank_n<<" total):\n";
     else
       ss1 << ":\n";
