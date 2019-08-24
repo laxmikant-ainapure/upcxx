@@ -133,6 +133,7 @@ New features/enhancements: (see specification and programmer's guide for full de
 Notable bug fixes:
 
 * issue #170: `team_id::when_here()` is unimplemented
+* issue #181: Library linkage failures when user compiles with a different -std=c++ level
 * issue #184: `bench/put_flood` crashes on opt/Linux
 * issue #210: `cuda_device::default_alignment()` not implemented
 * issue #203: strict aliasing violations in device\_allocator
