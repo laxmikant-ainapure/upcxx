@@ -31,25 +31,27 @@ The current release is known to work on the following configurations:
   Free Software Foundation GCC (e.g., as installed by Homebrew or Fink)
   version 6.4.0 or newer should also work (smp and udp conduits)
 
-* Linux/x86_64 with one of the following compilers:    
+* Linux/x86_64 with one of the following compilers:
     - Gnu g++ 6.4.0 or newer    
     - clang 4.0.0 or newer (with libstdc++ from gcc-6.4.0 or newer)    
     - Intel C++ 17.0.2 or newer (with libstdc++ from gcc-6.4.0 or newer)    
     - PGI C++ 19.1 or newer (with libstdc++ from gcc-6.4.0 or newer)    
-  If your system compilers do not meet these requirements, please see the note
-  in [docs/local-gcc.md](docs/local-gcc.md) regarding use of non-system
-  compilers. (smp, udp and ibv conduits)
+
+    See "Linux Compiler Notes", below, if `/usr/bin/g++` is older than 6.4.0.
 
 * Linux/ppc64le with one of the following compilers:
-    - gcc-6.4.0 or newer (and see the note immediately above if
-      you use a non-system compiler).
+    - gcc-6.4.0 or newer
     - clang 5.0.0 or newer (with libstdc++ from gcc-6.4.0 or newer)    
     - PGI C++ 18.10 or newer (with libstdc++ from gcc-6.4.0 or newer)    
 
+    See "Linux Compiler Notes", below, if `/usr/bin/g++` is older than 6.4.0.
+
 * Linux/aarch64 (aka "arm64" or "armv8") with one of the following compilers:
-    - gcc-6.4.0 or newer (and see the note under Linux/x86_64 if
-      you use a non-system compiler).
-    - clang 4.0.0 or newer (with libstdc++ from gcc-6.4.0 or newer)
+    - gcc-6.4.0 or newer
+    - clang 4.0.0 or newer (with libstdc++ from gcc-6.4.0 or newer)   
+
+    See "Linux Compiler Notes", below, if `/usr/bin/g++` is older than 6.4.0.
+
     Note that gcc- and clang-based toolchains from Arm Ltd. exist, but have
     not been tested with UPC++.
 
@@ -71,6 +73,14 @@ The current release is known to work on the following configurations:
   it is recommended to `module unload xalt` to avoid a large volume of
   verbose linker output in this configuration.  Mixing with OpenMP in this
   configuration is not currently supported.  (smp and aries conduits).
+
+Linux Compiler Notes:
+
+* If /usr/bin/g++ is older than 6.4.0 (even if using a different C++
+  compiler for UPC++) please read [docs/local-gcc.md](docs/local-gcc.md).
+
+* If using a non-GNU compiler with /usr/bin/g++ older than 6.4.0, please also
+  read [docs/alt-compilers.md](docs/alt-compilers.md).
 
 Miscellaneous software requirements:
 
