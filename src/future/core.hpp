@@ -130,8 +130,9 @@ namespace upcxx {
       // "a->status_" must be "status_proxying" or "status_proxying_active".
       static future_header* drop_for_proxied(future_header *a);
     };
-    
-    struct future_header_nil {
+
+    template<typename=void>
+    struct future_header_nil1 {
       // The "nil" future, not to be used. Only exists so that future_impl_shref's don't
       // have to test for nullptr, instead they'll just see its negative ref_n_.
       static constexpr future_header the_nil = {
@@ -145,6 +146,11 @@ namespace upcxx {
         return const_cast<future_header*>(&the_nil);
       }
     };
+
+    template<typename VoidThanks>
+    constexpr future_header future_header_nil1<VoidThanks>::the_nil;
+
+    using future_header_nil = future_header_nil1<>;
     
     ////////////////////////////////////////////////////////////////////
     // future_header_dependent: dependent headers are those that...

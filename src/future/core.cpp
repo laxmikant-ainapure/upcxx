@@ -11,17 +11,6 @@ using upcxx::detail::future_body_proxy_;
 template<typename ...T>
 using future_header_result = upcxx::detail::future_header_result<T...>;
 
-constexpr future_header future_header_nil::the_nil
-#if 0
-= {
-  /*ref_n_*/-1,
-  /*status_*/future_header::status_active + 666,
-  /*sucs_head_*/nullptr,
-  {/*result_*/nullptr}
-}
-#endif
-;
-
 future_header future_header_result<>::the_always = {
   /*ref_n_*/-1,
   /*status_*/upcxx::detail::future_header::status_ready,

@@ -435,7 +435,10 @@ def lang_c11(cxt):
   String list to engage C11 language dialect for the C compiler.
   """
   cc = yield cxt.cc()
-  yield ['-std=c11'] if not is_pgi(cc) else []
+  if any(arg.startswith('-std=c') for arg in cc):
+    yield []
+  else:
+    yield ['-std=c11'] if not is_pgi(cc) else []
 
 @rule()
 @coroutine
@@ -445,9 +448,11 @@ def lang_cxx11(cxt):
   """
   cxx = yield cxt.cxx()
   _,out,_ = yield version_of(cxx)
-  
-  if any(token in out for token in ['(ICC)']):
-  #if any(token in out for token in ['PGI Compilers and Tools','(ICC)']):
+
+  if any(arg.startswith('-std=c++') for arg in cxx):
+    yield []
+  elif any(token in out for token in ['(ICC)']):
+  #elif any(token in out for token in ['PGI Compilers and Tools','(ICC)']):
     yield ['-std=c++14']
   else:
     yield ['-std=c++11']
