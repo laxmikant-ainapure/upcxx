@@ -123,7 +123,15 @@ For copyright notice and licensing agreement, see [LICENSE.txt](LICENSE.txt)
 New features/enhancements: (see specification and programmer's guide for full details)
 
 * `atomic_domain<float>` and `atomic_domain<double>` are now implemented
-* clang v5.0+ has been added to the list of supported compilers on Linux/ppc64le platforms
+* The following have been added to the list of supported platforms/compilers
+    - PGI v19.1+ on Linux/x86_64
+    - PGI v18.10+ on Linux/ppc64le
+    - clang v5.0+ on Linux/ppc64le
+    - PrgEnv/cray with CCE v9.0+ on the Cray XC
+    - ALCF's PrgEnv/llvm v4.0+ on the Cray XC
+    - NEW platform: Linux/aarch64 (aka "arm64" or "armv8")
+        + gcc v6.4.0+
+        + clang 4.0.0+
 * New define `UPCXX_SPEC_VERSION` documents the implemented revision of the UPC++ specification
 * `upcxx` has several new convenience options (see `upcxx -help`)
 * Release tarball downloads now embed a copy of GASNet-EX that is used by default during install.
