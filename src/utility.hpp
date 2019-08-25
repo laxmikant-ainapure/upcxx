@@ -11,6 +11,7 @@
 #include <sstream>
 #include <tuple>
 #include <utility>
+#include <new> // launder
 
 #include <cstdlib> // std::aligned_alloc, posix_memalign
 
@@ -81,7 +82,7 @@ namespace detail {
   //////////////////////////////////////////////////////////////////////////////
   // detail::launder
 
-  #if __cplusplus >= 201703L
+  #if __cpp_lib_launder >= 201606 // std::launder is not reliably available in C++17 (eg clang 8)
     template<typename T>
     constexpr T* launder(T *p) {
       return std::launder(p);
