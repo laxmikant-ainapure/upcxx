@@ -315,8 +315,7 @@ void upcxx::destroy_heap(void) {
 
 // void upcxx::restore_heap(void):
 //
-// Precondition: The shared heap is a live state, either by virtue
-// of library initialization, or a prior call to upcxx::restore_heap.
+// Precondition: The shared heap is a dead state, due to a prior call to upcxx::destroy_heap.
 // Calling thread must have the master persona.
 //
 // This collective call over all processes re-initializes the shared heap of 
