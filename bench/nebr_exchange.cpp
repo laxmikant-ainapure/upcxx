@@ -59,10 +59,10 @@ using upcxx::global_ptr;
 using namespace std;
 using namespace bench;
 
-const vector<size_t> buf_sizes = os_env<vector<size_t>>("sizes", vector<size_t>({1<<10}));
-const vector<int> nebr_nums = os_env<vector<int>>("nebrs", std::vector<int>({10}));
-const double nebr_stdev = os_env<double>("nebr_stdev", 10.0);
-const double wait_secs = os_env<double>("wait_secs", 1.0);
+vector<size_t> buf_sizes;
+vector<int> nebr_nums;
+double nebr_stdev;
+double wait_secs;
 
 struct nebr_t {
   intrank_t rank;
@@ -362,6 +362,12 @@ auto make_row = [](int nebr_n, size_t buf_size, const char *via) {
 
 int main() {
   upcxx::init();
+
+  buf_sizes = os_env<vector<size_t>>("sizes", vector<size_t>({1<<10}));
+  nebr_nums = os_env<vector<int>>("nebrs", std::vector<int>({10}));
+  nebr_stdev = os_env<double>("nebr_stdev", 10.0);
+  wait_secs = os_env<double>("wait_secs", 1.0);
+
   setup_exchange_via_amlong();
   
   UPCXX_ASSERT_ALWAYS(
