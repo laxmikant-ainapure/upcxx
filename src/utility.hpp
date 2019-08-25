@@ -200,7 +200,7 @@ namespace detail {
   // detail::alloc_aligned
 
   inline void* alloc_aligned(std::size_t size, std::size_t align) noexcept {
-  #if __cplusplus >= 201703L
+  #if __cplusplus >= 201703L && !__APPLE__ // missing on at least XCode 10.3
     void *p = std::aligned_alloc(align, size);
     UPCXX_ASSERT(p != nullptr, "std::aligned_alloc returned nullptr");
     return p;
