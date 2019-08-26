@@ -259,11 +259,6 @@ namespace {
   void  *shared_heap_base = nullptr;
   size_t shared_heap_sz = 0;
 
-  std::string format_memsize(size_t memsize) {
-    char buf[80];
-    return std::string(gasnett_format_number(memsize, buf, sizeof(buf), 1));
-  }
-
   void heap_init_internal(size_t &size, noise_log &noise) {
     UPCXX_ASSERT_ALWAYS(!shared_heap_isinit);
 
@@ -323,8 +318,8 @@ namespace {
       gex_Event_Wait(gex_Coll_ReduceToOneNB(world_tm, 0, &minsz, &minsz, GEX_DT_U64, sizeof(minsz), 1, GEX_OP_MIN, 0,0,0));
       noise.line()
         <<"Shared heap statistics:\n"
-        << "  max size: 0x" << std::hex << maxsz << std::dec << " (" << format_memsize(maxsz) << ")\n"
-        << "  min size: 0x" << std::hex << minsz << std::dec << " (" << format_memsize(minsz) << ")\n"
+        << "  max size: 0x" << std::hex << maxsz << std::dec << " (" << noise_log::size(maxsz) << ")\n"
+        << "  min size: 0x" << std::hex << minsz << std::dec << " (" << noise_log::size(minsz) << ")\n"
         << "  P0 base:  " << shared_heap_base;
     }
     shared_heap_isinit = true;
@@ -405,10 +400,9 @@ void upcxx::restore_heap(void) {
 
   if (upcxx_use_upc_alloc) {
     // unsupported/ignored
-  } else { 
-    noise_log null_log;
-    heap_init_internal(shared_heap_sz, null_log);
-    
+  } else {
+    noise_log mute = noise_log::muted();
+    heap_init_internal(shared_heap_sz, mute);
     init_localheap_tables();
   }
   shared_heap_isinit = true;
@@ -498,9 +492,9 @@ void upcxx::init() {
   // now adjust the segment size if it's less than the GASNET_MAX_SEGSIZE
   if (segment_size > gasnet_max_segsize) {
     noise.warn() <<
-      "Requested UPC++ shared heap size (" << format_memsize(segment_size) << ") "
-      "is larger than the GASNet segment size (" << format_memsize(gasnet_max_segsize) << "). "
-      "Adjusted shared heap size to " << format_memsize(gasnet_max_segsize) << ".";
+      "Requested UPC++ shared heap size (" << noise_log::size(segment_size) << ") "
+      "is larger than the GASNet segment size (" << noise_log::size(gasnet_max_segsize) << "). "
+      "Adjusted shared heap size to " << noise_log::size(gasnet_max_segsize) << ".";
 
     segment_size = gasnet_max_segsize;
   }
@@ -552,6 +546,22 @@ void upcxx::init() {
     am_medium_size < 8<<10 ? 512 :
                              1024;
   UPCXX_ASSERT(gasnet::am_size_rdzv_cutover_min <= gasnet::am_size_rdzv_cutover);
+
+  //////////////////////////////////////////////////////////////////////////////
+  // Determine if we're oversubscribed.
+  { 
+    gex_Rank_t host_peer_n;
+    gex_System_QueryHostInfo(nullptr, &host_peer_n, nullptr);
+    bool oversubscribed_default = (int)gasnett_cpu_count() < (int)host_peer_n;
+    oversubscribed = os_env<bool>("UPCXX_OVERSUBSCRIBED", oversubscribed_default);
+
+    if(backend::verbose_noise)
+      noise.line()<<"CPUs Oversubscribed: "<<(oversubscribed
+        ? "yes \"upcxx::progress() may yield to OS)\""
+        : "no \"upcxx::progress() never yields to OS\"");
+
+    gasnet_set_waitmode(oversubscribed ? GASNET_WAIT_BLOCK : GASNET_WAIT_SPIN);
+  }
   
   //////////////////////////////////////////////////////////////////////////////
   // Setup the local-memory neighborhood tables.
@@ -560,23 +570,6 @@ void upcxx::init() {
   gex_Rank_t peer_n, peer_me;
   gex_System_QueryNbrhdInfo(&nbhd, &peer_n, &peer_me);
 
-  { // Sidetrack, determine if we're oversubscribed.
-    int oversubscribed_user = os_env<int>("UPCXX_OVERSUBSCRIBED", -1);
-    if(oversubscribed_user == -1)
-      oversubscribed = (int)gasnett_cpu_count() < (int)peer_n;
-    else
-      oversubscribed = oversubscribed_user != 0;
-    
-    if(oversubscribed_user == -1 && backend::verbose_noise) {
-      noise.line() << "Default oversubscription value chosen: "
-        <<(oversubscribed
-          ? "1 (os yield enabled)"
-          : "0 (os yield disabled)"
-        );
-    }
-  }
-  // Ok, back to local-memory tables...
-  
   bool contiguous_nbhd = true;
   for(gex_Rank_t p=1; p < peer_n; p++)
     contiguous_nbhd &= (nbhd[p].gex_jobrank == 1 + nbhd[p-1].gex_jobrank);

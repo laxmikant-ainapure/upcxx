@@ -18,15 +18,15 @@ than you have CPUs on your laptop), UPC++ can be configured at launch time with
 on the system by periodically issuing a "yield" syscall to the OS from within
 `upcxx::progress()`.
 
-Supported values for `UPCXX_OVERSUBSCRIBED=0|1|-1`:
+Supported values for `UPCXX_OVERSUBSCRIBED`:
 
-  * `0`: Oversubscription is assumed false. `progress()` never yields to OS.
+  * `0|n[o]`: Oversubscription is assumed false. `progress()` never yields to OS.
 
-  * `1`: Oversubscription assumed true. A yield is issued if N consecutive
+  * `1|y[es]`: Oversubscription assumed true. A yield is issued if N consecutive
     calls to `progress()` detect no incoming communication events (for
     some implementation defined value N, likely 10).
 
-  * `-1` (default): A default value is chosen at startup by querying the local
+  * `<unset>|<empty>`: A default value is chosen at startup by querying the local
     machine for the number of total CPUs and enabling progress yield if they are
     fewer than the number of ranks running locally.
 

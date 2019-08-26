@@ -42,3 +42,8 @@ void noise_log::show() {
     std::cerr << ss1.str() << std::flush;
   }
 }
+
+std::string noise_log::size(std::size_t x) {
+  char buf[80];
+  return std::string(gasnett_format_number(x, buf, sizeof(buf), 1));
+}

@@ -10,10 +10,24 @@ namespace gasnet {
     const char *fn_name;
     std::stringstream ss;
     bool empty = true;
+
+  private:
+    noise_log() {
+      this->fn_name = nullptr;
+    }
     
   public:
-    noise_log(const char *fn_name = nullptr) {
+    static noise_log muted() {
+      return noise_log();
+    }
+    
+    noise_log(const char *fn_name) {
       this->fn_name = fn_name;
+    }
+    noise_log(noise_log &&that):
+      ss(std::move(that.ss)) {
+      fn_name = that.fn_name;
+      empty = that.empty;
     }
     
     struct line_type {
@@ -58,6 +72,8 @@ namespace gasnet {
     }
 
     void show();
+
+    static std::string size(std::size_t x);
   };
 }}}
 #endif
