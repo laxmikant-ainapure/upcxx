@@ -192,7 +192,7 @@ namespace backend {
   //////////////////////////////////////////////////////////////////////////////
   
   inline bool rank_is_local(intrank_t r) {
-    return std::uintptr_t(r) - std::uintptr_t(pshm_peer_lb) < std::uintptr_t(pshm_peer_n);
+    return all_ranks_definitely_local || std::uintptr_t(r) - std::uintptr_t(pshm_peer_lb) < std::uintptr_t(pshm_peer_n);
     // Is equivalent to...
     // return pshm_peer_lb <= r && r < pshm_peer_ub;
   }

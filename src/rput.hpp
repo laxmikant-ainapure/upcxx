@@ -213,6 +213,10 @@ namespace upcxx {
       static constexpr rma_put_sync sync_lb = Traits::src_is_sync
         ? rma_put_sync::src_now
         : rma_put_sync::src_cb;
+
+      static constexpr backend::gasnet::rma_put_then_am_sync sync_lb1 = Traits::src_is_sync
+        ? backend::gasnet::rma_put_then_am_sync::src_now
+        : backend::gasnet::rma_put_then_am_sync::src_cb;
       
       template<typename RemoteFn>
       rma_put_sync inject(
@@ -221,13 +225,21 @@ namespace upcxx {
         ) {
         //upcxx::say()<<"amlong with reply";
         auto *o = static_cast<Obj*>(this);
-        bool src_done = backend::gasnet::template rma_put_then_am_master<Traits::src_is_sync>(
+
+        auto sync_out = backend::gasnet::template rma_put_then_am_master<sync_lb1>(
           upcxx::world(), rank_d, buf_d, buf_s, buf_size,
           progress_level::user, std::move(remote),
           this->the_src_cb(),
           this->the_reply_cb()
         );
-        return src_done ? rma_put_sync::src_now : rma_put_sync::src_cb;
+
+        if((int)sync_lb1 <= (int)backend::gasnet::rma_put_then_am_sync::src_cb &&
+           (int)sync_out == (int)backend::gasnet::rma_put_then_am_sync::src_cb)
+          return rma_put_sync::src_cb;
+        
+        if(sync_out == backend::gasnet::rma_put_then_am_sync::src_now)
+          return rma_put_sync::src_now;
+        return rma_put_sync::op_now;
       }
     };
     
@@ -257,13 +269,18 @@ namespace upcxx {
         //upcxx::say()<<"amlong with reply blocking";
         auto *o = static_cast<Obj*>(this);
         
-        backend::gasnet::template rma_put_then_am_master</*src_now=*/true>(
+        auto sync_out = backend::gasnet::template rma_put_then_am_master<
+            backend::gasnet::rma_put_then_am_sync::src_now
+          >(
           upcxx::world(), rank_d, buf_d, buf_s, buf_size,
           progress_level::user, std::move(remote),
           nullptr,
           static_cast<backend::gasnet::reply_cb*>(this)
         );
 
+        if(sync_out == backend::gasnet::rma_put_then_am_sync::op_now)
+          this->remote_done = true;
+        
         while(!this->remote_done)
           upcxx::progress(upcxx::progress_level::internal);
 
@@ -290,6 +307,10 @@ namespace upcxx {
       static constexpr rma_put_sync sync_lb = src_now
         ? rma_put_sync::src_now
         : rma_put_sync::src_cb;
+
+      static constexpr backend::gasnet::rma_put_then_am_sync sync_lb1 = src_now
+        ? backend::gasnet::rma_put_then_am_sync::src_now
+        : backend::gasnet::rma_put_then_am_sync::src_cb;
       
       template<typename RemoteFn>
       rma_put_sync inject(
@@ -298,12 +319,19 @@ namespace upcxx {
         ) {
         //upcxx::say()<<"amlong without reply";
         auto *o = static_cast<Obj*>(this);
-        bool src_done = backend::gasnet::template rma_put_then_am_master<src_now>(
+        auto sync_out = backend::gasnet::template rma_put_then_am_master<sync_lb1>(
           upcxx::world(), rank_d, buf_d, buf_s, buf_size,
           progress_level::user, std::move(remote),
           this->the_src_cb(), nullptr
         );
-        return src_done ? rma_put_sync::src_now : rma_put_sync::src_cb;
+
+        if((int)sync_lb1 <= (int)backend::gasnet::rma_put_then_am_sync::src_cb &&
+           (int)sync_out == (int)backend::gasnet::rma_put_then_am_sync::src_cb)
+          return rma_put_sync::src_cb;
+        
+        if(sync_out == backend::gasnet::rma_put_then_am_sync::src_now)
+          return rma_put_sync::src_now;
+        return rma_put_sync::op_now;
       }
     };
     

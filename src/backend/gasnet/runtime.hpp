@@ -95,8 +95,14 @@ namespace gasnet {
     size_t cmd_align
   );
 
-  template<bool src_now, typename AmFn>
-  bool/*src_done*/ rma_put_then_am_master(
+  enum class rma_put_then_am_sync: int {
+    src_cb,
+    src_now,
+    op_now
+  };
+
+  template<rma_put_then_am_sync sync_lb/*src_cb,src_now*/, typename AmFn>
+  rma_put_then_am_sync rma_put_then_am_master(
     team &tm, intrank_t rank_d,
     void *buf_d, void const *buf_s, std::size_t buf_size,
     progress_level am_level, AmFn &&am_fn,
@@ -600,39 +606,49 @@ namespace gasnet {
   //////////////////////////////////////////////////////////////////////////////
   // rma_put_then_am_master
   
-  template<bool src_now, bool packed_protocol>
-  bool/*src_done*/ rma_put_then_am_master_protocol(
+  template<rma_put_then_am_sync sync_lb, bool packed_protocol>
+  rma_put_then_am_sync rma_put_then_am_master_protocol(
     team &tm, intrank_t rank_d,
     void *buf_d, void const *buf_s, std::size_t buf_size,
     progress_level am_level, void *am_cmd, std::size_t am_size, std::size_t am_align,
     handle_cb *src_cb, reply_cb *rem_cb
   );
   
-  template<bool src_now, typename AmFn>
-  bool/*src_done*/ rma_put_then_am_master(
+  template<rma_put_then_am_sync sync_lb, typename AmFn>
+  rma_put_then_am_sync rma_put_then_am_master(
       team &tm, intrank_t rank_d,
       void *buf_d, void const *buf_s, std::size_t buf_size,
       progress_level am_level, AmFn &&am_fn,
       handle_cb *src_cb, reply_cb *rem_cb
     ) {
 
+    bool rank_d_is_local = backend::rank_is_local(rank_d);
+    
     constexpr std::size_t arg_size = sizeof(std::int32_t);
 
-    auto am(backend::prepare_am(am_fn, /*disable rdzv=*/std::size_t(-1)));
-    
-    if(am.cmd_size_static_ub <= 13*arg_size || am.cmd_size <= 13*arg_size) {
-      return gasnet::template rma_put_then_am_master_protocol<src_now, /*packed=*/true>(
-        tm, rank_d, buf_d, buf_s, buf_size,
-        am_level, am.buffer, am.cmd_size, am.cmd_align,
-        src_cb, rem_cb
-      );
+    auto am(backend::prepare_am(am_fn, rank_d_is_local ? am_size_rdzv_cutover : /*rdzv disabled=*/std::size_t(-1)));
+
+    if(rank_d_is_local) {
+      void *buf_d_local = backend::localize_memory_nonnull(rank_d, reinterpret_cast<std::uintptr_t>(buf_d));
+      std::memcpy(buf_d_local, buf_s, buf_size);
+      backend::send_prepared_am_master(am_level, upcxx::world(), rank_d, std::move(am));
+      return rma_put_then_am_sync::op_now;
     }
     else {
-      return gasnet::template rma_put_then_am_master_protocol<src_now, /*packed=*/false>(
-        tm, rank_d, buf_d, buf_s, buf_size,
-        am_level, am.buffer, am.cmd_size, am.cmd_align,
-        src_cb, rem_cb
-      );
+      if(am.cmd_size_static_ub <= 13*arg_size || am.cmd_size <= 13*arg_size) {
+        return gasnet::template rma_put_then_am_master_protocol<sync_lb, /*packed=*/true>(
+          tm, rank_d, buf_d, buf_s, buf_size,
+          am_level, am.buffer, am.cmd_size, am.cmd_align,
+          src_cb, rem_cb
+        );
+      }
+      else {
+        return gasnet::template rma_put_then_am_master_protocol<sync_lb, /*packed=*/false>(
+          tm, rank_d, buf_d, buf_s, buf_size,
+          am_level, am.buffer, am.cmd_size, am.cmd_align,
+          src_cb, rem_cb
+        );
+      }
     }
   }
 }}}

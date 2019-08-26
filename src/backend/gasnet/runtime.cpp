@@ -72,7 +72,7 @@ static_assert(
 // from: upcxx/backend.hpp
 
 int backend::init_count = 0;
-  
+
 intrank_t backend::rank_n = -1;
 intrank_t backend::rank_me; // leave undefined so valgrind can catch it.
 
@@ -80,6 +80,12 @@ bool backend::verbose_noise = false;
 
 persona backend::master;
 persona_scope *backend::initial_master_scope = nullptr;
+
+#if GASNET_CONDUIT_SMP
+  const bool backend::all_ranks_definitely_local = true;
+#else
+  const bool backend::all_ranks_definitely_local = false;
+#endif
 
 intrank_t backend::pshm_peer_lb;
 intrank_t backend::pshm_peer_ub;
@@ -1685,8 +1691,8 @@ namespace {
   par_atomic<std::uint32_t> rma_put_then_am_nonce_bumper(0);
 }
 
-template<bool src_now, bool packed_protocol>
-bool/*src_done*/ gasnet::rma_put_then_am_master_protocol(
+template<gasnet::rma_put_then_am_sync sync_lb, bool packed_protocol>
+gasnet::rma_put_then_am_sync gasnet::rma_put_then_am_master_protocol(
     team &tm, intrank_t rank_d,
     void *buf_d, void const *buf_s, std::size_t buf_size,
     progress_level am_level, void *am_cmd, std::size_t am_size, std::size_t am_align,
@@ -1697,10 +1703,15 @@ bool/*src_done*/ gasnet::rma_put_then_am_master_protocol(
   gex_TM_t tm_h = gasnet::handle_of(tm);
   gex_Event_t src_h = GEX_EVENT_INVALID, *src_ph;
 
-  if(src_now)
+  switch(sync_lb) {
+  case rma_put_then_am_sync::src_now:
     src_ph = GEX_EVENT_NOW;
-  else
+    break;
+  case rma_put_then_am_sync::src_cb:
+  default: // suppress exhaustiveness warning
     src_ph = &src_h;
+    break;
+  }
   
   size_t am_long_max = gex_AM_MaxRequestLong(tm_h, rank_d, src_ph, /*flags*/0, 16);
   
@@ -1777,18 +1788,20 @@ bool/*src_done*/ gasnet::rma_put_then_am_master_protocol(
     }
   }
   
-  if(!src_now) {
+  if(sync_lb == rma_put_then_am_sync::src_cb) {
     src_cb->handle = reinterpret_cast<uintptr_t>(src_h);
-    return 0 == gex_Event_Test(src_h);
+    if(0 == gex_Event_Test(src_h))
+      return rma_put_then_am_sync::src_now;
   }
-  else
-    return true;
+  
+  return rma_put_then_am_sync::src_cb;
 }
 
 // instantiate all cases of rma_put_then_am_master_protocol
-#define INSTANTIATE(src_now, packed_protocol) \
+#define INSTANTIATE(sync_lb, packed_protocol) \
   template \
-  bool gasnet::rma_put_then_am_master_protocol<src_now, packed_protocol>( \
+  gasnet::rma_put_then_am_sync \
+  gasnet::rma_put_then_am_master_protocol<sync_lb, packed_protocol>( \
       team &tm, intrank_t rank_d, \
       void *buf_d, void const *buf_s, std::size_t buf_size, \
       progress_level am_level, void *am_cmd, std::size_t am_size, std::size_t am_align, \
@@ -1796,10 +1809,10 @@ bool/*src_done*/ gasnet::rma_put_then_am_master_protocol(
       gasnet::reply_cb *rem_cb \
     );
 
-INSTANTIATE(true, true)
-INSTANTIATE(true, false)
-INSTANTIATE(false, true)
-INSTANTIATE(false, false)
+INSTANTIATE(gasnet::rma_put_then_am_sync::src_now, true)
+INSTANTIATE(gasnet::rma_put_then_am_sync::src_now, false)
+INSTANTIATE(gasnet::rma_put_then_am_sync::src_cb, true)
+INSTANTIATE(gasnet::rma_put_then_am_sync::src_cb, false)
 #undef INSTANTIATE
 
 namespace {
@@ -1971,11 +1984,7 @@ namespace {
     
   void am_reply_cb(gex_Token_t, gex_AM_Arg_t cb_lo, gex_AM_Arg_t cb_hi) {
     gasnet::reply_cb *cb = am_arg_decode_ptr<gasnet::reply_cb>(cb_lo, cb_hi);
-    detail::persona_tls &tls = detail::the_persona_tls;
-    tls.enqueue(
-      *cb->target, progress_level::internal, cb,
-      /*known_active=*/std::integral_constant<bool, !UPCXX_BACKEND_GASNET_PAR>()
-    );
+    cb->fire();
   }
 }
 

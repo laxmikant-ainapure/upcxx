@@ -1,7 +1,9 @@
 #ifndef _b514e330_beb4_41df_835b_9dde85882b76
 #define _b514e330_beb4_41df_835b_9dde85882b76
 
+#include <upcxx/backend_fwd.hpp>
 #include <upcxx/lpc.hpp>
+#include <upcxx/persona.hpp>
 
 namespace upcxx {
 namespace backend {
@@ -31,6 +33,14 @@ namespace gasnet {
     //   reply_cb(&the_vtbl, target) {
     //   ...
     // }
+    
+    void fire() {
+      detail::persona_tls &tls = detail::the_persona_tls;
+      tls.enqueue(
+        *this->target, progress_level::internal, this,
+        /*known_active=*/std::integral_constant<bool, !UPCXX_BACKEND_GASNET_PAR>()
+      );
+    }
   };
 }}}
 #endif

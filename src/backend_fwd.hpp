@@ -159,7 +159,8 @@ namespace backend {
   intrank_t team_rank_from_world(team &tm, intrank_t rank);
   intrank_t team_rank_from_world(team &tm, intrank_t rank, intrank_t otherwise);
   intrank_t team_rank_to_world(team &tm, intrank_t peer);
-  
+
+  extern const bool all_ranks_definitely_local;
   bool rank_is_local(intrank_t r);
   
   void* localize_memory(intrank_t rank, std::uintptr_t raw);
