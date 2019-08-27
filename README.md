@@ -66,13 +66,13 @@ The current release is known to work on the following configurations:
     - PrgEnv-cray with cce/9.0.0 (or later) loaded.
       Note that does not include support for "cce/9.x.y-classic".
 
-  ALCF's PrgEnv-llvm is also supported on the Cray XC.  Unlike Cray's
-  PrgEnv-* modules, PrgEnv-llvm is versioned to match the llvm toolchain
-  it includes, rather than the Cray PE version.  UPC++ has been tested
-  against PrgEnv-llvm/4.0 (clang 4.0) and newer.  When using PrgEnv-llvm,
-  it is recommended to `module unload xalt` to avoid a large volume of
-  verbose linker output in this configuration.  Mixing with OpenMP in this
-  configuration is not currently supported.  (smp and aries conduits).
+    ALCF's PrgEnv-llvm is also supported on the Cray XC.  Unlike Cray's
+    PrgEnv-\* modules, PrgEnv-llvm is versioned to match the llvm toolchain
+    it includes, rather than the Cray PE version.  UPC++ has been tested
+    against PrgEnv-llvm/4.0 (clang 4.0) and newer.  When using PrgEnv-llvm,
+    it is recommended to `module unload xalt` to avoid a large volume of
+    verbose linker output in this configuration.  Mixing with OpenMP in this
+    configuration is not currently supported.  (smp and aries conduits).
 
 Linux Compiler Notes:
 
@@ -133,20 +133,22 @@ For copyright notice and licensing agreement, see [LICENSE.txt](LICENSE.txt)
 New features/enhancements: (see specification and programmer's guide for full details)
 
 * `atomic_domain<float>` and `atomic_domain<double>` are now implemented
-* The following have been added to the list of supported platforms/compilers
-    - PGI v19.1+ on Linux/x86_64
-    - PGI v18.10+ on Linux/ppc64le
-    - clang v5.0+ on Linux/ppc64le
-    - PrgEnv/cray with CCE v9.0+ on the Cray XC
-    - ALCF's PrgEnv/llvm v4.0+ on the Cray XC
-    - NEW platform: Linux/aarch64 (aka "arm64" or "armv8")
-        + gcc v6.4.0+
-        + clang 4.0.0+
 * New define `UPCXX_SPEC_VERSION` documents the implemented revision of the UPC++ specification
 * `upcxx` has several new convenience options (see `upcxx -help`)
 * Release tarball downloads now embed a copy of GASNet-EX that is used by default during install.
   Git clones of the repo will still default to downloading GASNet-EX during install.
   The `GASNET` envvar can still be set at install time to change the default behavior.
+
+Support has been added for the following compilers/platforms (for details, see 'System Requirements'):
+
+* PGI v19.1+ on Linux/x86_64
+* PGI v18.10+ on Linux/ppc64le
+* clang v5.0+ on Linux/ppc64le
+* PrgEnv/cray with CCE v9.0+ on the Cray XC
+* ALCF's PrgEnv/llvm v4.0+ on the Cray XC
+* NEW platform: Linux/aarch64 (aka "arm64" or "armv8")
+    + gcc v6.4.0+
+    + clang 4.0.0+
 
 Notable bug fixes:
 
@@ -168,9 +170,9 @@ The following features from the specification are not yet implemented:
 * User-defined Class Serialization interface (coming soon!)
 
 Breaking changes:
+
 * Applications are recommended to replace calls to `std::getenv` with `upcxx::getenv_console`,
   to maximize portability to loosely coupled distributed systems.
-
 * envvar `UPCXX_GASNET_CONDUIT` has been renamed to `UPCXX_NETWORK`.
   For backwards compat, the former is still accepted when the latter is unset.
 
