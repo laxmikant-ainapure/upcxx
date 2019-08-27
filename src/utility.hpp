@@ -676,8 +676,8 @@ namespace detail {
     inline auto apply_tupled(
         Fn &&fn, Tup &&args, index_sequence<i...>
       )
-      -> decltype(fn(std::get<i>(args)...)) {
-      return fn(std::get<i>(args)...);
+      -> decltype(static_cast<Fn&&>(fn)(std::get<i>(static_cast<Tup&&>(args))...)) {
+      return static_cast<Fn&&>(fn)(std::get<i>(static_cast<Tup&&>(args))...);
     }
   }
   

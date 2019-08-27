@@ -4,6 +4,7 @@
 #include <upcxx/backend.hpp>
 #include <upcxx/bind.hpp>
 #include <upcxx/future.hpp>
+#include <upcxx/lpc_dormant.hpp>
 #include <upcxx/persona.hpp>
 #include <upcxx/utility.hpp>
 
@@ -293,6 +294,14 @@ namespace upcxx {
       promise<T...> pro_;
       
       cx_state(future_cx<Event,level>) {}
+
+      lpc_dormant<T...>* to_lpc_dormant(lpc_dormant<T...> *tail) && {
+        return detail::make_lpc_dormant_quiesced_promise<T...>(
+          upcxx::current_persona(), progress_level::user,
+          std::move(pro_),
+          tail
+        );
+      }
       
       void operator()(T ...vals) {
         backend::fulfill_during<level>(std::move(pro_), std::tuple<T...>(std::forward<T>(vals)...));
@@ -304,9 +313,20 @@ namespace upcxx {
     struct cx_state<promise_cx<Event,T...>, std::tuple<T...>> {
       promise<T...> &pro_;
 
-      cx_state(promise_cx<Event,T...> cx):
+      cx_state(promise_cx<Event,T...> &&cx):
         pro_(cx.pro_) {
         pro_.require_anonymous(1);
+      }
+
+      lpc_dormant<T...>* to_lpc_dormant(lpc_dormant<T...> *tail) && {
+        promise<T...> *pro = &pro_;
+        return detail::make_lpc_dormant(
+          upcxx::current_persona(), progress_level::user,
+          [=](std::tuple<T...> &&results) {
+            backend::fulfill_during<progress_level::user>(*pro, std::move(results));
+          },
+          tail
+        );
       }
       
       void operator()(T ...vals) {
@@ -318,9 +338,20 @@ namespace upcxx {
     struct cx_state<promise_cx<Event,T...>, std::tuple<>> {
       promise<T...> &pro_;
 
-      cx_state(promise_cx<Event,T...> cx):
+      cx_state(promise_cx<Event,T...> &&cx):
         pro_(cx.pro_) {
         pro_.require_anonymous(1);
+      }
+      
+      lpc_dormant<>* to_lpc_dormant(lpc_dormant<> *tail) && {
+        promise<T...> *pro = &pro_;
+        return detail::make_lpc_dormant(
+          upcxx::current_persona(), progress_level::user,
+          [=](std::tuple<>) {
+            backend::fulfill_during<progress_level::user>(*pro, 1);
+          },
+          tail
+        );
       }
       
       void operator()() {
@@ -332,9 +363,20 @@ namespace upcxx {
     struct cx_state<promise_cx<Event>, std::tuple<>> {
       promise<> &pro_;
 
-      cx_state(promise_cx<Event> cx):
+      cx_state(promise_cx<Event> &&cx):
         pro_(cx.pro_) {
         pro_.require_anonymous(1);
+      }
+
+      lpc_dormant<>* to_lpc_dormant(lpc_dormant<> *tail) && {
+        promise<> *pro = &pro_;
+        return detail::make_lpc_dormant<>(
+          upcxx::current_persona(), progress_level::user,
+          [=](std::tuple<>) {
+            backend::fulfill_during<progress_level::user>(*pro, 1);
+          },
+          tail
+        );
       }
       
       void operator()() {
@@ -347,15 +389,22 @@ namespace upcxx {
       persona *target_;
       Fn fn_;
       
-      cx_state(lpc_cx<Event,Fn> cx):
+      cx_state(lpc_cx<Event,Fn> &&cx):
         target_(cx.target_),
         fn_(std::move(cx.fn_)) {
+        upcxx::current_persona().undischarged_n_ += 1;
+      }
+
+      lpc_dormant<T...>* to_lpc_dormant(lpc_dormant<T...> *tail) && {
+        upcxx::current_persona().undischarged_n_ -= 1;
+        return detail::make_lpc_dormant(*target_, progress_level::user, std::move(fn_), tail);
       }
       
       void operator()(T ...vals) {
         target_->lpc_ff(
           std::bind(std::move(fn_), static_cast<T>(vals)...)
         );
+        upcxx::current_persona().undischarged_n_ -= 1;
       }
     };
     
@@ -363,7 +412,7 @@ namespace upcxx {
     struct cx_state<rpc_cx<Event,Fn>, std::tuple<T...>> {
       Fn fn_;
       
-      cx_state(rpc_cx<Event,Fn> cx):
+      cx_state(rpc_cx<Event,Fn> &&cx):
         fn_{std::move(cx.fn_)} {
       }
       
@@ -428,6 +477,15 @@ namespace upcxx {
       event_bound bind_event() && {
         return event_bound{};
       }
+
+      template<typename Event>
+      typename detail::tuple_types_into<
+          typename EventValues::template tuple_t<Event>,
+          lpc_dormant
+        >::type*
+      to_lpc_dormant() && {
+        return nullptr;
+      }
     };
 
     template<bool event_selected, typename EventValues, typename Cx>
@@ -480,6 +538,26 @@ namespace upcxx {
             std::is_same<Event, typename Cx::event_t>::value
           >{},
           std::forward<V>(vals)...
+        );
+      }
+      
+      template<typename Event, typename Lpc>
+      Lpc* to_lpc_dormant_case(std::true_type, Lpc *tail) && {
+        return std::move(state_).to_lpc_dormant(tail);
+      }
+
+      template<typename Event, typename Lpc>
+      Lpc* to_lpc_dormant_case(std::false_type, Lpc *tail) && {
+        return tail;
+      }
+
+      template<typename Event, typename Lpc>
+      Lpc* to_lpc_dormant(Lpc *tail) && {
+        return std::move(*this).template to_lpc_dormant_case<Event>(
+          std::integral_constant<bool,
+            std::is_same<Event, typename Cx::event_t>::value
+          >(),
+          tail
         );
       }
     };
@@ -544,6 +622,17 @@ namespace upcxx {
       typename detail::template bind<event_bound<Event>, completions_state>::return_type
       bind_event() && {
         return upcxx::bind(event_bound<Event>(), std::move(*this));
+      }
+
+      template<typename Event>
+      typename detail::tuple_types_into<
+          typename EventValues::template tuple_t<Event>,
+          lpc_dormant
+        >::type*
+      to_lpc_dormant() && {
+        return static_cast<head_t&&>(*this).template to_lpc_dormant<Event>(
+          static_cast<tail_t&&>(*this).template to_lpc_dormant<Event>()
+        );
       }
     };
   }

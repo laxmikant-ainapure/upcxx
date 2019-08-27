@@ -10,8 +10,15 @@ namespace backend {
 namespace gasnet {
   // reply_cb: Am internal-progress lpc which also knows to which persona
   // it is to be enqueued. Useful for handling zero-data AMReply's where we
-  // just want to rememer what to do once the remote event has been learned.
+  // just want to remember what to do once the remote event has been learned.
   // Subclassing is a bit tricky due to the manual vtbl management of lpc's.
+  //
+  // This is conceptually a restricted form of `lpc_dormant` where:
+  //   1. There is no data being delivered (no `T...`).
+  //   2. Quiesced promises don't get a special encoding.
+  //   3. Lists of lpc's aren't handled.
+  //   4. `progress_level::internal` is assumed.
+  //   5. Subclassing is expected (and therefor no factory function taking lambda).
   struct reply_cb: detail::lpc_base {
     persona *target;
 

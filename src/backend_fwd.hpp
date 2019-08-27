@@ -53,6 +53,10 @@ namespace upcxx {
   class persona;
   class persona_scope;
   class team;
+  namespace detail {
+    template<typename ...T>
+    struct lpc_dormant;
+  }
   
   void init();
   bool initialized();
@@ -78,8 +82,13 @@ namespace upcxx {
   persona_scope& default_persona_scope();
   persona_scope& top_persona_scope();
   
-  bool progress_required(persona_scope &ps = top_persona_scope());
-  void discharge(persona_scope &ps = top_persona_scope());
+  // bool progress_required(persona_scope &ps = top_persona_scope());
+  bool progress_required();
+  bool progress_required(persona_scope &ps);
+
+  // void discharge(persona_scope &ps = top_persona_scope());
+  void discharge();
+  void discharge(persona_scope &ps);
   
   namespace detail {
     int progressing();
@@ -152,6 +161,9 @@ namespace backend {
   
   template<progress_level level, typename Fn>
   void send_am_persona(team &tm, intrank_t recipient_rank, persona *recipient_persona, Fn &&fn);
+
+  template<typename ...T>
+  void send_awaken_lpc(team &tm, intrank_t recipient, detail::lpc_dormant<T...> *lpc, std::tuple<T...> &&vals);
 
   template<progress_level level, typename Fn>
   void bcast_am_master(team &tm, Fn &&fn);

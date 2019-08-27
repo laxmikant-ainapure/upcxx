@@ -75,7 +75,7 @@ namespace gasnet {
     progress_level level,
     team &tm,
     intrank_t recipient_rank,
-    persona *recipient_persona,
+    persona *recipient_persona, // if low-bit set then this is a persona** to be dereferenced remotely
     void *command_buf,
     std::size_t buf_size,
     std::size_t buf_align
@@ -86,7 +86,7 @@ namespace gasnet {
     progress_level level,
     team &tm,
     intrank_t recipient_rank,
-    persona *recipient_persona, // nullptr == master
+    persona *recipient_persona, // nullptr == master, or, if low-bit set then this is a persona** to be dereferenced remotely
     void *command_buf,
     std::size_t buf_size, std::size_t buf_align
   );
@@ -147,9 +147,9 @@ namespace gasnet {
       return detail::serialization_reader(static_cast<rpc_as_lpc*>(me)->payload);
     }
     
-    template<bool definitely_not_rdzv>
+    template<bool definitely_not_rdzv, bool restricted=false>
     static void cleanup(detail::lpc_base *me);
-    
+
     // Build copy of a packed command buffer (upcxx/command.hpp) as a rpc_as_lpc.
     template<typename RpcAsLpc = rpc_as_lpc>
     static RpcAsLpc* build_eager(
@@ -384,9 +384,12 @@ namespace backend {
   //////////////////////////////////////////////////////////////////////
   // send_am_{master|persona}
 
-  template<typename Fn>
-  auto prepare_am(Fn &&fn, std::size_t rdzv_cutover_size = gasnet::am_size_rdzv_cutover)
-    -> gasnet::am_send_buffer<decltype(detail::command<detail::lpc_base*>::ubound(empty_storage_size, fn))> {
+  template<typename Fn, bool restricted=false>
+  auto prepare_am(
+      Fn &&fn,
+      std::size_t rdzv_cutover_size = gasnet::am_size_rdzv_cutover,
+      std::integral_constant<bool, restricted> restricted1={}
+    ) -> gasnet::am_send_buffer<decltype(detail::command<detail::lpc_base*>::ubound(empty_storage_size, fn))> {
     
     using gasnet::am_send_buffer;
     using gasnet::rpc_as_lpc;
@@ -399,8 +402,8 @@ namespace backend {
     auto w = am_buf.prepare_writer(ub, rdzv_cutover_size);
     
     detail::command<detail::lpc_base*>::template serialize<
-        rpc_as_lpc::reader_of,
-        rpc_as_lpc::template cleanup</*definitely_not_rdzv=*/definitely_not_rdzv>
+        &rpc_as_lpc::reader_of,
+        &rpc_as_lpc::template cleanup<definitely_not_rdzv, restricted>
       >(w, ub.size, fn);
 
     am_buf.finalize_buffer(std::move(w), rdzv_cutover_size);
@@ -505,6 +508,29 @@ namespace backend {
       );
     #endif
   }
+
+  template<typename ...T>
+  void send_awaken_lpc(team &tm, intrank_t recipient, detail::lpc_dormant<T...> *lpc, std::tuple<T...> &&vals) {
+    auto am_buf(prepare_am(
+      upcxx::bind([=](std::tuple<T...> &&vals) {
+          lpc->awaken(std::move(vals));
+        },
+        std::move(vals)
+      ),
+      gasnet::am_size_rdzv_cutover,
+      /*restricted=*/std::true_type()
+    ));
+
+    if(am_buf.is_eager)
+      gasnet::send_am_eager_restricted(tm, recipient, am_buf.buffer, am_buf.cmd_size, am_buf.cmd_align);
+    else
+      gasnet::send_am_rdzv(
+        progress_level::internal, tm, recipient,
+        // mark low-bit so callee knows its a remote persona**, not a persona*
+        reinterpret_cast<persona*>(0x1 | reinterpret_cast<std::uintptr_t>(&lpc->target)),
+        am_buf.buffer, am_buf.cmd_size, am_buf.cmd_align
+      );
+  }
   
   template<progress_level level, typename Fn1>
   void bcast_am_master(team &tm, Fn1 &&fn) {
@@ -585,26 +611,15 @@ namespace gasnet {
   //////////////////////////////////////////////////////////////////////
   // send_am_restricted
   
-  inline detail::serialization_reader restricted_reader_of(void *p) {
-    return detail::serialization_reader(p);
-  }
-  inline void restricted_cleanup(void *p) {/*nop*/}
-  
   template<typename Fn>
   void send_am_restricted(team &tm, intrank_t recipient, Fn &&fn) {
     UPCXX_ASSERT(!UPCXX_BACKEND_GASNET_SEQ || backend::master.active_with_caller());
-    
-    auto ub = detail::command<detail::lpc_base*>::ubound(empty_storage_size, fn);
-    am_send_buffer<decltype(ub)> am_buf;
 
-    auto w = am_buf.prepare_writer(ub, /*rdzv no supported*/std::size_t(-1));
-    detail::command<void*>::serialize<
-        restricted_reader_of,
-        restricted_cleanup
-      >(w, ub.size, fn);
+    auto am_buf(prepare_am(
+      std::forward<Fn>(fn), gasnet::am_size_rdzv_cutover, /*restricted=*/std::true_type()
+    ));
     
-    am_buf.finalize_buffer(std::move(w), std::size_t(-1));
-    
+    UPCXX_ASSERT(am_buf.is_eager);
     gasnet::send_am_eager_restricted(tm, recipient, am_buf.buffer, am_buf.cmd_size, am_buf.cmd_align);
   }
   
@@ -612,11 +627,16 @@ namespace gasnet {
   // rpc_as_lpc
   
   template<>
-  inline void rpc_as_lpc::cleanup</*definitely_not_rdzv=*/true>(detail::lpc_base *me1) {
+  inline void rpc_as_lpc::cleanup</*definitely_not_rdzv=*/true, /*restricted=*/false>(detail::lpc_base *me1) {
     rpc_as_lpc *me = static_cast<rpc_as_lpc*>(me1);
     std::free(me->payload);
   }
   
+  template<>
+  inline void rpc_as_lpc::cleanup</*definitely_not_rdzv=*/true, /*restricted=*/true>(detail::lpc_base *me1) {
+    // nop
+  }
+
   template<>
   inline void bcast_as_lpc::cleanup</*definitely_not_rdzv=*/true>(detail::lpc_base *me1) {
     bcast_as_lpc *me = static_cast<bcast_as_lpc*>(me1);

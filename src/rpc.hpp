@@ -136,28 +136,19 @@ namespace upcxx {
   // rpc
   
   namespace detail {
-    template<typename CxsState>
-    struct rpc_recipient_after {
-      intrank_t initiator_;
-      persona *initiator_persona_;
-      CxsState *state_;
+    template<typename PointerToLpcStalled>
+    struct rpc_recipient_after;
 
-      struct operation_satisfier {
-        CxsState *state;
-        template<typename ...T>
-        void operator()(T &&...vals) const {
-          state->template operator()<operation_cx_event>(std::forward<T>(vals)...);
-          delete state;
-        }
-      };
+    template<typename ...T>
+    struct rpc_recipient_after<detail::lpc_dormant<T...>*> {
+      intrank_t initiator;
+      detail::lpc_dormant<T...> *remote_lpc;
       
       template<typename ...Arg>
-      void operator()(Arg &&...args) const {
-        backend::template send_am_persona<progress_level::user>(
-          upcxx::world(),
-          initiator_,
-          initiator_persona_,
-          upcxx::bind(operation_satisfier{state_}, std::forward<Arg>(args)...)
+      void operator()(Arg &&...arg) const {
+        backend::template send_awaken_lpc<T...>(
+          upcxx::world(), initiator,
+          remote_lpc, std::tuple<T...>(std::forward<Arg>(arg)...)
         );
       }
     };
@@ -223,17 +214,17 @@ namespace upcxx {
           Cxs
         >;
       
-      cxs_state_t *state = new cxs_state_t{std::move(cxs)};
+      cxs_state_t state(std::move(cxs));
       
       auto returner = detail::completions_returner<
           /*EventPredicate=*/detail::event_is_here,
           /*EventValues=*/detail::rpc_event_values<Fn&&(Arg&&...)>,
           Cxs
-        >{*state};
-
+        >(state);
+      
       intrank_t initiator = backend::rank_me;
-      persona *initiator_persona = &upcxx::current_persona();
-
+      auto *op_lpc = std::move(state).template to_lpc_dormant<operation_cx_event>();
+      
       using fn_bound_t = typename detail::bind<Fn&&, Arg&&...>::return_type;
       fn_bound_t fn_bound = upcxx::bind(std::forward<Fn>(fn), std::forward<Arg>(args)...);
       
@@ -247,8 +238,8 @@ namespace upcxx {
                 // to take variadic Arg... we have to call to an outlined
                 // class. I'm not sure if even C++14's allowance of `auto`
                 // lambda args would be enough.
-                detail::rpc_recipient_after<cxs_state_t>{
-                  initiator, initiator_persona, state
+                detail::rpc_recipient_after<decltype(op_lpc)>{
+                  initiator, op_lpc
                 }
               );
           },
@@ -258,7 +249,7 @@ namespace upcxx {
       
       // send_am_master doesn't support async source-completion, so we know
       // its trivially satisfied.
-      state->template operator()<source_cx_event>();
+      state.template operator()<source_cx_event>();
       
       return returner();
     }
