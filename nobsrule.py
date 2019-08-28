@@ -1229,18 +1229,23 @@ class gasnet_configured:
         env1['CC'] = ' '.join(cc)
       if 'CXX' not in env1:
         env1['CXX'] = ' '.join(cxx)
-      
+     
+      # these arguments enforce GASNet defaults that UPC++ relies upon
+      # to ensure that users cannot break our dependencies by setting GASNET_CONFIGURE_ARGS
+      # For details, see GASNet configure --help
       misc_conf_opts = [
-        # disable the parsync mode which is not used by UPCXX
-        '--disable-parsync',
+        '--disable-parsync', '--enable-seq', '--enable-par',
+        '--enable-pthreads',
+        '--disable-segment-everything',
       ]
       
       print>>sys.stderr, 'Configuring GASNet...'
       yield subexec.launch(
         [os.path.join(source_dir, 'configure')] +
         config_args +
-        (['--enable-debug'] if debug else []) +
-        misc_conf_opts + user_args,
+        user_args + 
+        misc_conf_opts +
+        (['--enable-debug'] if debug else ['--disable-debug']),
         
         cwd = build_dir,
         env = env1
