@@ -1429,7 +1429,12 @@ namespace gasnet {
         delete me;
       }
       else {
-        gasnet::deallocate(me->payload, &gasnet::sheap_footprint_rdzv);
+        // rpc_as_lpc::build_rdzv_lz(use_sheap=false, ...)
+        UPCXX_ASSERT(!( // should not be in segment
+          shared_heap_base <= me->payload &&
+          (char*)me->payload < (char*)shared_heap_base + shared_heap_sz
+        ));
+        std::free(me->payload); 
       }
     }
   }
@@ -1462,8 +1467,14 @@ namespace gasnet {
         delete me;
       }
       else {
-        if(0 == refs_now)
+        if(0 == refs_now) {
+          // rpc_as_lpc::build_rdzv_lz(use_sheap=true, ...)
+          UPCXX_ASSERT( // should be in segment
+            shared_heap_base <= me->payload &&
+            (char*)me->payload < (char*)shared_heap_base + shared_heap_sz
+          );
           gasnet::deallocate(me->payload, &gasnet::sheap_footprint_rdzv);
+        }
       }
     }
   }
