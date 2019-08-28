@@ -163,6 +163,7 @@ Notable bug fixes:
 * issue #223: `operator<<(std::ostream, global_ptr<T>)` does not match spec
 * issue #243: Honor `$UPCXX_PYTHON` during install
 * issue #204: No support for `nvcc --compiler-bindir=...`
+* issue #260: `GASNET_CONFIGURE_ARGS` can break UPC++ build
 
 The following features from the specification are not yet implemented:
 
