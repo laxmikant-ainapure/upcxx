@@ -67,10 +67,7 @@ if( UPCXX_EXECUTABLE )
     foreach( option ${UPCXX_CXXFLAGS} )
       string(REGEX MATCH "^-std=" tmp_option ${option})
       if( tmp_option )
-        string( REGEX REPLACE "^-std=(.+)\\+\\+" "" UPCXX_CXX_STANDARD ${option} )
-        if (CMAKE_MATCH_1)
-          set(UPCXX_CXX_STANDARD_TYPE ${CMAKE_MATCH_1})
-        endif()
+        string( REGEX REPLACE "^-std=.+\\+\\+" "" UPCXX_CXX_STANDARD ${option} )
       endif()
     endforeach()
   endif()
@@ -116,7 +113,7 @@ find_package_handle_standard_args( UPCXX
   HANDLE_COMPONENTS
 )
 
-message(STATUS "UPC++ requires the ${UPCXX_CXX_STANDARD_TYPE}++${UPCXX_CXX_STANDARD} standard.")
+message(STATUS "UPC++ requires the c++${UPCXX_CXX_STANDARD} standard.")
 
 
 # Export a UPCXX::upcxx target for modern cmake projects
@@ -126,6 +123,6 @@ if( UPCXX_FOUND AND NOT TARGET UPCXX::upcxx )
     INTERFACE_INCLUDE_DIRSECTORIES "${UPCXX_INCLUDE_DIRS}"
     INTERFACE_LINK_LIBRARIES      "${UPCXX_LIBRARIES}" 
     INTERFACE_COMPILE_DEFINITIONS "${UPCXX_DEFINITIONS}" 
-    INTERFACE_COMPILE_FEATURES    "cxx_${UPCXX_CXX_STANDARD_TYPE}_${UPCXX_CXX_STANDARD}"
+    INTERFACE_COMPILE_FEATURES    "cxx_std_${UPCXX_CXX_STANDARD}"
   )
 endif()
