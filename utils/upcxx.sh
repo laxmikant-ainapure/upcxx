@@ -99,7 +99,7 @@ if [[ $codemode_override ]] ; then
   :  # -codemode is highest priority and ignores other args
 elif [[ $dodebug && ! $doopt ]] ; then
   UPCXX_CODEMODE=debug
-elif [[ ( $doopt && ! $dodebug ) || $doversion ]] ; then
+elif [[ ( $doopt && ! $dodebug ) || $doversion || $dohelp ]] ; then
   UPCXX_CODEMODE=O3
 elif [[ $UPCXX_CODEMODE ]] ; then
   : # last resort : user environment
