@@ -168,6 +168,7 @@ Notable bug fixes:
 The following features from the specification are not yet implemented:
 
 * `barrier_async()` and `broadcast()` only support default future-based completion (issue #234)
+* view buffer lifetime extension for `remote_cx::as_rpc` (issue #262)
 * User-defined Class Serialization interface (coming soon!)
 
 Breaking changes:
