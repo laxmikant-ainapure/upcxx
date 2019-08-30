@@ -1,6 +1,7 @@
 #include <upcxx/backend/gasnet/runtime.hpp>
 #include <upcxx/backend/gasnet/runtime_internal.hpp>
 #include <upcxx/backend/gasnet/upc_link.h>
+#include <upcxx/backend/gasnet/noise_log.hpp>
 
 #include <upcxx/concurrency.hpp>
 #include <upcxx/cuda_internal.hpp>
@@ -14,7 +15,6 @@
 #include <cstring>
 #include <memory>
 
-#include <sched.h>
 #include <unistd.h>
 
 namespace backend = upcxx::backend;
@@ -39,6 +39,7 @@ using gasnet::handle_cb_queue;
 using gasnet::rpc_as_lpc;
 using gasnet::bcast_as_lpc;
 using gasnet::bcast_payload_header;
+using gasnet::noise_log;
 
 using namespace std;
 
@@ -121,6 +122,8 @@ namespace {
     // unused
     constexpr void *gasnet_seq_thread_id = nullptr;
   #endif
+
+  bool oversubscribed;
   
   auto do_internal_progress = []() { upcxx::progress(progress_level::internal); };
   auto operation_cx_as_internal_future = upcxx::completions<upcxx::future_cx<upcxx::operation_cx_event, progress_level::internal>>{{}};
@@ -256,12 +259,7 @@ namespace {
   void  *shared_heap_base = nullptr;
   size_t shared_heap_sz = 0;
 
-  std::string format_memsize(size_t memsize) {
-    char buf[80];
-    return std::string(gasnett_format_number(memsize, buf, sizeof(buf), 1));
-  }
-
-  void heap_init_internal(size_t &size) {
+  void heap_init_internal(size_t &size, noise_log &noise) {
     UPCXX_ASSERT_ALWAYS(!shared_heap_isinit);
 
     void *segment_base = 0;
@@ -278,7 +276,7 @@ namespace {
         // UPCXX_USE_UPC_ALLOC enables the use of the UPC allocator to replace our allocator
         upcxx_use_upc_alloc = upcxx::os_env<bool>("UPCXX_USE_UPC_ALLOC" , (upcxx_upc_is_pthreads() || upcxx_use_upc_alloc));
         if (upcxx_upc_is_pthreads() && !upcxx_use_upc_alloc) {
-          cerr << "WARNING: UPCXX_USE_UPC_ALLOC=no is not supported in UPC -pthreads mode. Forcing UPCXX_USE_UPC_ALLOC=yes" << endl;
+          noise.warn() << "UPCXX_USE_UPC_ALLOC=no is not supported in UPC -pthreads mode. Forcing UPCXX_USE_UPC_ALLOC=yes";
           upcxx_use_upc_alloc = 1;
         }
         if (!upcxx_use_upc_alloc) {
@@ -318,15 +316,11 @@ namespace {
       uint64_t minsz = shared_heap_sz;
       gex_Event_Wait(gex_Coll_ReduceToOneNB(world_tm, 0, &maxsz, &maxsz, GEX_DT_U64, sizeof(maxsz), 1, GEX_OP_MAX, 0,0,0));
       gex_Event_Wait(gex_Coll_ReduceToOneNB(world_tm, 0, &minsz, &minsz, GEX_DT_U64, sizeof(minsz), 1, GEX_OP_MIN, 0,0,0));
-      if (backend::rank_me == 0) {
-        std::cerr
-        <<std::string(70,'/')<<std::endl
-        <<"heap_init_internal(): Shared heap statistics: \n"
-        << "  max size: 0x" << std::hex << maxsz << std::dec << " (" << format_memsize(maxsz) << ")\n"
-        << "  min size: 0x" << std::hex << minsz << std::dec << " (" << format_memsize(minsz) << ")\n"
-        << "  P0 base:  " << shared_heap_base <<std::endl
-        <<std::string(70,'/')<<std::endl;
-      }
+      noise.line()
+        <<"Shared heap statistics:\n"
+        << "  max size: 0x" << std::hex << maxsz << std::dec << " (" << noise_log::size(maxsz) << ")\n"
+        << "  min size: 0x" << std::hex << minsz << std::dec << " (" << noise_log::size(minsz) << ")\n"
+        << "  P0 base:  " << shared_heap_base;
     }
     shared_heap_isinit = true;
 
@@ -361,22 +355,18 @@ namespace {
 // creation have undefined behavior. The list of such functions is
 // implementation-defined.
 
-void upcxx::destroy_heap(void) {
+void upcxx::destroy_heap() {
+  noise_log noise("upcxx::destroy_heap()");
+  
   UPCXX_ASSERT_ALWAYS(backend::master.active_with_caller());
   UPCXX_ASSERT_ALWAYS(shared_heap_isinit);
   backend::quiesce(upcxx::world(), entry_barrier::user);
 
   if (allocs_live_n_ > 0) {
-     char warning[200];
-     snprintf(warning, sizeof(warning), 
-        "%i: WARNING: upcxx::destroy_heap() called with %lli live shared objects\n",
-        backend::rank_me, (long long)allocs_live_n_);
-     cerr << warning << flush;
+    noise.warn()<<"destroy_heap() called with "<<allocs_live_n_<<" live shared objects.";
   }
   if (upcxx_use_upc_alloc) { 
-    if (!backend::rank_me) {
-      cerr << "WARNING: upcxx::destroy_heap() is not supported for UPCXX_USE_UPC_ALLOC=yes" << endl;
-    }
+    noise.warn()<<"destroy_heap() is not supported for UPCXX_USE_UPC_ALLOC=yes" << endl;
   } else {
     allocs_live_n_ = 0;
 
@@ -391,6 +381,8 @@ void upcxx::destroy_heap(void) {
   }
 
   shared_heap_isinit = false;
+
+  noise.show();
 }
 
 // void upcxx::restore_heap(void):
@@ -408,8 +400,9 @@ void upcxx::restore_heap(void) {
 
   if (upcxx_use_upc_alloc) {
     // unsupported/ignored
-  } else { 
-    heap_init_internal(shared_heap_sz);
+  } else {
+    noise_log mute = noise_log::muted();
+    heap_init_internal(shared_heap_sz, mute);
     init_localheap_tables();
   }
   shared_heap_isinit = true;
@@ -425,6 +418,8 @@ void upcxx::restore_heap(void) {
 void upcxx::init() {
   if(0 != backend::init_count++)
     return;
+
+  noise_log noise("upcxx::init()");
   
   int ok;
 
@@ -496,11 +491,11 @@ void upcxx::init() {
 
   // now adjust the segment size if it's less than the GASNET_MAX_SEGSIZE
   if (segment_size > gasnet_max_segsize) {
-    if(upcxx::rank_me() == 0) {
-      cerr << "WARNING: Requested UPC++ shared heap size (" << format_memsize(segment_size) << ") "
-              "is larger than the GASNet segment size (" << format_memsize(gasnet_max_segsize) << "). "
-              "Adjusted shared heap size to " << format_memsize(gasnet_max_segsize) << ".\n";
-    }
+    noise.warn() <<
+      "Requested UPC++ shared heap size (" << noise_log::size(segment_size) << ") "
+      "is larger than the GASNet segment size (" << noise_log::size(gasnet_max_segsize) << "). "
+      "Adjusted shared heap size to " << noise_log::size(gasnet_max_segsize) << ".";
+
     segment_size = gasnet_max_segsize;
   }
  
@@ -518,8 +513,8 @@ void upcxx::init() {
   
   // Create the GEX segment
   if (upcxx_upc_is_linked()) {
-    if (backend::verbose_noise && !backend::rank_me) 
-      cerr << "UPCXX: Activating interoperability support for the Berkeley UPC Runtime." << endl;
+    if(backend::verbose_noise)
+      noise.line() << "Activating interoperability support for the Berkeley UPC Runtime.";
   } else {
     ok = gex_Segment_Attach(&segment, world_tm, segment_size);
     UPCXX_ASSERT_ALWAYS(ok == GASNET_OK);
@@ -551,6 +546,22 @@ void upcxx::init() {
     am_medium_size < 8<<10 ? 512 :
                              1024;
   UPCXX_ASSERT(gasnet::am_size_rdzv_cutover_min <= gasnet::am_size_rdzv_cutover);
+
+  //////////////////////////////////////////////////////////////////////////////
+  // Determine if we're oversubscribed.
+  { 
+    gex_Rank_t host_peer_n;
+    gex_System_QueryHostInfo(nullptr, &host_peer_n, nullptr);
+    bool oversubscribed_default = (int)gasnett_cpu_count() < (int)host_peer_n;
+    oversubscribed = os_env<bool>("UPCXX_OVERSUBSCRIBED", oversubscribed_default);
+
+    if(backend::verbose_noise)
+      noise.line()<<"CPUs Oversubscribed: "<<(oversubscribed
+        ? "yes \"upcxx::progress() may yield to OS)\""
+        : "no \"upcxx::progress() never yields to OS\"");
+
+    gasnet_set_waitmode(oversubscribed ? GASNET_WAIT_BLOCK : GASNET_WAIT_SPIN);
+  }
   
   //////////////////////////////////////////////////////////////////////////////
   // Setup the local-memory neighborhood tables.
@@ -577,15 +588,11 @@ void upcxx::init() {
   }
 
   // setup shared segment allocator
-  heap_init_internal(segment_size);
+  heap_init_internal(segment_size, noise);
   
   if (local_is_world) {
-    if(backend::verbose_noise && backend::rank_me == 0) {
-      std::cerr
-        <<std::string(70,'/')<<std::endl
-        <<"upcxx::init(): Whole world is in same local team."<<std::endl
-        <<std::string(70,'/')<<std::endl;
-    }
+    if(backend::verbose_noise)
+      noise.line() << "Whole world is in same local team.";
     
     backend::pshm_peer_lb = 0;
     backend::pshm_peer_ub = backend::rank_n;
@@ -632,18 +639,14 @@ void upcxx::init() {
         )
       );
       
-      if(backend::rank_me == 0) {
-        std::cerr
-          <<std::string(70,'/')<<std::endl
-          <<"upcxx::init(): local team statistics:"<<std::endl
-          <<"  local teams = "<<stats.count<<std::endl
-          <<"  min rank_n = "<<stats.min_size<<std::endl
-          <<"  max rank_n = "<<stats.max_size<<std::endl;
-        if(stats.count == backend::rank_n) {
-          std::cerr<<"  WARNING: All local team's are singletons. Memory sharing between ranks will never succeed."<<std::endl;
-        }
-        std::cerr<<std::string(70,'/')<<std::endl;
-      }
+      noise.line()
+        <<"Local team statistics:"<<'\n'
+        <<"  local teams = "<<stats.count<<'\n'
+        <<"  min rank_n = "<<stats.min_size<<'\n'
+        <<"  max rank_n = "<<stats.max_size;
+
+      if(stats.count == backend::rank_n)
+        noise.warn()<<"All local team's are singletons. Memory sharing between ranks will never succeed.";
     }
     
     UPCXX_ASSERT_ALWAYS( local_scratch_sz && local_scratch_ptr );
@@ -673,6 +676,8 @@ void upcxx::init() {
   // Setup local peer address translation tables
   init_localheap_tables();
 
+  noise.show();
+  
   //////////////////////////////////////////////////////////////////////////////
   // Exit barrier
   
@@ -682,7 +687,7 @@ void upcxx::init() {
 }
 
 namespace {
- void init_localheap_tables(void) {
+void init_localheap_tables(void) {
   const gex_Rank_t peer_n = backend::pshm_peer_n;
 
   backend::pshm_local_minus_remote.reset(new uintptr_t[peer_n]);
@@ -754,7 +759,7 @@ namespace {
   // permute vbase's into sorted order
   for(gex_Rank_t i=0; i < peer_n; i++)
     pshm_owner_vbase[i] = backend::pshm_vbase[pshm_owner_peer[i]];
- }
+}
 }
 
 void upcxx::finalize() {
@@ -764,6 +769,8 @@ void upcxx::finalize() {
   if(0 != --backend::init_count)
     return;
   
+  noise_log noise("upcxx::finalize()");
+
   { // barrier
     gasnet_barrier_notify(0, GASNET_BARRIERFLAG_ANONYMOUS);
     while(GASNET_OK != gasnet_barrier_try(0, GASNET_BARRIERFLAG_ANONYMOUS))
@@ -791,15 +798,13 @@ void upcxx::finalize() {
     int64_t objs_local = detail::registry.size() - 2; // minus `world` and `local_team`
     popn_stats_t objs = reduce_popn_to_rank0(objs_local);
     
-    if(backend::rank_me == 0 && objs.sum != 0) {
-      std::cerr
-        <<std::string(70,'/')<<std::endl
-        <<"upcxx::finalize(): Objects remain within registries at finalize"<<std::endl
-        <<"(could be teams, dist_object's, or outstanding collectives)."<<std::endl
-        <<"  total = "<<objs.sum<<std::endl
-        <<"  per rank min = "<<objs.min<<std::endl
-        <<"  per rank max = "<<objs.max<<std::endl
-        <<std::string(70,'/')<<std::endl;
+    if(objs.sum != 0) {
+      noise.warn()
+        <<"Objects remain within registries at finalize (could be teams, "
+          "dist_object's, or outstanding collectives).\n"
+        <<"  total = "<<objs.sum<<'\n'
+        <<"  per rank min = "<<objs.min<<'\n'
+        <<"  per rank max = "<<objs.max;
     }
   }
   
@@ -813,14 +818,12 @@ void upcxx::finalize() {
     
     popn_stats_t live = reduce_popn_to_rank0(live_local);
     
-    if(backend::rank_me == 0 && live.sum != 0) {
-      std::cerr
-        <<std::string(70,'/')<<std::endl
-        <<"upcxx::finalize(): Shared segment allocations live at finalize:"<<std::endl
-        <<"  total = "<<live.sum<<std::endl
-        <<"  per rank min = "<<live.min<<std::endl
-        <<"  per rank max = "<<live.max<<std::endl
-        <<std::string(70,'/')<<std::endl;
+    if(live.sum != 0) {
+      noise.warn()
+        <<"Shared segment allocations live at finalize:\n"
+        <<"  total = "<<live.sum<<'\n'
+        <<"  per rank min = "<<live.min<<'\n'
+        <<"  per rank max = "<<live.max;
     }
   }
   
@@ -838,6 +841,8 @@ void upcxx::finalize() {
   
   if(backend::initial_master_scope != nullptr)
     delete backend::initial_master_scope;
+
+  noise.show();
 }
 
 void upcxx::liberate_master_persona() {
@@ -1548,7 +1553,7 @@ void upcxx::progress(progress_level level) {
   while(total_exec_n < 1000 && exec_n != 0);
   //while(0);
   
-  #if GASNET_CONDUIT_SMP || GASNET_CONDUIT_UDP
+  if(oversubscribed) {
     /* In SMP tests we typically oversubscribe ranks to cpus. This is
      * an attempt at heuristically determining if this rank is just
      * spinning fruitlessly hogging the cpu from another who needs it.
@@ -1564,10 +1569,10 @@ void upcxx::progress(progress_level level) {
     if(total_exec_n != 0)
       consecutive_nothings = 0;
     else if(++consecutive_nothings == 10) {
-      sched_yield();
+      gasnett_sched_yield();
       consecutive_nothings = 0;
     }
-  #endif
+  }
   
   tls.flip_burstable(progress_level::user);
   tls.set_progressing(-1);
