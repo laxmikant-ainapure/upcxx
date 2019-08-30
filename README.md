@@ -142,6 +142,9 @@ New features/enhancements: (see specification and programmer's guide for full de
   for non-shared-memory peers where the dependent rpc is injected immediately following
   the put. Previously, the rpc's injection was a chained operation awaiting completion
   of the put. <<TODO?: mention performance regression>>
+* Environment variable `UPCXX_OVERSUBSCRIBED` has been added to control runtime's
+  behavior of yielding to OS (`sched_yield()`) from calls to `upcxx::progress()`.
+  See [docs/oversubscription.md](docs/oversubscription.md).
 
 Support has been added for the following compilers/platforms (for details, see 'System Requirements'):
 
