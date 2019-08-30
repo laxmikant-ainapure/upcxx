@@ -14,31 +14,28 @@
 
 namespace upcxx {
   namespace detail {
-    enum class rma_put_mode { op_now, src_now, src_defer, src_handle };
-    enum class rma_put_done: int { none=0, source=1, operation=2 };
+    // rma_put_sync: Enumerates both the least-acceptable amount of synchronicity
+    // required at injection time, as well as amount of synchronicity actually
+    // achieved. These are totally ordered such that if a < b, then b has strictly
+    // more events synchronously complete.
+    enum class rma_put_sync: int {
+      // Explicitly assigned so that backend/gasnet/runtime.hpp can reliably
+      // match them.
+      src_cb=0,
+      src_into_op_cb=1,
+      src_now=2,
+      op_now=3
+    };
     
-    // Does the actual gasnet PUT
-    template<rma_put_mode mode>
-    rma_put_done rma_put(
+    // Does the actual gasnet PUT. Input sync_lb level is our demand, returned sync
+    // level is guaranteed to be equal or greater.
+    template<rma_put_sync sync_lb>
+    rma_put_sync rma_put(
       intrank_t rank_d, void *buf_d,
       const void *buf_s, std::size_t size,
       backend::gasnet::handle_cb *source_cb,
       backend::gasnet::handle_cb *operation_cb
     );
-    
-    constexpr rma_put_done rma_put_done_lbound(rma_put_mode mode) {
-      return mode == rma_put_mode::op_now ? rma_put_done::operation :
-             mode == rma_put_mode::src_now ? rma_put_done::source :
-             rma_put_done::none;
-    }
-    
-    constexpr bool rma_put_done_ge(
-        rma_put_mode mode,
-        rma_put_done a, 
-        rma_put_done b
-      ) {
-      return (int)a >= (int)b || (int)rma_put_done_lbound(mode) >= (int)b;
-    }
     
     ////////////////////////////////////////////////////////////////////
     // rput_event_values: Value for completions_state's EventValues
@@ -48,372 +45,441 @@ namespace upcxx {
       using tuple_t = std::tuple<>;
     };
     
-    ////////////////////////////////////////////////////////////////////
-
-    // In the following classes, FinalType will be one of:
-    //   rput_cbs_byref<CxStateHere, CxStateRemote>
-    //   rput_cbs_byval<T, CxStateHere, CxStateRemote>
-    // So there is a pattern of a class inheriting a base-class which has
-    // the derived class as a template argument. This allows the base
-    // class to access the derived class without using virtual functions.
+    ////////////////////////////////////////////////////////////////////////////
     
-    // rput_cb_source: rput_cbs_{byref|byval} inherits this to hold
-    // source-copmletion details.
-    template<typename FinalType, typename CxStateHere, typename CxStateRemote,
-             bool sync = completions_is_event_sync<
-                 typename CxStateHere::completions_t,
-                 source_cx_event
-               >::value,
-             // only use handle when the user has asked for source_cx
-             // notification AND hasn't specified that it be sync.
-             bool use_handle = !sync && completions_has_event<
-                 typename CxStateHere::completions_t,
-                 source_cx_event
-               >::value
-            >
-    struct rput_cb_source;
-
-    // rput_cb_operation: rput_cbs_{byref|byval} inherits this to hold
-    // operation-completion details.
-    template<typename FinalType, typename CxStateHere, typename CxStateRemote,
-             bool definitely_static_scope = completions_is_event_sync<
-                 typename CxStateHere::completions_t,
-                 operation_cx_event
-               >::value
-            >
-    struct rput_cb_operation;
-
-    ////////////////////////////////////////////////////////////////////
-
-    // rput_cb_source: Case when the user has an action for source_cx_event.
-    // We extend a handle_cb which will fire the completions and transition
-    // control to rput_cb_operation.
-    template<typename FinalType, typename CxStateHere, typename CxStateRemote>
-    struct rput_cb_source<
-        FinalType, CxStateHere, CxStateRemote,
-        /*sync=*/false, /*use_handle=*/true
-      >:
-      backend::gasnet::handle_cb {
+    template<typename Cxs, bool by_val>
+    struct rput_traits {
+      static constexpr bool want_op = completions_has_event<Cxs, operation_cx_event>::value;
+      static constexpr bool op_is_sync = completions_is_event_sync<Cxs, operation_cx_event>::value;
       
-      static constexpr auto mode = rma_put_mode::src_handle;
-
-      backend::gasnet::handle_cb* source_cb() {
-        return this;
-      }
-      backend::gasnet::handle_cb* source_else_operation_cb() {
-        return this;
-      }
+      static constexpr bool want_src = by_val || completions_has_event<Cxs, source_cx_event>::value;
+      static constexpr bool src_is_sync = by_val || completions_is_event_sync<Cxs, source_cx_event>::value;
       
-      void execute_and_delete(backend::gasnet::handle_cb_successor add_succ) {
-        auto *cbs = static_cast<FinalType*>(this);
+      static constexpr bool want_remote = completions_has_event<Cxs, remote_cx_event>::value;
+
+      using cx_state_here_t = detail::completions_state<
+        /*EventPredicate=*/detail::event_is_here,
+        /*EventValues=*/detail::rput_event_values,
+        Cxs>;
+      using cx_state_remote_t = detail::completions_state<
+        /*EventPredicate=*/detail::event_is_remote,
+        /*EventValues=*/detail::rput_event_values,
+        Cxs>;
+
+      using return_t = typename detail::completions_returner<
+          /*EventPredicate=*/detail::event_is_here,
+          /*EventValues=*/detail::rput_event_values,
+          Cxs
+        >::return_t;
+
+      template<typename T>
+      static void assert_sane() {
+        static_assert(
+          is_definitely_trivially_serializable<T>::value,
+          "RMA operations only work on DefinitelyTriviallySerializable types."
+        );
         
-        cbs->state_here.template operator()<source_cx_event>();
-        
-        add_succ(
-          static_cast<
-              rput_cb_operation<FinalType, CxStateHere, CxStateRemote>*
-            >(cbs)
+        UPCXX_ASSERT_ALWAYS((want_op | want_remote),
+          "Not requesting either operation or remote completion is surely an "
+          "error. You'll have know way of ever knowing when the target memory is "
+          "safe to read or write again."
         );
       }
     };
 
-    // rput_cb_source: Case user does not care about source_cx_event.
-    template<typename FinalType, typename CxStateHere, typename CxStateRemote,
-             bool sync>
-    struct rput_cb_source<
-        FinalType, CxStateHere, CxStateRemote,
-        sync, /*use_handle=*/false
-      > {
-      static constexpr auto mode =
-        sync ? rma_put_mode::src_now : rma_put_mode::src_defer;
-      
-      backend::gasnet::handle_cb* source_cb() {
-        return nullptr;
+    ////////////////////////////////////////////////////////////////////////////
+
+    template<typename Obj, typename Traits, bool op_is_handle>
+    struct rput_op_handle_cb;
+
+    template<typename Obj, typename Traits, bool src_is_handle, bool op_is_handle>
+    struct rput_src_handle_cb;
+
+    template<typename Obj, typename Traits, bool replies>
+    struct rput_reply_cb;
+
+    ////////////////////////////////////////////////////////////////////////////
+    
+    template<typename Obj, typename Traits, bool op_is_handle>
+    struct rput_src_handle_cb<Obj, Traits, /*src_is_handle=*/true, op_is_handle>:
+      backend::gasnet::handle_cb {
+      backend::gasnet::handle_cb* the_src_cb(backend::gasnet::handle_cb *otherwise=nullptr) {
+        return this;
       }
-      backend::gasnet::handle_cb* source_else_operation_cb() {
-        return static_cast<FinalType*>(this)->operation_cb();
+
+      void src_hook() {/*default is nop*/}
+      
+      void add_op_suc(backend::gasnet::handle_cb_successor suc, std::true_type /*op_is_handle1*/) {
+        suc(static_cast<rput_op_handle_cb<Obj,Traits,true>*>(this));
+      }
+      void add_op_suc(backend::gasnet::handle_cb_successor suc, std::false_type /*op_is_handle*/) {
+        // nop
+      }
+      
+      void execute_and_delete(backend::gasnet::handle_cb_successor suc) {
+        auto *o = static_cast<Obj*>(this);
+        o->cx_state_here.template operator()<source_cx_event>();
+        this->add_op_suc(suc, std::integral_constant<bool, op_is_handle>());
+        o->src_hook(); // potentially overriden by Obj
+      }
+    };
+    
+    template<typename Obj, typename Traits, bool op_is_handle>
+    struct rput_src_handle_cb<Obj, Traits, /*src_is_handle=*/false, op_is_handle> {
+      constexpr backend::gasnet::handle_cb* the_src_cb(backend::gasnet::handle_cb *otherwise=nullptr) const {
+        return otherwise;
+      }
+
+      void src_hook() {/*default is nop*/}
+    };
+
+    ////////////////////////////////////////////////////////////////////////////
+    
+    template<typename Obj, typename Traits>
+    struct rput_op_handle_cb<Obj, Traits, /*op_is_handle=*/true>:
+      backend::gasnet::handle_cb {
+      backend::gasnet::handle_cb* the_op_cb() { return this; }
+
+      void execute_and_delete(backend::gasnet::handle_cb_successor suc) {
+        auto *o = static_cast<Obj*>(this);
+        o->cx_state_here.template operator()<operation_cx_event>();
+        delete o;
       }
     };
 
-    ////////////////////////////////////////////////////////////////////
+    template<typename Obj, typename Traits>
+    struct rput_op_handle_cb<Obj, Traits, /*op_is_handle=*/false> {
+      constexpr backend::gasnet::handle_cb* the_op_cb() const { return nullptr; }
+    };
 
-    // rput_cb_remote: Inherited by rput_cb_operation to handle sending
-    // remote rpc events upon operation completion.
-    template<typename FinalType, typename CxStateHere, typename CxStateRemote,
-             bool has_remote = !CxStateRemote::empty>
-    struct rput_cb_remote;
+    ////////////////////////////////////////////////////////////////////////////
+
+    template<typename Obj, typename Traits>
+    struct rput_reply_cb<Obj, Traits, /*replies=*/true>:
+      backend::gasnet::reply_cb {
+      backend::gasnet::reply_cb* the_reply_cb() { return this; }
+
+      void reply_hook() {/*default is nop*/}
+
+      static void the_execute_and_delete(lpc_base *me_lpc) {
+        auto *me = static_cast<rput_reply_cb*>(me_lpc);
+        Obj *o = static_cast<Obj*>(me);
+        o->reply_hook(); // potentially overriden by Obj
+      }
+
+      static constexpr lpc_vtable the_vtbl = {&the_execute_and_delete};
+
+      rput_reply_cb(): reply_cb(&the_vtbl, &upcxx::current_persona()) {}
+    };
     
-    template<typename FinalType, typename CxStateHere, typename CxStateRemote>
-    struct rput_cb_remote<FinalType, CxStateHere, CxStateRemote, /*has_remote=*/true> {
-      void send_remote() {
-        auto *cbs = static_cast<FinalType*>(this);
+    template<typename Obj, typename Traits>
+    constexpr lpc_vtable rput_reply_cb<Obj,Traits,true>::the_vtbl;
+
+    template<typename Obj, typename Traits>
+    struct rput_reply_cb<Obj, Traits, /*replies=*/false> {
+      constexpr backend::gasnet::reply_cb* the_reply_cb() const { return nullptr; }
+      
+      void reply_hook() {/*default is nop*/}
+    };
+
+    ////////////////////////////////////////////////////////////////////////////
+
+    // The base object tracking everything about a rput injection. We specialize
+    // on boolean traits to determine wire protocol. Presence of remote_cx
+    // (want_remote=1) dictates we use gasnet::rma_put_then_am_master, otherwise
+    // we use detail::rma_put.
+    template<typename Obj, typename Traits,
+             bool want_remote = Traits::want_remote,
+             bool want_op = Traits::want_op,
+             bool op_is_sync = Traits::op_is_sync,
+             bool want_src = Traits::want_src>
+    struct rput_obj_base;
+    
+    template<typename Obj, typename Traits, bool want_src>
+    struct rput_obj_base<Obj, Traits,
+        /*want_remote=*/true,
+        /*want_op=*/true, /*op_is_sync=*/false,
+        want_src
+      >:
+      rput_src_handle_cb<Obj, Traits, /*src_is_handle=*/!Traits::src_is_sync, /*op_is_handle=*/false>,
+      rput_op_handle_cb<Obj, Traits, /*op_is_handle=*/false>,
+      rput_reply_cb<Obj, Traits, /*replies=*/true> {
+      
+      std::int8_t outstanding = 2; // counts source and reply
+      
+      void src_hook() {
+        if(--this->outstanding == 0) {
+          static_cast<Obj*>(this)->cx_state_here.template operator()<operation_cx_event>();
+          delete static_cast<Obj*>(this);
+        }
+      }
+      
+      void reply_hook() { this->src_hook(); }
+
+      static constexpr rma_put_sync sync_lb = Traits::src_is_sync
+        ? rma_put_sync::src_now
+        : rma_put_sync::src_cb;
+
+      static constexpr backend::gasnet::rma_put_then_am_sync sync_lb1 = Traits::src_is_sync
+        ? backend::gasnet::rma_put_then_am_sync::src_now
+        : backend::gasnet::rma_put_then_am_sync::src_cb;
+      
+      template<typename RemoteFn>
+      rma_put_sync inject(
+          intrank_t rank_d, void *buf_d, void const *buf_s, std::size_t buf_size,
+          RemoteFn &&remote
+        ) {
+        //upcxx::say()<<"amlong with reply";
+        auto *o = static_cast<Obj*>(this);
+
+        auto sync_out = backend::gasnet::template rma_put_then_am_master<sync_lb1>(
+          upcxx::world(), rank_d, buf_d, buf_s, buf_size,
+          progress_level::user, std::move(remote),
+          this->the_src_cb(),
+          this->the_reply_cb()
+        );
+
+        if((int)sync_lb1 <= (int)backend::gasnet::rma_put_then_am_sync::src_cb &&
+           (int)sync_out == (int)backend::gasnet::rma_put_then_am_sync::src_cb)
+          return rma_put_sync::src_cb;
         
-        backend::send_am_master<progress_level::user>(
-          upcxx::world(), cbs->rank_d,
-          upcxx::bind(
-            [](CxStateRemote &&st) {
-              return st.template operator()<remote_cx_event>();
-            },
-            std::move(cbs->state_remote)
-          )
+        if(sync_out == backend::gasnet::rma_put_then_am_sync::src_now)
+          return rma_put_sync::src_now;
+        return rma_put_sync::op_now;
+      }
+    };
+    
+    template<typename Obj, typename Traits, bool want_src>
+    struct rput_obj_base<Obj, Traits,
+        /*want_remote=*/true,
+        /*want_op=*/true, /*op_is_sync=*/true,
+        want_src
+      >:
+      rput_src_handle_cb<Obj, Traits, /*src_is_handle=*/false, /*op_is_handle=*/false>,
+      rput_op_handle_cb<Obj, Traits, /*op_is_handle=*/false>,
+      rput_reply_cb<Obj, Traits, /*replies=*/true> {
+
+      bool remote_done = false;
+      
+      void reply_hook() {
+        this->remote_done = true;
+      }
+
+      static constexpr rma_put_sync sync_lb = rma_put_sync::op_now;
+      
+      template<typename RemoteFn>
+      rma_put_sync inject(
+          intrank_t rank_d, void *buf_d, void const *buf_s, std::size_t buf_size,
+          RemoteFn &&remote
+        ) {
+        //upcxx::say()<<"amlong with reply blocking";
+        auto *o = static_cast<Obj*>(this);
+        
+        auto sync_out = backend::gasnet::template rma_put_then_am_master<
+            backend::gasnet::rma_put_then_am_sync::src_now
+          >(
+          upcxx::world(), rank_d, buf_d, buf_s, buf_size,
+          progress_level::user, std::move(remote),
+          nullptr,
+          static_cast<backend::gasnet::reply_cb*>(this)
+        );
+
+        if(sync_out == backend::gasnet::rma_put_then_am_sync::op_now)
+          this->remote_done = true;
+        
+        while(!this->remote_done)
+          upcxx::progress(upcxx::progress_level::internal);
+
+        return rma_put_sync::op_now;
+      }
+    };
+
+    template<typename Obj, typename Traits, bool want_src>
+    struct rput_obj_base<Obj, Traits,
+        /*want_remote=*/true,
+        /*want_op=*/false, /*op_is_sync=*/false,
+        want_src
+      >:
+      rput_src_handle_cb<Obj, Traits, /*src_is_handle=*/want_src && !Traits::src_is_sync, /*op_is_handle=*/false>,
+      rput_op_handle_cb<Obj, Traits, /*op_is_handle=*/false> {
+
+      // We handle absence of source_cx as assuming synchronous completion as
+      // opposed to asynchronous (with an ignored notification) since this (naked
+      // remote_cx) is a bizarre thing to ask for. So bizarre that I feel its more
+      // likely a user mistake rather than they actually have a source buffer
+      // that they feel safe giving over to us forever.
+      static constexpr bool src_now = !want_src || Traits::src_is_sync;
+      
+      static constexpr rma_put_sync sync_lb = src_now
+        ? rma_put_sync::src_now
+        : rma_put_sync::src_cb;
+
+      static constexpr backend::gasnet::rma_put_then_am_sync sync_lb1 = src_now
+        ? backend::gasnet::rma_put_then_am_sync::src_now
+        : backend::gasnet::rma_put_then_am_sync::src_cb;
+      
+      template<typename RemoteFn>
+      rma_put_sync inject(
+          intrank_t rank_d, void *buf_d, void const *buf_s, std::size_t buf_size,
+          RemoteFn &&remote
+        ) {
+        //upcxx::say()<<"amlong without reply";
+        auto *o = static_cast<Obj*>(this);
+        auto sync_out = backend::gasnet::template rma_put_then_am_master<sync_lb1>(
+          upcxx::world(), rank_d, buf_d, buf_s, buf_size,
+          progress_level::user, std::move(remote),
+          this->the_src_cb(), nullptr
+        );
+
+        if((int)sync_lb1 <= (int)backend::gasnet::rma_put_then_am_sync::src_cb &&
+           (int)sync_out == (int)backend::gasnet::rma_put_then_am_sync::src_cb)
+          return rma_put_sync::src_cb;
+        
+        if(sync_out == backend::gasnet::rma_put_then_am_sync::src_now)
+          return rma_put_sync::src_now;
+        return rma_put_sync::op_now;
+      }
+    };
+    
+    template<typename Obj, typename Traits, bool op_is_sync, bool want_src>
+    struct rput_obj_base<Obj, Traits,
+        /*want_remote=*/false,
+        /*want_op=*/true, op_is_sync,
+        want_src
+      >:
+      rput_src_handle_cb<Obj, Traits, /*src_is_handle=*/want_src && !Traits::src_is_sync, /*op_is_handle=*/!op_is_sync>,
+      rput_op_handle_cb<Obj, Traits, /*op_is_handle=*/!op_is_sync> {
+
+      static constexpr rma_put_sync sync_lb =
+        op_is_sync          ? rma_put_sync::op_now :
+        Traits::src_is_sync ? rma_put_sync::src_now :
+        want_src            ? rma_put_sync::src_cb
+                            : rma_put_sync::src_into_op_cb;
+
+      template<typename RemoteFn>
+      rma_put_sync inject(
+          intrank_t rank_d, void *buf_d, void const *buf_s, std::size_t buf_size,
+          RemoteFn&&
+        ) {
+        return detail::template rma_put<sync_lb>(
+          rank_d, buf_d, buf_s, buf_size,
+          this->the_src_cb(), this->the_op_cb()
         );
       }
     };
-    
-    template<typename FinalType, typename CxStateHere, typename CxStateRemote>
-    struct rput_cb_remote<FinalType, CxStateHere, CxStateRemote, /*has_remote=*/false> {
-      void send_remote() {/*nop*/}
-    };
-    
-    // rput_cb_operation: Case when the user wants synchronous operation
-    // completion.
-    template<typename FinalType, typename CxStateHere, typename CxStateRemote>
-    struct rput_cb_operation<
-        FinalType, CxStateHere, CxStateRemote, /*definitely_static_scope=*/true
-      >:
-      rput_cb_remote<FinalType, CxStateHere, CxStateRemote> {
 
-      static constexpr bool definitely_static_scope = true;
+    ////////////////////////////////////////////////////////////////////////////
+    
+    template<typename Cxs, typename Traits>
+    struct rput_obj final:
+      detail::rput_obj_base<rput_obj<Cxs,Traits>, Traits> {
+
+      typename Traits::cx_state_here_t cx_state_here;
       
-      backend::gasnet::handle_cb* operation_cb() {
-        return nullptr;
+      rput_obj(Cxs &&cxs):
+        cx_state_here(std::move(cxs)) {
       }
     };
 
-    // rput_cb_operation: Case with non-blocking operation completion. We
-    // inherit from rput_cb_remote which will dispatch to either sending remote
-    // completion events or nop.
-    template<typename FinalType, typename CxStateHere, typename CxStateRemote>
-    struct rput_cb_operation<
-        FinalType, CxStateHere, CxStateRemote, /*definitely_static_scope=*/false
-      >:
-      rput_cb_remote<FinalType, CxStateHere, CxStateRemote>,
-      backend::gasnet::handle_cb {
+    ////////////////////////////////////////////////////////////////////////////
+    
+    template<typename Obj, typename Traits>
+    void rput_post_inject(Obj *o, rma_put_sync sync_returned) {
+      backend::gasnet::handle_cb *first_cb;
 
-      static constexpr bool definitely_static_scope = false;
+      // `Obj::sync_lb` is the sync level that was given to injection routine.
+      // `sync_returned` is the possibly escalated value returned from injection.
+      // Our job is to fire off completions and cleanup for any escalations.
+      // The benefit is that if source or op completion were satisfied
+      // immediately, we detect that and fire off completions code here *without*
+      // incurring virtual dispatch.
       
-      backend::gasnet::handle_cb* operation_cb() {
-        return this;
-      }
-      
-      void execute_and_delete(backend::gasnet::handle_cb_successor) {
-        auto *cbs = static_cast<FinalType*>(this);
+      // We have guarantee that Obj::sync_lb <= sync_returned. We use that here
+      // to help the optimizer know these conditions statically.
+      if(rma_put_sync::src_now <= Obj::sync_lb ||
+         rma_put_sync::src_now <= sync_returned
+        ) {
+        o->cx_state_here.template operator()<source_cx_event>();
+        o->src_hook();
         
-        this->send_remote(); // may nop depending on rput_cb_remote case.
-        
-        cbs->state_here.template operator()<operation_cx_event>();
-        
-        delete cbs; // cleanup object, no more events
+        if(rma_put_sync::op_now <= Obj::sync_lb ||
+           rma_put_sync::op_now <= sync_returned
+          ) {
+          o->cx_state_here.template operator()<operation_cx_event>();
+          delete o;
+          return; // skips handle registration
+        }
+        else
+          first_cb = o->the_op_cb(); // null if using injected with gasnet::rput_then_am_master
       }
-    };
+      else
+        first_cb = o->the_src_cb(/*otherwise=*/o->the_op_cb());
+      
+      if(first_cb != nullptr) // this nullness is always statically known, i'm trusting optimizer to see that
+        backend::gasnet::register_cb(first_cb);
+      
+      backend::gasnet::after_gasnet();
+    }
+  } // namespace detail
 
-    ////////////////////////////////////////////////////////////////////
-    // rput_cbs_by{ref|val}: Final classes which hold all completion
-    // state and gasnet handles. Inherit from rput_cb_source and
-    // rput_cb_operation.
-    
-    template<typename CxStateHere, typename CxStateRemote>
-    struct rput_cbs_byref final:
-        rput_cb_source</*FinalType=*/rput_cbs_byref<CxStateHere, CxStateRemote>,
-                       CxStateHere, CxStateRemote>,
-        rput_cb_operation</*FinalType=*/rput_cbs_byref<CxStateHere, CxStateRemote>,
-                          CxStateHere, CxStateRemote> {
-      
-      intrank_t rank_d;
-      CxStateHere state_here;
-      CxStateRemote state_remote;
+  ////////////////////////////////////////////////////////////////////////////
 
-      rput_cbs_byref(intrank_t rank_d, CxStateHere here, CxStateRemote remote):
-        rank_d{rank_d},
-        state_here{std::move(here)},
-        state_remote{std::move(remote)} {
-      }
-    };
-    
-    template<typename T, typename CxStateHere, typename CxStateRemote>
-    struct rput_cbs_byval final:
-        rput_cb_source</*FinalType=*/rput_cbs_byval<T, CxStateHere, CxStateRemote>,
-                       CxStateHere, CxStateRemote>,
-        rput_cb_operation</*FinalType=*/rput_cbs_byval<T, CxStateHere, CxStateRemote>,
-                          CxStateHere, CxStateRemote> {
-      
-      intrank_t rank_d;
-      CxStateHere state_here;
-      CxStateRemote state_remote;
-      T value;
-      
-      rput_cbs_byval(
-          intrank_t rank_d, CxStateHere here, CxStateRemote remote,
-          T value):
-        rank_d{rank_d},
-        state_here{std::move(here)},
-        state_remote{std::move(remote)},
-        value(std::move(value)) {
-      }
-    };
-  }
-  
-  //////////////////////////////////////////////////////////////////////
-  // rput
-  
   template<typename T,
            typename Cxs = completions<future_cx<operation_cx_event>>>
-  typename detail::completions_returner<
-      /*EventPredicate=*/detail::event_is_here,
-      /*EventValues=*/detail::rput_event_values,
-      Cxs
-    >::return_t
+  typename detail::rput_traits<Cxs, /*by_val=*/true>::return_t
   rput(T value_s,
        global_ptr<T> gp_d,
        Cxs cxs = completions<future_cx<operation_cx_event>>{{}}) {
 
-    static_assert(
-      is_definitely_trivially_serializable<T>::value,
-      "RMA operations only work on DefinitelyTriviallySerializable types."
-    );
+    using traits_t = detail::rput_traits<Cxs, /*by_val=*/true>;
+    using object_t = detail::rput_obj<Cxs, traits_t>;
     
-    UPCXX_ASSERT_ALWAYS(
-      (detail::completions_has_event<Cxs, operation_cx_event>::value |
-       detail::completions_has_event<Cxs, remote_cx_event>::value),
-      "Not requesting either operation or remote completion is surely an "
-      "error. You'll have know way of ever knowing when the target memory is "
-      "safe to read or write again."
-    );
+    traits_t::template assert_sane<T>();
     
-    namespace gasnet = upcxx::backend::gasnet;
+    object_t *o = new object_t(std::move(cxs));
     
-    using cxs_here_t = detail::completions_state<
-      /*EventPredicate=*/detail::event_is_here,
-      /*EventValues=*/detail::rput_event_values,
-      Cxs>;
-    using cxs_remote_t = detail::completions_state<
-      /*EventPredicate=*/detail::event_is_remote,
-      /*EventValues=*/detail::rput_event_values,
-      Cxs>;
-    
-    using cbs_t = detail::rput_cbs_byval<T, cxs_here_t, cxs_remote_t>;
-    using detail::rma_put_done;
-    using detail::rma_put_done_ge;
-    
-    cbs_t cbs_static(
-      gp_d.rank_,
-      cxs_here_t{std::move(cxs)},
-      cxs_remote_t{std::move(cxs)},
-      std::move(value_s)
-    );
-    
-    cbs_t *cbs = cbs_t::definitely_static_scope
-      ? &cbs_static
-      : new cbs_t(std::move(cbs_static));
-    
-    auto returner = detail::completions_returner<
+    detail::completions_returner<
         /*EventPredicate=*/detail::event_is_here,
         /*EventValues=*/detail::rput_event_values,
         Cxs
-      >(cbs->state_here);
-
-    auto done = detail::rma_put</*mode=*/cbs_t::mode>(
-      gp_d.rank_, gp_d.raw_ptr_, &cbs->value, sizeof(T),
-      cbs->source_cb(), cbs->operation_cb()
+      > returner(o->cx_state_here);
+    
+    detail::rma_put_sync sync_done = o->inject(
+      gp_d.rank_, gp_d.raw_ptr_, &value_s, sizeof(T),
+      typename traits_t::cx_state_remote_t(std::move(cxs))
+        .template bind_event<remote_cx_event>()
     );
-    
-    if(rma_put_done_ge(cbs_t::mode, done, rma_put_done::source))
-      cbs->state_here.template operator()<source_cx_event>();
-    
-    if(rma_put_done_ge(cbs_t::mode, done, rma_put_done::operation)) {
-      cbs->send_remote();
-      cbs->state_here.template operator()<operation_cx_event>();
-      
-      if(!cbs_t::definitely_static_scope)
-        delete cbs;
-    }
-    else {
-      gasnet::register_cb(
-        rma_put_done_ge(cbs_t::mode, done, rma_put_done::source)
-          ? cbs->operation_cb()
-          : cbs->source_else_operation_cb()
-      );
-      gasnet::after_gasnet();
-    }
-    
+    detail::template rput_post_inject<object_t, traits_t>(o, sync_done);
     return returner();
   }
   
   template<typename T,
            typename Cxs = completions<future_cx<operation_cx_event>>>
-  typename detail::completions_returner<
-      /*EventPredicate=*/detail::event_is_here,
-      /*EventValues=*/detail::rput_event_values,
-      Cxs
-    >::return_t
+  typename detail::rput_traits<Cxs, /*by_val=*/false>::return_t
   rput(T const *buf_s,
        global_ptr<T> gp_d,
        std::size_t n,
        Cxs cxs = completions<future_cx<operation_cx_event>>{{}}) {
 
-    static_assert(
-      is_definitely_trivially_serializable<T>::value,
-      "RMA operations only work on DefinitelyTriviallySerializable types."
-    );
+    using traits_t = detail::rput_traits<Cxs, /*by_val=*/false>;
+    using object_t = detail::rput_obj<Cxs, traits_t>;
     
-    UPCXX_ASSERT_ALWAYS(
-      (detail::completions_has_event<Cxs, operation_cx_event>::value |
-       detail::completions_has_event<Cxs, remote_cx_event>::value),
-      "Not requesting either operation or remote completion is surely an "
-      "error. You'll have know way of ever knowing when the target memory is "
-      "safe to read or write again."
-    );
+    traits_t::template assert_sane<T>();
     
-    namespace gasnet = upcxx::backend::gasnet;
+    object_t *o = new object_t(std::move(cxs));
     
-    using cxs_here_t = detail::completions_state<
-      /*EventPredicate=*/detail::event_is_here,
-      /*EventValues=*/detail::rput_event_values,
-      Cxs>;
-    using cxs_remote_t = detail::completions_state<
-      /*EventPredicate=*/detail::event_is_remote,
-      /*EventValues=*/detail::rput_event_values,
-      Cxs>;
-    
-    using cbs_t = detail::rput_cbs_byref<cxs_here_t, cxs_remote_t>;
-    using detail::rma_put_done;
-    using detail::rma_put_done_ge;
-    
-    cbs_t cbs(
-      gp_d.rank_,
-      cxs_here_t(std::move(cxs)),
-      cxs_remote_t(std::move(cxs))
-    );
-    
-    auto returner = detail::completions_returner<
+    detail::completions_returner<
         /*EventPredicate=*/detail::event_is_here,
         /*EventValues=*/detail::rput_event_values,
         Cxs
-      >(cbs.state_here);
+      > returner(o->cx_state_here);
     
-    rma_put_done done = detail::rma_put</*mode=*/cbs_t::mode>(
+    detail::rma_put_sync sync_done = o->inject(
       gp_d.rank_, gp_d.raw_ptr_, buf_s, n*sizeof(T),
-      cbs.source_cb(), cbs.operation_cb()
+      typename traits_t::cx_state_remote_t(std::move(cxs))
+        .template bind_event<remote_cx_event>()
     );
-    
-    if(rma_put_done_ge(cbs_t::mode, done, rma_put_done::source))
-      cbs.state_here.template operator()<source_cx_event>();
-    
-    if(rma_put_done_ge(cbs_t::mode, done, rma_put_done::operation)) {
-      cbs.send_remote();
-      cbs.state_here.template operator()<operation_cx_event>();
-    }
-    else {
-      cbs_t *cbs_dy = new cbs_t(std::move(cbs));
-      
-      gasnet::register_cb(
-        rma_put_done_ge(cbs_t::mode, done, rma_put_done::source)
-          ? cbs_dy->operation_cb()
-          : cbs_dy->source_else_operation_cb()
-      );
-      gasnet::after_gasnet();
-    }
-    
+    detail::template rput_post_inject<object_t, traits_t>(o, sync_done);
     return returner();
   }
 }

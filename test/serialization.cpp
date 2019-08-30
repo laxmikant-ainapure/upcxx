@@ -154,6 +154,8 @@ static_assert(is_definitely_trivially_serializable<std::tuple<const int,char>>::
 static_assert(serialization_traits<std::tuple<int,char>>::is_actually_trivially_serializable, "Uh-oh.");
 static_assert(serialization_traits<std::tuple<const int,char>>::is_actually_trivially_serializable, "Uh-oh.");
 
+static_assert(!is_definitely_trivially_serializable<std::string>::value, "Uh-oh");
+
 int main() {
   print_test_header();
   

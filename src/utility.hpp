@@ -4,6 +4,7 @@
 #include <upcxx/diagnostic.hpp>
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <functional>
@@ -13,7 +14,7 @@
 #include <utility>
 #include <new> // launder
 
-#include <cstdlib> // std::aligned_alloc, posix_memalign
+#include <cstdlib> // posix_memalign
 
 // UPCXX_RETURN_DECLTYPE(type): use this inplace of "-> decltype(type)" so that
 // for compilers which choke on such return types (icc) it can be elided in
@@ -80,7 +81,17 @@ namespace detail {
   }
 
   //////////////////////////////////////////////////////////////////////////////
-  // detail::launder
+  // detail::launder & detail::launder_unconstructed
+
+  // *Hopefully*, make it impossible for the compiler to prove to itself that
+  // that `p` doesn't point to an object of type T. This can be used when you
+  // know the underlying bytes encode a valid T, but it hasn't been actually
+  // constructed as such.
+  template<typename T>
+  T* launder_unconstructed(T *p) noexcept {
+    asm("" : "+rm"(p) : "rm"(p) :);
+    return p;
+  }
 
   #if __cpp_lib_launder >= 201606 // std::launder is not reliably available in C++17 (eg clang 8)
     template<typename T>
@@ -90,8 +101,7 @@ namespace detail {
   #else
     template<typename T>
     T* launder(T *p) noexcept {
-      asm("" : "+rm"(p) : "rm"(p) :);
-      return p;
+      return launder_unconstructed(p);
     }
   #endif
   
@@ -106,7 +116,7 @@ namespace detail {
     }
     template<typename T>
     T* construct_default(void *spot, std::false_type deft_ctor) {
-      return detail::template launder<T>(reinterpret_cast<T*>(spot));
+      return detail::template launder_unconstructed<T>(reinterpret_cast<T*>(spot));
     }
   }
   
@@ -141,7 +151,7 @@ namespace detail {
     template<typename T, bool any>
     T* construct_trivial(void *dest, const void *src, std::false_type deft_ctor, std::integral_constant<bool,any> triv_copy) {
       detail::template memcpy_aligned<alignof(T)>(dest, src, sizeof(T));
-      return detail::launder(reinterpret_cast<T*>(dest));
+      return detail::launder_unconstructed(reinterpret_cast<T*>(dest));
     }
     
     template<typename T>
@@ -164,7 +174,7 @@ namespace detail {
     template<typename T, bool any>
     T* construct_trivial(void *dest, const void *src, std::size_t n, std::false_type deft_ctor, std::integral_constant<bool,any> triv_copy) {
       detail::template memcpy_aligned<alignof(T)>(dest, src, n*sizeof(T));
-      return detail::launder(reinterpret_cast<T*>(dest));
+      return detail::launder_unconstructed(reinterpret_cast<T*>(dest));
     }
   }
   
@@ -201,16 +211,28 @@ namespace detail {
   // detail::alloc_aligned
 
   inline void* alloc_aligned(std::size_t size, std::size_t align) noexcept {
-  #if __cplusplus >= 201703L && !__APPLE__ // missing on at least XCode 10.3
-    void *p = std::aligned_alloc(align, size);
-    UPCXX_ASSERT(p != nullptr, "std::aligned_alloc returned nullptr");
-    return p;
-  #else
+    UPCXX_ASSERT(
+      align != 0 && (align & (align-1)) == 0,
+      "upcxx::detail::alloc_aligned: Invalid align="<<align
+    );
+
+    // Note: do not use std::aligned_alloc (C++17) since it does not *portably*
+    // support extended alignments (those greater than std::max_align_t), and
+    // thus is no better than ::operator new().
+
+    // Make align = max(align, sizeof(void*))
+    align -= 1;
+    align |= sizeof(void*)-1;
+    align += 1;
+    // Round size up to a multiple of alignment
+    size = (size + align-1) & -align;
+    
     void *p;
     int err = posix_memalign(&p, align, size);
-    if(err != 0) UPCXX_ASSERT(false, "posix_memalign failed with return="<<err);
+    UPCXX_ASSERT_ALWAYS(err == 0,
+      "upcxx::detail::alloc_aligned: posix_memalign(align="<<align<<", size="<<size<<"): failed with return="<<err
+    );
     return p;
-  #endif
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -222,7 +244,57 @@ namespace detail {
   }
   
   //////////////////////////////////////////////////////////////////////////////
-  // detail::raw_storage<T>: Like std::aligned_storage, except more convenient.
+  // xaligned_storage: like std::aligned_storage::type except:
+  //   1. Supports extended alignemnts greater than alignof(std::max_align_t)
+  //   2. Does not guarantee that `sizeof(xaligned_storage<S,A>::type) == S` since it might
+  //      include padding space to achieve the alignemnt dynamically.
+  //   3. Does not guarantee to be a trivial type.
+  //   4. Access to the aligned memory is provided by the `storage()` member,
+  //      alignment of the xaligned_storage object itself is unspecified.
+  //
+  // The intenteded use case is for small stack-allocated serialization buffers.
+  // The other potential use case is to hold overly-aligned types, but currently
+  // we have none so for that usage we stick to `std::aligned_storage<>::type`.
+  
+  template<std::size_t size, std::size_t align,
+           bool valid = 0 == (align & (align-1)),
+           bool extended = (align > alignof(std::max_align_t))>
+  struct xaligned_storage;
+
+  template<std::size_t size, std::size_t align>
+  struct xaligned_storage<size, align, /*valid=*/true, /*extended=*/false> {
+    typename std::aligned_storage<(size + align-1) & -align, align>::type storage_;
+
+    void const* storage() const noexcept { return &storage_; }
+    void*       storage()       noexcept { return &storage_; }
+  };
+  
+  template<std::size_t size, std::size_t align>
+  struct xaligned_storage<size, align, /*valid=*/true, /*extended=*/true> {
+    char xbuf_[size + align-1];
+    
+    void const* storage() const noexcept {
+      std::uintptr_t u = reinterpret_cast<std::uintptr_t>(&xbuf_);
+      return &xbuf_[-u & (align-1)];
+    }
+    void*       storage()       noexcept {
+      std::uintptr_t u = reinterpret_cast<std::uintptr_t>(&xbuf_);
+      return &xbuf_[-u & (align-1)];
+    }
+
+    xaligned_storage() noexcept = default;
+    xaligned_storage(xaligned_storage const &that) noexcept {
+      detail::memcpy_aligned<align>(this->storage(), that.storage(), size);
+    }
+    xaligned_storage& operator=(xaligned_storage const &that) noexcept {
+      if(this != &that)
+        detail::memcpy_aligned<align>(this->storage(), that.storage(), size);
+      return *this;
+    }
+  };
+
+  //////////////////////////////////////////////////////////////////////////////
+  // detail::raw_storage<T>: Like std::aligned_storage<>::type, except more convenient.
   // The typed value exists in the `value()` member, but isnt implicitly
   // constructed. Construction should be done by user with placement new like:
   //   `::new(&my_storage) T(...)`.
@@ -230,11 +302,16 @@ namespace detail {
   // responsibility.
 
   template<typename T>
-  struct raw_storage {
-    typename std::aligned_storage<sizeof(T), alignof(T)>::type raw;
+  class raw_storage {
+    typename std::aligned_storage<sizeof(T), alignof(T)>::type raw_;
 
+  public:
+    void* raw() noexcept {
+      return &raw_;
+    }
+    
     T& value() noexcept {
-      return *detail::launder(reinterpret_cast<T*>(&raw));
+      return *detail::launder(reinterpret_cast<T*>(&raw_));
     }
     
     // Invoke value's destructor.
