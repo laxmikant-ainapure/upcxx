@@ -754,7 +754,7 @@ namespace upcxx {
       if(p->undischarged_n_ != 0)
         return true;
       if(ps == bot)
-        break;
+        return false;
       ps = ps->next_;
     }
   }
