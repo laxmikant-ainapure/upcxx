@@ -63,7 +63,7 @@ namespace upcxx {
 
       template<int ...i>
       void apply_help(detail::index_sequence<i...>) {
-        std::move(this->fn)(std::get<i>(this->results)...);
+        std::move(this->fn)(std::move(std::get<i>(this->results))...);
       }
       
       static void the_execute_and_delete(lpc_base *me1) {
@@ -88,12 +88,13 @@ namespace upcxx {
     constexpr lpc_vtable lpc_dormant_fn<Fn,T...>::the_vtbl;
 
     // Make a lpc_dormant* from lambda.
-    template<typename ...T, typename Fn>
+    template<typename ...T, typename Fn1>
     lpc_dormant<T...>* make_lpc_dormant(
-        persona &target, progress_level level, Fn &&fn,
+        persona &target, progress_level level, Fn1 &&fn,
         lpc_dormant<T...> *tail
       ) {
-      auto *lpc = new lpc_dormant_fn<Fn,T...>(target, level, std::forward<Fn>(fn));
+      using Fn = typename std::decay<Fn1>::type;
+      auto *lpc = new lpc_dormant_fn<Fn,T...>(target, level, std::forward<Fn1>(fn));
       lpc->intruder.p.store(tail, std::memory_order_relaxed);
       return lpc;
     }

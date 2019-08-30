@@ -322,8 +322,8 @@ namespace upcxx {
         promise<T...> *pro = &pro_;
         return detail::make_lpc_dormant(
           upcxx::current_persona(), progress_level::user,
-          [=](std::tuple<T...> &&results) {
-            backend::fulfill_during<progress_level::user>(*pro, std::move(results));
+          [=](T &&...results) {
+            backend::fulfill_during<progress_level::user>(*pro, std::tuple<T...>(std::move(results)...));
           },
           tail
         );
@@ -347,7 +347,7 @@ namespace upcxx {
         promise<T...> *pro = &pro_;
         return detail::make_lpc_dormant(
           upcxx::current_persona(), progress_level::user,
-          [=](std::tuple<>) {
+          [=]() {
             backend::fulfill_during<progress_level::user>(*pro, 1);
           },
           tail
@@ -372,7 +372,7 @@ namespace upcxx {
         promise<> *pro = &pro_;
         return detail::make_lpc_dormant<>(
           upcxx::current_persona(), progress_level::user,
-          [=](std::tuple<>) {
+          [=]() {
             backend::fulfill_during<progress_level::user>(*pro, 1);
           },
           tail
