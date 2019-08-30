@@ -14,11 +14,17 @@
 
 namespace upcxx {
   namespace detail {
+    // rma_put_sync: Enumerates both the least-acceptable amount of synchronicity
+    // required at injection time, as well as amount of synchronicity actually
+    // achieved. These are totally ordered such that if a < b, then b has strictly
+    // more events synchronously complete.
     enum class rma_put_sync: int {
-      src_cb,
-      src_into_op_cb,
-      src_now,
-      op_now
+      // Explicitly assigned so that backend/gasnet/runtime.hpp can reliably
+      // match them.
+      src_cb=0,
+      src_into_op_cb=1,
+      src_now=2,
+      op_now=3
     };
     
     // Does the actual gasnet PUT. Input sync_lb level is our demand, returned sync

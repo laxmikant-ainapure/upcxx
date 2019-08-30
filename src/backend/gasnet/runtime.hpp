@@ -96,9 +96,12 @@ namespace gasnet {
   );
 
   enum class rma_put_then_am_sync: int {
-    src_cb,
-    src_now,
-    op_now
+    // These numeric assignments intentionally match like-named members of
+    // detail::rma_put_sync as this *may* assist the compiler in optimizing
+    // enum translations, though correctness does not depend on it.
+    src_cb=0,
+    src_now=2,
+    op_now=3
   };
 
   template<rma_put_then_am_sync sync_lb/*src_cb,src_now*/, typename AmFn>

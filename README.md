@@ -138,6 +138,10 @@ New features/enhancements: (see specification and programmer's guide for full de
 * Release tarball downloads now embed a copy of GASNet-EX that is used by default during install.
   Git clones of the repo will still default to downloading GASNet-EX during install.
   The `GASNET` envvar can still be set at install time to change the default behavior.
+* `upcxx::rput(..., remote_cx::as_rpc(...))` has received an improved implementation
+  for non-shared-memory peers where the dependent rpc is injected immediately following
+  the put. Previously, the rpc's injection was a chained operation awaiting completion
+  of the put. <<TODO?: mention performance regression>>
 
 Support has been added for the following compilers/platforms (for details, see 'System Requirements'):
 
