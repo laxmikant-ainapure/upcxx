@@ -49,46 +49,61 @@ if( UPCXX_META_EXECUTABLE )
   
   list( APPEND UPCXX_LIBRARIES ${UPCXX_LIBFLAGS})
 
+  if(NOT ("${UPCXX_CXX_COMPILER}" STREQUAL "${CMAKE_CXX_COMPILER}"))
+    message(WARNING "UPCXX CXX compiler provided by upcxx-meta (${UPCXX_CXX_COMPILER}) is different from CMAKE_CXX_COMPILER (${CMAKE_CXX_COMPILER})")
+    message(WARNING "Checking compilers compatibility (ABI and compile features). USE AT YOUR OWN RISK.")
+    #check compiler's ABI compatibility
+    include(${CMAKE_ROOT}/Modules/CMakePushCheckState.cmake)
+    cmake_push_check_state(RESET)
+    set( PREV_CMAKE_CXX_SIZEOF_DATA_PTR ${CMAKE_CXX_SIZEOF_DATA_PTR})
+    set( PREV_CMAKE_CXX_COMPILER_ABI ${CMAKE_CXX_COMPILER_ABI} ) 
+    set( PREV_CMAKE_CXX_COMPILE_FEATURES ${CMAKE_CXX_COMPILE_FEATURES} ) 
+    set( PREV_CMAKE_CXX_LIBRARY_ARCHITECTURE ${CMAKE_CXX_LIBRARY_ARCHITECTURE})
+    set( PREV_CMAKE_CXX_COMPILER ${CMAKE_CXX_COMPILER})
+    unset(CMAKE_CXX_ABI_COMPILED)
 
-  #check compiler's ABI compatibility
+    set(CMAKE_CXX_COMPILER ${UPCXX_CXX_COMPILER})
+    
+    # Try to identify the ABI and configure it into CMakeCXXCompiler.cmake
+    include(${CMAKE_ROOT}/Modules/CMakeDetermineCompilerABI.cmake)
+    CMAKE_DETERMINE_COMPILER_ABI(CXX ${CMAKE_ROOT}/Modules/CMakeCXXCompilerABI.cpp)
 
-  include(${CMAKE_ROOT}/Modules/CMakePushCheckState.cmake)
-  cmake_push_check_state(RESET)
-  SET( PREV_CMAKE_CXX_SIZEOF_DATA_PTR ${CMAKE_CXX_SIZEOF_DATA_PTR})
-  SET( PREV_CMAKE_CXX_COMPILER_ABI ${CMAKE_CXX_COMPILER_ABI} ) 
-  SET( PREV_CMAKE_CXX_COMPILE_FEATURES ${CMAKE_CXX_COMPILE_FEATURES} ) 
-  SET( PREV_CMAKE_CXX_LIBRARY_ARCHITECTURE ${CMAKE_CXX_LIBRARY_ARCHITECTURE})
-  SET( PREV_CMAKE_CXX_COMPILER ${CMAKE_CXX_COMPILER})
-  UNSET(CMAKE_CXX_ABI_COMPILED)
 
-  SET(CMAKE_CXX_COMPILER ${UPCXX_CXX_COMPILER})
-  
-  # Try to identify the ABI and configure it into CMakeCXXCompiler.cmake
-  include(${CMAKE_ROOT}/Modules/CMakeDetermineCompilerABI.cmake)
-  CMAKE_DETERMINE_COMPILER_ABI(CXX ${CMAKE_ROOT}/Modules/CMakeCXXCompilerABI.cpp)
-  # Try to identify the compiler features
-  include(${CMAKE_ROOT}/Modules/CMakeDetermineCompileFeatures.cmake)
-  CMAKE_DETERMINE_COMPILE_FEATURES(CXX)
-  
-  message(STATUS "${CMAKE_CXX_SIZEOF_DATA_PTR}      vs ${PREV_CMAKE_CXX_SIZEOF_DATA_PTR}     ") 
-  message(STATUS "${CMAKE_CXX_COMPILER_ABI}         vs ${PREV_CMAKE_CXX_COMPILER_ABI}        ") 
-  message(STATUS "${CMAKE_CXX_COMPILE_FEATURES}     vs ${PREV_CMAKE_CXX_COMPILE_FEATURES}    ") 
-  message(STATUS "${CMAKE_CXX_LIBRARY_ARCHITECTURE} vs ${PREV_CMAKE_CXX_LIBRARY_ARCHITECTURE}") 
-  message(STATUS "${CMAKE_CXX_COMPILER} vs ${PREV_CMAKE_CXX_COMPILER}")
+    if(NOT ("${CMAKE_CXX_SIZEOF_DATA_PTR}" STREQUAL "${PREV_CMAKE_CXX_SIZEOF_DATA_PTR}"
+     AND "${CMAKE_CXX_COMPILER_ABI}" STREQUAL "${PREV_CMAKE_CXX_COMPILER_ABI}"
+     AND "${CMAKE_CXX_LIBRARY_ARCHITECTURE}" STREQUAL "${PREV_CMAKE_CXX_LIBRARY_ARCHITECTURE}") ) 
+     message( FATAL_ERROR "UPCXX was built with ${UPCXX_CXX_COMPILER}, while CMAKE_CXX_COMPILER is"
+       " set to ${PREV_CMAKE_CXX_COMPILER}, and their ABIs are not compatible. Please use compatible/same compilers.")
+    endif()
 
-  if(NOT ("${CMAKE_CXX_SIZEOF_DATA_PTR}" STREQUAL "${PREV_CMAKE_CXX_SIZEOF_DATA_PTR}"
-   AND "${CMAKE_CXX_COMPILER_ABI}" STREQUAL "${PREV_CMAKE_CXX_COMPILER_ABI}"
-   AND "${CMAKE_CXX_COMPILE_FEATURES}" STREQUAL "${PREV_CMAKE_CXX_COMPILE_FEATURES}" 
-   AND "${CMAKE_CXX_LIBRARY_ARCHITECTURE}" STREQUAL "${PREV_CMAKE_CXX_LIBRARY_ARCHITECTURE}") ) 
-   message( FATAL_ERROR "UPCXX was built with ${UPCXX_CXX_COMPILER}, while CMAKE_CXX_COMPILER is"
-                        " set to ${PREV_CMAKE_CXX_COMPILER}, and they are not compatible. Please use compatible/same compilers.")
+
+    # Try to identify the compiler features
+    include(${CMAKE_ROOT}/Modules/CMakeDetermineCompileFeatures.cmake)
+    CMAKE_DETERMINE_COMPILE_FEATURES(CXX)
+    
+    #compare the compile feature. CMAKE_CXX_COMPILER must have ALL the features that UPCXX_CXX_COMPILER has.
+    set(COMPILER_FEATURE_COMPATIBLE TRUE)
+    foreach( feature ${CMAKE_CXX_COMPILE_FEATURES} )
+      if( NOT ( "${feature}" IN_LIST PREV_CMAKE_CXX_COMPILE_FEATURES))
+        message(STATUS "Compile feature \"${feature}\" can't be found")
+        set(COMPILER_FEATURE_COMPATIBLE FALSE)
+        break()
+      endif()
+    endforeach()
+
+    if(NOT COMPILER_FEATURE_COMPATIBLE)
+      message(FATAL_ERROR "${UPCXX_CXX_COMPILER} and ${PREV_CMAKE_CXX_COMPILER} are not compile feature compatible")
+    endif()
+
+    unset(COMPILER_FEATURE_COMPATIBLE) 
+
+    set( CMAKE_CXX_SIZEOF_DATA_PTR ${PREV_CMAKE_CXX_SIZEOF_DATA_PTR})
+    set( CMAKE_CXX_COMPILER_ABI ${PREV_CMAKE_CXX_COMPILER_ABI} ) 
+    set( CMAKE_CXX_COMPILE_FEATURES ${PREV_CMAKE_CXX_COMPILE_FEATURES} ) 
+    set( CMAKE_CXX_LIBRARY_ARCHITECTURE ${PREV_CMAKE_CXX_LIBRARY_ARCHITECTURE})
+    set( CMAKE_CXX_COMPILER ${PREV_CMAKE_CXX_COMPILER})
+    cmake_pop_check_state()
   endif()
-
-  SET(CMAKE_CXX_COMPILER ${PREV_CMAKE_CXX_COMPILER})
-
-  cmake_pop_check_state()
-
-  message(STATUS "${CMAKE_CXX_COMPILER}")
 
   #now separate include dirs from flags
   if(UPCXX_CPPFLAGS)
