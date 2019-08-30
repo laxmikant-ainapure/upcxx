@@ -845,10 +845,12 @@ void upcxx::finalize() {
   if(backend::verbose_noise) {
     int64_t live_local = gasnet::sheap_footprint_user.count;
     
+    #if 0 // local_team scratch is no longer credited as a user allocation
     if(gasnet::handle_of(detail::the_local_team.value()) !=
        gasnet::handle_of(detail::the_world_team.value())
        && !upcxx_upc_is_linked())
        live_local -= 1; // minus local_team scratch
+    #endif
     
     popn_stats_t live = reduce_popn_to_rank0(live_local);
     
