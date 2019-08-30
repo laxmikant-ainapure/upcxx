@@ -190,7 +190,7 @@ namespace upcxx {
     // the_default_dummy_'s constructor
     persona_scope() {
       // immediately invalidate this scope
-      this->next_unique_ = reinterpret_cast<persona_scope_raw*>(0x1);
+      this->next_ = reinterpret_cast<persona_scope_raw*>(0x1);
     }
     
     persona_scope(persona &persona, detail::persona_tls &tls);
