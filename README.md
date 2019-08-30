@@ -145,6 +145,10 @@ New features/enhancements: (see specification and programmer's guide for full de
 * Environment variable `UPCXX_OVERSUBSCRIBED` has been added to control runtime's
   behavior of yielding to OS (`sched_yield()`) from calls to `upcxx::progress()`.
   See [docs/oversubscription.md](docs/oversubscription.md).
+* Accounting measures have been added to track the shared-heap utilization of the
+  UPC++ runtime (specifically rendezvous buffers) so that in the case of shread-heap
+  exhaustion an informative assertion will fire. Also, fewer rendezvous buffers are
+  now required by the runtime, thus alleviation some pressure on the shared-heap.
 
 Support has been added for the following compilers/platforms (for details, see 'System Requirements'):
 
