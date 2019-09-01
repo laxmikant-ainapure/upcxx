@@ -781,22 +781,28 @@ void init_localheap_tables(void) {
 namespace {
   void quiesce_rdzv(bool in_finalize, noise_log &noise) {
     int64_t iters = 0;
-    int64_t n = gasnet::sheap_footprint_rdzv.count;
+    int64_t n;
 
     do {
-      if(upcxx::rank_me()==0 && iters == (in_finalize ? 1000 : 100000)) {
+      n = gasnet::sheap_footprint_rdzv.count;
+      if(iters == (in_finalize ? 1000 : 100000)) {
         if(in_finalize) {
-          noise.warn()<<
+          if(upcxx::rank_me()==0)
+            noise.warn()<<
             /*> WARN*/"It appears that the application has not quiesced its usage "
-            "of upcxx communcation. As this isn't strictly necessary before "
-            "allowing the job to terminate, upcxx will proceed with finalization.";
+            "of upcxx communcation, violating the semantics of upcxx::finalize(), "
+            "which may lead to undefined behavior. "
+            "upcxx will now attempt to ignore this activity and proceed with finalization.";
+          noise.show(); // flush output before potential crash
           return;
         }
         else {
-          noise.warn()<<
+          if(upcxx::rank_me()==0)
+            noise.warn()<<
             /*> WARN*/"It appears that the application has not quiesced its usage "
-            "of upcxx communcation. It is necessary that all internal upcxx buffers "
+            "of upcxx communication. It is necessary that all internal upcxx buffers "
             "be reclaimed before proceeding, so upcxx shall continue to wait...";
+          noise.show(); // don't pause forever without output
         }
       }
       

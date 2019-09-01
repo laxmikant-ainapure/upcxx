@@ -41,6 +41,8 @@ void noise_log::show() {
     ss1 << std::string(50,'/') << '\n';
     std::cerr << ss1.str() << std::flush;
   }
+
+  reset();
 }
 
 std::string noise_log::size(std::size_t x) {

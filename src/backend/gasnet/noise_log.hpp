@@ -29,6 +29,10 @@ namespace gasnet {
       fn_name = that.fn_name;
       empty = that.empty;
     }
+    void reset() {
+      ss = std::stringstream();
+      empty = true;
+    }
     
     struct line_type {
       noise_log *parent;
