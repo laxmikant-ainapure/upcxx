@@ -55,6 +55,8 @@ namespace upcxx {
     template<typename ...T>
     struct lpc_dormant_fn_base: lpc_dormant<T...> {
       union { std::tuple<T...> results; };
+      lpc_dormant_fn_base() {}
+      ~lpc_dormant_fn_base() {}
     };
     
     template<typename Fn, typename ...T>
