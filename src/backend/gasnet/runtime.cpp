@@ -132,6 +132,8 @@ namespace {
   
   auto do_internal_progress = []() { upcxx::progress(progress_level::internal); };
   auto operation_cx_as_internal_future = upcxx::completions<upcxx::future_cx<upcxx::operation_cx_event, progress_level::internal>>{{}};
+
+  void quiesce_rdzv(bool in_finalize, noise_log&);
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -372,27 +374,7 @@ void upcxx::destroy_heap() {
   UPCXX_ASSERT_ALWAYS(shared_heap_isinit);
   backend::quiesce(upcxx::world(), entry_barrier::user);
 
-  { // wait for rdzv & misc buffers to free
-    int64_t iters = 0;
-    int64_t n = gasnet::sheap_footprint_rdzv.count;
-    do {
-      if(upcxx::rank_me()==0 && iters == 100000)
-        noise.warn()<<"Waiting for internal rdzv buffers to become free.";
-      
-      gex_Event_t e = gex_Coll_ReduceToAllNB(
-        gasnet::handle_of(upcxx::world()),
-        &n, &n,
-        GEX_DT_I64, sizeof(int64_t), 1,
-        GEX_OP_MAX,
-        nullptr, nullptr, 0
-      );
-
-      do upcxx::progress(progress_level::internal);
-      while(0 != gex_Event_Test(e));
-
-      iters += 1;
-    } while(n != 0);
-  }
+  quiesce_rdzv(/*in_finalize=*/false, noise);
   
   gasnet_barrier_notify(0, GASNET_BARRIERFLAG_ANONYMOUS);
   int ok = gasnet_barrier_wait(0, GASNET_BARRIERFLAG_ANONYMOUS);
@@ -796,6 +778,44 @@ void init_localheap_tables(void) {
 }
 }
 
+namespace {
+  void quiesce_rdzv(bool in_finalize, noise_log &noise) {
+    int64_t iters = 0;
+    int64_t n = gasnet::sheap_footprint_rdzv.count;
+
+    do {
+      if(upcxx::rank_me()==0 && iters == (in_finalize ? 1000 : 100000)) {
+        if(in_finalize) {
+          noise.warn()<<
+            /*> WARN*/"It appears that the application has not quiesced its usage "
+            "of upcxx communcation. As this isn't strictly necessary before "
+            "allowing the job to terminate, upcxx will proceed with finalization.";
+          return;
+        }
+        else {
+          noise.warn()<<
+            /*> WARN*/"It appears that the application has not quiesced its usage "
+            "of upcxx communcation. It is necessary that all internal upcxx buffers "
+            "be reclaimed before proceeding, so upcxx shall continue to wait...";
+        }
+      }
+      
+      gex_Event_t e = gex_Coll_ReduceToAllNB(
+        gasnet::handle_of(upcxx::world()),
+        &n, &n,
+        GEX_DT_I64, sizeof(int64_t), 1,
+        GEX_OP_MAX,
+        nullptr, nullptr, 0
+      );
+
+      do upcxx::progress(progress_level::internal);
+      while(0 != gex_Event_Test(e));
+
+      iters += 1;
+    } while(n != 0);
+  }
+}
+
 void upcxx::finalize() {
   UPCXX_ASSERT_ALWAYS(backend::master.active_with_caller());
   UPCXX_ASSERT_ALWAYS(backend::init_count > 0);
@@ -811,6 +831,8 @@ void upcxx::finalize() {
       upcxx::progress();
   }
 
+  quiesce_rdzv(/*in_finalize=*/true, noise);
+  
   struct popn_stats_t {
     int64_t sum, min, max;
   };
