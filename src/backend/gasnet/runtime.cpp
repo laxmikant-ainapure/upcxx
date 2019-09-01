@@ -1792,14 +1792,15 @@ gasnet::rma_put_then_am_sync gasnet::rma_put_then_am_master_protocol(
       part_offset += part_size;
     }
   }
-  
+
+  // look for chance to escalate actual synchronization achieved
   if(sync_lb == rma_put_then_am_sync::src_cb) {
     src_cb->handle = reinterpret_cast<uintptr_t>(src_h);
     if(0 == gex_Event_Test(src_h))
       return rma_put_then_am_sync::src_now;
   }
   
-  return rma_put_then_am_sync::src_cb;
+  return sync_lb; // no sync escalation
 }
 
 // instantiate all cases of rma_put_then_am_master_protocol
