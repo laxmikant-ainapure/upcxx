@@ -145,13 +145,15 @@ namespace upcxx {
         delete this;
       }
 
-      // we allocate this class in the segment for performance with gasnet
-      static void* operator new(std::size_t size) {
-        return upcxx::allocate(size, alignof(rget_cb_byval));
-      }
-      static void operator delete(void *p) {
-        upcxx::deallocate(p);
-      }
+      #if 0 // Disable this, GASNet handles out-of-segment gets very well
+        // we allocate this class in the segment for performance with gasnet
+        static void* operator new(std::size_t size) {
+          return upcxx::allocate(size, alignof(rget_cb_byval));
+        }
+        static void operator delete(void *p) {
+          upcxx::deallocate(p);
+        }
+      #endif
     };
   }
   

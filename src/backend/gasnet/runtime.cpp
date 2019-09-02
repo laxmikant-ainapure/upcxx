@@ -40,6 +40,7 @@ using gasnet::rpc_as_lpc;
 using gasnet::bcast_as_lpc;
 using gasnet::bcast_payload_header;
 using gasnet::noise_log;
+using gasnet::sheap_footprint_t;
 
 using namespace std;
 
@@ -101,6 +102,10 @@ unique_ptr<uintptr_t[/*local_team.size()*/]> backend::pshm_size;
 
 size_t gasnet::am_size_rdzv_cutover;
 
+sheap_footprint_t gasnet::sheap_footprint_rdzv;
+sheap_footprint_t gasnet::sheap_footprint_misc;
+sheap_footprint_t gasnet::sheap_footprint_user;
+  
 #if UPCXX_BACKEND_GASNET_SEQ
   handle_cb_queue gasnet::master_hcbs;
 #endif
@@ -127,6 +132,8 @@ namespace {
   
   auto do_internal_progress = []() { upcxx::progress(progress_level::internal); };
   auto operation_cx_as_internal_future = upcxx::completions<upcxx::future_cx<upcxx::operation_cx_event, progress_level::internal>>{{}};
+
+  void quiesce_rdzv(bool in_finalize, noise_log&);
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -245,7 +252,6 @@ namespace {
   gex_TM_t local_tm;
 
   detail::par_mutex segment_lock_;
-  intptr_t allocs_live_n_ = 0;
   mspace segment_mspace_;
 
   // scratch space for the local_team, if required
@@ -311,6 +317,12 @@ namespace {
       // ensure dlmalloc never tries to mmap anything from the system
       mspace_set_footprint_limit(segment_mspace_, shared_heap_sz);
     }
+
+    // zero shared heap footprint counters
+    gasnet::sheap_footprint_rdzv = {0,0};
+    gasnet::sheap_footprint_misc = {0,0};
+    gasnet::sheap_footprint_user = {0,0};    
+    
     if(backend::verbose_noise) {
       uint64_t maxsz = shared_heap_sz;
       uint64_t minsz = shared_heap_sz;
@@ -326,7 +338,7 @@ namespace {
 
     if (!upcxx_upc_is_linked()) {
       if (local_scratch_sz && !local_scratch_ptr) { 
-        local_scratch_ptr = upcxx::allocate(local_scratch_sz, GASNET_PAGESIZE);
+        local_scratch_ptr = gasnet::allocate(local_scratch_sz, GASNET_PAGESIZE, &gasnet::sheap_footprint_misc);
         UPCXX_ASSERT_ALWAYS(local_scratch_ptr);
       }
     }
@@ -362,14 +374,18 @@ void upcxx::destroy_heap() {
   UPCXX_ASSERT_ALWAYS(shared_heap_isinit);
   backend::quiesce(upcxx::world(), entry_barrier::user);
 
-  if (allocs_live_n_ > 0) {
-    noise.warn()<<"destroy_heap() called with "<<allocs_live_n_<<" live shared objects.";
-  }
+  quiesce_rdzv(/*in_finalize=*/false, noise);
+  
+  gasnet_barrier_notify(0, GASNET_BARRIERFLAG_ANONYMOUS);
+  int ok = gasnet_barrier_wait(0, GASNET_BARRIERFLAG_ANONYMOUS);
+  UPCXX_ASSERT_ALWAYS(ok == GASNET_OK);
+  
+  if(gasnet::sheap_footprint_user.count != 0)
+    noise.warn()<<"destroy_heap() called with "<<gasnet::sheap_footprint_user.count<<" live shared objects.";
+
   if (upcxx_use_upc_alloc) { 
     noise.warn()<<"destroy_heap() is not supported for UPCXX_USE_UPC_ALLOC=yes" << endl;
   } else {
-    allocs_live_n_ = 0;
-
     destroy_mspace(segment_mspace_);
     segment_mspace_ = 0;
 
@@ -498,7 +514,7 @@ void upcxx::init() {
 
     segment_size = gasnet_max_segsize;
   }
- 
+
   // ready master persona
   backend::initial_master_scope = new persona_scope(backend::master);
   UPCXX_ASSERT_ALWAYS(backend::master.active_with_caller());
@@ -762,6 +778,50 @@ void init_localheap_tables(void) {
 }
 }
 
+namespace {
+  void quiesce_rdzv(bool in_finalize, noise_log &noise) {
+    int64_t iters = 0;
+    int64_t n;
+
+    do {
+      n = gasnet::sheap_footprint_rdzv.count;
+      if(iters == (in_finalize ? 1000 : 100000)) {
+        if(in_finalize) {
+          if(upcxx::rank_me()==0)
+            noise.warn()<<
+            /*> WARN*/"It appears that the application has not quiesced its usage "
+            "of upcxx communcation, violating the semantics of upcxx::finalize(), "
+            "which may lead to undefined behavior. "
+            "upcxx will now attempt to ignore this activity and proceed with finalization.";
+          noise.show(); // flush output before potential crash
+          return;
+        }
+        else {
+          if(upcxx::rank_me()==0)
+            noise.warn()<<
+            /*> WARN*/"It appears that the application has not quiesced its usage "
+            "of upcxx communication. It is necessary that all internal upcxx buffers "
+            "be reclaimed before proceeding, so upcxx shall continue to wait...";
+          noise.show(); // don't pause forever without output
+        }
+      }
+      
+      gex_Event_t e = gex_Coll_ReduceToAllNB(
+        gasnet::handle_of(upcxx::world()),
+        &n, &n,
+        GEX_DT_I64, sizeof(int64_t), 1,
+        GEX_OP_MAX,
+        nullptr, nullptr, 0
+      );
+
+      do upcxx::progress(progress_level::internal);
+      while(0 != gex_Event_Test(e));
+
+      iters += 1;
+    } while(n != 0);
+  }
+}
+
 void upcxx::finalize() {
   UPCXX_ASSERT_ALWAYS(backend::master.active_with_caller());
   UPCXX_ASSERT_ALWAYS(backend::init_count > 0);
@@ -777,6 +837,8 @@ void upcxx::finalize() {
       upcxx::progress();
   }
 
+  quiesce_rdzv(/*in_finalize=*/true, noise);
+  
   struct popn_stats_t {
     int64_t sum, min, max;
   };
@@ -809,12 +871,14 @@ void upcxx::finalize() {
   }
   
   if(backend::verbose_noise) {
-    int64_t live_local = allocs_live_n_;
+    int64_t live_local = gasnet::sheap_footprint_user.count;
     
+    #if 0 // local_team scratch is no longer credited as a user allocation
     if(gasnet::handle_of(detail::the_local_team.value()) !=
        gasnet::handle_of(detail::the_world_team.value())
        && !upcxx_upc_is_linked())
        live_local -= 1; // minus local_team scratch
+    #endif
     
     popn_stats_t live = reduce_popn_to_rank0(live_local);
     
@@ -855,6 +919,14 @@ void upcxx::liberate_master_persona() {
 }
 
 void* upcxx::allocate(size_t size, size_t alignment) {
+  return gasnet::allocate(size, alignment, &gasnet::sheap_footprint_user);
+}
+
+void  upcxx::deallocate(void *p) {
+  gasnet::deallocate(p, &gasnet::sheap_footprint_user);
+}
+  
+void* gasnet::allocate(size_t size, size_t alignment, sheap_footprint_t *foot) {
   UPCXX_ASSERT(shared_heap_isinit);
   #if UPCXX_BACKEND_GASNET_SEQ
     UPCXX_ASSERT(backend::master.active_with_caller());
@@ -866,24 +938,48 @@ void* upcxx::allocate(size_t size, size_t alignment) {
   if (upcxx_use_upc_alloc) {
     // must overallocate and pad to ensure alignment
     UPCXX_ASSERT(alignment < 1U<<31);
-    alignment = std::max(alignment, (size_t)4);
+    alignment = std::max(alignment, (size_t)16);
     UPCXX_ASSERT((alignment & (alignment-1)) == 0); // assumed to be power-of-two
     uintptr_t base = (uintptr_t)upcxx_upc_alloc(size+alignment);
     uintptr_t user = (base+alignment) & ~(alignment-1);
     uintptr_t pad = (user - base);
-    UPCXX_ASSERT(pad >= 4 && pad <= alignment);
-    *(reinterpret_cast<uint32_t*>(user-4)) = pad; // store padding amount in header
+    UPCXX_ASSERT(pad >= 16 && pad <= alignment);
+    *(reinterpret_cast<uint64_t*>(user-8)) = pad; // store padding amount in header
+    *(reinterpret_cast<uint64_t*>(user-16)) = size+alignment; // store footrpint size in header
     p = reinterpret_cast<void *>(user);
+
+    foot->bytes += size+alignment;
+    foot->count += 1;
   } else {
     p = mspace_memalign(segment_mspace_, alignment, size);
+    if_pt(p) {
+      foot->bytes += mspace_usable_size(p);
+      foot->count += 1;
+    }
   }
-  if_pt(p) allocs_live_n_ += 1;
+
+  UPCXX_ASSERT_ALWAYS(
+    p != nullptr || foot == &gasnet::sheap_footprint_user,
+
+    "UPC++ could not allocate an internal buffer of\n"
+    "size="<<size<<" from shared heap. Please increase\n"
+    "the size of the shared heap (UPCXX_SHARED_HEAP_SIZE).\n\n"
+    
+    <<"Local shared heap statistics:\n"
+    <<"  User allocations:      count "<<gasnet::sheap_footprint_user.count
+    <<                       ", bytes "<<gasnet::sheap_footprint_user.bytes<<'\n'
+    <<"  Internal rdzv buffers: count "<<gasnet::sheap_footprint_rdzv.count
+    <<                       ", bytes "<<gasnet::sheap_footprint_rdzv.bytes<<'\n'
+    <<"  Internal misc buffers: count "<<gasnet::sheap_footprint_misc.count
+    <<                       ", bytes "<<gasnet::sheap_footprint_misc.bytes
+  );
+    
   //UPCXX_ASSERT(p != nullptr);
   UPCXX_ASSERT(reinterpret_cast<uintptr_t>(p) % alignment == 0);
   return p;
 }
 
-void upcxx::deallocate(void *p) {
+void gasnet::deallocate(void *p, sheap_footprint_t *foot) {
   UPCXX_ASSERT(shared_heap_isinit);
   #if UPCXX_BACKEND_GASNET_SEQ
     UPCXX_ASSERT(backend::master.active_with_caller());
@@ -897,13 +993,17 @@ void upcxx::deallocate(void *p) {
     // parse alignment header to recover original base ptr
     uintptr_t user = reinterpret_cast<uintptr_t>(p);
     UPCXX_ASSERT((user & 0x3) == 0);
-    uint32_t  pad = *(reinterpret_cast<uint32_t*>(user-4));
+    uint64_t pad = *(reinterpret_cast<uint64_t*>(user-8));
+    uint64_t foot_size = *(reinterpret_cast<uint64_t*>(user-16));
     uintptr_t base = user-pad;
     upcxx_upc_free(reinterpret_cast<void *>(base));
+    foot->bytes -= foot_size;
+    foot->count -= 1;
   } else {
+    foot->bytes -= mspace_usable_size(p);
+    foot->count -= 1;
     mspace_free(segment_mspace_, p);
   }
-  allocs_live_n_ -= 1;
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -1127,7 +1227,7 @@ void gasnet::send_am_rdzv(
         tls.enqueue(*tls.get_top_persona(), level, m, /*known_active=*/std::true_type());
       }
       else {
-        rpc_as_lpc *m = rpc_as_lpc::build_rdzv_lz(cmd_size, cmd_align);
+        rpc_as_lpc *m = rpc_as_lpc::build_rdzv_lz(/*use_sheap=*/false, cmd_size, cmd_align);
         m->rdzv_rank_s = rank_s;
         m->rdzv_rank_s_local = false;
         
@@ -1143,7 +1243,7 @@ void gasnet::send_am_rdzv(
             // Notify source rank it can free buffer.
             gasnet::send_am_restricted(
               upcxx::world(), rank_s,
-              [=]() { upcxx::deallocate(buf_s); }
+              [=]() { gasnet::deallocate(buf_s, &gasnet::sheap_footprint_rdzv); }
             );
           }
         );
@@ -1234,7 +1334,7 @@ void gasnet::bcast_am_master_rdzv(
           // materializing the am payload was pointless since it is sent to
           // nobody. Seeing this as an unlikely kind of bcast, we will forfeit
           // optimizing out this wasted effort.
-          upcxx::deallocate((void*)payload_sender);
+          gasnet::deallocate((void*)payload_sender, &gasnet::sheap_footprint_rdzv);
         }
         return;
       }
@@ -1290,7 +1390,7 @@ void gasnet::bcast_am_master_rdzv(
           tls.enqueue(*tls.get_top_persona(), level, m, /*known_active=*/std::true_type());
         }
         else {
-          bcast_as_lpc *m = rpc_as_lpc::build_rdzv_lz<bcast_as_lpc>(cmd_size, cmd_align);
+          bcast_as_lpc *m = rpc_as_lpc::build_rdzv_lz<bcast_as_lpc>(/*use_sheap=*/true, cmd_size, cmd_align);
           m->rdzv_rank_s = wrank_owner;
           m->rdzv_rank_s_local = false;
           
@@ -1322,7 +1422,7 @@ void gasnet::bcast_am_master_rdzv(
                 upcxx::world(), wrank_owner,
                 [=]() {
                   if(0 == -1 + payload_owner->rdzv_refs.fetch_add(-1, std::memory_order_acq_rel))
-                    upcxx::deallocate(payload_owner);
+                    gasnet::deallocate(payload_owner, &gasnet::sheap_footprint_rdzv);
                 }
               );
             }
@@ -1353,13 +1453,18 @@ namespace gasnet {
          
         send_am_restricted(
           upcxx::world(), me->rdzv_rank_s,
-          [=]() { upcxx::deallocate(buf_s); }
+          [=]() { gasnet::deallocate(buf_s, &gasnet::sheap_footprint_rdzv); }
         );
         
         delete me;
       }
       else {
-        upcxx::deallocate(me->payload);
+        // rpc_as_lpc::build_rdzv_lz(use_sheap=false, ...)
+        UPCXX_ASSERT(!( // should not be in segment
+          shared_heap_base <= me->payload &&
+          (char*)me->payload < (char*)shared_heap_base + shared_heap_sz
+        ));
+        std::free(me->payload); 
       }
     }
   }
@@ -1385,15 +1490,21 @@ namespace gasnet {
           
           send_am_restricted(
             upcxx::world(), me->rdzv_rank_s,
-            [=]() { upcxx::deallocate(buf_s); }
+            [=]() { gasnet::deallocate(buf_s, &gasnet::sheap_footprint_rdzv); }
           );
         }
         
         delete me;
       }
       else {
-        if(0 == refs_now)
-          upcxx::deallocate(me->payload);
+        if(0 == refs_now) {
+          // rpc_as_lpc::build_rdzv_lz(use_sheap=true, ...)
+          UPCXX_ASSERT( // should be in segment
+            shared_heap_base <= me->payload &&
+            (char*)me->payload < (char*)shared_heap_base + shared_heap_sz
+          );
+          gasnet::deallocate(me->payload, &gasnet::sheap_footprint_rdzv);
+        }
       }
     }
   }
@@ -1433,6 +1544,7 @@ RpcAsLpc* rpc_as_lpc::build_eager(
 
 template<typename RpcAsLpc>
 RpcAsLpc* rpc_as_lpc::build_rdzv_lz(
+    bool use_sheap,
     std::size_t cmd_size,
     std::size_t cmd_alignment // alignment requirement of packing
   ) {
@@ -1440,7 +1552,11 @@ RpcAsLpc* rpc_as_lpc::build_rdzv_lz(
   std::size_t buf_size = offset + sizeof(RpcAsLpc);
   std::size_t buf_align = std::max(cmd_alignment, alignof(RpcAsLpc));
   
-  void *buf = upcxx::allocate(buf_size, buf_align);
+  void *buf;
+  if(use_sheap)
+    buf = gasnet::allocate(buf_size, buf_align, &gasnet::sheap_footprint_rdzv);
+  else
+    buf = detail::alloc_aligned(buf_size, buf_align);
   UPCXX_ASSERT_ALWAYS(buf != nullptr);
   
   RpcAsLpc *m = ::new((char*)buf + offset) RpcAsLpc;
