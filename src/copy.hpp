@@ -87,6 +87,8 @@ namespace upcxx {
     const std::size_t size = n*sizeof(T);
 
     constexpr int host_device = -1;
+
+    UPCXX_ASSERT(src && dest, "pointer arguments to copy may not be null");
     
     using cxs_here_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_here,

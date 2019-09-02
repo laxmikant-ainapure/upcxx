@@ -428,7 +428,7 @@ namespace upcxx
     static_assert(std::is_convertible<S, const T*>::value,
                   "SrcIter and DestIter need to be over same base T type");
 
-    UPCXX_ASSERT((detail::completions_has_event<Cxs, operation_cx_event>::value |
+    UPCXX_ASSERT_ALWAYS((detail::completions_has_event<Cxs, operation_cx_event>::value |
                   detail::completions_has_event<Cxs, remote_cx_event>::value),
                  "Not requesting either operation or remote completion is surely an "
                  "error. You'll have know way of ever knowing when the target memory is "
@@ -451,25 +451,23 @@ namespace upcxx
     std::vector<upcxx::detail::memvec_t>  dest(std::distance(dst_runs_begin, dst_runs_end));
     auto dv=dest.begin();
     std::size_t dstsize=0;
-    intrank_t gpdrank = 0; // zero is a valid rank for gasnet to set event flag.
+    intrank_t gpdrank = upcxx::rank_me(); // default for empty sequence is self
     if(dest.size()!=0) gpdrank = std::get<0>(*dst_runs_begin).rank_; //hoist gpdrank assign out of loop
     for(DestIter d=dst_runs_begin; !(d==dst_runs_end); ++d,++dv)
       {
-        UPCXX_ASSERT(gpdrank==std::get<0>(*d).rank_);
+	UPCXX_ASSERT(std::get<0>(*d), "pointer arguments to rput_irregular may not be null");
+        UPCXX_ASSERT(gpdrank==std::get<0>(*d).rank_, "pointer arguments to rput_irregular must all target the same affinity");
         dv->gex_addr=(std::get<0>(*d)).raw_ptr_;
         dv->gex_len =std::get<1>(*d)*tsize;
         dstsize+=dv->gex_len;
       }
 
-    UPCXX_ASSERT( !(dest.size() == 0 && detail::completions_has_event<Cxs, remote_cx_event>::value),
-                  "Cannot request remote completion without providing at least one global_ptr "
-                  "in the destination sequence." );
-    
     std::size_t srcsize=0;
     std::vector<upcxx::detail::memvec_t> src(std::distance(src_runs_begin, src_runs_end));
     auto sv=src.begin();
     for(SrcIter s=src_runs_begin; !(s==src_runs_end); ++s,++sv)
       {
+	UPCXX_ASSERT(std::get<0>(*s), "pointer arguments to rput_irregular may not be null");
         sv->gex_addr=std::get<0>(*s);
         sv->gex_len =std::get<1>(*s)*tsize;
         srcsize+=sv->gex_len;
@@ -522,7 +520,7 @@ namespace upcxx
                   "SrcIter and DestIter need to be over same base T type");
  
     
-    UPCXX_ASSERT((detail::completions_has_event<Cxs, operation_cx_event>::value |
+    UPCXX_ASSERT_ALWAYS((detail::completions_has_event<Cxs, operation_cx_event>::value |
                   detail::completions_has_event<Cxs, remote_cx_event>::value),
                  "Not requesting either operation or remote completion is surely an "
                  "error. You'll have know way of ever knowing when the target memory is "
@@ -546,6 +544,7 @@ namespace upcxx
     std::size_t dstsize=0;
     for(DestIter d=dst_runs_begin; !(d==dst_runs_end); ++d,++dv)
       {
+	UPCXX_ASSERT(std::get<0>(*d), "pointer arguments to rget_irregular may not be null");
         dv->gex_addr=(std::get<0>(*d));
         dv->gex_len =std::get<1>(*d)*tsize;
         dstsize+=dv->gex_len;
@@ -554,19 +553,17 @@ namespace upcxx
     std::vector<upcxx::detail::memvec_t> src(std::distance(src_runs_begin, src_runs_end));
     auto sv=src.begin();
     std::size_t srcsize=0;
-    intrank_t rank_s = 0; // zero is a valid rank for gasnet to perform event completion
+    intrank_t rank_s = upcxx::rank_me(); // default for empty sequence is self
     if(src.size()!=0) rank_s = std::get<0>(*src_runs_begin).rank_; // hoist rank_s assign out of loop
     for(SrcIter s=src_runs_begin; !(s==src_runs_end); ++s,++sv)
       {
+	UPCXX_ASSERT(std::get<0>(*s), "pointer arguments to rget_irregular may not be null");
         UPCXX_ASSERT(rank_s==std::get<0>(*s).rank_,
-                     "All ranks in rput need to target the same rank");
+                     "pointer arguments to rget_irregular must all target the same affinity");
         sv->gex_addr=std::get<0>(*s).raw_ptr_;
         sv->gex_len =std::get<1>(*s)*tsize;
         srcsize+=sv->gex_len;
       }
-    UPCXX_ASSERT(!(src.size() ==0  && detail::completions_has_event<Cxs, remote_cx_event>::value),
-                 "Cannot request remote completion without providing at least one global_ptr "
-                 "in the source sequence.");
     
 
     UPCXX_ASSERT(dstsize==srcsize);
@@ -610,7 +607,7 @@ namespace upcxx
                   "RMA operations only work on DefinitelyTriviallySerializable types."
                   );
     
-    UPCXX_ASSERT((
+    UPCXX_ASSERT_ALWAYS((
                   detail::completions_has_event<Cxs, operation_cx_event>::value |
                   detail::completions_has_event<Cxs, remote_cx_event>::value),
                  "Not requesting either operation or remote completion is surely an "
@@ -643,27 +640,24 @@ namespace upcxx
     // during the resize. This new way is to do a `reserve` followed by `push_back's`.
     dst_ptrs.reserve(std::distance(dst_runs_begin, dst_runs_end));
  
-    intrank_t dst_rank = 0; // zero is a valid rank for gasnet to perform completion
+    intrank_t dst_rank = upcxx::rank_me(); // default for empty sequence is self
     if(dst_ptrs.capacity() !=0) dst_rank = (*dst_runs_begin).rank_;
     for(DestIter d=dst_runs_begin; !(d == dst_runs_end); ++d) {
-      UPCXX_ASSERT(dst_rank == (*d).rank_,
-        "All global_ptr's in destination must reference memory from the same rank."
-      );
+      UPCXX_ASSERT(*d, "pointer arguments to rput_regular may not be null");
+      UPCXX_ASSERT(dst_rank==(*d).rank_, "pointer arguments to rput_regular must all target the same affinity");
       dst_rank = (*d).rank_;
       dst_ptrs.push_back((*d).raw_ptr_);
     }
-
-    UPCXX_ASSERT(!(dst_ptrs.size()==0  && detail::completions_has_event<Cxs, remote_cx_event>::value),
-                 "Cannot request remote completion without providing at least one global_ptr "
-                 "in the destination sequence." );
 
     std::vector<void*> src_ptrs;
 
     src_ptrs.reserve(std::distance(src_runs_begin, src_runs_end));
   
 
-    for(SrcIter s=src_runs_begin; !(s == src_runs_end); ++s)
+    for(SrcIter s=src_runs_begin; !(s == src_runs_end); ++s) {
+      UPCXX_ASSERT((*s), "pointer arguments to rput_regular may not be null");
       src_ptrs.push_back(const_cast<void*>((void const*)*s));
+    }
 
     UPCXX_ASSERT(src_ptrs.size()*src_run_length == dst_ptrs.size()*dst_run_length,
                  "Source and destination must contain same number of elements.");
@@ -715,7 +709,7 @@ namespace upcxx
     static_assert(is_definitely_trivially_serializable<T>::value,
                   "RMA operations only work on DefinitelyTriviallySerializable types.");
     
-    UPCXX_ASSERT((detail::completions_has_event<Cxs, operation_cx_event>::value |
+    UPCXX_ASSERT_ALWAYS((detail::completions_has_event<Cxs, operation_cx_event>::value |
                   detail::completions_has_event<Cxs, remote_cx_event>::value),
                  "Not requesting either operation or remote completion is surely an "
                  "error. You'll have know way of ever knowing when the target memory is "
@@ -742,23 +736,23 @@ namespace upcxx
     std::vector<void*> dst_ptrs;
     dst_ptrs.reserve(std::distance(dst_runs_begin, dst_runs_end));
  
-    for(DestIter d=dst_runs_begin; !(d == dst_runs_end); ++d)
+    for(DestIter d=dst_runs_begin; !(d == dst_runs_end); ++d) {
+      UPCXX_ASSERT((*d), "pointer arguments to rget_regular may not be null");
       dst_ptrs.push_back((void*)*d);
+    }
 
     
     std::vector<void*> src_ptrs;
     src_ptrs.reserve(std::distance(src_runs_begin, src_runs_end));
    
-    intrank_t src_rank = 0; // gasnet accepts rank zero for empty message
+    intrank_t src_rank = upcxx::rank_me(); // default for empty sequence is self
     if(src_ptrs.capacity() != 0) src_rank = (*src_runs_begin).rank_;
     for(SrcIter s=src_runs_begin; !(s == src_runs_end); ++s) {
-      UPCXX_ASSERT(src_rank == (*s).rank_,
-        "All global_ptr's in source runs must reference memory on the same rank."
-      );
+      UPCXX_ASSERT((*s), "pointer arguments to rget_regular may not be null");
+      UPCXX_ASSERT(src_rank==(*s).rank_, "pointer arguments to rget_regular must all target the same affinity");
       src_ptrs.push_back((*s).raw_ptr_);
       src_rank = (*s).rank_;
     }
-
  
     
     UPCXX_ASSERT(
@@ -812,6 +806,8 @@ namespace upcxx
       "safe to read or write again."
                          );
     
+    UPCXX_ASSERT(src_base && dest_base, "pointer arguments to rput_strided may not be null");
+
     using cxs_here_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::rput_event_values,
@@ -878,12 +874,14 @@ namespace upcxx
     static_assert(is_definitely_trivially_serializable<T>::value,
       "RMA operations only work on DefinitelyTriviallySerializable types.");
     
-    UPCXX_ASSERT((detail::completions_has_event<Cxs, operation_cx_event>::value |
+    UPCXX_ASSERT_ALWAYS((detail::completions_has_event<Cxs, operation_cx_event>::value |
                   detail::completions_has_event<Cxs, remote_cx_event>::value),
                  "Not requesting either operation or remote completion is surely an "
                  "error. You'll have know way of ever knowing when the target memory is "
                  "safe to read or write again.");
  
+    UPCXX_ASSERT(src_base && dest_base, "pointer arguments to rget_strided may not be null");
+
     using cxs_here_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::rput_event_values,

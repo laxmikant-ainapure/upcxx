@@ -435,6 +435,8 @@ namespace upcxx {
     using object_t = detail::rput_obj<Cxs, traits_t>;
     
     traits_t::template assert_sane<T>();
+
+    UPCXX_ASSERT(gp_d, "pointer arguments to rput may not be null");
     
     object_t *o = new object_t(std::move(cxs));
     
@@ -465,6 +467,8 @@ namespace upcxx {
     using object_t = detail::rput_obj<Cxs, traits_t>;
     
     traits_t::template assert_sane<T>();
+
+    UPCXX_ASSERT(buf_s && gp_d, "pointer arguments to rput may not be null");
     
     object_t *o = new object_t(std::move(cxs));
     
