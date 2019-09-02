@@ -722,7 +722,6 @@ namespace upcxx {
     auto *meta = &pro_hdr->pro_meta;
     UPCXX_ASSERT(meta->deferred_decrements == 0); // promise not quiesced!
     meta->deferred_decrements = result_plus_anon;
-    pro_hdr->incref(1);
     
     if(known_active || target.active_with_caller(*this)) {
       if(level == progress_level::user &&

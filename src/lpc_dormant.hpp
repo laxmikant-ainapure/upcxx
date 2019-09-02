@@ -110,7 +110,8 @@ namespace upcxx {
         promise<T...> &&pro,
         lpc_dormant<T...> *tail
       ) {
-      auto *lpc = new lpc_dormant_qpromise<T...>(target, level, detail::promise_header_of(pro));
+      auto *hdr = detail::promise_steal_header_of(std::move(pro));
+      auto *lpc = new lpc_dormant_qpromise<T...>(target, level, hdr);
       lpc->intruder.p.store(tail, std::memory_order_relaxed);
       return lpc;
     }
@@ -126,6 +127,7 @@ namespace upcxx {
         
         if(vtbl_u & 0x1) {
           auto *pro = reinterpret_cast<future_header_promise<T...>*>(vtbl_u ^ 0x1);
+          
           if(next == nullptr)
             pro->base_header_result.construct_results(std::move(results));
           else

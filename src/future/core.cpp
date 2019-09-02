@@ -2,6 +2,8 @@
 
 using namespace std;
 
+namespace detail = upcxx::detail;
+
 using upcxx::detail::future_header;
 using upcxx::detail::future_header_nil;
 using upcxx::detail::future_header_dependent;
@@ -17,6 +19,15 @@ future_header future_header_result<>::the_always = {
   /*sucs_head_*/nullptr,
   {/*result_*/&upcxx::detail::future_header_result<>::the_always}
 };
+
+#if 1 // PGI HACK!!
+const detail::promise_vtable detail::the_promise_vtable<>::vtbl{
+  /*meta_offset_from_header*/
+  offsetof(future_header_promise<>, pro_meta),
+  /*fulfill_deferred_and_drop*/
+  promise_vtable::fulfill_deferred_and_drop_trivial
+};
+#endif
 
 namespace {
   __thread future_header_dependent **active_tail_ = nullptr;

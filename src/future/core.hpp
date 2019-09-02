@@ -574,6 +574,7 @@ namespace upcxx {
     };
     
     // This builds the promise_vtable corresponding to future_header_promise<T...>.
+  
     template<typename ...T>
     struct the_promise_vtable {
       static constexpr promise_vtable vtbl{
@@ -589,6 +590,14 @@ namespace upcxx {
     template<typename ...T>
     constexpr promise_vtable the_promise_vtable<T...>::vtbl;
     
+    #if 1 // PGI HACK!!
+    template<>
+    struct the_promise_vtable<> {
+      // This can't be constexpr because then we would run into link issues when mixing C++17 apps with pre-17 upcxx builds
+      static const promise_vtable vtbl;
+    };
+    #endif
+
     template<typename ...T>
     future_header_promise<T...>::future_header_promise():
       base_header_result(),
