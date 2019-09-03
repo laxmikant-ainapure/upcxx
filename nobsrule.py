@@ -1230,6 +1230,8 @@ class gasnet_configured:
         env1['CXX'] = ' '.join(cxx)
 
       # gasnet can't handle `-fsanitize=xxx`, so we just drop it
+      # TODO: Instead of dropping the flag, we can suppress its effect with:
+      # env['ASAN_OPTIONS'] = 'detect_leaks=0'
       env1['CXX'] = ' '.join([s for s in env1['CXX'].split() if not s.startswith('-fsanitize=')])
     
       # these arguments enforce GASNet defaults that UPC++ relies upon
