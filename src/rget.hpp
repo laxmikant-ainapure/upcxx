@@ -78,6 +78,8 @@ namespace upcxx {
       rget_cb_remote(intrank_t rank_s, CxStateRemote state_remote):
         rank_s{rank_s},
         state_remote{std::move(state_remote)} {
+
+        upcxx::current_persona().undischarged_n_ += 1;
       }
 
       void send_remote() {
@@ -90,6 +92,8 @@ namespace upcxx {
             std::move(state_remote)
           )
         );
+        
+        upcxx::current_persona().undischarged_n_ -= 1;
       }
     };
     

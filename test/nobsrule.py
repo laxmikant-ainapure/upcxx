@@ -18,6 +18,7 @@ REQUIRES_PTHREAD = [
   'uts/uts_threads.cpp',
   'uts/uts_hybrid.cpp',
   'view.cpp',
+  'regression/issue168.cpp'
 ]
 
 REQUIRES_OPENMP = [

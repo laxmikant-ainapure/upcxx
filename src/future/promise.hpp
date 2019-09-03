@@ -32,6 +32,9 @@ namespace upcxx {
     
     template<typename ...T>
     future_header_promise<T...>* promise_header_of(promise<T...> &pro);
+
+    template<typename ...T>
+    future_header_promise<T...>* promise_steal_header_of(promise<T...> &&pro);
     
     template<typename ...T>
     future_header_promise<T...>* promise_header_of(promise_meta *meta);
@@ -48,6 +51,7 @@ namespace upcxx {
     
     friend detail::promise_meta* detail::promise_meta_of<T...>(promise<T...>&);
     friend detail::future_header_promise<T...>* detail::promise_header_of<T...>(promise<T...> &pro);
+    friend detail::future_header_promise<T...>* detail::promise_steal_header_of<T...>(promise<T...> &&pro);
     
     promise(detail::future_header *hdr):
       detail::future_impl_shref<detail::future_header_ops_promise, T...>(hdr) {
@@ -147,6 +151,11 @@ namespace upcxx {
       return reinterpret_cast<future_header_promise<T...>*>(pro.hdr_);
     }
     
+    template<typename ...T>
+    future_header_promise<T...>* promise_steal_header_of(promise<T...> &&pro) {
+      return reinterpret_cast<future_header_promise<T...>*>(pro.steal_header());
+    }
+
     template<typename ...T>
     future_header_promise<T...>* promise_header_of(promise_meta *meta) {
       return (future_header_promise<T...>*)((char*)meta - offsetof(future_header_promise<T...>, pro_meta));

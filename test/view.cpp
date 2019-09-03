@@ -117,11 +117,19 @@ static_assert(!is_actually_trivially_serializable<pair_t>::value, "ERROR");
 persona worker;
 atomic<bool> worker_shutdown{false};
 
+const upcxx::detail::promise_vtable *volatile cleanser;
+
 int main() {
   upcxx::init();
   {
     print_test_header();
 
+    cleanser = &upcxx::detail::the_promise_vtable<>::vtbl;
+    UPCXX_ASSERT_ALWAYS(cleanser->execute_and_delete != nullptr);
+
+    cleanser = &upcxx::detail::the_promise_vtable<int>::vtbl;
+    UPCXX_ASSERT_ALWAYS(cleanser->execute_and_delete != nullptr);
+  
     std::thread worker_thread{
       []() {
         persona_scope worker_scope{worker};

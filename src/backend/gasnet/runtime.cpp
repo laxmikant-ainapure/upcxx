@@ -188,7 +188,7 @@ namespace {
     gex_AM_Arg_t cmd_part_offset);
   
   void am_reply_cb(gex_Token_t, gex_AM_Arg_t cb_lo, gex_AM_Arg_t cb_hi);
-
+  
   #define AM_ENTRY(name, arg_n) \
     {id_##name, (void(*)())name, GEX_FLAG_AM_MEDIUM | GEX_FLAG_AM_REQUEST, arg_n, nullptr, #name}
   
@@ -1156,7 +1156,7 @@ void gasnet::send_am_eager_persona(
     std::size_t buf_size,
     std::size_t buf_align
   ) {
-  
+
   gex_AM_Arg_t per_lo = reinterpret_cast<intptr_t>(recipient_persona) & 0xffffffffu;
   gex_AM_Arg_t per_hi = reinterpret_cast<intptr_t>(recipient_persona) >> 31 >> 1;
 
@@ -1438,35 +1438,48 @@ void gasnet::bcast_am_master_rdzv(
 namespace upcxx {
 namespace backend {
 namespace gasnet {
-  template<>
-  void rpc_as_lpc::cleanup</*never_rdzv=*/false>(detail::lpc_base *me1) {
-    rpc_as_lpc *me = static_cast<rpc_as_lpc*>(me1);
-    
-    if(!me->is_rdzv)
-      std::free(me->payload);
-    else {
-      if(me->rdzv_rank_s_local) {
-        // Notify source rank it can free buffer.
-        void *buf_s = reinterpret_cast<void*>(
-            backend::globalize_memory_nonnull(me->rdzv_rank_s, me->payload)
-          );
-         
-        send_am_restricted(
-          upcxx::world(), me->rdzv_rank_s,
-          [=]() { gasnet::deallocate(buf_s, &gasnet::sheap_footprint_rdzv); }
-        );
-        
-        delete me;
+  namespace {
+    template<bool restricted>
+    void cleanup_rpc_as_lpc_maybe_rdzv(detail::lpc_base *me1) {
+      rpc_as_lpc *me = static_cast<rpc_as_lpc*>(me1);
+      
+      if(!me->is_rdzv) {
+        if(!restricted) std::free(me->payload);
       }
       else {
-        // rpc_as_lpc::build_rdzv_lz(use_sheap=false, ...)
-        UPCXX_ASSERT(!( // should not be in segment
-          shared_heap_base <= me->payload &&
-          (char*)me->payload < (char*)shared_heap_base + shared_heap_sz
-        ));
-        std::free(me->payload); 
+        if(me->rdzv_rank_s_local) {
+          // Notify source rank it can free buffer.
+          void *buf_s = reinterpret_cast<void*>(
+              backend::globalize_memory_nonnull(me->rdzv_rank_s, me->payload)
+            );
+           
+          send_am_restricted(
+            upcxx::world(), me->rdzv_rank_s,
+            [=]() { gasnet::deallocate(buf_s, &gasnet::sheap_footprint_rdzv); }
+          );
+          
+          delete me;
+        }
+        else {
+          // rpc_as_lpc::build_rdzv_lz(use_sheap=false, ...)
+          UPCXX_ASSERT(!( // should not be in segment
+            shared_heap_base <= me->payload &&
+            (char*)me->payload < (char*)shared_heap_base + shared_heap_sz
+          ));
+          std::free(me->payload); 
+        }
       }
     }
+  }
+  
+  template<>
+  void rpc_as_lpc::cleanup</*never_rdzv=*/false, /*restricted=*/false>(detail::lpc_base *me) {
+    cleanup_rpc_as_lpc_maybe_rdzv<false>(me);
+  }
+  
+  template<>
+  void rpc_as_lpc::cleanup</*never_rdzv=*/false, /*restricted=*/true>(detail::lpc_base *me) {
+    cleanup_rpc_as_lpc_maybe_rdzv<true>(me);
   }
   
   template<>
@@ -1703,19 +1716,22 @@ namespace {
       void *buf, size_t buf_size,
       gex_AM_Arg_t buf_align
     ) {
-    
-    if(0 == (reinterpret_cast<uintptr_t>(buf) & (buf_align-1))) {
-      command<void*>::get_executor(detail::serialization_reader(buf))(buf);
-    }
+
+    void *tmp;
+    if(0 == (reinterpret_cast<uintptr_t>(buf) & (buf_align-1)))
+      tmp = buf;
     else {
-      void *tmp = detail::alloc_aligned(buf_size, buf_align);
-      
+      tmp = detail::alloc_aligned(buf_size, buf_align);
       std::memcpy((void**)tmp, (void**)buf, buf_size);
-      
-      command<void*>::get_executor(detail::serialization_reader(buf))(buf);
-      
-      std::free(tmp);
     }
+
+    gasnet::rpc_as_lpc dummy;
+    dummy.payload = tmp;
+    dummy.is_rdzv = false;
+    command<detail::lpc_base*>::get_executor(detail::serialization_reader(tmp))(&dummy);
+
+    if(tmp != buf)
+      std::free(tmp);
   }
   
   void am_eager_master(
@@ -1754,7 +1770,12 @@ namespace {
     size_t buf_align = buf_align_and_level>>1;
     bool level_user = buf_align_and_level & 1;
     
-    persona *per = am_arg_decode_ptr<persona>(per_lo, per_hi);
+    persona *per;
+    if(per_lo & 0x1) // low bit used to discriminate persona** vs persona*
+      per = *am_arg_decode_ptr<persona*>(per_lo ^ 0x1, per_hi);
+    else
+      per = am_arg_decode_ptr<persona>(per_lo, per_hi);
+    
     per = per == nullptr ? &backend::master : per; 
     
     rpc_as_lpc *m = rpc_as_lpc::build_eager(buf, buf_size, buf_align);

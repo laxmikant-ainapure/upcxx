@@ -1218,7 +1218,6 @@ class gasnet_configured:
     else:
       cc, cxx, debug, config, source_dir, user_args = yield me.get_config()
       config_args, config_env = config
-      
       build_dir = me.mkpath(key=None)
       os.makedirs(build_dir)
       
@@ -1229,7 +1228,12 @@ class gasnet_configured:
         env1['CC'] = ' '.join(cc)
       if 'CXX' not in env1:
         env1['CXX'] = ' '.join(cxx)
-     
+
+      # gasnet can't handle `-fsanitize=xxx`, so we just drop it
+      # TODO: Instead of dropping the flag, we can suppress its effect with:
+      # env['ASAN_OPTIONS'] = 'detect_leaks=0'
+      env1['CXX'] = ' '.join([s for s in env1['CXX'].split() if not s.startswith('-fsanitize=')])
+    
       # these arguments enforce GASNet defaults that UPC++ relies upon
       # to ensure that users cannot break our dependencies by setting GASNET_CONFIGURE_ARGS
       # For details, see GASNet configure --help

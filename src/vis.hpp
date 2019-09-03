@@ -112,6 +112,10 @@ namespace upcxx
     
     template<typename FinalType, typename CxStateHere, typename CxStateRemote>
     struct rput_cb_remote<FinalType, CxStateHere, CxStateRemote, /*has_remote=*/true> {
+      rput_cb_remote() {
+        upcxx::current_persona().undischarged_n_ += 1;
+      }
+
       void send_remote() {
         auto *cbs = static_cast<FinalType*>(this);
         
@@ -124,6 +128,8 @@ namespace upcxx
             std::move(cbs->state_remote)
           )
         );
+
+        upcxx::current_persona().undischarged_n_ -= 1;
       }
     };
     
