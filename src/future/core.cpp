@@ -20,7 +20,7 @@ future_header future_header_result<>::the_always = {
   {/*result_*/&upcxx::detail::future_header_result<>::the_always}
 };
 
-#if 1 // PGI HACK!!
+#if UPCXX_PROMISE_VTABLE_HACK
 const detail::promise_vtable detail::the_promise_vtable<>::vtbl{
   /*meta_offset_from_header*/
   offsetof(future_header_promise<>, pro_meta),

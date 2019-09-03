@@ -31,6 +31,12 @@
     }
 #endif
 
+#if __PGI // TODO: range of impacted versions and/or C++ standard?
+  // Work around a bug leading to nullptr initialization for a function pointer
+  // See PR#119 for more details
+  #define UPCXX_PROMISE_VTABLE_HACK 1
+#endif
+
 namespace upcxx {
   namespace detail {
     //////////////////////////////////////////////////////////////////////
@@ -590,7 +596,12 @@ namespace upcxx {
     template<typename ...T>
     constexpr promise_vtable the_promise_vtable<T...>::vtbl;
     
-    #if 1 // PGI HACK!!
+    #if UPCXX_PROMISE_VTABLE_HACK
+    // This empty-parameter specialization is redundant, the general <T...> case
+    // redues to something functionally equivalent. Unfortunately, the PGI linker
+    // is not initializing the `execute_and_delete` fnptr of vtbl correctly.
+    // By specializing the empty case, the linker treats it differently (not
+    // as weak definition) and compile-time initialization looks good again.
     template<>
     struct the_promise_vtable<> {
       // This can't be constexpr because then we would run into link issues when mixing C++17 apps with pre-17 upcxx builds
