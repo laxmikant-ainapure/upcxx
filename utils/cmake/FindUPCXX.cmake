@@ -39,7 +39,7 @@ if( UPCXX_META_EXECUTABLE )
   string(REPLACE "\n" " " UPCXX_CPPFLAGS ${UPCXX_CPPFLAGS})
   string(REPLACE "\n" " " UPCXX_CXXFLAGS ${UPCXX_CXXFLAGS})
   string(REPLACE "\n" " " UPCXX_LDFLAGS ${UPCXX_LDFLAGS})
-  string(REPLACE "\n" " " UPCXX_CXX_COMPILER ${UPCXX_CXX_COMPILER})
+  string(REPLACE "\n" "" UPCXX_CXX_COMPILER ${UPCXX_CXX_COMPILER})
 
   string(STRIP ${UPCXX_LIBFLAGS} UPCXX_LIBFLAGS)
   string(STRIP ${UPCXX_CPPFLAGS} UPCXX_CPPFLAGS)
@@ -49,60 +49,43 @@ if( UPCXX_META_EXECUTABLE )
   
   list( APPEND UPCXX_LIBRARIES ${UPCXX_LIBFLAGS})
 
-  if(NOT ("${UPCXX_CXX_COMPILER}" STREQUAL "${CMAKE_CXX_COMPILER}"))
-    message(WARNING "UPCXX CXX compiler provided by upcxx-meta (${UPCXX_CXX_COMPILER}) is different from CMAKE_CXX_COMPILER (${CMAKE_CXX_COMPILER})")
-    message(WARNING "Checking compilers compatibility (ABI and compile features). USE AT YOUR OWN RISK.")
-    #check compiler's ABI compatibility
-    include(${CMAKE_ROOT}/Modules/CMakePushCheckState.cmake)
-    cmake_push_check_state(RESET)
-    set( PREV_CMAKE_CXX_SIZEOF_DATA_PTR ${CMAKE_CXX_SIZEOF_DATA_PTR})
-    set( PREV_CMAKE_CXX_COMPILER_ABI ${CMAKE_CXX_COMPILER_ABI} ) 
-    set( PREV_CMAKE_CXX_COMPILE_FEATURES ${CMAKE_CXX_COMPILE_FEATURES} ) 
-    set( PREV_CMAKE_CXX_LIBRARY_ARCHITECTURE ${CMAKE_CXX_LIBRARY_ARCHITECTURE})
-    set( PREV_CMAKE_CXX_COMPILER ${CMAKE_CXX_COMPILER})
-    unset(CMAKE_CXX_ABI_COMPILED)
+  find_program( ABS_UPCXX_CXX_PATH ${UPCXX_CXX_COMPILER} )
+  #get_filename_component(ABS_UPCXX_CXX_PATH ${UPCXX_CXX_COMPILER} REALPATH /)
+  if (NOT EXISTS "${ABS_UPCXX_CXX_PATH}")
+    message(WARNING "CANNOT FIND ABSOLUTE PATH TO UPCXX_CXX_COMPILER (${UPCXX_CXX_COMPILER})")
+    set(ABS_UPCXX_CXX_PATH "${UPCXX_CXX_COMPILER}")
+  endif()
+  get_filename_component(ABS_CMAKE_CXX_PATH ${CMAKE_CXX_COMPILER} REALPATH /)
+  message(STATUS "${ABS_UPCXX_CXX_PATH} vs ${ABS_CMAKE_CXX_PATH}")
 
-    set(CMAKE_CXX_COMPILER ${UPCXX_CXX_COMPILER})
-    
-    # Try to identify the ABI and configure it into CMakeCXXCompiler.cmake
-    include(${CMAKE_ROOT}/Modules/CMakeDetermineCompilerABI.cmake)
-    CMAKE_DETERMINE_COMPILER_ABI(CXX ${CMAKE_ROOT}/Modules/CMakeCXXCompilerABI.cpp)
-
-
-    if(NOT ("${CMAKE_CXX_SIZEOF_DATA_PTR}" STREQUAL "${PREV_CMAKE_CXX_SIZEOF_DATA_PTR}"
-     AND "${CMAKE_CXX_COMPILER_ABI}" STREQUAL "${PREV_CMAKE_CXX_COMPILER_ABI}"
-     AND "${CMAKE_CXX_LIBRARY_ARCHITECTURE}" STREQUAL "${PREV_CMAKE_CXX_LIBRARY_ARCHITECTURE}") ) 
-     message( FATAL_ERROR "UPCXX was built with ${UPCXX_CXX_COMPILER}, while CMAKE_CXX_COMPILER is"
-       " set to ${PREV_CMAKE_CXX_COMPILER}, and their ABIs are not compatible. Please use compatible/same compilers.")
-    endif()
-
-
-    # Try to identify the compiler features
-    include(${CMAKE_ROOT}/Modules/CMakeDetermineCompileFeatures.cmake)
-    CMAKE_DETERMINE_COMPILE_FEATURES(CXX)
-    
-    #compare the compile feature. CMAKE_CXX_COMPILER must have ALL the features that UPCXX_CXX_COMPILER has.
-    set(COMPILER_FEATURE_COMPATIBLE TRUE)
-    foreach( feature ${CMAKE_CXX_COMPILE_FEATURES} )
-      if( NOT ( "${feature}" IN_LIST PREV_CMAKE_CXX_COMPILE_FEATURES))
-        message(STATUS "Compile feature \"${feature}\" can't be found")
-        set(COMPILER_FEATURE_COMPATIBLE FALSE)
-        break()
+  set( UPCXX_COMPATIBLE_COMPILER FALSE)
+  if("${ABS_UPCXX_CXX_PATH}" STREQUAL "${ABS_CMAKE_CXX_PATH}")
+    set( UPCXX_COMPATIBLE_COMPILER TRUE)
+  else()
+    get_filename_component(UPCXX_CXX_NAME ${UPCXX_CXX_COMPILER} NAME)
+    get_filename_component(CMAKE_CXX_NAME ${CMAKE_CXX_COMPILER} NAME)
+    message(STATUS "${UPCXX_CXX_NAME} vs ${CMAKE_CXX_NAME}")
+    if("${UPCXX_CXX_NAME}" STREQUAL "${CMAKE_CXX_NAME}")
+      #compare the versions
+      execute_process( COMMAND ${UPCXX_CXX_COMPILER}  -dumpfullversion -dumpversion OUTPUT_VARIABLE UPCXX_CXX_COMPILER_VERSION)
+      string(REPLACE "\n" "" UPCXX_CXX_COMPILER_VERSION ${UPCXX_CXX_COMPILER_VERSION})
+      message(STATUS "${UPCXX_CXX_COMPILER_VERSION} vs ${CMAKE_CXX_COMPILER_VERSION}")
+      if("${UPCXX_CXX_COMPILER_VERSION}" STREQUAL "${CMAKE_CXX_COMPILER_VERSION}")
+        set( UPCXX_COMPATIBLE_COMPILER TRUE)
       endif()
-    endforeach()
-
-    if(NOT COMPILER_FEATURE_COMPATIBLE)
-      message(FATAL_ERROR "${UPCXX_CXX_COMPILER} and ${PREV_CMAKE_CXX_COMPILER} are not compile feature compatible")
     endif()
+  endif()
 
-    unset(COMPILER_FEATURE_COMPATIBLE) 
+  unset(ABS_UPCXX_CXX_PATH)
+  unset(ABS_CMAKE_CXX_PATH)
+  unset(UPCXX_CXX_NAME)
+  unset(CMAKE_CXX_NAME)
+  unset(UPCXX_CXX_COMPILER_VERSION)
 
-    set( CMAKE_CXX_SIZEOF_DATA_PTR ${PREV_CMAKE_CXX_SIZEOF_DATA_PTR})
-    set( CMAKE_CXX_COMPILER_ABI ${PREV_CMAKE_CXX_COMPILER_ABI} ) 
-    set( CMAKE_CXX_COMPILE_FEATURES ${PREV_CMAKE_CXX_COMPILE_FEATURES} ) 
-    set( CMAKE_CXX_LIBRARY_ARCHITECTURE ${PREV_CMAKE_CXX_LIBRARY_ARCHITECTURE})
-    set( CMAKE_CXX_COMPILER ${PREV_CMAKE_CXX_COMPILER})
-    cmake_pop_check_state()
+
+  if( NOT UPCXX_COMPATIBLE_COMPILER )
+    message(WARNING "UPCXX CXX compiler provided by upcxx-meta (${UPCXX_CXX_COMPILER}) is different from CMAKE_CXX_COMPILER (${CMAKE_CXX_COMPILER})")
+    message(WARNING "UPCXX cannot be used.")
   endif()
 
   #now separate include dirs from flags
@@ -156,21 +139,18 @@ if( UPCXX_META_EXECUTABLE )
   unset( UPCXX_OPTIMIZATION )
 endif()
 
-
-
-
 foreach( dir ${UPCXX_UPCXX_INCLUDE_DIRS} )
   if( EXISTS ${dir}/upcxx/upcxx.h )
     set( version_pattern 
       "^#define[\t ]+UPCXX_VERSION[\t ]+([0-9]+)$"
-    )
+      )
     file( STRINGS ${dir}/upcxx/upcxx.h upcxx_version
-          REGEX ${version_pattern} )
-    
+      REGEX ${version_pattern} )
+
     foreach( match ${upcxx_version} )
       set(UPCXX_VERSION_STRING ${CMAKE_MATCH_2})
     endforeach()
-    
+
     unset( upcxx_version )
     unset( version_pattern )
   endif()
@@ -181,14 +161,17 @@ if(UPCXX_VERSION_STRING)
 endif()
 
 # Determine if we've found UPCXX
-mark_as_advanced( UPCXX_FOUND UPCXX_META_EXECUTABLE UPCXX_INCLUDE_DIRS UPCXX_LIBRARIES UPCXX_DEFINITIONS UPCXX_CXX_STANDARD UPCXX_OPTIONS UPCXX_LINK_OPTIONS)
+mark_as_advanced( UPCXX_FOUND UPCXX_META_EXECUTABLE UPCXX_INCLUDE_DIRS
+                  UPCXX_LIBRARIES UPCXX_DEFINITIONS UPCXX_CXX_STANDARD
+                  UPCXX_OPTIONS UPCXX_LINK_OPTIONS UPCXX_COMPATIBLE_COMPILER)
 
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args( UPCXX
-  REQUIRED_VARS UPCXX_META_EXECUTABLE UPCXX_LIBRARIES UPCXX_INCLUDE_DIRS UPCXX_DEFINITIONS UPCXX_OPTIONS UPCXX_LINK_OPTIONS
+  REQUIRED_VARS UPCXX_META_EXECUTABLE UPCXX_LIBRARIES UPCXX_INCLUDE_DIRS
+                UPCXX_DEFINITIONS UPCXX_OPTIONS UPCXX_LINK_OPTIONS 
+                UPCXX_COMPATIBLE_COMPILER
   VERSION_VAR UPCXX_VERSION_STRING
-  HANDLE_COMPONENTS
-)
+  HANDLE_COMPONENTS)
 
 message(STATUS "UPC++ requires the c++${UPCXX_CXX_STANDARD} standard.")
 
@@ -203,6 +186,6 @@ if( UPCXX_FOUND AND NOT TARGET UPCXX::upcxx )
     INTERFACE_COMPILE_DEFINITIONS "${UPCXX_DEFINITIONS}" 
     INTERFACE_COMPILE_OPTIONS "${UPCXX_OPTIONS}" 
     INTERFACE_COMPILE_FEATURES    "cxx_std_${UPCXX_CXX_STANDARD}"
-  )
+    )
   set(UPCXX_LIBRARIES UPCXX::upcxx)
 endif()
