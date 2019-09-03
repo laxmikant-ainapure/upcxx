@@ -91,10 +91,13 @@ platform_sanity_checks() {
             ARCH_BAD=1
         fi
 
+        # absify compilers
+        CXX=`type -p ${CXX%% *}`${CXX/${CXX%% *}/}
+        CC=`type -p ${CC%% *}`${CC/${CC%% *}/}
         if test -z "$UPCXX_INSTALL_QUIET" ; then
-            type -p ${CXX%% *}
+            echo $CXX
             $CXX --version 2>&1 | grep -v 'warning #10315'
-            type -p ${CC%% *}
+            echo $CC
             $CC --version 2>&1 | grep -v 'warning #10315'
             echo " "
         fi
