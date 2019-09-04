@@ -152,7 +152,7 @@ New features/enhancements: (see specification and programmer's guide for full de
 
 Support has been added for the following compilers/platforms (for details, see 'System Requirements'):
 
-* PGI v19.1+ on Linux/x86_64
+* PGI v19.1+ on Linux/x86\_64
 * PGI v18.10+ on Linux/ppc64le
 * clang v5.0+ on Linux/ppc64le
 * PrgEnv/cray with CCE v9.0+ on the Cray XC
@@ -163,6 +163,8 @@ Support has been added for the following compilers/platforms (for details, see '
 
 Notable bug fixes:
 
+* issue #140: `upcxx::discharge()` does not discharge `remote_cx::as_rpc()`
+* issue #168: `upcxx::progress_required` always returns 0
 * issue #170: `team_id::when_here()` is unimplemented
 * issue #181: Library linkage failures when user compiles with a different -std=c++ level
 * issue #184: `bench/put_flood` crashes on opt/Linux
