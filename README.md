@@ -177,6 +177,7 @@ Notable bug fixes:
 * issue #243: Honor `$UPCXX_PYTHON` during install
 * issue #204: No support for `nvcc --compiler-bindir=...`
 * issue #260: `GASNET_CONFIGURE_ARGS` can break UPC++ build
+* issue #264: `upcxx-meta CXX` and `CC` are not full-path expanded
 
 The following features from the specification are not yet implemented:
 
