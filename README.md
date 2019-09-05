@@ -178,6 +178,7 @@ Notable bug fixes:
 * issue #204: No support for `nvcc --compiler-bindir=...`
 * issue #260: `GASNET_CONFIGURE_ARGS` can break UPC++ build
 * issue #264: `upcxx-meta CXX` and `CC` are not full-path expanded
+* spec issue #141: resolve empty transfer ambiguities (count=0 RMA)
 
 The following features from the specification are not yet implemented:
 
