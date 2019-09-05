@@ -159,7 +159,7 @@ int main() {
   
   //////////////////////////////////////////////////////////////////////////////
   
-  global_ptr<char> blob = upcxx::allocate<char, (2<<20)>(max_size);
+  global_ptr<char> blob = upcxx::allocate<char>(max_size, (2<<20));
   
   // ensure requested alignment
   UPCXX_ASSERT_ALWAYS(
