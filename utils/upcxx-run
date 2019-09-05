@@ -346,11 +346,10 @@ def main():
                     spawner_path = path + '/' + spawner
                     break
         if spawner_path:
-            vflag = []
             print_verbose('UPCXX_RUN: Found spawner "' + spawner_path + '"')
+            spawner = [ spawner_path ]
             if args.veryverbose:
-                vflag = ['-v']
-            cmd = [spawner_path] + vflag + cmd
+                spawner += ['-v']
         else:
             print_error_and_abort('Could not find spawner "' + spawner + '"')
 
@@ -403,6 +402,19 @@ def main():
 
     if args.backtrace:
         os.environ['GASNET_BACKTRACE'] = '1'
+
+    # issue #265: ensure automatic env propagation for UPCXX_* variables
+    if conduit not in ['udp', 'smp']:
+        env_list = []
+        for env_key in sorted(os.environ):
+            if env_key.startswith('UPCXX'):
+                env_list += [env_key]
+        if env_list:
+            spawner += ['-E', ','.join(env_list)]
+    
+    # prepend the spawn command, if any
+    if spawner:
+        cmd = spawner + cmd
 
     if args.verbose or args.show:
         print('UPCXX_RUN: Environment:')
