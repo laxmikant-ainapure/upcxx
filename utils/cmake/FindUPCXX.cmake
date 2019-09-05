@@ -49,12 +49,15 @@ if( UPCXX_META_EXECUTABLE )
   
   list( APPEND UPCXX_LIBRARIES ${UPCXX_LIBFLAGS})
 
+  #get absolute path, resolving symbolic links, of UPCXX_CXX_COMPILER
   find_program( ABS_UPCXX_CXX_PATH ${UPCXX_CXX_COMPILER} )
-  #get_filename_component(ABS_UPCXX_CXX_PATH ${UPCXX_CXX_COMPILER} REALPATH /)
+  get_filename_component(ABS_UPCXX_CXX_PATH ${ABS_UPCXX_CXX_PATH} REALPATH /)
   if (NOT EXISTS "${ABS_UPCXX_CXX_PATH}")
     message(WARNING "CANNOT FIND ABSOLUTE PATH TO UPCXX_CXX_COMPILER (${UPCXX_CXX_COMPILER})")
     set(ABS_UPCXX_CXX_PATH "${UPCXX_CXX_COMPILER}")
   endif()
+
+  #get absolute path, resolving symbolic links, of CMAKE_CXX_COMPILER
   get_filename_component(ABS_CMAKE_CXX_PATH ${CMAKE_CXX_COMPILER} REALPATH /)
   message(STATUS "${ABS_UPCXX_CXX_PATH} vs ${ABS_CMAKE_CXX_PATH}")
 
@@ -62,8 +65,8 @@ if( UPCXX_META_EXECUTABLE )
   if("${ABS_UPCXX_CXX_PATH}" STREQUAL "${ABS_CMAKE_CXX_PATH}")
     set( UPCXX_COMPATIBLE_COMPILER TRUE)
   else()
-    get_filename_component(UPCXX_CXX_NAME ${UPCXX_CXX_COMPILER} NAME)
-    get_filename_component(CMAKE_CXX_NAME ${CMAKE_CXX_COMPILER} NAME)
+    get_filename_component(UPCXX_CXX_NAME ${ABS_UPCXX_CXX_PATH} NAME)
+    get_filename_component(CMAKE_CXX_NAME ${ABS_CMAKE_CXX_PATH} NAME)
     message(STATUS "${UPCXX_CXX_NAME} vs ${CMAKE_CXX_NAME}")
     if("${UPCXX_CXX_NAME}" STREQUAL "${CMAKE_CXX_NAME}")
       #compare the versions
@@ -71,11 +74,16 @@ if( UPCXX_META_EXECUTABLE )
       string(REPLACE "\n" " " UPCXX_CXX_COMPILER_VERSION ${UPCXX_CXX_COMPILER_VERSION})
       execute_process( COMMAND ${CMAKE_CXX_COMPILER}  --version OUTPUT_VARIABLE LOC_CMAKE_CXX_COMPILER_VERSION)
       string(REPLACE "\n" " " LOC_CMAKE_CXX_COMPILER_VERSION ${LOC_CMAKE_CXX_COMPILER_VERSION})
-      message(STATUS "${UPCXX_CXX_COMPILER_VERSION} vs ${LOC_CMAKE_CXX_COMPILER_VERSION}")
+      #message(STATUS "${UPCXX_CXX_COMPILER_VERSION} vs ${LOC_CMAKE_CXX_COMPILER_VERSION}")
       if("${UPCXX_CXX_COMPILER_VERSION}" STREQUAL "${LOC_CMAKE_CXX_COMPILER_VERSION}")
         set( UPCXX_COMPATIBLE_COMPILER TRUE)
       endif()
     endif()
+  endif()
+
+  if( NOT UPCXX_COMPATIBLE_COMPILER )
+    message(WARNING "UPCXX CXX compiler provided by upcxx-meta (${UPCXX_CXX_COMPILER} -- ${ABS_UPCXX_CXX_PATH}) is different from CMAKE_CXX_COMPILER (${CMAKE_CXX_COMPILER} -- ${ABS_CMAKE_CXX_PATH})")
+    message(WARNING "UPCXX cannot be used.")
   endif()
 
   unset(ABS_UPCXX_CXX_PATH)
@@ -83,12 +91,6 @@ if( UPCXX_META_EXECUTABLE )
   unset(UPCXX_CXX_NAME)
   unset(CMAKE_CXX_NAME)
   unset(UPCXX_CXX_COMPILER_VERSION)
-
-
-  if( NOT UPCXX_COMPATIBLE_COMPILER )
-    message(WARNING "UPCXX CXX compiler provided by upcxx-meta (${UPCXX_CXX_COMPILER}) is different from CMAKE_CXX_COMPILER (${CMAKE_CXX_COMPILER})")
-    message(WARNING "UPCXX cannot be used.")
-  endif()
 
   #now separate include dirs from flags
   if(UPCXX_CPPFLAGS)
