@@ -163,6 +163,7 @@ New features/enhancements: (see specification and programmer's guide for full de
   UPC++ runtime (specifically rendezvous buffers) so that in the case of shread-heap
   exhaustion an informative assertion will fire. Also, fewer rendezvous buffers are
   now required by the runtime, thus alleviation some pressure on the shared-heap.
+* A CMake module for UPC++ is now installed. See 'Using UPC++ with CMake' 
 
 Support has been added for the following compilers/platforms (for details, see 'System Requirements'):
 
