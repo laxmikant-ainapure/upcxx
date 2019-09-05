@@ -218,6 +218,12 @@ EOF
   mkdir -p $docdir
   cp -f -R README.md LICENSE.txt docs $docdir
   chmod -R a+rX $docdir
+  # install cmake module
+  cmakedir="${install_to}/share/cmake/UPCXX"
+  mkdir -p $cmakedir
+  cp -f -R utils/cmake/FindUPCXX.cmake $cmakedir
+  cp -f -R utils/cmake/UPCXXConfig.cmake $cmakedir
+  chmod -R a+rX $cmakedir
 fi
 
 echo "UPC++ successfully installed"
