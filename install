@@ -223,7 +223,7 @@ EOF
   mkdir -p $cmakedir
   cp -f -R utils/cmake/FindUPCXX.cmake $cmakedir
   cp -f -R utils/cmake/UPCXXConfig.cmake $cmakedir
-  chmod -R a+r $cmakedir
+  chmod -R a+rX $cmakedir
 fi
 
 echo "UPC++ successfully installed"
