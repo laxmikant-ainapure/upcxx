@@ -121,11 +121,13 @@ To run a UPC++ correctness test, see [docs/testing.md](docs/testing.md)
 
 A UPCXX CMake module is provided in the installation directory. To use it
 in a CMake project, append the UPC++ installation directory to the
-**CMAKE_PREFIX_PATH** variable, then use `find_package(UPCXX)` in the
+`CMAKE_PREFIX_PATH` variable 
+(`cmake ... -DCMAKE_PREFIX_PATH=/path/to/upcxx/install/prefix ...`), 
+then use `find_package(UPCXX)` in the
 CMakeLists.txt file of the project.
 
 If it is able to find a compatible UPC++ installation, the CMake module
-will define a **UPCXX:upcxx target** (as well as a **UPCXX_LIBRARIES**
+will define a `UPCXX:upcxx target` (as well as a `UPCXX_LIBRARIES`
 variable for legacy projects) that can be added as dependency to
 your project.
 
