@@ -26,6 +26,26 @@ namespace upcxx {
       
       return pro;
     }
+
+    template<typename T, typename ...U>
+    T* registered_state(digest id, U &&...ctor_args) {
+      UPCXX_ASSERT(backend::master.active_with_caller());
+      
+      T *thing;
+      
+      // We use dist_master_registry to map from `dist_id<T>` to
+      // `promise<dist_object<T>&>*`
+      auto it_and_inserted = registry.insert({id, nullptr});
+      
+      if(it_and_inserted.second) {
+        thing = new T(std::forward<U>(ctor_args)...);
+        it_and_inserted.first->second = static_cast<void*>(thing);
+      }
+      else
+        thing = static_cast<T*>(it_and_inserted.first->second);
+      
+      return thing;
+    }
   }
   
   inline bool local_team_contains(intrank_t rank) {

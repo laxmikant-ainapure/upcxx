@@ -402,7 +402,7 @@ namespace upcxx {
       
       void operator()(T ...vals) {
         target_->lpc_ff(
-          std::bind(std::move(fn_), static_cast<T>(vals)...)
+          detail::lpc_bind<Fn,T...>(std::forward<Fn>(fn_), std::forward<T>(vals)...)
         );
         upcxx::current_persona().undischarged_n_ -= 1;
       }

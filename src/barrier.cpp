@@ -137,21 +137,16 @@ void upcxx::barrier(team &tm) {
   //std::atomic_thread_fence(std::memory_order_acquire);
 }
 
-template<>
-future<> upcxx::barrier_async<
-      completions<future_cx<operation_cx_event>>
-    >(
+void upcxx::detail::barrier_async_inject(
     team &tm,
-    completions<future_cx<operation_cx_event>> cxs_ignored
+    backend::gasnet::handle_cb *cb
   ) {
   UPCXX_ASSERT(backend::master.active_with_caller());
-  
+
   #if 1
-    // memory fencing is handled inside gex_Coll_BarrierNB + gex_Event_Test
-    //std::atomic_thread_fence(std::memory_order_release);
-    
     gex_Event_t e = gex_Coll_BarrierNB(backend::gasnet::handle_of(tm), 0);
-    return backend::gasnet::register_handle_as_future(e);
+    cb->handle = reinterpret_cast<std::uintptr_t>(e);
+    backend::gasnet::register_cb(cb);
   #else
     // do hand-rolled barrier
     digest id = tm.next_collective_id(detail::internal_only());
