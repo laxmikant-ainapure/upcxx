@@ -3,6 +3,7 @@
 
 #include <upcxx/diagnostic.hpp>
 #include <upcxx/intru_queue.hpp>
+#include <upcxx/utility.hpp>
 
 namespace upcxx {
   namespace detail {
@@ -27,7 +28,7 @@ namespace upcxx {
     struct lpc_impl_fn final: lpc_base {
       static void the_execute_and_delete(lpc_base *me) {
         auto *me1 = static_cast<lpc_impl_fn*>(me);
-        me1->fn_();
+        static_cast<Fn&&>(me1->fn_)();
         delete me1;
       }
       
@@ -36,7 +37,7 @@ namespace upcxx {
       Fn fn_;
       
       lpc_impl_fn(Fn fn):
-        fn_(std::forward<Fn>(fn)) {
+        fn_(static_cast<Fn&&>(fn)) {
         this->vtbl = &the_vtbl;
       }
     };
@@ -48,7 +49,45 @@ namespace upcxx {
     lpc_impl_fn<Fn>* make_lpc(Fn1 &&fn) {
       return new lpc_impl_fn<Fn>(std::forward<Fn1>(fn));
     }
-        
+
+    ////////////////////////////////////////////////////////////////////////////
+    
+    template<typename Fn, typename ...Arg>
+    struct lpc_bind {
+      Fn fn;
+      std::tuple<Arg...> arg;
+
+      template<typename Fn1, typename ...Arg1>
+      lpc_bind(Fn1 &&fn, Arg1 &&...arg):
+        fn(static_cast<Fn1&&>(fn)),
+        arg(static_cast<Arg1&&>(arg)...) {
+      }
+
+      template<int ...i>
+      void apply_rval(detail::index_sequence<i...>) {
+        static_cast<Fn&&>(this->fn)(
+          std::get<i>(static_cast<std::tuple<Arg...>&&>(this->arg))...
+        );
+      }
+      
+      void operator()() && {
+        this->apply_rval(detail::make_index_sequence<sizeof...(Arg)>());
+      }
+    };
+
+    template<typename Fn>
+    struct lpc_bind<Fn> {
+      Fn fn;
+
+      template<typename Fn1>
+      lpc_bind(Fn1 &&fn):
+        fn(static_cast<Fn1&&>(fn)) {
+      }
+
+      void operator()() && { static_cast<Fn&&>(fn)(); }
+    };
+
+    ////////////////////////////////////////////////////////////////////////////
     // This type is contained within `__thread` storage, so it must be:
     //   1. trivially destructible.
     //   2. constexpr constructible equivalent to zero-initialization.
