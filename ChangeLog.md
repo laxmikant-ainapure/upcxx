@@ -1,27 +1,32 @@
 ## ChangeLog
 
-### 2019.XX.XX: PENDING
+This is the ChangeLog for public releases of [UPC++](https://upcxx.lbl.gov).
+
+For information on using UPC++, see: [README.md](README.md)    
+For information on installing UPC++, see: [INSTALL.md](INSTALL.md)
+
+### 2019.09.14: Release 2019.9.0
 
 New features/enhancements: (see specification and programmer's guide for full details)
 
-* `atomic_domain<float>` and `atomic_domain<double>` are now implemented
-* New define `UPCXX_SPEC_VERSION` documents the implemented revision of the UPC++ specification
 * `upcxx` has several new convenience options (see `upcxx -help`)
+* `upcxx::rput(..., remote_cx::as_rpc(...))` has received an improved implementation
+  for non-shared-memory peers where the dependent rpc is injected immediately following
+  the put. This pipelining reduces latency and sensitivity to initiator attentiveness,
+  improving performance in most cases (for the exception, see issue #261).
+* Accounting measures have been added to track the shared-heap utilization of the
+  UPC++ runtime (specifically rendezvous buffers) so that in the case of shared-heap
+  exhaustion an informative assertion will fire. Also, fewer rendezvous buffers are
+  now required by the runtime, thus alleviating some pressure on the shared-heap.
+* Environment variable `UPCXX_OVERSUBSCRIBED` has been added to control runtime's
+  behavior of yielding to OS (`sched_yield()`) from calls to `upcxx::progress()`).
+  See [docs/oversubscription.md](docs/oversubscription.md).
 * Release tarball downloads now embed a copy of GASNet-EX that is used by default during install.
   Git clones of the repo will still default to downloading GASNet-EX during install.
   The `GASNET` envvar can still be set at install time to change the default behavior.
-* `upcxx::rput(..., remote_cx::as_rpc(...))` has received an improved implementation
-  for non-shared-memory peers where the dependent rpc is injected immediately following
-  the put. Previously, the rpc's injection was a chained operation awaiting completion
-  of the put. <<TODO?: mention performance regression>>
-* Environment variable `UPCXX_OVERSUBSCRIBED` has been added to control runtime's
-  behavior of yielding to OS (`sched_yield()`) from calls to `upcxx::progress()`.
-  See [docs/oversubscription.md](docs/oversubscription.md).
-* Accounting measures have been added to track the shared-heap utilization of the
-  UPC++ runtime (specifically rendezvous buffers) so that in the case of shread-heap
-  exhaustion an informative assertion will fire. Also, fewer rendezvous buffers are
-  now required by the runtime, thus alleviation some pressure on the shared-heap.
 * A CMake module for UPC++ is now installed. See 'Using UPC++ with CMake' 
+* `atomic_domain<float>` and `atomic_domain<double>` are now implemented
+* New define `UPCXX_SPEC_VERSION` documents the implemented revision of the UPC++ specification
 
 Support has been added for the following compilers/platforms (for details, see 'System Requirements'):
 
@@ -39,22 +44,24 @@ Notable bug fixes:
 * issue #140: `upcxx::discharge()` does not discharge `remote_cx::as_rpc()`
 * issue #168: `upcxx::progress_required` always returns 0
 * issue #170: `team_id::when_here()` is unimplemented
-* issue #181: Library linkage failures when user compiles with a different -std=c++ level
+* issue #181: Library linkage failures when user compiles with a different `-std=c++` level
 * issue #184: `bench/put_flood` crashes on opt/Linux
 * issue #210: `cuda_device::default_alignment()` not implemented
-* issue #203: strict aliasing violations in device\_allocator
+* issue #203: strict aliasing violations in `device_allocator`
 * issue #228: incorrect behavior for `upcxx -g -O`
-* issue #229: Teach upcxx wrapper to compile C language files
+* issue #229: Teach `upcxx` wrapper to compile C language files
 * issue #224: missing const qualifier on `dist_object<T>.fetch()`
 * issue #223: `operator<<(std::ostream, global_ptr<T>)` does not match spec
-* issue #234: Generalized operation completion for barrier_async and broadcast
+* issue #234: Generalized operation completion for `barrier_async` and `broadcast`
 * issue #243: Honor `$UPCXX_PYTHON` during install
 * issue #204: No support for `nvcc --compiler-bindir=...`
 * issue #260: `GASNET_CONFIGURE_ARGS` can break UPC++ build
 * issue #264: `upcxx-meta CXX` and `CC` are not full-path expanded
-* spec issue #141: resolve empty transfer ambiguities (count=0 RMA)
+* [spec issue #141](https://bitbucket.org/berkeleylab/upcxx-spec/issues/141): resolve empty transfer ambiguities (count=0 RMA)
 
-The following features from the specification are not yet implemented:
+This library release mostly conforms to the
+[UPC++ v1.0 Specification, Revision 2019.9.0](docs/spec.pdf).
+The following features from that specification are not yet implemented:
 
 * view buffer lifetime extension for `remote_cx::as_rpc` (issue #262)
 * User-defined Class Serialization interface (coming soon!)
@@ -82,9 +89,6 @@ Fixes the following notable bug in the GASNet library
 
 ### 2019.03.15: Release 2019.3.0
 
-This release of UPC++ v1.0 supports most of the functionality specified in the 
-[UPC++ 1.0 Draft 10 Specification](docs/spec.pdf).
-
 New features/enhancements: (see specification and programmer's guide for full details)
 
 * Prototype Memory Kinds support for CUDA-based NVIDIA GPUs, see [INSTALL.md](INSTALL.md).
@@ -98,13 +102,6 @@ New features/enhancements: (see specification and programmer's guide for full de
 * Barrier synchronization performance has been improved
 * Installer now defaults to more build parallelism, improving efficiency (see `UPCXX_MAKE`)
 
-The following features from the specification are not yet implemented:
-
-* `barrier_async()` and `broadcast()` only support default future-based completion (issue #234)
-* `atomic_domain<float>` and `atomic_domain<double>` are not yet implemented (issue #235)
-* `team_id::when_here()` is unimplemented (issue #170)
-* User-defined Class Serialization interface 
-
 Notable bug fixes:
 
 * issue #100: Fix shared heap setting propagation on loosely-coupled clusters
@@ -117,6 +114,15 @@ Notable bug fixes:
 * issue #202: Make `global_ptr::operator bool` conversion explicit 
 * issue #205: incorrect metadata handling in `~persona_scope()`
 
+This library release mostly conforms to the
+[UPC++ v1.0 Draft 10 Specification](https://bitbucket.org/berkeleylab/upcxx/downloads/upcxx-spec-V1.0-Draft10.pdf).
+The following features from that specification are not yet implemented:
+
+* `barrier_async()` and `broadcast()` only support default future-based completion (issue #234)
+* `atomic_domain<float>` and `atomic_domain<double>` are not yet implemented (issue #235)
+* `team_id::when_here()` is unimplemented (issue #170)
+* User-defined Class Serialization interface 
+
 Breaking changes:
 
 * envvar `UPCXX_SEGMENT_MB` has been renamed to `UPCXX_SHARED_HEAP_SIZE`.
@@ -126,9 +132,6 @@ Breaking changes:
 * The minimum-supported version of llvm/clang for Linux is now 4.0
 
 ### 2018.09.26: Release 2018.9.0
-
-This release of UPC++ v1.0 supports most of the functionality specified in the 
-[UPC++ 1.0 Draft 8 Specification](https://bitbucket.org/berkeleylab/upcxx/downloads/upcxx-spec-V1.0-Draft8.pdf).
 
 New features/enhancements: (see specification and programmer's guide for full details)
 
@@ -148,17 +151,19 @@ New features/enhancements: (see specification and programmer's guide for full de
 * UPC++ library now contains ident strings that can be used to query version info
   from a compiled executable, using the UNIX `ident` tool.
 
-The following features from the specification are not yet implemented:
+Notable bug fixes:
+
+* issue #49: stability and portability issues caused by C++ `thread_local`
+* issue #141: missing promise move assignment operator
+
+This library release mostly conforms to the
+[UPC++ v1.0 Draft 8 Specification](https://bitbucket.org/berkeleylab/upcxx/downloads/upcxx-spec-V1.0-Draft8.pdf).
+The following features from that specification are not yet implemented:
 
 * Non-Blocking collectives currently support only the default future-based completion
 * `atomic_domain<float>` and `atomic_domain<double>` are not yet implemented
 * `team_id::when_here()` is unimplemented
 * User-defined Serialization interface
-
-Notable bug fixes:
-
-* issue #49: stability and portability issues caused by C++ `thread_local`
-* issue #141: missing promise move assignment operator
 
 Breaking changes:
 
@@ -172,9 +177,6 @@ This is a re-release of version 2018.3.0 (see below) that corrects a packaging e
 
 ### 2018.03.31: Release 2018.3.0
 
-This release of UPC++ v1.0 supports most of the functionality specified in the 
-[UPC++ 1.0 Draft 6 Specification](https://bitbucket.org/berkeleylab/upcxx/downloads/upcxx-spec-V1.0-Draft6.pdf).
-
 New features/enhancements:
 
  * Non-Contiguous One-Sided RMA interface is now fully implemented.
@@ -187,7 +189,15 @@ New features/enhancements:
    implementation of teams to support `upcxx::world` and `upcxx::local_team`
    so clients may query their local neighborhood of ranks.
 
-The following features from the specification are not yet implemented:
+Notable bug fixes:
+
+ * issue #119: Build system is now more robust to GASNet-EX download failures.
+ * issue #125: Fix upcxx-run exit code handling.
+ * Minor improvements to upcxx-run and run-tests.
+
+This library release mostly conforms to the
+[UPC++ v1.0 Draft 6 Specification](https://bitbucket.org/berkeleylab/upcxx/downloads/upcxx-spec-V1.0-Draft6.pdf).
+The following features from that specification are not yet implemented:
 
  * Teams: `team::split`, `team_id`, collectives over teams, passing
        `team&` arguments to rpcs, constructing `dist_object` over teams.
@@ -195,20 +205,13 @@ The following features from the specification are not yet implemented:
  * `barrier_async`
  * User-defined Serialization interface
 
-Notable bug fixes:
-
- * issue 119: Build system is now more robust to GASNet-EX download failures.
- * issue 125: Fix upcxx-run exit code handling.
- * Minor improvements to upcxx-run and run-tests.
-
 This release is not yet performant, and may be unstable or buggy.
 
 Please report any problems in the [issue tracker](https://upcxx-bugs.lbl.gov).
 
 ### 2018.01.31: Release 2018.1.0 BETA
 
-This is a BETA preview release of UPC++ v1.0. This release supports most of the
-functionality specified in the [UPC++ 1.0 Draft 5 Specification](https://bitbucket.org/berkeleylab/upcxx/downloads/upcxx-spec-V1.0-Draft5.pdf).
+This is a BETA preview release of UPC++ v1.0. 
 
 New features/enhancements:
 
@@ -222,6 +225,8 @@ New features/enhancements:
  * Improvements to the `upcxx-run` command.
  * Improvements to internal assertion checking and diagnostics.
   
+This library release mostly conforms to the
+[UPC++ v1.0 Draft 5 Specification](https://bitbucket.org/berkeleylab/upcxx/downloads/upcxx-spec-V1.0-Draft5.pdf).
 The following features from that specification are not yet implemented:
 
  * Teams
@@ -235,9 +240,10 @@ This release is not performant, and may be unstable or buggy.
 
 ### 2017.09.30: Release 2017.9.0
 
-The initial public release of UPC++ v1.0. This release supports most of the
-functionality specified in the [UPC++ 1.0 Draft 4 Specification](https://bitbucket.org/berkeleylab/upcxx/downloads/upcxx-spec-V1.0-Draft4.pdf).
+The initial public release of UPC++ v1.0. 
 
+This library release mostly conforms to the
+[UPC++ v1.0 Draft 4 Specification](https://bitbucket.org/berkeleylab/upcxx/downloads/upcxx-spec-V1.0-Draft4.pdf).
 The following features from that specification are not yet implemented:
 
  * Continuation-based and Promise-based completion (use future completion for
