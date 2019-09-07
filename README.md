@@ -189,6 +189,7 @@ Notable bug fixes:
 * issue #229: Teach upcxx wrapper to compile C language files
 * issue #224: missing const qualifier on `dist_object<T>.fetch()`
 * issue #223: `operator<<(std::ostream, global_ptr<T>)` does not match spec
+* issue #234: Generalized operation completion for barrier_async and broadcast
 * issue #243: Honor `$UPCXX_PYTHON` during install
 * issue #204: No support for `nvcc --compiler-bindir=...`
 * issue #260: `GASNET_CONFIGURE_ARGS` can break UPC++ build
@@ -197,7 +198,6 @@ Notable bug fixes:
 
 The following features from the specification are not yet implemented:
 
-* `barrier_async()` and `broadcast()` only support default future-based completion (issue #234)
 * view buffer lifetime extension for `remote_cx::as_rpc` (issue #262)
 * User-defined Class Serialization interface (coming soon!)
 
