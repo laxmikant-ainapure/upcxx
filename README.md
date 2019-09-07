@@ -1,8 +1,9 @@
 # UPC\+\+: a PGAS library for C\+\+ #
 
-UPC++ is a parallel programming library for developing C++ applications with
-the Partitioned Global Address Space (PGAS) model.  UPC++ has three main
-objectives:
+[UPC++](https://upcxx.lbl.gov) is a parallel programming library for developing
+C++ applications with the Partitioned Global Address Space (PGAS) model.
+
+UPC++ has three main objectives:
 
 * Provide an object-oriented PGAS programming model in the context of the
   popular C++ language
@@ -15,56 +16,28 @@ objectives:
 * Offer an easy on-ramp to PGAS programming through interoperability with other
   existing parallel programming systems (e.g., MPI, OpenMP, CUDA)
 
-For a description of how to use UPC++, please refer to the
-[programmer's guide](docs/guide.pdf).
+# UPC++ Documentation
 
-## Installation
+The rest of this document provides basic information for command-line
+use of the UPC++ software implementation.
 
-For instructions on installing UPC++ and compiling programs, look at
-[INSTALL.md](INSTALL.md).
+Other topics are covered in the following documents:
 
-## Debugging
+* Installing the UPC++ software, see: [INSTALL.md](INSTALL.md)
+* Tutorial on programming with UPC++, see: [UPC++ Programmer's Guide](docs/guide.pdf)
+* Formal details on UPC++ semantics, see: [UPC++ Specification](docs/spec.pdf)
+* Running basic UPC++ correctness tests, see: [docs/testing.md](docs/testing.md)
+* Software change history of UPC++, see: [ChangeLog.md](ChangeLog.md)
+* Debugging UPC++ programs, see: [docs/debugging.md](docs/debugging.md)
+* Using UPC++ and MPI in the same program, see: [docs/hybrid.md](docs/hybrid.md).
+* Using UPC++ and UPC in the same program, see: [docs/upc-hybrid.md](docs/upc-hybrid.md).
+* Using UPC++ with oversubscribed cores, see: [docs/oversubscription.md](docs/oversubscription.md)
+* Implementation-defined behavior, see: [docs/implementation-defined.md](docs/implementation-defined.md) 
+* Copyright notice and licensing agreement, see: [LICENSE.txt](LICENSE.txt)
 
-For recommendations on debugging, see [docs/debugging.md](docs/debugging.md)
+To report problems or request features: [issue tracker](https://upcxx-bugs.lbl.gov).
 
-Please report any problems in the [issue tracker](https://upcxx-bugs.lbl.gov).
-
-## Testing
-
-To run a UPC++ correctness test, see [docs/testing.md](docs/testing.md)
-
-## Using UPC++ with other programming models
-
-**MPI**: For guidance on using UPC++ and MPI in the same application, see 
-[docs/hybrid.md](docs/hybrid.md).
-
-**UPC**: For guidance on using UPC++ and UPC in the same application, see 
-[docs/upc-hybrid.md](docs/upc-hybrid.md).
-
-## Using UPC++ with CMake
-
-A UPCXX CMake module is provided in the installation directory. To use it
-in a CMake project, append the UPC++ installation directory to the
-`CMAKE_PREFIX_PATH` variable 
-(`cmake ... -DCMAKE_PREFIX_PATH=/path/to/upcxx/install/prefix ...`), 
-then use `find_package(UPCXX)` in the
-CMakeLists.txt file of the project.
-
-If it is able to find a compatible UPC++ installation, the CMake module
-will define a `UPCXX:upcxx target` (as well as a `UPCXX_LIBRARIES`
-variable for legacy projects) that can be added as dependency to
-your project.
-
-## Implementation-defined behavior
-
-[docs/implementation-defined.md](docs/implementation-defined.md) documents 
-implementation-defined behaviors of this implementation.
-
-## Legal terms
-
-For copyright notice and licensing agreement, see [LICENSE.txt](LICENSE.txt)
-
-# Compiling Against UPC\+\+ on the Command Line #
+# Compiling Against UPC\+\+ on the Command Line
 
 With UPC\+\+ installed, the easiest way to build a UPC++ application from the
 command line is to use the `upcxx` compiler wrapper, installed in 
@@ -91,7 +64,7 @@ you'll need to pass the -network= or -threadmode= options, or set the
 `UPCXX_NETWORK` or `UPCXX_THREADMODE` variables prior to invoking compilation.
 See the `UPC++ Backends` section below.
 
-# Compiling Against UPC\+\+ in Makefiles #
+## Compiling Against UPC\+\+ in Makefiles
 
 The simplest way to build UPC++ programs from a Makefile is to use the 
 `upcxx` compiler wrapper documented in the section above to replace your
@@ -130,7 +103,21 @@ has code for running all the examples given in the programmer's guide. To use
 that `Makefile`, first set the `UPCXX_INSTALL` shell variable to the
 `<upcxx-install-path>`.
 
-## UPC\+\+ Backends ##
+## Using UPC++ with CMake
+
+A UPCXX CMake module is provided in the installation directory. To use it
+in a CMake project, append the UPC++ installation directory to the
+`CMAKE_PREFIX_PATH` variable 
+(`cmake ... -DCMAKE_PREFIX_PATH=/path/to/upcxx/install/prefix ...`), 
+then use `find_package(UPCXX)` in the
+CMakeLists.txt file of the project.
+
+If it is able to find a compatible UPC++ installation, the CMake module
+will define a `UPCXX:upcxx target` (as well as a `UPCXX_LIBRARIES`
+variable for legacy projects) that can be added as dependency to
+your project.
+
+## UPC\+\+ Backends
 
 UPC\+\+ provides multiple "backends" offering the user flexibility to choose the
 means by which the parallel communication facilities are implemented. Those
@@ -165,7 +152,7 @@ influence which backend `upcxx-meta` selects:
   assertions, and is annotated with the symbol tables needed by debuggers. The
   default value is always `O3`.
 
-# Running UPC\+\+ Programs #
+# Running UPC\+\+ Programs
 
 To run a parallel UPC\+\+ application, use the `upcxx-run` launcher provided in
 the installation.
@@ -187,3 +174,10 @@ to the run script, which takes a suffix of KB, MB or GB; e.g. to reserve 1GB per
 
 There are several additional options that can be passed to `upcxx-run`. Execute with `-h` to get a
 list of options. 
+
+--------------------------------------------------------------------------
+The canonical version of this document is located here:
+    https://upcxx.lbl.gov/wiki/README.md
+
+For more information, please visit the [UPC++ home page](https://upcxx.lbl.gov)
+
