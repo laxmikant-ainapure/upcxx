@@ -1,5 +1,9 @@
 # UPC\+\+ Installation #
 
+This file documents software installation of [UPC++](https://upcxx.lbl.gov).
+
+For information on using UPC++, see: [README.md](README.md)    
+
 ## System Requirements
 
 UPC++ makes aggressive use of template meta-programming techniques, and requires
@@ -13,7 +17,7 @@ The current release is known to work on the following configurations:
   Free Software Foundation GCC (e.g., as installed by Homebrew or Fink)
   version 6.4.0 or newer should also work (smp and udp conduits)
 
-* Linux/x86_64 with one of the following compilers:
+* Linux/x86\_64 with one of the following compilers:
     - Gnu g++ 6.4.0 or newer    
     - clang 4.0.0 or newer (with libstdc++ from gcc-6.4.0 or newer)    
     - Intel C++ 17.0.2 or newer (with libstdc++ from gcc-6.4.0 or newer)    
@@ -56,7 +60,7 @@ The current release is known to work on the following configurations:
     verbose linker output in this configuration.  Mixing with OpenMP in this
     configuration is not currently supported.  (smp and aries conduits).
 
-Linux Compiler Notes:
+### Linux Compiler Notes:
 
 * If /usr/bin/g++ is older than 6.4.0 (even if using a different C++
   compiler for UPC++) please read [docs/local-gcc.md](docs/local-gcc.md).
@@ -64,7 +68,7 @@ Linux Compiler Notes:
 * If using a non-GNU compiler with /usr/bin/g++ older than 6.4.0, please also
   read [docs/alt-compilers.md](docs/alt-compilers.md).
 
-Miscellaneous software requirements:
+### Miscellaneous software requirements:
 
 * Python2 version 2.7.5 or newer
 
@@ -104,7 +108,7 @@ installation fails and you suspect it has to do with the Python version, try
 setting the `UPCXX_PYTHON` environment variable to refer to your system's name
 for Python 2.7 (e.g. `python2.7`, or `python2`).
 
-**Installation: Linux**
+### Installation: Linux
 
 The installation command above will work as is. The default compilers used will
 be gcc/g++. The `CC` and `CXX` environment variables can be set to alternatives
@@ -112,7 +116,7 @@ to override this behavior. Additional environment variables allowing finer
 control over how UPC\+\+ is configured can be found in the
 "Advanced Installer Configuration" section below.
 
-**Installation: Apple macOS**
+### Installation: Apple macOS
 
 On macOS, UPC++ defaults to using the Apple LLVM clang compiler that is part
 of the Xcode Command Line Tools.
@@ -127,7 +131,7 @@ xcode-select --install
 Alternatively, the `CC` and `CXX` environment variables can be set to an alternative
 compiler installation for a supported compiler before running `./install`.
 
-**Installation: Cray XC**
+### Installation: Cray XC
 
 To run on the compute nodes of a Cray XC, the `CROSS` environment variable needs
 to be set before the install command is invoked,
@@ -155,7 +159,7 @@ Currently only Intel-based Cray XC systems have been tested, including Xeon
 and Xeon Phi (aka "KNL").  Note that UPC++ has not yet been tested on an
 ARM-based Cray XC.
 
-**Installation: CUDA GPU support**
+### Installation: CUDA GPU support
 
 UPC++ now includes *prototype* support for communication operations on memory buffers
 resident in a CUDA-compatible NVIDIA GPU. 
@@ -209,7 +213,7 @@ UPC++ CUDA operation can be validated using the following programs in the source
 See the "Memory Kinds" section in the _UPC++ Programmer's Guide_ for more details on 
 using the CUDA support.
 
-## Advanced Installer Configuration ##
+## Advanced Installer Configuration
 
 The installer script tries to pick a sensible default behavior for the platform
 it is running on, but the install can be customized using the following
