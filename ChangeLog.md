@@ -59,6 +59,7 @@ Notable bug fixes:
 * issue #260: `GASNET_CONFIGURE_ARGS` can break UPC++ build
 * issue #264: `upcxx-meta CXX` and `CC` are not full-path expanded
 * [spec issue #141](https://bitbucket.org/berkeleylab/upcxx-spec/issues/141): resolve empty transfer ambiguities (count=0 RMA)
+* issue #268: Completion handlers can't accept `&&` references
 
 This library release mostly conforms to the
 [UPC++ v1.0 Specification, Revision 2019.9.0](docs/spec.pdf).
