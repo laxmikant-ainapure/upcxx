@@ -1,5 +1,87 @@
 # UPC\+\+ Installation #
 
+This file documents software installation of [UPC++](https://upcxx.lbl.gov).
+
+For information on using UPC++, see: [README.md](README.md)    
+
+## System Requirements
+
+UPC++ makes aggressive use of template meta-programming techniques, and requires
+a modern C++11/14 compiler and corresponding STL implementation.
+
+The current release is known to work on the following configurations:
+
+* macOS 10.11-10.14 (El Capitan, Sierra, High Sierra, or Mojave)
+  with the most recent Xcode releases for each, though it is
+  suspected that any Xcode (ie Apple clang) release 8.0 or newer will work. 
+  Free Software Foundation GCC (e.g., as installed by Homebrew or Fink)
+  version 6.4.0 or newer should also work (smp and udp conduits)
+
+* Linux/x86\_64 with one of the following compilers:
+    - Gnu g++ 6.4.0 or newer    
+    - clang 4.0.0 or newer (with libstdc++ from gcc-6.4.0 or newer)    
+    - Intel C++ 17.0.2 or newer (with libstdc++ from gcc-6.4.0 or newer)    
+    - PGI C++ 19.1 or newer (with libstdc++ from gcc-6.4.0 or newer)    
+
+    See "Linux Compiler Notes", below, if `/usr/bin/g++` is older than 6.4.0.
+
+* Linux/ppc64le with one of the following compilers:
+    - gcc-6.4.0 or newer
+    - clang 5.0.0 or newer (with libstdc++ from gcc-6.4.0 or newer)    
+    - PGI C++ 18.10 or newer (with libstdc++ from gcc-6.4.0 or newer)    
+
+    See "Linux Compiler Notes", below, if `/usr/bin/g++` is older than 6.4.0.
+
+* Linux/aarch64 (aka "arm64" or "armv8") with one of the following compilers:
+    - gcc-6.4.0 or newer
+    - clang 4.0.0 or newer (with libstdc++ from gcc-6.4.0 or newer)   
+
+    See "Linux Compiler Notes", below, if `/usr/bin/g++` is older than 6.4.0.
+
+    Note that gcc- and clang-based toolchains from Arm Ltd. exist, but have
+    not been tested with UPC++.
+
+    Support for InfiniBand on Linux/aarch64 should be considered experimental.
+    For more information, please see
+    [GASNet bug 3997](https://upc-bugs.lbl.gov/bugzilla/show_bug.cgi?id=3997).
+
+* Cray XC x86\_64 with one of the following PrgEnv environment modules and
+  its dependencies.  (smp and aries conduits)
+    - PrgEnv-gnu with gcc/6.4.0 (or later) loaded.
+    - PrgEnv-intel with gcc/6.4.0 (or later) loaded.
+    - PrgEnv-cray with cce/9.0.0 (or later) loaded.
+      Note that does not include support for "cce/9.x.y-classic".
+
+    ALCF's PrgEnv-llvm is also supported on the Cray XC.  Unlike Cray's
+    PrgEnv-\* modules, PrgEnv-llvm is versioned to match the llvm toolchain
+    it includes, rather than the Cray PE version.  UPC++ has been tested
+    against PrgEnv-llvm/4.0 (clang 4.0) and newer.  When using PrgEnv-llvm,
+    it is recommended to `module unload xalt` to avoid a large volume of
+    verbose linker output in this configuration.  Mixing with OpenMP in this
+    configuration is not currently supported.  (smp and aries conduits).
+
+### Linux Compiler Notes:
+
+* If /usr/bin/g++ is older than 6.4.0 (even if using a different C++
+  compiler for UPC++) please read [docs/local-gcc.md](docs/local-gcc.md).
+
+* If using a non-GNU compiler with /usr/bin/g++ older than 6.4.0, please also
+  read [docs/alt-compilers.md](docs/alt-compilers.md).
+
+### Miscellaneous software requirements:
+
+* Python2 version 2.7.5 or newer
+
+* Perl version 5.005 or newer
+
+* GNU Bash (must be installed, user's shell doesn't matter)
+
+* Make (we recommend GNU make version 3.79 or newer).
+
+* The following standard Unix tools: 'awk', 'sed', 'env', 'basename', 'dirname'
+
+## Installation Instructions
+
 The general recipe for building and installing UPC\+\+ is to run the `install`
 script found in the top-level (upcxx) source directory:
 
@@ -26,7 +108,7 @@ installation fails and you suspect it has to do with the Python version, try
 setting the `UPCXX_PYTHON` environment variable to refer to your system's name
 for Python 2.7 (e.g. `python2.7`, or `python2`).
 
-**Installation: Linux**
+### Installation: Linux
 
 The installation command above will work as is. The default compilers used will
 be gcc/g++. The `CC` and `CXX` environment variables can be set to alternatives
@@ -34,7 +116,14 @@ to override this behavior. Additional environment variables allowing finer
 control over how UPC\+\+ is configured can be found in the
 "Advanced Installer Configuration" section below.
 
-**Installation: Apple macOS**
+By default ibv-conduit (InfiniBand support) will use MPI for job spawning if a
+working `mpicc` is found at installation time.  When this occurs, `CXX=mpicxx`
+(or similar) is required at install time to ensure correct linkage of
+ibv-conduit executables.  Alternatively, one may include `--disable-mpi-compat`
+in the value of `GASNET_CONFIGURE_ARGS` to exclude support for MPI as a job
+spawner.
+
+### Installation: Apple macOS
 
 On macOS, UPC++ defaults to using the Apple LLVM clang compiler that is part
 of the Xcode Command Line Tools.
@@ -49,20 +138,30 @@ xcode-select --install
 Alternatively, the `CC` and `CXX` environment variables can be set to an alternative
 compiler installation for a supported compiler before running `./install`.
 
-**Installation: Cray XC**
+At the time of writing, UPC++ has beed tested with Beta 7 of macOS 10.15
+"Catalina", and there are no known platform-specific issues.
+
+At the time of writing, UPC++ has been tested with Beta 7 of Xcode 11, and
+there are no known compiler-specific issues on either macOS 10.14 "Mojave" or on
+Beta 7 of macOS 10.15 "Catalina".
+
+### Installation: Cray XC
 
 To run on the compute nodes of a Cray XC, the `CROSS` environment variable needs
-to be set before the install command is invoked,
-i.e. `CROSS=cray-aries-slurm`.
+to be set before the install command is invoked. Use the appropriate value for
+your supercomputer installation:
 
-When Intel compilers are being
-used (usually the default for these systems), a gcc environment module (6.4.0
-or newer) is also required, and may need to be explicitly loaded, e.g.:
+* `CROSS=cray-aries-slurm`: Cray XC systems using the SLURM job scheduler (srun)
+* `CROSS=cray-aries-alps`: Cray XC systems using the Cray ALPS job scheduler (aprun)
+
+When Intel compilers are being used (usually the default for these systems), 
+a gcc environment module (6.4.0 or newer) is also required, and may need to be
+explicitly loaded, e.g.:
 
 ```bash
 module load gcc/7.1.0
 cd <upcxx-source-path>
-CROSS=cray-aries-slurm ./install <upcxx-install-path>
+env CROSS=cray-aries-slurm ./install <upcxx-install-path>
 ```
 
 If using PrgEnv-cray, then version 9.0 or newer of the Cray compilers is
@@ -77,7 +176,7 @@ Currently only Intel-based Cray XC systems have been tested, including Xeon
 and Xeon Phi (aka "KNL").  Note that UPC++ has not yet been tested on an
 ARM-based Cray XC.
 
-**Installation: CUDA GPU support**
+### Installation: CUDA GPU support
 
 UPC++ now includes *prototype* support for communication operations on memory buffers
 resident in a CUDA-compatible NVIDIA GPU. 
@@ -131,7 +230,7 @@ UPC++ CUDA operation can be validated using the following programs in the source
 See the "Memory Kinds" section in the _UPC++ Programmer's Guide_ for more details on 
 using the CUDA support.
 
-## Advanced Installer Configuration ##
+## Advanced Installer Configuration
 
 The installer script tries to pick a sensible default behavior for the platform
 it is running on, but the install can be customized using the following
@@ -148,139 +247,9 @@ environment variables:
 * `GASNET_CONFIGURE_ARGS`: List of additional command line arguments passed to
   GASNet's configure phase.
 * `UPCXX_PYTHON`: Python2 interpreter to use.
-* `UPCXX_MAKE`: GNU Make command for make steps in the installation (e.g. building
+* `UPCXX_MAKE`: Make command for make steps in the installation (e.g. building
   the GASNet-EX library). Defaults to `make -j 8` for parallel make.  To disable
   parallel make, set `UPCXX_MAKE=make`.
-* `UPCXX_NOBS_THREADS`: Number of tasks to used for nobs-based compilation of the runtime.
+* `UPCXX_NOBS_THREADS`: Number of tasks to used for non-make installation steps.
   Defaults to autodetected CPU count, set `UPCXX_NOBS_THREADS=1` for serial compilation.
 
-By default ibv-conduit (InfiniBand support) will use MPI for job spawning if a
-working `mpicc` is found at installation time.  When this occurs, `CXX=mpicxx`
-(or similar) is recommended at install time to ensure correct linkage of
-ibv-conduit executables.  Alternatively, one may include `--disable-mpi-compat`
-in the value of `GASNET_CONFIGURE_ARGS` to exclude support for MPI as a job
-spawner.
-
-# Compiling Against UPC\+\+ on the Command Line #
-
-With UPC\+\+ installed, the easiest way to build a UPC++ application from the
-command line is to use the `upcxx` compiler wrapper, installed in 
-`<upcxx-install-path>/bin/upcxx`. This arguments to this wrapper work
-just like the C++ compiler used to install UPC++ (analogous to the
-`mpicxx` compiler wrapper often provided for MPI/C++ programs).
-
-For example, to build an application consisting of `my-app1.cpp` and
-`my-app2.cpp`:
-
-```bash
-export PATH="<upcxx-install-path>/bin/:$PATH"
-upcxx -O -c my-app1.cpp my-app2.cpp
-upcxx -O -o my-app my-app1.o my-app2.o -lm
-```
-
-Be sure that all commands used to build one executable consistently pass either
-a -O option to select the optimized/production version of UPC++ (for
-performance runs), or a -g option to select the debugging version of UPC++
-(for tracking down bugs in your application).
-
-To select a non-default network backend or thread-safe version of the library, 
-you'll need to pass the -network= or -threadmode= options, or set the
-`UPCXX_NETWORK` or `UPCXX_THREADMODE` variables prior to invoking compilation.
-See the `UPC++ Backends` section below.
-
-# Compiling Against UPC\+\+ in Makefiles #
-
-The simplest way to build UPC++ programs from a Makefile is to use the 
-`upcxx` compiler wrapper documented in the section above to replace your
-normal C++ compiler command.
-
-If your Makefile structure prevents this and/or requires extraction of the 
-underlying compiler flags to build against UPC++, your build process can 
-query this information by invoking the
-`<upcxx-install-path>/bin/upcxx-meta <what>` script, where `<what>` indicates
-which form of flags are desired. Valid values are:
-
-* `CXX`: The C++ compiler used to install UPC++, which must also be used for
-  building application code.
-* `CPPFLAGS`: Preprocessor flags which will put the upcxx headers in the
-  compiler's search path and define macros required by those headers.
-* `CXXFLAGS`: Compiler flags which set debug/optimization settings, and
-  set the minimum C++ language level required by the UPC++ headers.
-* `LDFLAGS`: Linker flags usually belonging at the front of the link command
-  line (before the list of object files).
-* `LIBS`: Linker flags belonging at the end of the link command line. These
-  will make libupcxx and its dependencies available to the linker.
-
-For example, to build an application consisting of `my-app1.cpp` and
-`my-app2.cpp` using extracted arguments:
-
-```bash
-meta="<upcxx-install-path>/bin/upcxx-meta"
-$($meta CXX) $($meta CPPFLAGS) $($meta CXXFLAGS) -c my-app1.cpp
-$($meta CXX) $($meta CPPFLAGS) $($meta CXXFLAGS) -c my-app2.cpp
-$($meta CXX) $($meta LDFLAGS) my-app1.o my-app2.o $($meta LIBS)
-```
-
-For an example of a Makefile which builds UPC++ applications, look at
-[example/prog-guide/Makefile](example/prog-guide/Makefile). This directory also
-has code for running all the examples given in the programmer's guide. To use
-that `Makefile`, first set the `UPCXX_INSTALL` shell variable to the
-`<upcxx-install-path>`.
-
-## UPC\+\+ Backends ##
-
-UPC\+\+ provides multiple "backends" offering the user flexibility to choose the
-means by which the parallel communication facilities are implemented. Those
-backends are characterized by three dimensions: conduit, thread-mode, and
-code-mode. The conduit and thread-mode parameters map directly to the GASNet
-concepts of the same name (for more explanation, see below). Code-mode selects
-between highly optimized code and highly debuggable code. The `upcxx-meta`
-script will assume sensible defaults for these parameters based on the
-installation configuration. The following environment variables can be set to
-influence which backend `upcxx-meta` selects:
-
-* `UPCXX_NETWORK=[aries|ibv|smp|udp|mpi]`: The GASNet network backend to use
-  for communication (the default and available values are system-dependent):
-    * `aries` is the high-performance Cray XC network.
-    * `ibv` is the high-performance InfiniBand network.
-    * `smp` is the high-performance choice for single-node multi-core runs.
-    * `udp` is a portable low-performance alternative for testing and debugging.
-    * `mpi` is a portable low-performance alternative for testing and debugging. 
-
-* `UPCXX_THREADMODE=[seq|par]`: The value `seq` limits the application to only
-  calling "communicating" upcxx routines from the thread that invoked
-  `upcxx::init`, and only while that thread is holding the master persona. The
-  benefit is that `seq` can be synchronization free in much of its internals. A
-  thread-mode value of `par` allows any thread in the process to issue
-  communication as allowed by the specification, allowing for greater injection
-  concurrency from a multi-threaded application but at the expensive of greater
-  internal synchronization (higher overheads per operation).  The default value
-  is always `seq`.
-  
-* `UPCXX_CODEMODE=[O3|debug]`: `O3` is for highly compiler-optimized
-  code. `debug` produces unoptimized code, includes extra error checking
-  assertions, and is annotated with the symbol tables needed by debuggers. The
-  default value is always `O3`.
-
-# Running UPC\+\+ Programs #
-
-To run a parallel UPC\+\+ application, use the `upcxx-run` launcher provided in
-the installation.
-
-```bash
-<upcxx-install-path>/bin/upcxx-run -n <ranks> <exe> <args...>
-```
-
-This will run the executable and arguments `<exe> <args...>` in a parallel
-context with `<ranks>` number of UPC\+\+ ranks.
-
-Upon startup, each UPC\+\+ rank creates a fixed-size shared memory heap that will never grow. By
-default, this heap is 128 MB per rank. This can be adjust by passing a `-shared-heap` parameter
-to the run script, which takes a suffix of KB, MB or GB; e.g. to reserve 1GB per rank, call:
-
-```bash
-<upcxx-install-path>/bin/upcxx-run -shared-heap 1G -n <ranks> <exe> <args...>
-```
-
-There are several additional options that can be passed to `upcxx-run`. Execute with `-h` to get a
-list of options. 

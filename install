@@ -216,7 +216,7 @@ EOF
   # install documentation
   docdir="${install_to}/share/doc/upcxx"
   mkdir -p $docdir
-  cp -f -R README.md LICENSE.txt docs $docdir
+  cp -f -R README.md ChangeLog.md LICENSE.txt docs $docdir
   chmod -R a+rX $docdir
   # install cmake module
   cmakedir="${install_to}/share/cmake/UPCXX"
