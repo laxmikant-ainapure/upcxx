@@ -29,7 +29,7 @@ Other topics are covered in the following documents:
 * Running basic UPC++ correctness tests, see: [docs/testing.md](docs/testing.md)
 * Software change history of UPC++, see: [ChangeLog.md](ChangeLog.md)
 * Debugging UPC++ programs, see: [docs/debugging.md](docs/debugging.md)
-* Using UPC++ and MPI in the same program, see: [docs/hybrid.md](docs/hybrid.md).
+* Using UPC++ and MPI in the same program, see: [docs/mpi-hybrid.md](docs/mpi-hybrid.md).
 * Using UPC++ and UPC in the same program, see: [docs/upc-hybrid.md](docs/upc-hybrid.md).
 * Using UPC++ with oversubscribed cores, see: [docs/oversubscription.md](docs/oversubscription.md)
 * Implementation-defined behavior, see: [docs/implementation-defined.md](docs/implementation-defined.md) 
