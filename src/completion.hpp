@@ -270,7 +270,10 @@ namespace upcxx {
   // is triggered. For future_cx's this holds a promise instance which
   // seeds the future given back to the user. All other cx actions get
   // their information stored as-is. All of these expose `operator()(T...)`
-  // which is used to "fire" the action  safely from any progress context.
+  // which is used to "fire" the action safely from any progress context.
+  // Notice that the args are taken as by-value T..., this ensures they each
+  // make get their own private copy, which they should then move into the
+  // users callable or promise etc.
   
   namespace detail {
     template<typename Cx /* the action */,
@@ -304,7 +307,7 @@ namespace upcxx {
       }
       
       void operator()(T ...vals) {
-        backend::fulfill_during<level>(std::move(pro_), std::tuple<T...>(std::forward<T>(vals)...));
+        backend::fulfill_during<level>(std::move(pro_), std::tuple<T...>(static_cast<T&&>(vals)...));
       }
     };
 
@@ -323,14 +326,14 @@ namespace upcxx {
         return detail::make_lpc_dormant(
           upcxx::current_persona(), progress_level::user,
           [=](T &&...results) {
-            backend::fulfill_during<progress_level::user>(*pro, std::tuple<T...>(std::move(results)...));
+            backend::fulfill_during<progress_level::user>(*pro, std::tuple<T...>(static_cast<T&&>(results)...));
           },
           tail
         );
       }
       
       void operator()(T ...vals) {
-        backend::fulfill_during<progress_level::user>(pro_, std::tuple<T...>(std::forward<T>(vals)...));
+        backend::fulfill_during<progress_level::user>(pro_, std::tuple<T...>(static_cast<T&&>(vals)...));
       }
     };
     // event is empty
@@ -391,7 +394,7 @@ namespace upcxx {
       
       cx_state(lpc_cx<Event,Fn> &&cx):
         target_(cx.target_),
-        fn_(std::move(cx.fn_)) {
+        fn_(static_cast<Fn&&>(cx.fn_)) {
         upcxx::current_persona().undischarged_n_ += 1;
       }
 
@@ -402,7 +405,7 @@ namespace upcxx {
       
       void operator()(T ...vals) {
         target_->lpc_ff(
-          detail::lpc_bind<Fn,T...>(std::forward<Fn>(fn_), std::forward<T>(vals)...)
+          detail::lpc_bind<Fn,T...>(static_cast<Fn&&>(fn_), static_cast<T&&>(vals)...)
         );
         upcxx::current_persona().undischarged_n_ -= 1;
       }
@@ -413,12 +416,12 @@ namespace upcxx {
       Fn fn_;
       
       cx_state(rpc_cx<Event,Fn> &&cx):
-        fn_{std::move(cx.fn_)} {
+        fn_(static_cast<Fn&&>(cx.fn_)) {
       }
       
-      typename std::result_of<Fn&&(T...)>::type
+      typename std::result_of<Fn&&(T&&...)>::type
       operator()(T ...vals) {
-        return std::move(fn_)(static_cast<T>(vals)...);
+        return static_cast<Fn&&>(fn_)(static_cast<T&&>(vals)...);
       }
     };
   }
