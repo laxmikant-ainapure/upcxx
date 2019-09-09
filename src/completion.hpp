@@ -439,10 +439,14 @@ namespace upcxx {
   // (as future) which types the values reported by the completed
   // action. `operator()` will expect that the runtime values it receives
   // match the types reported by this map for the given event.
+  //
+  // ordinal: indexes the nesting depth of this type so that base classes
+  // with identical types can be disambiguated.
   namespace detail {
     template<template<typename> class EventPredicate,
              typename EventValues,
-             typename Cxs>
+             typename Cxs,
+             int ordinal=0> 
     struct completions_state /*{
       using completions_t = Cxs;
 
@@ -456,9 +460,10 @@ namespace upcxx {
     }*/;
     
     template<template<typename> class EventPredicate,
-             typename EventValues>
+             typename EventValues,
+             int ordinal>
     struct completions_state<EventPredicate, EventValues,
-                             completions<>> {
+                             completions<>, ordinal> {
 
       using completions_t = completions<>;
       static constexpr bool empty = true;
@@ -488,13 +493,12 @@ namespace upcxx {
       }
     };
 
-    template<bool event_selected, typename EventValues, typename Cx>
+    template<bool event_selected, typename EventValues, typename Cx, int ordinal>
     struct completions_state_head;
     
-    template<typename EventValues,
-             typename Cx>
+    template<typename EventValues, typename Cx, int ordinal>
     struct completions_state_head<
-        /*event_enabled=*/false, EventValues, Cx
+        /*event_enabled=*/false, EventValues, Cx, ordinal
       > {
       static constexpr bool empty = true;
 
@@ -507,9 +511,9 @@ namespace upcxx {
     template<typename Cx>
     using cx_event_t = typename Cx::event_t;
 
-    template<typename EventValues, typename Cx>
+    template<typename EventValues, typename Cx, int ordinal>
     struct completions_state_head<
-        /*event_enabled=*/true, EventValues, Cx
+        /*event_enabled=*/true, EventValues, Cx, ordinal
       > {
       static constexpr bool empty = false;
 
@@ -563,24 +567,26 @@ namespace upcxx {
     };
     
     template<template<typename> class EventPredicate,
-             typename EventValues, typename CxH, typename ...CxT>
+             typename EventValues, typename CxH, typename ...CxT,
+             int ordinal>
     struct completions_state<EventPredicate, EventValues,
-                             completions<CxH,CxT...>>:
+                             completions<CxH,CxT...>, ordinal>:
         // head base class
         completions_state_head<EventPredicate<typename CxH::event_t>::value,
-                               EventValues, CxH>,
-        // tail base class
+                               EventValues, CxH, ordinal>,
+        // Tail base class. Incrementing the ordinal is essential so that the
+        // head bases of this tail base are disambiguated from our head.
         completions_state<EventPredicate, EventValues,
-                          completions<CxT...>> {
+                          completions<CxT...>, ordinal+1> {
 
       using completions_t = completions<CxH, CxT...>;
       
       using head_t = completions_state_head<
           /*event_enabled=*/EventPredicate<typename CxH::event_t>::value,
-          EventValues, CxH
+          EventValues, CxH, ordinal
         >;
       using tail_t = completions_state<EventPredicate, EventValues,
-                                       completions<CxT...>>;
+                                       completions<CxT...>, ordinal+1>;
 
       static constexpr bool empty = head_t::empty && tail_t::empty;
       
@@ -602,9 +608,16 @@ namespace upcxx {
       template<typename Event, typename ...V>
       void operator()(V &&...vals) {
         // fire the head element
-        head_t::template operator()<Event>(std::forward<V>(vals)...);
+        head_t::template operator()<Event>(
+          static_cast<
+              // An empty tail means we are the lucky one who gets the
+              // opportunity to move-out the given values (if caller supplied
+              // reference type permits, thank you reference collapsing).
+              typename std::conditional<tail_t::empty, V&&, V const&>::type
+            >(vals)...
+        );
         // recurse to fire remaining elements
-        tail_t::template operator()<Event>(std::forward<V>(vals)...);
+        tail_t::template operator()<Event>(static_cast<V&&>(vals)...);
       }
 
       template<typename Event>
@@ -640,13 +653,13 @@ namespace upcxx {
   //////////////////////////////////////////////////////////////////////
   // Serialization of a completions_state of rpc_cx's
   
-  template<typename EventValues, typename Event, typename Fn>
+  template<typename EventValues, typename Event, typename Fn, int ordinal>
   struct serialization<
       detail::completions_state_head<
-        /*event_enabled=*/true, EventValues, rpc_cx<Event,Fn>
+        /*event_enabled=*/true, EventValues, rpc_cx<Event,Fn>, ordinal
       >
     > {
-    using type = detail::completions_state_head<true, EventValues, rpc_cx<Event,Fn>>;
+    using type = detail::completions_state_head<true, EventValues, rpc_cx<Event,Fn>, ordinal>;
 
     static constexpr bool is_definitely_serializable = serialization_traits<Fn>::is_definitely_serializable;
     
@@ -665,7 +678,8 @@ namespace upcxx {
 
     using deserialized_type = detail::completions_state_head<
         true, EventValues,
-        rpc_cx<Event, typename serialization_traits<Fn>::deserialized_type>
+        rpc_cx<Event, typename serialization_traits<Fn>::deserialized_type>,
+        ordinal
       >;
     
     static constexpr bool skip_is_fast = serialization_traits<Fn>::skip_is_fast;
@@ -682,35 +696,35 @@ namespace upcxx {
     }
   };
 
-  template<typename EventValues, typename Cx>
+  template<typename EventValues, typename Cx, int ordinal>
   struct serialization<
-      detail::completions_state_head</*event_enabled=*/false, EventValues, Cx>
+      detail::completions_state_head</*event_enabled=*/false, EventValues, Cx, ordinal>
     >:
     detail::serialization_trivial<
-      detail::completions_state_head</*event_enabled=*/false, EventValues, Cx>,
+      detail::completions_state_head</*event_enabled=*/false, EventValues, Cx, ordinal>,
       /*empty=*/true
     > {
     static constexpr bool is_definitely_serializable = true;
   };
   
   template<template<typename> class EventPredicate,
-           typename EventValues>
+           typename EventValues, int ordinal>
   struct serialization<
-      detail::completions_state<EventPredicate, EventValues, completions<>>
+      detail::completions_state<EventPredicate, EventValues, completions<>, ordinal>
     >:
     detail::serialization_trivial<
-      detail::completions_state<EventPredicate, EventValues, completions<>>,
+      detail::completions_state<EventPredicate, EventValues, completions<>, ordinal>,
       /*empty=*/true
     > {
     static constexpr bool is_definitely_serializable = true;
   };
 
   template<template<typename> class EventPredicate,
-           typename EventValues, typename CxH, typename ...CxT>
+           typename EventValues, typename CxH, typename ...CxT, int ordinal>
   struct serialization<
-      detail::completions_state<EventPredicate, EventValues, completions<CxH,CxT...>>
+      detail::completions_state<EventPredicate, EventValues, completions<CxH,CxT...>, ordinal>
     > {
-    using type = detail::completions_state<EventPredicate, EventValues, completions<CxH,CxT...>>;
+    using type = detail::completions_state<EventPredicate, EventValues, completions<CxH,CxT...>, ordinal>;
 
     static constexpr bool is_definitely_serializable =
       serialization_traits<typename type::head_t>::is_definitely_serializable &&
@@ -735,7 +749,8 @@ namespace upcxx {
     using deserialized_type = detail::completions_state<
         EventPredicate, EventValues,
         completions<typename CxH::deserialized_cx,
-                    typename CxT::deserialized_cx...>
+                    typename CxT::deserialized_cx...>,
+        ordinal
       >;
 
     static constexpr bool skip_is_fast =
@@ -774,8 +789,9 @@ namespace upcxx {
     struct completions_returner<EventPredicate, EventValues, completions<>> {
       using return_t = void;
 
+      template<int ordinal>
       completions_returner(
-          completions_state<EventPredicate, EventValues, completions<>>&
+          completions_state<EventPredicate, EventValues, completions<>, ordinal>&
         ) {
       }
       
@@ -913,9 +929,10 @@ namespace upcxx {
           >::return_t
       > {
 
+      template<int ordinal>
       completions_returner(
           completions_state<
-              EventPredicate, EventValues, completions<CxH,CxT...>
+              EventPredicate, EventValues, completions<CxH,CxT...>, ordinal
             > &s
         ):
         completions_returner_head<
