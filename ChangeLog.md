@@ -11,24 +11,25 @@ New features/enhancements: (see specification and programmer's guide for full de
 
 * `upcxx` has several new convenience options (see `upcxx -help`)
 * `upcxx::rput(..., remote_cx::as_rpc(...))` has received an improved implementation
-  for non-shared-memory peers where the dependent rpc is injected immediately following
+  for remote peers where the dependent rpc is injected immediately following
   the put. This pipelining reduces latency and sensitivity to initiator attentiveness,
   improving performance in most cases (for the exception, see issue #261).
 * Accounting measures have been added to track the shared-heap utilization of the
   UPC++ runtime (specifically rendezvous buffers) so that in the case of shared-heap
   exhaustion an informative assertion will fire. Also, fewer rendezvous buffers are
-  now required by the runtime, thus alleviating some pressure on the shared-heap.
-* Environment variable `UPCXX_OVERSUBSCRIBED` has been added to control runtime's
-  behavior of yielding to OS (`sched_yield()`) from calls to `upcxx::progress()`).
+  now required by the runtime, thus alleviating some pressure on the shared heap.
+* Environment variable `UPCXX_OVERSUBSCRIBED` has been added to control whether the 
+  runtime should yield to OS (`sched_yield()`) within calls to `upcxx::progress()`).
   See [docs/oversubscription.md](docs/oversubscription.md).
 * Release tarball downloads now embed a copy of GASNet-EX that is used by default during install.
   Git clones of the repo will still default to downloading GASNet-EX during install.
   The `GASNET` envvar can still be set at install time to change the default behavior.
-* A CMake module for UPC++ is now installed. See 'Using UPC++ with CMake' 
+* A CMake module for UPC++ is now installed. See 'Using UPC++ with CMake' in [README.md](README.md)
 * `atomic_domain<float>` and `atomic_domain<double>` are now implemented
 * New define `UPCXX_SPEC_VERSION` documents the implemented revision of the UPC++ specification
 
-Support has been added for the following compilers/platforms (for details, see 'System Requirements'):
+Support has been added for the following compilers/platforms 
+(for details, see 'System Requirements' in [INSTALL.md](INSTALL.md)):
 
 * PGI v19.1+ on Linux/x86\_64
 * PGI v18.10+ on Linux/ppc64le
@@ -160,9 +161,9 @@ This library release mostly conforms to the
 [UPC++ v1.0 Draft 8 Specification](https://bitbucket.org/berkeleylab/upcxx/downloads/upcxx-spec-V1.0-Draft8.pdf).
 The following features from that specification are not yet implemented:
 
-* Non-Blocking collectives currently support only the default future-based completion
-* `atomic_domain<float>` and `atomic_domain<double>` are not yet implemented
-* `team_id::when_here()` is unimplemented
+* `barrier_async()` and `broadcast()` only support default future-based completion (issue #234)
+* `atomic_domain<float>` and `atomic_domain<double>` are not yet implemented (issue #235)
+* `team_id::when_here()` is unimplemented (issue #170)
 * User-defined Serialization interface
 
 Breaking changes:
@@ -220,8 +221,6 @@ New features/enhancements:
    is free to choose among: futures, promises, callbacks, delivery of remote
    rpc, and in some cases even blocking until the event has occurred.
  * Internal use of lock-free datastructures for `lpc` queues.
-     * Enabled by default. See [INSTALL.md](INSTALL.md) for instructions on how
-       to build UPC\+\+ with the older lock-based datastructure.
  * Improvements to the `upcxx-run` command.
  * Improvements to internal assertion checking and diagnostics.
   

@@ -45,7 +45,7 @@ The current release is known to work on the following configurations:
     For more information, please see
     [GASNet bug 3997](https://upc-bugs.lbl.gov/bugzilla/show_bug.cgi?id=3997).
 
-* Cray XC x86_64 with one of the following PrgEnv environment modules and
+* Cray XC x86\_64 with one of the following PrgEnv environment modules and
   its dependencies.  (smp and aries conduits)
     - PrgEnv-gnu with gcc/6.4.0 (or later) loaded.
     - PrgEnv-intel with gcc/6.4.0 (or later) loaded.
@@ -116,6 +116,13 @@ to override this behavior. Additional environment variables allowing finer
 control over how UPC\+\+ is configured can be found in the
 "Advanced Installer Configuration" section below.
 
+By default ibv-conduit (InfiniBand support) will use MPI for job spawning if a
+working `mpicc` is found at installation time.  When this occurs, `CXX=mpicxx`
+(or similar) is required at install time to ensure correct linkage of
+ibv-conduit executables.  Alternatively, one may include `--disable-mpi-compat`
+in the value of `GASNET_CONFIGURE_ARGS` to exclude support for MPI as a job
+spawner.
+
 ### Installation: Apple macOS
 
 On macOS, UPC++ defaults to using the Apple LLVM clang compiler that is part
@@ -131,20 +138,30 @@ xcode-select --install
 Alternatively, the `CC` and `CXX` environment variables can be set to an alternative
 compiler installation for a supported compiler before running `./install`.
 
+At the time of writing, UPC++ has beed tested with Beta 7 of macOS 10.15
+"Catalina", and there are no known platform-specific issues.
+
+At the time of writing, UPC++ has been tested with Beta 7 of Xcode 11, and
+there are no known compiler-specific issues on either macOS 10.14 "Mojave" or on
+Beta 7 of macOS 10.15 "Catalina".
+
 ### Installation: Cray XC
 
 To run on the compute nodes of a Cray XC, the `CROSS` environment variable needs
-to be set before the install command is invoked,
-i.e. `CROSS=cray-aries-slurm`.
+to be set before the install command is invoked. Use the appropriate value for
+your supercomputer installation:
 
-When Intel compilers are being
-used (usually the default for these systems), a gcc environment module (6.4.0
-or newer) is also required, and may need to be explicitly loaded, e.g.:
+* `CROSS=cray-aries-slurm`: Cray XC systems using the SLURM job scheduler (srun)
+* `CROSS=cray-aries-alps`: Cray XC systems using the Cray ALPS job scheduler (aprun)
+
+When Intel compilers are being used (usually the default for these systems), 
+a gcc environment module (6.4.0 or newer) is also required, and may need to be
+explicitly loaded, e.g.:
 
 ```bash
 module load gcc/7.1.0
 cd <upcxx-source-path>
-CROSS=cray-aries-slurm ./install <upcxx-install-path>
+env CROSS=cray-aries-slurm ./install <upcxx-install-path>
 ```
 
 If using PrgEnv-cray, then version 9.0 or newer of the Cray compilers is
@@ -230,16 +247,9 @@ environment variables:
 * `GASNET_CONFIGURE_ARGS`: List of additional command line arguments passed to
   GASNet's configure phase.
 * `UPCXX_PYTHON`: Python2 interpreter to use.
-* `UPCXX_MAKE`: GNU Make command for make steps in the installation (e.g. building
+* `UPCXX_MAKE`: Make command for make steps in the installation (e.g. building
   the GASNet-EX library). Defaults to `make -j 8` for parallel make.  To disable
   parallel make, set `UPCXX_MAKE=make`.
-* `UPCXX_NOBS_THREADS`: Number of tasks to used for nobs-based compilation of the runtime.
+* `UPCXX_NOBS_THREADS`: Number of tasks to used for non-make installation steps.
   Defaults to autodetected CPU count, set `UPCXX_NOBS_THREADS=1` for serial compilation.
-
-By default ibv-conduit (InfiniBand support) will use MPI for job spawning if a
-working `mpicc` is found at installation time.  When this occurs, `CXX=mpicxx`
-(or similar) is recommended at install time to ensure correct linkage of
-ibv-conduit executables.  Alternatively, one may include `--disable-mpi-compat`
-in the value of `GASNET_CONFIGURE_ARGS` to exclude support for MPI as a job
-spawner.
 

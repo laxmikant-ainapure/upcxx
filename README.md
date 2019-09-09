@@ -41,7 +41,7 @@ To report problems or request features: [issue tracker](https://upcxx-bugs.lbl.g
 
 With UPC\+\+ installed, the easiest way to build a UPC++ application from the
 command line is to use the `upcxx` compiler wrapper, installed in 
-`<upcxx-install-path>/bin/upcxx`. This arguments to this wrapper work
+`<upcxx-install-path>/bin/upcxx`. The arguments to this wrapper work
 just like the C++ compiler used to install UPC++ (analogous to the
 `mpicxx` compiler wrapper often provided for MPI/C++ programs).
 
@@ -62,7 +62,7 @@ performance runs), or a -g option to select the debugging version of UPC++
 To select a non-default network backend or thread-safe version of the library, 
 you'll need to pass the -network= or -threadmode= options, or set the
 `UPCXX_NETWORK` or `UPCXX_THREADMODE` variables prior to invoking compilation.
-See the `UPC++ Backends` section below.
+See the 'UPC++ Backends' section below.
 
 ## Compiling Against UPC\+\+ in Makefiles
 
@@ -140,12 +140,12 @@ influence which backend `upcxx-meta` selects:
 * `UPCXX_THREADMODE=[seq|par]`: The value `seq` limits the application to only
   calling "communicating" upcxx routines from the thread that invoked
   `upcxx::init`, and only while that thread is holding the master persona. The
-  benefit is that `seq` can be synchronization free in much of its internals. A
-  thread-mode value of `par` allows any thread in the process to issue
-  communication as allowed by the specification, allowing for greater injection
-  concurrency from a multi-threaded application but at the expensive of greater
-  internal synchronization (higher overheads per operation).  The default value
-  is always `seq`.
+  benefit is that `seq` can be synchronization-free in much of its internals. 
+  A thread-mode value of `par` selects the thread-safe library that allows any
+  thread in each process to issue communication as allowed by the specification,
+  enabling greater injection concurrency in a multi-threaded application, at
+  the expensive of greater internal synchronization (higher overhead per operation).  
+  The default value is always `seq`.
   
 * `UPCXX_CODEMODE=[O3|debug]`: `O3` is for highly compiler-optimized
   code. `debug` produces unoptimized code, includes extra error checking
@@ -162,18 +162,18 @@ the installation.
 ```
 
 This will run the executable and arguments `<exe> <args...>` in a parallel
-context with `<ranks>` number of UPC\+\+ ranks.
+context with `<ranks>` number of UPC\+\+ processes.
 
-Upon startup, each UPC\+\+ rank creates a fixed-size shared memory heap that will never grow. By
-default, this heap is 128 MB per rank. This can be adjust by passing a `-shared-heap` parameter
-to the run script, which takes a suffix of KB, MB or GB; e.g. to reserve 1GB per rank, call:
+Upon startup, each UPC\+\+ process creates a fixed-size shared memory heap that will never grow. By
+default, this heap is 128 MB per process. This can be adjusted by passing a `-shared-heap` parameter
+to `upcxx-run`, which takes a suffix of KB, MB or GB; e.g. to reserve 1GB per process, call:
 
 ```bash
 <upcxx-install-path>/bin/upcxx-run -shared-heap 1G -n <ranks> <exe> <args...>
 ```
 
-There are several additional options that can be passed to `upcxx-run`. Execute with `-h` to get a
-list of options. 
+There are several additional options that can be passed to `upcxx-run`. 
+See `upcxx-run -h` for a complete list of options.
 
 --------------------------------------------------------------------------
 The canonical version of this document is located here:
