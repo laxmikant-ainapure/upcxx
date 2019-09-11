@@ -141,9 +141,9 @@ compiler installation for a supported compiler before running `./install`.
 At the time of writing, UPC++ has beed tested with Beta 7 of macOS 10.15
 "Catalina", and there are no known platform-specific issues.
 
-At the time of writing, UPC++ has been tested with Beta 7 of Xcode 11, and
-there are no known compiler-specific issues on either macOS 10.14 "Mojave" or on
-Beta 7 of macOS 10.15 "Catalina".
+At the time of writing, UPC++ has been tested with Apple's "GM Seed" of Xcode-11
+(the final pre-release), and there are no known compiler-specific issues on
+either macOS 10.14 "Mojave" or on Beta 7 of macOS 10.15 "Catalina".
 
 ### Installation: Cray XC
 
