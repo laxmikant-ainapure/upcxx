@@ -79,6 +79,8 @@ Breaking changes:
 * `upcxx::allocate()` and `device_allocator<Device>::allocate()` have changed signature.
   The `alignment` parameter has moved from being a final defaulted
   template argument to being a final defaulted function argument.
+* `future<T...>::result_moved()` and `future<T...>::wait_moved()` are deprecated,
+  and will be removed in a future release.
 
 ### 2019.05.27: Bug-fix release 2019.3.2
 
