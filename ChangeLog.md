@@ -26,6 +26,7 @@ New features/enhancements: (see specification and programmer's guide for full de
   The `GASNET` envvar can still be set at install time to change the default behavior.
 * A CMake module for UPC++ is now installed. See 'Using UPC++ with CMake' in [README.md](README.md)
 * `atomic_domain<float>` and `atomic_domain<double>` are now implemented
+* Interoperability support for Berkeley UPC's `-pthreads` mode, see [docs/upc-hybrid.md](docs/upc-hybrid.md)
 * New define `UPCXX_SPEC_VERSION` documents the implemented revision of the UPC++ specification
 
 Support has been added for the following compilers/platforms 
@@ -47,19 +48,20 @@ Notable bug fixes:
 * issue #170: `team_id::when_here()` is unimplemented
 * issue #181: Library linkage failures when user compiles with a different `-std=c++` level
 * issue #184: `bench/put_flood` crashes on opt/Linux
-* issue #210: `cuda_device::default_alignment()` not implemented
 * issue #203: strict aliasing violations in `device_allocator`
+* issue #204: No support for `nvcc --compiler-bindir=...`
+* issue #210: `cuda_device::default_alignment()` not implemented
+* issue #223: `operator<<(std::ostream, global_ptr<T>)` does not match spec
+* issue #224: missing const qualifier on `dist_object<T>.fetch()`
 * issue #228: incorrect behavior for `upcxx -g -O`
 * issue #229: Teach `upcxx` wrapper to compile C language files
-* issue #224: missing const qualifier on `dist_object<T>.fetch()`
-* issue #223: `operator<<(std::ostream, global_ptr<T>)` does not match spec
 * issue #234: Generalized operation completion for `barrier_async` and `broadcast`
 * issue #243: Honor `$UPCXX_PYTHON` during install
-* issue #204: No support for `nvcc --compiler-bindir=...`
 * issue #260: `GASNET_CONFIGURE_ARGS` can break UPC++ build
 * issue #264: `upcxx-meta CXX` and `CC` are not full-path expanded
-* [spec issue #141](https://bitbucket.org/berkeleylab/upcxx-spec/issues/141): resolve empty transfer ambiguities (count=0 RMA)
 * issue #268: Completion handlers can't accept `&&` references
+* [spec issue #141](https://bitbucket.org/berkeleylab/upcxx-spec/issues/141): resolve empty transfer ambiguities (count=0 RMA)
+* [spec issue #142](https://bitbucket.org/berkeleylab/upcxx-spec/issues/142): add `persona::active_with_caller()`
 
 This library release mostly conforms to the
 [UPC++ v1.0 Specification, Revision 2019.9.0](docs/spec.pdf).
