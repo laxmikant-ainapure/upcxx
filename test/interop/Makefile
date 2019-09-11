@@ -1,7 +1,7 @@
 # To use this makefile, ensure that Berkeley UPC and UPC++ are both in the PATH,
 # or alternatively set UPCC and UPCXX to point to the UPC/UPC++ compiler wrappers
 #
-# For documentation, see docs/upc-interop.md
+# For documentation, see docs/upc-hybrid.md
 
 SHELL = /bin/bash
 
