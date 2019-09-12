@@ -3,11 +3,11 @@
 
 // UPCXX_VERSION release identifier format:
 // YYYYMMPPL = [YEAR][MONTH][PATCH]
-#define UPCXX_VERSION 20190309L
+#define UPCXX_VERSION 20190900L
 
 // UPCXX_SPEC_VERSION release identifier format:
 // YYYYMM00L = [YEAR][MONTH]
-#define UPCXX_SPEC_VERSION 20190301L
+#define UPCXX_SPEC_VERSION 20190900L
 
 #include <upcxx/allocate.hpp>
 #include <upcxx/atomic.hpp>
