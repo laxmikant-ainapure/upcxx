@@ -138,12 +138,12 @@ xcode-select --install
 Alternatively, the `CC` and `CXX` environment variables can be set to an alternative
 compiler installation for a supported compiler before running `./install`.
 
-At the time of writing, UPC++ has beed tested with Beta 7 of macOS 10.15
+At the time of writing, UPC++ has beed tested with Developer Beta 8 of macOS 10.15
 "Catalina", and there are no known platform-specific issues.
 
 At the time of writing, UPC++ has been tested with Apple's "GM Seed" of Xcode-11
 (the final pre-release), and there are no known compiler-specific issues on
-either macOS 10.14 "Mojave" or on Beta 7 of macOS 10.15 "Catalina".
+either macOS 10.14 "Mojave" or on Developer Beta 8 of macOS 10.15 "Catalina".
 
 ### Installation: Cray XC
 
