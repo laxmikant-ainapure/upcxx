@@ -159,7 +159,7 @@ int main() {
   
   //////////////////////////////////////////////////////////////////////////////
   
-  global_ptr<char> blob = upcxx::allocate<char, (2<<20)>(max_size);
+  global_ptr<char> blob = upcxx::allocate<char>(max_size, (2<<20));
   
   // ensure requested alignment
   UPCXX_ASSERT_ALWAYS(
@@ -385,8 +385,8 @@ int main() {
         for(const char *kind: {LAT,BW}) {
           for(const char *how:
               kind == LAT
-                ? std::initializer_list<const char*>{"upcxx","gasnet"}
-                : std::initializer_list<const char*>{"upcxx-fut","upcxx-pro","gasnet","gasnet-nbi"}
+                ? std::vector<const char*>{"upcxx","gasnet"}
+                : std::vector<const char*>{"upcxx-fut","upcxx-pro","gasnet","gasnet-nbi"}
             ) {
             
             auto r = make_row(peers[peer_ix], size, kind, how);

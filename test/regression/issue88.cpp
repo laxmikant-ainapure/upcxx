@@ -22,6 +22,7 @@ int main() {
       upcxx::progress(upcxx::progress_level::internal);
     
     success = countdown == 0;
+    got.wait();
   }
   
   print_test_success(success);

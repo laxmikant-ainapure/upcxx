@@ -9,7 +9,7 @@ namespace backend = upcxx::backend;
 namespace gasnet = upcxx::backend::gasnet;
 
 using upcxx::team;
-using upcxx::raw_storage;
+using detail::raw_storage;
 
 raw_storage<team> detail::the_world_team;
 raw_storage<team> detail::the_local_team;

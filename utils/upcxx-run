@@ -123,7 +123,7 @@ def heapsz_type(a):
     
 def load_args():
     global _parser
-    _parser = argparse.ArgumentParser(description='A portable parallel job launcher for UPC++ programs, v2019.3.2')
+    _parser = argparse.ArgumentParser(description='A portable parallel job launcher for UPC++ programs, v2019.9.0')
     _parser.add_argument('-n', '-np', dest='nranks', type=ranks_type, default=None, metavar='NUM',
                          help='Spawn NUM number of UPC++ processes. Required.')
     _parser.add_argument('-N', dest='nnodes', type=nodes_type, default=None, metavar='NUM',
@@ -146,6 +146,8 @@ def load_args():
                          help='Verbose output')
     _parser.add_argument('-vv', dest='veryverbose', default=False, action='store_true',
                          help='Very verbose output')
+    _parser.add_argument('-E', dest='env_list', default=[], action='append', metavar='VAR1[,VAR2]',
+                         help='Adds provided arguments to the list of environment variables to propagate to compute processes.')
     cmd_arg_group = _parser.add_argument_group('command to execute')
     cmd_arg_group.add_argument('cmd', default=None, metavar='command', help='UPC++ executable')
     cmd_arg_group.add_argument('cmd_args', default=[], nargs=argparse.REMAINDER, metavar='...',
@@ -291,7 +293,7 @@ def main():
         os.environ['GASNET_PSHM_NODES'] = str(args.nranks)
         if args.nnodes and args.nnodes != 1:
             print('WARNING: '+executable+' was compiled with smp backend, which only supports single-node operation. -N option ignored.')
-            print('WARNING: For multi-node operation, please re-compile with UPCXX_GASNET_CONDUIT=<backend>')
+            print('WARNING: For multi-node operation, please re-compile with UPCXX_NETWORK=<backend>')
             args.nnodes = 1
     elif conduit == 'udp':
         spawner = 'amudprun'
@@ -346,11 +348,10 @@ def main():
                     spawner_path = path + '/' + spawner
                     break
         if spawner_path:
-            vflag = []
             print_verbose('UPCXX_RUN: Found spawner "' + spawner_path + '"')
+            spawner = [ spawner_path ]
             if args.veryverbose:
-                vflag = ['-v']
-            cmd = [spawner_path] + vflag + cmd
+                spawner += ['-v']
         else:
             print_error_and_abort('Could not find spawner "' + spawner + '"')
 
@@ -403,6 +404,22 @@ def main():
 
     if args.backtrace:
         os.environ['GASNET_BACKTRACE'] = '1'
+
+    # issue #265: ensure automatic env propagation for UPCXX_* variables
+    if conduit not in ['udp', 'smp']:
+        args.env_list = sum([var.split(',') for var in args.env_list],[]) # parse comma delimiters
+        env_list = []
+        for env_key in sorted(os.environ):
+            if env_key.startswith('UPCXX_') \
+            or env_key.startswith('UPC_') \
+            or env_key in args.env_list:
+                env_list += [env_key]
+        if env_list:
+            spawner += ['-E', ','.join(env_list)]
+    
+    # prepend the spawn command, if any
+    if spawner:
+        cmd = spawner + cmd
 
     if args.verbose or args.show:
         print('UPCXX_RUN: Environment:')

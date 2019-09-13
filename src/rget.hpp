@@ -4,7 +4,7 @@
 #include <upcxx/backend.hpp>
 #include <upcxx/completion.hpp>
 #include <upcxx/global_ptr.hpp>
-#include <upcxx/packing.hpp>
+#include <upcxx/serialization.hpp>
 
 // For the time being, our implementation of put/get requires the
 // gasnet backend. Ideally we would detect gasnet via UPCXX_BACKEND_GASNET
@@ -78,18 +78,22 @@ namespace upcxx {
       rget_cb_remote(intrank_t rank_s, CxStateRemote state_remote):
         rank_s{rank_s},
         state_remote{std::move(state_remote)} {
+
+        upcxx::current_persona().undischarged_n_ += 1;
       }
 
       void send_remote() {
         backend::send_am_master<progress_level::user>(
           upcxx::world(), rank_s,
           upcxx::bind(
-            [](CxStateRemote &st) {
+            [](CxStateRemote &&st) {
               return st.template operator()<remote_cx_event>();
             },
             std::move(state_remote)
           )
         );
+        
+        upcxx::current_persona().undischarged_n_ -= 1;
       }
     };
     
@@ -145,13 +149,15 @@ namespace upcxx {
         delete this;
       }
 
-      // we allocate this class in the segment for performance with gasnet
-      static void* operator new(std::size_t size) {
-        return upcxx::allocate(size, alignof(rget_cb_byval));
-      }
-      static void operator delete(void *p) {
-        upcxx::deallocate(p);
-      }
+      #if 0 // Disable this, GASNet handles out-of-segment gets very well
+        // we allocate this class in the segment for performance with gasnet
+        static void* operator new(std::size_t size) {
+          return upcxx::allocate(size, alignof(rget_cb_byval));
+        }
+        static void operator delete(void *p) {
+          upcxx::deallocate(p);
+        }
+      #endif
     };
   }
   
@@ -183,6 +189,8 @@ namespace upcxx {
       "way of ever knowing when then the source or target memory are safe to "
       "access again without incurring a data race."
     );
+
+    UPCXX_ASSERT(gp_s, "pointer arguments to rget may not be null");
     
     using cxs_here_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_here,
@@ -255,6 +263,8 @@ namespace upcxx {
       "access again without incurring a data race."
     );
     
+    UPCXX_ASSERT(buf_d && gp_s, "pointer arguments to rget may not be null");
+
     using cxs_here_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::rget_byref_event_values,

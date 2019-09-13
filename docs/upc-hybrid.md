@@ -1,7 +1,7 @@
 # UPC++ Interoperability with Berkeley UPC #
 
 UPC++ now has experimental support for interoperability with the 
-[Berkeley UPC Runtime](http://upc.lbl.gov) (a.k.a "UPCR"), 
+[Berkeley UPC Runtime](https://upc.lbl.gov) (a.k.a "UPCR"), 
 using any of the four UPC translators targetting that runtime.
 This makes it possible to run hybrid applications that use both UPC and UPC++
 (in separate object files, due to the difference in base languages).
@@ -46,15 +46,16 @@ as there is currently no way to express a single atomic domain shared by both la
 * UPC++ must be version 2018.9.5 or newer (`UPCXX_VERSION=20180905`)
 * UPCR must be version 2018.5.3 or newer 
   (visible via `__BERKELEY_UPC{,_MINOR,PATCHLEVEL}__` or `UPCR_RUNTIME_SPEC_{MAJOR,MINOR}=3,13`)
-* Both packages must be configured with the same release version of GASNet-EX,
+* Both packages must be configured with the same release version of GASNet-EX
+  (see the [GASNet-EX version table](http://upcxx.lbl.gov/wiki/GASNet-EX%20Version%20Table)),
   and compatible settings for any non-default GASNet configure options.
 * The C++ compiler used for UPC++ must be ABI compatible with the backend C compiler configured for UPCR.
-* UPCR must use `upcc -nopthreads` mode (ie UPC++ interop does not support pthread-as-UPC-thread mode).
 * All object files linked into one executable must agree upon GASNet conduit, debug mode and thread-safety setting.
 * If `UPCXX_THREADMODE=par`, then must pass `upcc -uses-threads`.
   This in turn may require UPCR's `configure --enable-uses-threads`.
 * The link command should use the UPCR link wrapper, and specify `upcc -link-with='upcxx <args>'`.
 * If the `main()` function appears outside UPC code, the link command should include `upcc -extern-main`.
+* Additional restrictions apply to `upcc -pthreads` mode, see "UPC++ with Berkeley UPC -pthreads mode" below.
 
 [test/interop/Makefile](../test/interop/Makefile) provides examples of this process in action.
 
@@ -93,5 +94,44 @@ For `UPCXX_USE_UPC_ALLOC=no` mode:
   UPC shared heap and statically-allocated shared UPC objects also consume space in the UPC shared heap,
   so one should generally allow some padding in addition to anticipated shared heap consumption from 
   dynamically allocated UPC shared objects.
-  For more details, see [UPCR memory management](http://upc.lbl.gov/docs/system/runtime_notes/memory_mgmt.shtml)
+  For more details, see [UPCR memory management](https://upc.lbl.gov/docs/system/runtime_notes/memory_mgmt.shtml)
+
+## UPC++ with Berkeley UPC -pthreads mode
+
+Starting in UPC++ version 2019.3.5, hybrid applications may now be linked with
+UPC programs compiled using the Berkeley UPC using the `upcc -pthreads` mode.
+
+It's important to understand that UPC++ uses process-based rank numbering, but
+in Berkeley UPC -pthreads mode there may be multiple UPC ranks per process.
+Consequently in this configuration there is generally a 1-to-many mapping
+between UPC++ ranks and UPC ranks.  The application is responsible for managing
+any consequences of this difference. One example is the affinity of objects in
+the shared heap is reported in the model-specific rank id, thus the affinity of
+a given shared object will be reported differently by each model.
+
+The following additional restrictions apply to hybrid use of UPC -pthreads mode with UPC++:
+
+* UPC++ cannot be relied upon to implicitly init UPC in -pthreads mode.
+  UPC must be initialized before UPC++, either by placing main() in UPC code,
+  or by linking with `upcc -extern-main` and invoking `bupc_init_reentrant()`.
+  For more details, see the [UPC Runtime specification](https://upc.lbl.gov/docs/system/).
+* upcxx::init() must be called by exactly one thread in each process.
+  Because UPC must be initialized first, this means the app must elect one UPC thread
+  per process to make this call, and that thread inherits the UPC++ master persona.  
+  Many UPC++ calls (notably including all collective calls) must be invoked
+  by exactly one thread per node while holding the master persona.
+* Only the default `UPCXX_USE_UPC_ALLOC=yes` mode is supported.
+* UPC++ must use the thread-safe backend (`UPCXX_THREADMODE=par`)
+* Calls to UPC++ shared storage management (allocation/deallocation) or any
+  UPC++ function with progress level internal or user may only be issued from
+  threads corresponding to a UPC rank pthread. Invoking such UPC++ functions
+  from other threads (eg those created manually or by OpenMP) has undefined
+  behavior. Similarly, invoking any UPC code or library functions from non-UPC
+  threads also has undefined behavior.
+* Shared heap objects allocated using UPC++ are placed in the UPC shared heap
+  with affinity to the calling UPC rank thread.
+* Global variables defined in UPC code do not have cross-language linkage in -pthreads mode,
+  and thus cannot be directly referenced by name from UPC++ code (regardless of declaration).
+  However they can still be accessed by pointer (or by calling UPC code to operate upon them).
+  For details, see [https://upc.lbl.gov/docs/user/interoperability.shtml#pthreads]
 

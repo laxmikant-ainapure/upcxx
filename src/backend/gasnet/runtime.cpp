@@ -1,7 +1,9 @@
 #include <upcxx/backend/gasnet/runtime.hpp>
 #include <upcxx/backend/gasnet/runtime_internal.hpp>
 #include <upcxx/backend/gasnet/upc_link.h>
+#include <upcxx/backend/gasnet/noise_log.hpp>
 
+#include <upcxx/concurrency.hpp>
 #include <upcxx/cuda_internal.hpp>
 #include <upcxx/os_env.hpp>
 #include <upcxx/reduce.hpp>
@@ -12,9 +14,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <memory>
-#include <mutex>
 
-#include <sched.h>
 #include <unistd.h>
 
 namespace backend = upcxx::backend;
@@ -22,20 +22,25 @@ namespace detail  = upcxx::detail;
 namespace gasnet  = upcxx::backend::gasnet;
 namespace cuda    = upcxx::cuda;
 
-using upcxx::command;
 using upcxx::intrank_t;
-using upcxx::parcel_reader;
-using upcxx::parcel_writer;
 using upcxx::persona;
 using upcxx::persona_scope;
 using upcxx::progress_level;
 using upcxx::team;
 using upcxx::team_id;
 
+using detail::command;
+using detail::par_atomic;
+using detail::par_mutex;
+
 using backend::persona_state;
 
 using gasnet::handle_cb_queue;
 using gasnet::rpc_as_lpc;
+using gasnet::bcast_as_lpc;
+using gasnet::bcast_payload_header;
+using gasnet::noise_log;
+using gasnet::sheap_footprint_t;
 
 using namespace std;
 
@@ -69,7 +74,7 @@ static_assert(
 // from: upcxx/backend.hpp
 
 int backend::init_count = 0;
-  
+
 intrank_t backend::rank_n = -1;
 intrank_t backend::rank_me; // leave undefined so valgrind can catch it.
 
@@ -77,6 +82,12 @@ bool backend::verbose_noise = false;
 
 persona backend::master;
 persona_scope *backend::initial_master_scope = nullptr;
+
+#if GASNET_CONDUIT_SMP
+  const bool backend::all_ranks_definitely_local = true;
+#else
+  const bool backend::all_ranks_definitely_local = false;
+#endif
 
 intrank_t backend::pshm_peer_lb;
 intrank_t backend::pshm_peer_ub;
@@ -91,6 +102,10 @@ unique_ptr<uintptr_t[/*local_team.size()*/]> backend::pshm_size;
 
 size_t gasnet::am_size_rdzv_cutover;
 
+sheap_footprint_t gasnet::sheap_footprint_rdzv;
+sheap_footprint_t gasnet::sheap_footprint_misc;
+sheap_footprint_t gasnet::sheap_footprint_user;
+  
 #if UPCXX_BACKEND_GASNET_SEQ
   handle_cb_queue gasnet::master_hcbs;
 #endif
@@ -112,9 +127,13 @@ namespace {
     // unused
     constexpr void *gasnet_seq_thread_id = nullptr;
   #endif
+
+  bool oversubscribed;
   
   auto do_internal_progress = []() { upcxx::progress(progress_level::internal); };
   auto operation_cx_as_internal_future = upcxx::completions<upcxx::future_cx<upcxx::operation_cx_event, progress_level::internal>>{{}};
+
+  void quiesce_rdzv(bool in_finalize, noise_log&);
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -122,13 +141,17 @@ namespace {
 namespace {
   // we statically allocate the top of the AM handler space, 
   // to improve interoperability with UPCR that uses the bottom
-  #define UPCXX_NUM_AM_HANDLERS 4
+  #define UPCXX_NUM_AM_HANDLERS 8
   #define UPCXX_AM_INDEX_BASE   (256 - UPCXX_NUM_AM_HANDLERS)
   enum {
     id_am_eager_restricted = UPCXX_AM_INDEX_BASE,
     id_am_eager_master,
     id_am_eager_persona,
     id_am_bcast_master_eager,
+    id_am_long_master_packed_cmd,
+    id_am_long_master_payload_part,
+    id_am_long_master_cmd_part,
+    id_am_reply_cb,
     _id_am_endpost
   };
   static_assert(UPCXX_AM_INDEX_BASE >= GEX_AM_INDEX_BASE, "Incorrect UPCXX_AM_INDEX_BASE");
@@ -140,6 +163,31 @@ namespace {
                         gex_AM_Arg_t persona_ptr_lo, gex_AM_Arg_t persona_ptr_hi);
 
   void am_bcast_master_eager(gex_Token_t, void *buf, size_t buf_size, gex_AM_Arg_t buf_align_and_level);
+
+  void am_long_master_packed_cmd(gex_Token_t,
+    void *payload, size_t payload_size,
+    gex_AM_Arg_t reply_cb_lo, gex_AM_Arg_t reply_cb_hi,
+    gex_AM_Arg_t cmd_size_align15_level1,
+    gex_AM_Arg_t cmd0, gex_AM_Arg_t cmd1, gex_AM_Arg_t cmd2, gex_AM_Arg_t cmd3,
+    gex_AM_Arg_t cmd4, gex_AM_Arg_t cmd5, gex_AM_Arg_t cmd6, gex_AM_Arg_t cmd7,
+    gex_AM_Arg_t cmd8, gex_AM_Arg_t cmd9, gex_AM_Arg_t cmd10, gex_AM_Arg_t cmd11,
+    gex_AM_Arg_t cmd12);
+
+  void am_long_master_payload_part(gex_Token_t,
+    void *payload_part, size_t payload_part_size,
+    gex_AM_Arg_t nonce,
+    gex_AM_Arg_t cmd_size,
+    gex_AM_Arg_t cmd_align_level1,
+    gex_AM_Arg_t reply_cb_lo, gex_AM_Arg_t reply_cb_hi);
+
+  void am_long_master_cmd_part(gex_Token_t,
+    void *cmd_part, size_t cmd_part_size,
+    gex_AM_Arg_t nonce,
+    gex_AM_Arg_t cmd_size,
+    gex_AM_Arg_t cmd_align_level1,
+    gex_AM_Arg_t cmd_part_offset);
+  
+  void am_reply_cb(gex_Token_t, gex_AM_Arg_t cb_lo, gex_AM_Arg_t cb_hi);
   
   #define AM_ENTRY(name, arg_n) \
     {id_##name, (void(*)())name, GEX_FLAG_AM_MEDIUM | GEX_FLAG_AM_REQUEST, arg_n, nullptr, #name}
@@ -148,8 +196,50 @@ namespace {
     AM_ENTRY(am_eager_restricted, 1),
     AM_ENTRY(am_eager_master, 1),
     AM_ENTRY(am_eager_persona, 3),
-    AM_ENTRY(am_bcast_master_eager, 1)
+    AM_ENTRY(am_bcast_master_eager, 1),
+    {id_am_long_master_packed_cmd, (void(*)())am_long_master_packed_cmd, GEX_FLAG_AM_LONG | GEX_FLAG_AM_REQUEST, 16, nullptr, "am_long_master_packed_cmd"},
+    {id_am_long_master_payload_part, (void(*)())am_long_master_payload_part, GEX_FLAG_AM_LONG | GEX_FLAG_AM_REQUEST, 5, nullptr, "am_long_master_payload_part"},
+    {id_am_long_master_cmd_part, (void(*)())am_long_master_cmd_part, GEX_FLAG_AM_MEDIUM | GEX_FLAG_AM_REQUEST, 4, nullptr, "am_long_master_cmd_part"},
+    {id_am_reply_cb, (void(*)())am_reply_cb, GEX_FLAG_AM_SHORT | GEX_FLAG_AM_REPLY, 2, nullptr, "id_am_reply_cb"}
   };
+}
+
+////////////////////////////////////////////////////////////////////////
+
+namespace {
+  template<typename T>
+  gex_AM_Arg_t am_arg_encode_ptr_lo(T *p) {
+    intptr_t i = reinterpret_cast<intptr_t>(p);
+    return gex_AM_Arg_t(i & 0xffffffffu);
+  }
+  template<typename T>
+  gex_AM_Arg_t am_arg_encode_ptr_hi(T *p) {
+    intptr_t i = reinterpret_cast<intptr_t>(p);
+    return gex_AM_Arg_t(i >> 31 >> 1);
+  }
+  template<typename T>
+  T* am_arg_decode_ptr(gex_AM_Arg_t lo, gex_AM_Arg_t hi) {
+    // Reconstruct a pointer from two gex_AM_Arg_t. The high
+    // bits (per_hi) can be safely upshifted into place, on a 32-bit
+    // system the result will just be zero. The low bits (per_lo) must
+    // not be permitted to sign-extend. Masking against 0xf's achieves
+    // this because all literals are non-negative. So the result of the
+    // AND could either be signed or unsigned depending on if the mask
+    // (a positive value) can be expressed in the desitination signed
+    // type (intptr_t).
+    intptr_t i = (intptr_t(hi)<<31<<1) | (intptr_t(lo) & 0xffffffffu);
+    return reinterpret_cast<T*>(i);
+  }
+
+  gex_AM_Arg_t am_arg_encode_i64_lo(int64_t i) {
+    return gex_AM_Arg_t(i & 0xffffffffu);
+  }
+  gex_AM_Arg_t am_arg_encode_i64_hi(int64_t i) {
+    return gex_AM_Arg_t(i >> 31 >> 1);
+  }
+  int64_t am_arg_decode_i64(gex_AM_Arg_t lo, gex_AM_Arg_t hi) {
+    return (int64_t(hi)<<31<<1) | (int64_t(lo) & 0xffffffffu);
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -161,8 +251,7 @@ namespace {
   gex_TM_t world_tm;
   gex_TM_t local_tm;
 
-  std::mutex segment_lock_;
-  intptr_t allocs_live_n_ = 0;
+  detail::par_mutex segment_lock_;
   mspace segment_mspace_;
 
   // scratch space for the local_team, if required
@@ -176,12 +265,7 @@ namespace {
   void  *shared_heap_base = nullptr;
   size_t shared_heap_sz = 0;
 
-  std::string format_memsize(size_t memsize) {
-    char buf[80];
-    return std::string(gasnett_format_number(memsize, buf, sizeof(buf), 1));
-  }
-
-  void heap_init_internal(size_t &size) {
+  void heap_init_internal(size_t &size, noise_log &noise) {
     UPCXX_ASSERT_ALWAYS(!shared_heap_isinit);
 
     void *segment_base = 0;
@@ -196,7 +280,11 @@ namespace {
       if (firstcall) {
         firstcall = false;
         // UPCXX_USE_UPC_ALLOC enables the use of the UPC allocator to replace our allocator
-        upcxx_use_upc_alloc = upcxx::os_env<bool>("UPCXX_USE_UPC_ALLOC" , upcxx_use_upc_alloc);
+        upcxx_use_upc_alloc = upcxx::os_env<bool>("UPCXX_USE_UPC_ALLOC" , (upcxx_upc_is_pthreads() || upcxx_use_upc_alloc));
+        if (upcxx_upc_is_pthreads() && !upcxx_use_upc_alloc) {
+          noise.warn() << "UPCXX_USE_UPC_ALLOC=no is not supported in UPC -pthreads mode. Forcing UPCXX_USE_UPC_ALLOC=yes";
+          upcxx_use_upc_alloc = 1;
+        }
         if (!upcxx_use_upc_alloc) {
           // UPCXX_UPC_HEAP_COLL: selects the use of the collective or non-collective UPC shared heap to host the UPC++ allocator
           upcxx_upc_heap_coll = upcxx::os_env<bool>("UPCXX_UPC_HEAP_COLL" , upcxx_upc_heap_coll);
@@ -205,7 +293,9 @@ namespace {
       if (local_scratch_sz && !local_scratch_ptr) { 
         // allocate local scratch separately from the heap to ensure it persists
         // we do this before segment allocation to prevent fragmentation issues
-        local_scratch_ptr = upcxx_upc_all_alloc(local_scratch_sz);
+        if (upcxx_upc_is_pthreads()) // cannot use all_alloc with -pthreads
+             local_scratch_ptr = upcxx_upc_alloc(local_scratch_sz);
+        else local_scratch_ptr = upcxx_upc_all_alloc(local_scratch_sz);
       }
       if (upcxx_use_upc_alloc) {
         shared_heap_base = segment_base;
@@ -227,26 +317,28 @@ namespace {
       // ensure dlmalloc never tries to mmap anything from the system
       mspace_set_footprint_limit(segment_mspace_, shared_heap_sz);
     }
+
+    // zero shared heap footprint counters
+    gasnet::sheap_footprint_rdzv = {0,0};
+    gasnet::sheap_footprint_misc = {0,0};
+    gasnet::sheap_footprint_user = {0,0};    
+    
     if(backend::verbose_noise) {
       uint64_t maxsz = shared_heap_sz;
       uint64_t minsz = shared_heap_sz;
       gex_Event_Wait(gex_Coll_ReduceToOneNB(world_tm, 0, &maxsz, &maxsz, GEX_DT_U64, sizeof(maxsz), 1, GEX_OP_MAX, 0,0,0));
       gex_Event_Wait(gex_Coll_ReduceToOneNB(world_tm, 0, &minsz, &minsz, GEX_DT_U64, sizeof(minsz), 1, GEX_OP_MIN, 0,0,0));
-      if (backend::rank_me == 0) {
-        std::cerr
-        <<std::string(70,'/')<<std::endl
-        <<"heap_init_internal(): Shared heap statistics: \n"
-        << "  max size: 0x" << std::hex << maxsz << " (" << format_memsize(maxsz) << ")\n"
-        << "  min size: 0x" << std::hex << minsz << " (" << format_memsize(minsz) << ")\n"
-        << "  P0 base:  " << shared_heap_base <<std::endl
-        <<std::string(70,'/')<<std::endl;
-      }
+      noise.line()
+        <<"Shared heap statistics:\n"
+        << "  max size: 0x" << std::hex << maxsz << std::dec << " (" << noise_log::size(maxsz) << ")\n"
+        << "  min size: 0x" << std::hex << minsz << std::dec << " (" << noise_log::size(minsz) << ")\n"
+        << "  P0 base:  " << shared_heap_base;
     }
     shared_heap_isinit = true;
 
     if (!upcxx_upc_is_linked()) {
       if (local_scratch_sz && !local_scratch_ptr) { 
-        local_scratch_ptr = upcxx::allocate(local_scratch_sz, GASNET_PAGESIZE);
+        local_scratch_ptr = gasnet::allocate(local_scratch_sz, GASNET_PAGESIZE, &gasnet::sheap_footprint_misc);
         UPCXX_ASSERT_ALWAYS(local_scratch_ptr);
       }
     }
@@ -275,25 +367,25 @@ namespace {
 // creation have undefined behavior. The list of such functions is
 // implementation-defined.
 
-void upcxx::destroy_heap(void) {
+void upcxx::destroy_heap() {
+  noise_log noise("upcxx::destroy_heap()");
+  
   UPCXX_ASSERT_ALWAYS(backend::master.active_with_caller());
   UPCXX_ASSERT_ALWAYS(shared_heap_isinit);
   backend::quiesce(upcxx::world(), entry_barrier::user);
 
-  if (allocs_live_n_ > 0) {
-     char warning[200];
-     snprintf(warning, sizeof(warning), 
-        "%i: WARNING: upcxx::destroy_heap() called with %lli live shared objects\n",
-        backend::rank_me, (long long)allocs_live_n_);
-     cerr << warning << flush;
-  }
-  if (upcxx_use_upc_alloc) { 
-    if (!backend::rank_me) {
-      cerr << "WARNING: upcxx::destroy_heap() is not supported for UPCXX_USE_UPC_ALLOC=yes" << endl;
-    }
-  } else {
-    allocs_live_n_ = 0;
+  quiesce_rdzv(/*in_finalize=*/false, noise);
+  
+  gasnet_barrier_notify(0, GASNET_BARRIERFLAG_ANONYMOUS);
+  int ok = gasnet_barrier_wait(0, GASNET_BARRIERFLAG_ANONYMOUS);
+  UPCXX_ASSERT_ALWAYS(ok == GASNET_OK);
+  
+  if(gasnet::sheap_footprint_user.count != 0)
+    noise.warn()<<"destroy_heap() called with "<<gasnet::sheap_footprint_user.count<<" live shared objects.";
 
+  if (upcxx_use_upc_alloc) { 
+    noise.warn()<<"destroy_heap() is not supported for UPCXX_USE_UPC_ALLOC=yes" << endl;
+  } else {
     destroy_mspace(segment_mspace_);
     segment_mspace_ = 0;
 
@@ -305,12 +397,13 @@ void upcxx::destroy_heap(void) {
   }
 
   shared_heap_isinit = false;
+
+  noise.show();
 }
 
 // void upcxx::restore_heap(void):
 //
-// Precondition: The shared heap is a live state, either by virtue
-// of library initialization, or a prior call to upcxx::restore_heap.
+// Precondition: The shared heap is a dead state, due to a prior call to upcxx::destroy_heap.
 // Calling thread must have the master persona.
 //
 // This collective call over all processes re-initializes the shared heap of 
@@ -323,8 +416,9 @@ void upcxx::restore_heap(void) {
 
   if (upcxx_use_upc_alloc) {
     // unsupported/ignored
-  } else { 
-    heap_init_internal(shared_heap_sz);
+  } else {
+    noise_log mute = noise_log::muted();
+    heap_init_internal(shared_heap_sz, mute);
     init_localheap_tables();
   }
   shared_heap_isinit = true;
@@ -340,6 +434,8 @@ void upcxx::restore_heap(void) {
 void upcxx::init() {
   if(0 != backend::init_count++)
     return;
+
+  noise_log noise("upcxx::init()");
   
   int ok;
 
@@ -411,20 +507,20 @@ void upcxx::init() {
 
   // now adjust the segment size if it's less than the GASNET_MAX_SEGSIZE
   if (segment_size > gasnet_max_segsize) {
-    if(upcxx::rank_me() == 0) {
-      cerr << "WARNING: Requested UPC++ shared heap size (" << format_memsize(segment_size) << ") "
-              "is larger than the GASNet segment size (" << format_memsize(gasnet_max_segsize) << "). "
-              "Adjusted shared heap size to " << format_memsize(gasnet_max_segsize) << ".\n";
-    }
+    noise.warn() <<
+      "Requested UPC++ shared heap size (" << noise_log::size(segment_size) << ") "
+      "is larger than the GASNet segment size (" << noise_log::size(gasnet_max_segsize) << "). "
+      "Adjusted shared heap size to " << noise_log::size(gasnet_max_segsize) << ".";
+
     segment_size = gasnet_max_segsize;
   }
- 
+
   // ready master persona
   backend::initial_master_scope = new persona_scope(backend::master);
   UPCXX_ASSERT_ALWAYS(backend::master.active_with_caller());
   
   // Build team upcxx::world()
-  ::new(&detail::the_world_team.raw) upcxx::team(
+  ::new(detail::the_world_team.raw()) upcxx::team(
     detail::internal_only(),
     backend::team_base{reinterpret_cast<uintptr_t>(world_tm)},
     digest{0x1111111111111111, 0x1111111111111111},
@@ -433,8 +529,8 @@ void upcxx::init() {
   
   // Create the GEX segment
   if (upcxx_upc_is_linked()) {
-    if (backend::verbose_noise && !backend::rank_me) 
-      cerr << "UPCXX: Activating interoperability support for the Berkeley UPC Runtime." << endl;
+    if(backend::verbose_noise)
+      noise.line() << "Activating interoperability support for the Berkeley UPC Runtime.";
   } else {
     ok = gex_Segment_Attach(&segment, world_tm, segment_size);
     UPCXX_ASSERT_ALWAYS(ok == GASNET_OK);
@@ -466,6 +562,22 @@ void upcxx::init() {
     am_medium_size < 8<<10 ? 512 :
                              1024;
   UPCXX_ASSERT(gasnet::am_size_rdzv_cutover_min <= gasnet::am_size_rdzv_cutover);
+
+  //////////////////////////////////////////////////////////////////////////////
+  // Determine if we're oversubscribed.
+  { 
+    gex_Rank_t host_peer_n;
+    gex_System_QueryHostInfo(nullptr, &host_peer_n, nullptr);
+    bool oversubscribed_default = (int)gasnett_cpu_count() < (int)host_peer_n;
+    oversubscribed = os_env<bool>("UPCXX_OVERSUBSCRIBED", oversubscribed_default);
+
+    if(backend::verbose_noise)
+      noise.line()<<"CPUs Oversubscribed: "<<(oversubscribed
+        ? "yes \"upcxx::progress() may yield to OS)\""
+        : "no \"upcxx::progress() never yields to OS\"");
+
+    gasnet_set_waitmode(oversubscribed ? GASNET_WAIT_BLOCK : GASNET_WAIT_SPIN);
+  }
   
   //////////////////////////////////////////////////////////////////////////////
   // Setup the local-memory neighborhood tables.
@@ -492,15 +604,11 @@ void upcxx::init() {
   }
 
   // setup shared segment allocator
-  heap_init_internal(segment_size);
+  heap_init_internal(segment_size, noise);
   
   if (local_is_world) {
-    if(backend::verbose_noise && backend::rank_me == 0) {
-      std::cerr
-        <<std::string(70,'/')<<std::endl
-        <<"upcxx::init(): Whole world is in same local team."<<std::endl
-        <<std::string(70,'/')<<std::endl;
-    }
+    if(backend::verbose_noise)
+      noise.line() << "Whole world is in same local team.";
     
     backend::pshm_peer_lb = 0;
     backend::pshm_peer_ub = backend::rank_n;
@@ -547,18 +655,14 @@ void upcxx::init() {
         )
       );
       
-      if(backend::rank_me == 0) {
-        std::cerr
-          <<std::string(70,'/')<<std::endl
-          <<"upcxx::init(): local team statistics:"<<std::endl
-          <<"  local teams = "<<stats.count<<std::endl
-          <<"  min rank_n = "<<stats.min_size<<std::endl
-          <<"  max rank_n = "<<stats.max_size<<std::endl;
-        if(stats.count == backend::rank_n) {
-          std::cerr<<"  WARNING: All local team's are singletons. Memory sharing between ranks will never succeed."<<std::endl;
-        }
-        std::cerr<<std::string(70,'/')<<std::endl;
-      }
+      noise.line()
+        <<"Local team statistics:"<<'\n'
+        <<"  local teams = "<<stats.count<<'\n'
+        <<"  min rank_n = "<<stats.min_size<<'\n'
+        <<"  max rank_n = "<<stats.max_size;
+
+      if(stats.count == backend::rank_n)
+        noise.warn()<<"All local team's are singletons. Memory sharing between ranks will never succeed.";
     }
     
     UPCXX_ASSERT_ALWAYS( local_scratch_sz && local_scratch_ptr );
@@ -577,7 +681,7 @@ void upcxx::init() {
   backend::pshm_peer_n = peer_n;
   
   // Build upcxx::local_team()
-  ::new(&detail::the_local_team.raw) upcxx::team(
+  ::new(detail::the_local_team.raw()) upcxx::team(
     detail::internal_only(),
     backend::team_base{reinterpret_cast<uintptr_t>(local_tm)},
     // we use different digests even if local_tm==world_tm
@@ -588,6 +692,8 @@ void upcxx::init() {
   // Setup local peer address translation tables
   init_localheap_tables();
 
+  noise.show();
+  
   //////////////////////////////////////////////////////////////////////////////
   // Exit barrier
   
@@ -597,7 +703,7 @@ void upcxx::init() {
 }
 
 namespace {
- void init_localheap_tables(void) {
+void init_localheap_tables(void) {
   const gex_Rank_t peer_n = backend::pshm_peer_n;
 
   backend::pshm_local_minus_remote.reset(new uintptr_t[peer_n]);
@@ -669,7 +775,51 @@ namespace {
   // permute vbase's into sorted order
   for(gex_Rank_t i=0; i < peer_n; i++)
     pshm_owner_vbase[i] = backend::pshm_vbase[pshm_owner_peer[i]];
- }
+}
+}
+
+namespace {
+  void quiesce_rdzv(bool in_finalize, noise_log &noise) {
+    int64_t iters = 0;
+    int64_t n;
+
+    do {
+      n = gasnet::sheap_footprint_rdzv.count;
+      if(iters == (in_finalize ? 1000 : 100000)) {
+        if(in_finalize) {
+          if(upcxx::rank_me()==0)
+            noise.warn()<<
+            /*> WARN*/"It appears that the application has not quiesced its usage "
+            "of upcxx communcation, violating the semantics of upcxx::finalize(), "
+            "which may lead to undefined behavior. "
+            "upcxx will now attempt to ignore this activity and proceed with finalization.";
+          noise.show(); // flush output before potential crash
+          return;
+        }
+        else {
+          if(upcxx::rank_me()==0)
+            noise.warn()<<
+            /*> WARN*/"It appears that the application has not quiesced its usage "
+            "of upcxx communication. It is necessary that all internal upcxx buffers "
+            "be reclaimed before proceeding, so upcxx shall continue to wait...";
+          noise.show(); // don't pause forever without output
+        }
+      }
+      
+      gex_Event_t e = gex_Coll_ReduceToAllNB(
+        gasnet::handle_of(upcxx::world()),
+        &n, &n,
+        GEX_DT_I64, sizeof(int64_t), 1,
+        GEX_OP_MAX,
+        nullptr, nullptr, 0
+      );
+
+      do upcxx::progress(progress_level::internal);
+      while(0 != gex_Event_Test(e));
+
+      iters += 1;
+    } while(n != 0);
+  }
 }
 
 void upcxx::finalize() {
@@ -679,12 +829,16 @@ void upcxx::finalize() {
   if(0 != --backend::init_count)
     return;
   
+  noise_log noise("upcxx::finalize()");
+
   { // barrier
     gasnet_barrier_notify(0, GASNET_BARRIERFLAG_ANONYMOUS);
     while(GASNET_OK != gasnet_barrier_try(0, GASNET_BARRIERFLAG_ANONYMOUS))
       upcxx::progress();
   }
 
+  quiesce_rdzv(/*in_finalize=*/true, noise);
+  
   struct popn_stats_t {
     int64_t sum, min, max;
   };
@@ -706,53 +860,53 @@ void upcxx::finalize() {
     int64_t objs_local = detail::registry.size() - 2; // minus `world` and `local_team`
     popn_stats_t objs = reduce_popn_to_rank0(objs_local);
     
-    if(backend::rank_me == 0 && objs.sum != 0) {
-      std::cerr
-        <<std::string(70,'/')<<std::endl
-        <<"upcxx::finalize(): Objects remain within registries at finalize"<<std::endl
-        <<"(could be teams, dist_object's, or outstanding collectives)."<<std::endl
-        <<"  total = "<<objs.sum<<std::endl
-        <<"  per rank min = "<<objs.min<<std::endl
-        <<"  per rank max = "<<objs.max<<std::endl
-        <<std::string(70,'/')<<std::endl;
+    if(objs.sum != 0) {
+      noise.warn()
+        <<"Objects remain within registries at finalize (could be teams, "
+          "dist_object's, or outstanding collectives).\n"
+        <<"  total = "<<objs.sum<<'\n'
+        <<"  per rank min = "<<objs.min<<'\n'
+        <<"  per rank max = "<<objs.max;
     }
   }
   
   if(backend::verbose_noise) {
-    int64_t live_local = allocs_live_n_;
+    int64_t live_local = gasnet::sheap_footprint_user.count;
     
-    if(gasnet::handle_of(detail::the_local_team.value) !=
-       gasnet::handle_of(detail::the_world_team.value)
+    #if 0 // local_team scratch is no longer credited as a user allocation
+    if(gasnet::handle_of(detail::the_local_team.value()) !=
+       gasnet::handle_of(detail::the_world_team.value())
        && !upcxx_upc_is_linked())
        live_local -= 1; // minus local_team scratch
+    #endif
     
     popn_stats_t live = reduce_popn_to_rank0(live_local);
     
-    if(backend::rank_me == 0 && live.sum != 0) {
-      std::cerr
-        <<std::string(70,'/')<<std::endl
-        <<"upcxx::finalize(): Shared segment allocations live at finalize:"<<std::endl
-        <<"  total = "<<live.sum<<std::endl
-        <<"  per rank min = "<<live.min<<std::endl
-        <<"  per rank max = "<<live.max<<std::endl
-        <<std::string(70,'/')<<std::endl;
+    if(live.sum != 0) {
+      noise.warn()
+        <<"Shared segment allocations live at finalize:\n"
+        <<"  total = "<<live.sum<<'\n'
+        <<"  per rank min = "<<live.min<<'\n'
+        <<"  per rank max = "<<live.max;
     }
   }
   
   { // Tear down local_team
-    if(gasnet::handle_of(detail::the_local_team.value) !=
-       gasnet::handle_of(detail::the_world_team.value))
+    if(gasnet::handle_of(detail::the_local_team.value()) !=
+       gasnet::handle_of(detail::the_world_team.value()))
       {/*TODO: add local team destruct once GEX has the API.*/}
     
-    detail::the_local_team.value.destroy();
+    detail::the_local_team.value().destroy();
     detail::the_local_team.destruct();
   }
   
   // can't just destroy world, it needs special attention
-  detail::registry.erase(detail::the_world_team.value.id().dig_);
+  detail::registry.erase(detail::the_world_team.value().id().dig_);
   
   if(backend::initial_master_scope != nullptr)
     delete backend::initial_master_scope;
+
+  noise.show();
 }
 
 void upcxx::liberate_master_persona() {
@@ -765,54 +919,91 @@ void upcxx::liberate_master_persona() {
 }
 
 void* upcxx::allocate(size_t size, size_t alignment) {
+  return gasnet::allocate(size, alignment, &gasnet::sheap_footprint_user);
+}
+
+void  upcxx::deallocate(void *p) {
+  gasnet::deallocate(p, &gasnet::sheap_footprint_user);
+}
+  
+void* gasnet::allocate(size_t size, size_t alignment, sheap_footprint_t *foot) {
   UPCXX_ASSERT(shared_heap_isinit);
   #if UPCXX_BACKEND_GASNET_SEQ
     UPCXX_ASSERT(backend::master.active_with_caller());
-  #elif UPCXX_BACKEND_GASNET_PAR
-    std::lock_guard<std::mutex> locked{segment_lock_};
   #endif
+
+  std::lock_guard<detail::par_mutex> locked{segment_lock_};
   
   void *p;
   if (upcxx_use_upc_alloc) {
     // must overallocate and pad to ensure alignment
     UPCXX_ASSERT(alignment < 1U<<31);
-    alignment = std::max(alignment, (size_t)4);
+    alignment = std::max(alignment, (size_t)16);
     UPCXX_ASSERT((alignment & (alignment-1)) == 0); // assumed to be power-of-two
     uintptr_t base = (uintptr_t)upcxx_upc_alloc(size+alignment);
     uintptr_t user = (base+alignment) & ~(alignment-1);
     uintptr_t pad = (user - base);
-    UPCXX_ASSERT(pad >= 4 && pad <= alignment);
-    *(reinterpret_cast<uint32_t*>(user-4)) = pad; // store padding amount in header
+    UPCXX_ASSERT(pad >= 16 && pad <= alignment);
+    *(reinterpret_cast<uint64_t*>(user-8)) = pad; // store padding amount in header
+    *(reinterpret_cast<uint64_t*>(user-16)) = size+alignment; // store footrpint size in header
     p = reinterpret_cast<void *>(user);
+
+    foot->bytes += size+alignment;
+    foot->count += 1;
   } else {
     p = mspace_memalign(segment_mspace_, alignment, size);
+    if_pt(p) {
+      foot->bytes += mspace_usable_size(p);
+      foot->count += 1;
+    }
   }
-  if_pt(p) allocs_live_n_ += 1;
+
+  UPCXX_ASSERT_ALWAYS(
+    p != nullptr || foot == &gasnet::sheap_footprint_user,
+
+    "UPC++ could not allocate an internal buffer of\n"
+    "size="<<size<<" from shared heap. Please increase\n"
+    "the size of the shared heap (UPCXX_SHARED_HEAP_SIZE).\n\n"
+    
+    <<"Local shared heap statistics:\n"
+    <<"  User allocations:      count "<<gasnet::sheap_footprint_user.count
+    <<                       ", bytes "<<gasnet::sheap_footprint_user.bytes<<'\n'
+    <<"  Internal rdzv buffers: count "<<gasnet::sheap_footprint_rdzv.count
+    <<                       ", bytes "<<gasnet::sheap_footprint_rdzv.bytes<<'\n'
+    <<"  Internal misc buffers: count "<<gasnet::sheap_footprint_misc.count
+    <<                       ", bytes "<<gasnet::sheap_footprint_misc.bytes
+  );
+    
   //UPCXX_ASSERT(p != nullptr);
   UPCXX_ASSERT(reinterpret_cast<uintptr_t>(p) % alignment == 0);
   return p;
 }
 
-void upcxx::deallocate(void *p) {
+void gasnet::deallocate(void *p, sheap_footprint_t *foot) {
   UPCXX_ASSERT(shared_heap_isinit);
   #if UPCXX_BACKEND_GASNET_SEQ
     UPCXX_ASSERT(backend::master.active_with_caller());
-  #elif UPCXX_BACKEND_GASNET_PAR
-    std::lock_guard<std::mutex> locked{segment_lock_};
   #endif
+
+  std::lock_guard<detail::par_mutex> locked{segment_lock_};
+  
   if_pf (!p) return;
   
   if (upcxx_use_upc_alloc) {
     // parse alignment header to recover original base ptr
     uintptr_t user = reinterpret_cast<uintptr_t>(p);
     UPCXX_ASSERT((user & 0x3) == 0);
-    uint32_t  pad = *(reinterpret_cast<uint32_t*>(user-4));
+    uint64_t pad = *(reinterpret_cast<uint64_t*>(user-8));
+    uint64_t foot_size = *(reinterpret_cast<uint64_t*>(user-16));
     uintptr_t base = user-pad;
     upcxx_upc_free(reinterpret_cast<void *>(base));
+    foot->bytes -= foot_size;
+    foot->count -= 1;
   } else {
+    foot->bytes -= mspace_usable_size(p);
+    foot->count -= 1;
     mspace_free(segment_mspace_, p);
   }
-  allocs_live_n_ -= 1;
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -965,7 +1156,7 @@ void gasnet::send_am_eager_persona(
     std::size_t buf_size,
     std::size_t buf_align
   ) {
-  
+
   gex_AM_Arg_t per_lo = reinterpret_cast<intptr_t>(recipient_persona) & 0xffffffffu;
   gex_AM_Arg_t per_hi = reinterpret_cast<intptr_t>(recipient_persona) >> 31 >> 1;
 
@@ -974,7 +1165,7 @@ void gasnet::send_am_eager_persona(
     id_am_eager_persona, buf, buf_size,
     GEX_EVENT_NOW, /*flags*/0,
     buf_align<<1 | (level == progress_level::user ? 1 : 0),
-    per_lo, per_hi
+    am_arg_encode_ptr_lo(recipient_persona), am_arg_encode_ptr_hi(recipient_persona)
   );
   
   after_gasnet();
@@ -1006,8 +1197,8 @@ namespace {
   }
 }
 
-template<progress_level level>
 void gasnet::send_am_rdzv(
+    progress_level level,
     team &tm,
     intrank_t rank_d,
     persona *persona_d,
@@ -1036,7 +1227,7 @@ void gasnet::send_am_rdzv(
         tls.enqueue(*tls.get_top_persona(), level, m, /*known_active=*/std::true_type());
       }
       else {
-        rpc_as_lpc *m = rpc_as_lpc::build_rdzv_lz(cmd_size, cmd_align);
+        rpc_as_lpc *m = rpc_as_lpc::build_rdzv_lz(/*use_sheap=*/false, cmd_size, cmd_align);
         m->rdzv_rank_s = rank_s;
         m->rdzv_rank_s_local = false;
         
@@ -1052,7 +1243,7 @@ void gasnet::send_am_rdzv(
             // Notify source rank it can free buffer.
             gasnet::send_am_restricted(
               upcxx::world(), rank_s,
-              [=]() { upcxx::deallocate(buf_s); }
+              [=]() { gasnet::deallocate(buf_s, &gasnet::sheap_footprint_rdzv); }
             );
           }
         );
@@ -1061,14 +1252,11 @@ void gasnet::send_am_rdzv(
   );
 }
 
-template void gasnet::send_am_rdzv<progress_level::internal>(team&, intrank_t, persona*, void*, size_t, size_t);
-template void gasnet::send_am_rdzv<progress_level::user>(team&, intrank_t, persona*, void*, size_t, size_t);
-
 void gasnet::bcast_am_master_eager(
     progress_level level,
     upcxx::team &tm,
     intrank_t rank_d_ub, // in range [0, 2*rank_n-1)
-    void *payload,
+    bcast_payload_header *payload,
     size_t cmd_size, size_t cmd_align
   ) {
   
@@ -1076,13 +1264,6 @@ void gasnet::bcast_am_master_eager(
   intrank_t rank_n = tm.rank_n();
   
   gex_TM_t tm_gex = handle_of(tm);
-  
-  parcel_writer w(payload);
-  team_id *p_tm_id = w.place_trivial_aligned<team_id>();
-  intrank_t *p_sub_ub = w.place_trivial_aligned<intrank_t>();
-  
-  UPCXX_ASSERT(*p_tm_id == tm.id());
-  if(p_tm_id) {/*silence "unused" warning*/}
   
   // loop over targets
   while(true) {
@@ -1098,7 +1279,7 @@ void gasnet::bcast_am_master_eager(
     intrank_t sub_lb = rank_d_mid - translate;
     intrank_t sub_ub = rank_d_ub - translate;
     
-    *p_sub_ub = sub_ub;
+    payload->eager_subrank_ub = sub_ub;
     gex_AM_RequestMedium1(
       tm_gex, sub_lb,
       id_am_bcast_master_eager, payload, cmd_size,
@@ -1112,13 +1293,13 @@ void gasnet::bcast_am_master_eager(
   gasnet::after_gasnet();
 }
 
-template<progress_level level>
-int gasnet::bcast_am_master_rdzv(
+void gasnet::bcast_am_master_rdzv(
+    progress_level level,
     upcxx::team &tm,
     intrank_t rank_d_ub, // in range [0, 2*rank_n-1)
     intrank_t wrank_owner, // self or a local peer (in world)
-    void *payload_sender, // in my address space
-    std::atomic<int64_t> *refs_sender, // in my address space
+    bcast_payload_header *payload_owner, // in owner address space
+    bcast_payload_header *payload_sender, // in my address space
     size_t cmd_size,
     size_t cmd_align
   ) {
@@ -1126,14 +1307,44 @@ int gasnet::bcast_am_master_rdzv(
   intrank_t rank_n = tm.rank_n();
   intrank_t rank_me = tm.rank_me();
   intrank_t wrank_sender = backend::rank_me;
-  void *payload_owner = reinterpret_cast<void*>(
-      backend::globalize_memory_nonnull(wrank_owner, payload_sender)
-    );
-  std::atomic<int64_t> *refs_owner = reinterpret_cast<std::atomic<int64_t>*>(
-      backend::globalize_memory_nonnull(wrank_owner, refs_sender)
-    );
-  
-  int refs_added = 0;
+
+  { // precompute number of references to add as num messages to be sent
+    int messages = 0;
+    intrank_t hi = rank_d_ub;
+    
+    while(true) {
+      intrank_t mid = rank_me + (hi - rank_me)/2;
+      // Send-to-self is stop condition.
+      if(mid == rank_me)
+        break;
+      messages += 1;
+      hi = mid;
+    }
+
+    if(payload_owner == payload_sender) {
+      // If we are the owner of the refcount, then nobody else could be concurrently
+      // decrementing until we do the message sends. Thus we can increment non-atomically now.
+      int64_t refs = payload_sender->rdzv_refs.load(std::memory_order_relaxed);
+      refs += messages;
+      payload_sender->rdzv_refs.store(refs, std::memory_order_relaxed);
+
+      if(messages == 0) { // leaf of bcast tree
+        if(refs == 0) { // no outstanding need of the rdzv buffer
+          // This can only happen for a bcast in a singleton team, in which case
+          // materializing the am payload was pointless since it is sent to
+          // nobody. Seeing this as an unlikely kind of bcast, we will forfeit
+          // optimizing out this wasted effort.
+          gasnet::deallocate((void*)payload_sender, &gasnet::sheap_footprint_rdzv);
+        }
+        return;
+      }
+    }
+    else {
+      if(messages == 0) // leaf of bcast tree
+        return;
+      payload_sender->rdzv_refs.fetch_add(messages, std::memory_order_relaxed);
+    }
+  }
   
   // loop over targets
   while(true) {
@@ -1149,18 +1360,17 @@ int gasnet::bcast_am_master_rdzv(
     intrank_t sub_lb = rank_d_mid - translate;
     intrank_t sub_ub = rank_d_ub - translate;
     
-    refs_added += 1;
-    
     backend::send_am_master<progress_level::internal>(
       tm, sub_lb,
       [=]() {
         if(backend::rank_is_local(wrank_sender)) {
-          void *payload_target = backend::localize_memory_nonnull(wrank_owner, reinterpret_cast<std::uintptr_t>(payload_owner));
-          std::atomic<int64_t> *refs_target = (std::atomic<int64_t>*)backend::localize_memory_nonnull(wrank_owner, reinterpret_cast<std::uintptr_t>(refs_owner));
+          bcast_payload_header *payload_target =
+            (bcast_payload_header*)backend::localize_memory_nonnull(
+              wrank_owner, reinterpret_cast<std::uintptr_t>(payload_owner)
+            );
           
-          parcel_reader r(payload_target);
-          team_id tm_id = r.pop_trivial_aligned<team_id>();
-          /*ignore*/r.pop_trivial_aligned<intrank_t>();
+          detail::serialization_reader r(payload_target);
+          r.unplace(storage_size_of<bcast_payload_header>());
           
           bcast_as_lpc *m = new bcast_as_lpc;
           m->the_vtbl.execute_and_delete = command<detail::lpc_base*>::get_executor(r);
@@ -1169,65 +1379,50 @@ int gasnet::bcast_am_master_rdzv(
           m->is_rdzv = true;
           m->rdzv_rank_s = wrank_owner;
           m->rdzv_rank_s_local = true;
-          m->rdzv_refs_s = refs_target;
-          
-          auto &tls = detail::the_persona_tls;
-          tls.enqueue(*tls.get_top_persona(), level, m, /*known_active=*/std::true_type());
-          
-          int refs_added = bcast_am_master_rdzv<level>(
-              tm_id.here(), sub_ub,
-              wrank_owner, payload_target, refs_target,
+
+          bcast_am_master_rdzv(
+              level, payload_target->tm_id.here(), sub_ub,
+              wrank_owner, payload_owner, payload_target,
               cmd_size, cmd_align
             );
           
-          int64_t refs_now = refs_target->fetch_add(refs_added, std::memory_order_relaxed);
-          refs_now += refs_added;
-          // can't be done because enqueued rpc couldn't have run. (The `if(...)`
-          // prevents "unused variable" warnings when asserts are off.)
-          if(refs_now == 0) UPCXX_ASSERT(refs_now != 0);
+          auto &tls = detail::the_persona_tls;
+          tls.enqueue(*tls.get_top_persona(), level, m, /*known_active=*/std::true_type());
         }
         else {
-          bcast_as_lpc *m = rpc_as_lpc::build_rdzv_lz<bcast_as_lpc>(cmd_size, cmd_align);
+          bcast_as_lpc *m = rpc_as_lpc::build_rdzv_lz<bcast_as_lpc>(/*use_sheap=*/true, cmd_size, cmd_align);
           m->rdzv_rank_s = wrank_owner;
           m->rdzv_rank_s_local = false;
-          m->rdzv_refs_s = refs_owner;
           
           rma_get(
             m->payload, wrank_owner, payload_owner, cmd_size,
             [=]() {
               intrank_t wrank_owner = m->rdzv_rank_s;
+              bcast_payload_header *payload_here = (bcast_payload_header*)m->payload;
+
+              new(&payload_here->rdzv_refs) std::atomic<int64_t>(1); // 1 ref for rpc execution
+
+              {
+                detail::serialization_reader r(payload_here);
+                r.unplace(storage_size_of<bcast_payload_header>());
+                m->the_vtbl.execute_and_delete = command<detail::lpc_base*>::get_executor(r);
+              }
               
-              std::atomic<int64_t> *refs_owner = m->rdzv_refs_s;
-              m->rdzv_refs_s = &m->rdzv_refs_here;
-              
-              parcel_reader r(m->payload);
-              team_id tm_id = r.pop_trivial_aligned<team_id>();
-              /*ignore*/r.pop_trivial_aligned<intrank_t>();
-              
-              auto &tls = detail::the_persona_tls;
-              m->the_vtbl.execute_and_delete = command<detail::lpc_base*>::get_executor(r);
-              UPCXX_ASSERT(&backend::master == tls.get_top_persona());
-              tls.enqueue(backend::master, level, m, /*known_active=*/std::true_type());
-              
-              m->rdzv_refs_here.store(1 + (1<<30), std::memory_order_relaxed);
-              
-              int refs_added = bcast_am_master_rdzv<level>(
-                  tm_id.here(), sub_ub,
-                  backend::rank_me, m->payload, &m->rdzv_refs_here,
+              bcast_am_master_rdzv(
+                  level, payload_here->tm_id.here(), sub_ub,
+                  backend::rank_me, payload_here, payload_here,
                   cmd_size, cmd_align
                 );
               
-              int64_t refs_now = m->rdzv_refs_here.fetch_add(refs_added - (1<<30), std::memory_order_relaxed);
-              refs_now += refs_added - (1<<30);
-              // enqueued rpc shouldn't have run yet
-              if(refs_now == 0) UPCXX_ASSERT(refs_now != 0);
+              auto &tls = detail::the_persona_tls;
+              tls.enqueue(*tls.get_top_persona(), level, m, /*known_active=*/std::true_type());
               
               // Notify source rank it can free buffer.
               send_am_restricted(
                 upcxx::world(), wrank_owner,
                 [=]() {
-                  if(0 == -1 + refs_owner->fetch_add(-1, std::memory_order_acq_rel))
-                    upcxx::deallocate(payload_owner);
+                  if(0 == -1 + payload_owner->rdzv_refs.fetch_add(-1, std::memory_order_acq_rel))
+                    gasnet::deallocate(payload_owner, &gasnet::sheap_footprint_rdzv);
                 }
               );
             }
@@ -1238,44 +1433,53 @@ int gasnet::bcast_am_master_rdzv(
     
     rank_d_ub = rank_d_mid;
   }
-  
-  return refs_added;
 }
-
-template int gasnet::bcast_am_master_rdzv<progress_level::internal>(
-  upcxx::team&, intrank_t, intrank_t, void*, std::atomic<int64_t>*, size_t, size_t
-);
-template int gasnet::bcast_am_master_rdzv<progress_level::user>(
-  upcxx::team&, intrank_t, intrank_t, void*, std::atomic<int64_t>*, size_t, size_t
-);
 
 namespace upcxx {
 namespace backend {
 namespace gasnet {
-  template<>
-  void rpc_as_lpc::cleanup</*never_rdzv=*/false>(detail::lpc_base *me1) {
-    rpc_as_lpc *me = static_cast<rpc_as_lpc*>(me1);
-    
-    if(!me->is_rdzv)
-      std::free(me->payload);
-    else {
-      if(me->rdzv_rank_s_local) {
-        // Notify source rank it can free buffer.
-        void *buf_s = reinterpret_cast<void*>(
-            backend::globalize_memory_nonnull(me->rdzv_rank_s, me->payload)
-          );
-         
-        send_am_restricted(
-          upcxx::world(), me->rdzv_rank_s,
-          [=]() { upcxx::deallocate(buf_s); }
-        );
-        
-        delete me;
+  namespace {
+    template<bool restricted>
+    void cleanup_rpc_as_lpc_maybe_rdzv(detail::lpc_base *me1) {
+      rpc_as_lpc *me = static_cast<rpc_as_lpc*>(me1);
+      
+      if(!me->is_rdzv) {
+        if(!restricted) std::free(me->payload);
       }
       else {
-        upcxx::deallocate(me->payload);
+        if(me->rdzv_rank_s_local) {
+          // Notify source rank it can free buffer.
+          void *buf_s = reinterpret_cast<void*>(
+              backend::globalize_memory_nonnull(me->rdzv_rank_s, me->payload)
+            );
+           
+          send_am_restricted(
+            upcxx::world(), me->rdzv_rank_s,
+            [=]() { gasnet::deallocate(buf_s, &gasnet::sheap_footprint_rdzv); }
+          );
+          
+          delete me;
+        }
+        else {
+          // rpc_as_lpc::build_rdzv_lz(use_sheap=false, ...)
+          UPCXX_ASSERT(!( // should not be in segment
+            shared_heap_base <= me->payload &&
+            (char*)me->payload < (char*)shared_heap_base + shared_heap_sz
+          ));
+          std::free(me->payload); 
+        }
       }
     }
+  }
+  
+  template<>
+  void rpc_as_lpc::cleanup</*never_rdzv=*/false, /*restricted=*/false>(detail::lpc_base *me) {
+    cleanup_rpc_as_lpc_maybe_rdzv<false>(me);
+  }
+  
+  template<>
+  void rpc_as_lpc::cleanup</*never_rdzv=*/false, /*restricted=*/true>(detail::lpc_base *me) {
+    cleanup_rpc_as_lpc_maybe_rdzv<true>(me);
   }
   
   template<>
@@ -1287,26 +1491,33 @@ namespace gasnet {
         std::free(me->payload);
     }
     else {
-      int64_t refs_now = -1 + me->rdzv_refs_s->fetch_add(-1, std::memory_order_acq_rel);
+      bcast_payload_header *hdr = (bcast_payload_header*)me->payload;
+      int64_t refs_now = -1 + hdr->rdzv_refs.fetch_add(-1, std::memory_order_acq_rel);
       
       if(me->rdzv_rank_s_local) {
         if(0 == refs_now) {
           // Notify source rank it can free buffer.
           void *buf_s = reinterpret_cast<void*>(
-              backend::globalize_memory_nonnull(me->rdzv_rank_s, me->payload)
+              backend::globalize_memory_nonnull(me->rdzv_rank_s, hdr)
             );
           
           send_am_restricted(
             upcxx::world(), me->rdzv_rank_s,
-            [=]() { upcxx::deallocate(buf_s); }
+            [=]() { gasnet::deallocate(buf_s, &gasnet::sheap_footprint_rdzv); }
           );
         }
         
         delete me;
       }
       else {
-        if(0 == refs_now)
-          upcxx::deallocate(me->payload);
+        if(0 == refs_now) {
+          // rpc_as_lpc::build_rdzv_lz(use_sheap=true, ...)
+          UPCXX_ASSERT( // should be in segment
+            shared_heap_base <= me->payload &&
+            (char*)me->payload < (char*)shared_heap_base + shared_heap_sz
+          );
+          gasnet::deallocate(me->payload, &gasnet::sheap_footprint_rdzv);
+        }
       }
     }
   }
@@ -1325,25 +1536,28 @@ RpcAsLpc* rpc_as_lpc::build_eager(
   std::size_t msg_offset = msg_size;
   msg_size += sizeof(RpcAsLpc);
   
-  void *msg_buf;
-  int ok = posix_memalign(&msg_buf, cmd_alignment, msg_size);
-  UPCXX_ASSERT_ALWAYS(ok == 0);
+  void *msg_buf = detail::alloc_aligned(msg_size, cmd_alignment);
   
-  // The (void**) casts *might* inform memcpy that it can assume word
-  // alignment.
-  std::memcpy((void**)msg_buf, (void**)cmd_buf, cmd_size);
-  
+  if(cmd_buf != nullptr) {
+    // The (void**) casts *might* inform memcpy that it can assume word
+    // alignment.
+    std::memcpy((void**)msg_buf, (void**)cmd_buf, cmd_size);
+  }
+
   RpcAsLpc *m = ::new((char*)msg_buf + msg_offset) RpcAsLpc;
   m->payload = msg_buf;
-  m->the_vtbl.execute_and_delete = command<detail::lpc_base*>::get_executor(RpcAsLpc::reader_of(m));
   m->vtbl = &m->the_vtbl;
   m->is_rdzv = false;
+  
+  if(cmd_buf != nullptr)
+    m->the_vtbl.execute_and_delete = command<detail::lpc_base*>::get_executor(RpcAsLpc::reader_of(m));
   
   return m;
 }
 
 template<typename RpcAsLpc>
 RpcAsLpc* rpc_as_lpc::build_rdzv_lz(
+    bool use_sheap,
     std::size_t cmd_size,
     std::size_t cmd_alignment // alignment requirement of packing
   ) {
@@ -1351,7 +1565,11 @@ RpcAsLpc* rpc_as_lpc::build_rdzv_lz(
   std::size_t buf_size = offset + sizeof(RpcAsLpc);
   std::size_t buf_align = std::max(cmd_alignment, alignof(RpcAsLpc));
   
-  void *buf = upcxx::allocate(buf_size, buf_align);
+  void *buf;
+  if(use_sheap)
+    buf = gasnet::allocate(buf_size, buf_align, &gasnet::sheap_footprint_rdzv);
+  else
+    buf = detail::alloc_aligned(buf_size, buf_align);
   UPCXX_ASSERT_ALWAYS(buf != nullptr);
   
   RpcAsLpc *m = ::new((char*)buf + offset) RpcAsLpc;
@@ -1464,7 +1682,7 @@ void upcxx::progress(progress_level level) {
   while(total_exec_n < 1000 && exec_n != 0);
   //while(0);
   
-  #if GASNET_CONDUIT_SMP || GASNET_CONDUIT_UDP
+  if(oversubscribed) {
     /* In SMP tests we typically oversubscribe ranks to cpus. This is
      * an attempt at heuristically determining if this rank is just
      * spinning fruitlessly hogging the cpu from another who needs it.
@@ -1480,10 +1698,10 @@ void upcxx::progress(progress_level level) {
     if(total_exec_n != 0)
       consecutive_nothings = 0;
     else if(++consecutive_nothings == 10) {
-      sched_yield();
+      gasnett_sched_yield();
       consecutive_nothings = 0;
     }
-  #endif
+  }
   
   tls.flip_burstable(progress_level::user);
   tls.set_progressing(-1);
@@ -1498,21 +1716,22 @@ namespace {
       void *buf, size_t buf_size,
       gex_AM_Arg_t buf_align
     ) {
-    
-    if(0 == (reinterpret_cast<uintptr_t>(buf) & (buf_align-1))) {
-      command<void*>::get_executor(parcel_reader(buf))(buf);
-    }
+
+    void *tmp;
+    if(0 == (reinterpret_cast<uintptr_t>(buf) & (buf_align-1)))
+      tmp = buf;
     else {
-      void *tmp;
-      int ok = posix_memalign(&tmp, buf_align, buf_size);
-      UPCXX_ASSERT_ALWAYS(ok == 0);
-      
+      tmp = detail::alloc_aligned(buf_size, buf_align);
       std::memcpy((void**)tmp, (void**)buf, buf_size);
-      
-      command<void*>::get_executor(parcel_reader(buf))(buf);
-      
-      std::free(tmp);
     }
+
+    gasnet::rpc_as_lpc dummy;
+    dummy.payload = tmp;
+    dummy.is_rdzv = false;
+    command<detail::lpc_base*>::get_executor(detail::serialization_reader(tmp))(&dummy);
+
+    if(tmp != buf)
+      std::free(tmp);
   }
   
   void am_eager_master(
@@ -1551,19 +1770,12 @@ namespace {
     size_t buf_align = buf_align_and_level>>1;
     bool level_user = buf_align_and_level & 1;
     
-    // Reconstructing a pointer from two gex_AM_Arg_t is nuanced
-    // since the size of gex_AM_Arg_t is unspecified. The high
-    // bits (per_hi) can be safely upshifted into place, on a 32-bit
-    // system the result will just be zero. The low bits (per_lo) must
-    // not be permitted to sign-extend. Masking against 0xf's achieves
-    // this because all literals are non-negative. So the result of the
-    // AND could either be signed or unsigned depending on if the mask
-    // (a positive value) can be expressed in the desitination signed
-    // type (intptr_t).
-    persona *per = reinterpret_cast<persona*>(
-      static_cast<intptr_t>(per_hi)<<31<<1 |
-      (per_lo & 0xffffffff)
-    );
+    persona *per;
+    if(per_lo & 0x1) // low bit used to discriminate persona** vs persona*
+      per = *am_arg_decode_ptr<persona*>(per_lo ^ 0x1, per_hi);
+    else
+      per = am_arg_decode_ptr<persona>(per_lo, per_hi);
+    
     per = per == nullptr ? &backend::master : per; 
     
     rpc_as_lpc *m = rpc_as_lpc::build_eager(buf, buf_size, buf_align);
@@ -1600,11 +1812,9 @@ namespace {
       backend::master,
       progress_level::internal,
       [=]() {
-        parcel_reader r(m->payload);
-        team_id tm_id = r.pop_trivial_aligned<team_id>();
-        intrank_t rank_d_ub = r.pop_trivial_aligned<intrank_t>();
+        bcast_payload_header *payload = (bcast_payload_header*)m->payload;
         
-        gasnet::bcast_am_master_eager(level, tm_id.here(), rank_d_ub, m->payload, buf_size, buf_align);
+        gasnet::bcast_am_master_eager(level, payload->tm_id.here(), payload->eager_subrank_ub, payload, buf_size, buf_align);
         
         if(0 == --m->eager_refs)
           std::free(m->payload);
@@ -1613,6 +1823,311 @@ namespace {
     );
     
     tls.enqueue(backend::master, level, m, known_active);
+  }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// rma_put_then_am_master
+
+namespace {
+  par_atomic<std::uint32_t> rma_put_then_am_nonce_bumper(0);
+}
+
+template<gasnet::rma_put_then_am_sync sync_lb, bool packed_protocol>
+gasnet::rma_put_then_am_sync gasnet::rma_put_then_am_master_protocol(
+    team &tm, intrank_t rank_d,
+    void *buf_d, void const *buf_s, std::size_t buf_size,
+    progress_level am_level, void *am_cmd, std::size_t am_size, std::size_t am_align,
+    gasnet::handle_cb *src_cb,
+    gasnet::reply_cb *rem_cb
+  ) {
+
+  gex_TM_t tm_h = gasnet::handle_of(tm);
+  gex_Event_t src_h = GEX_EVENT_INVALID, *src_ph;
+
+  switch(sync_lb) {
+  case rma_put_then_am_sync::src_now:
+    src_ph = GEX_EVENT_NOW;
+    break;
+  case rma_put_then_am_sync::src_cb:
+  default: // suppress exhaustiveness warning
+    src_ph = &src_h;
+    break;
+  }
+  
+  size_t am_long_max = gex_AM_MaxRequestLong(tm_h, rank_d, src_ph, /*flags*/0, 16);
+  
+  if(am_long_max < buf_size) {
+    (void)gex_RMA_PutBlocking(
+      tm_h, rank_d,
+      buf_d, const_cast<void*>(buf_s), buf_size - am_long_max,
+      /*flags*/0
+    );
+    buf_d = (char*)buf_d + (buf_size - am_long_max);
+    buf_s = (char const*)buf_s + (buf_size - am_long_max);
+    buf_size = am_long_max;
+  }
+  
+  if(packed_protocol) {
+    gex_AM_Arg_t cmd_size_align15_level1 = am_size<<16 | am_align<<1 |
+                                           (am_level == progress_level::user ? 1 : 0);
+    gex_AM_Arg_t cmd_arg[13];
+    UPCXX_ASSERT(am_size <= 13*sizeof(gex_AM_Arg_t));
+    std::memcpy((void*)cmd_arg, am_cmd, am_size);
+    
+    gex_AM_RequestLong16(
+      tm_h, rank_d,
+      id_am_long_master_packed_cmd,
+      const_cast<void*>(buf_s), buf_size, buf_d,
+      src_ph,
+      /*flags*/0,
+      am_arg_encode_ptr_lo(rem_cb), am_arg_encode_ptr_hi(rem_cb),
+      cmd_size_align15_level1,
+      cmd_arg[0], cmd_arg[1], cmd_arg[2], cmd_arg[3],
+      cmd_arg[4], cmd_arg[5], cmd_arg[6], cmd_arg[7],
+      cmd_arg[8], cmd_arg[9], cmd_arg[10], cmd_arg[11],
+      cmd_arg[12]
+    );
+  }
+  else {
+    gex_AM_Arg_t am_align_level1 =
+      am_align<<1 |
+      (am_level == progress_level::user ? 1 : 0);
+
+    uint32_t nonce_u = rma_put_then_am_nonce_bumper.fetch_add(1, std::memory_order_relaxed);
+    gex_AM_Arg_t nonce;
+    std::memcpy(&nonce, &nonce_u, sizeof(gex_AM_Arg_t));
+    
+    (void)gex_AM_RequestLong5(
+      tm_h, rank_d,
+      id_am_long_master_payload_part,
+      const_cast<void*>(buf_s), buf_size, buf_d,
+      src_ph,
+      /*flags*/0,
+      nonce, am_size, am_align_level1,
+      am_arg_encode_ptr_lo(rem_cb), am_arg_encode_ptr_hi(rem_cb)
+    );
+
+    size_t part_size_max = gex_AM_MaxRequestMedium(
+      tm_h, rank_d, GEX_EVENT_NOW, /*flags*/0, /*num_args*/6
+    );
+    size_t part_offset = 0;
+    
+    while(part_offset < am_size) {
+      size_t part_size = std::min(part_size_max, am_size - part_offset);
+      
+      (void)gex_AM_RequestMedium4(
+        tm_h, rank_d,
+        id_am_long_master_cmd_part,
+        (char*)am_cmd + part_offset, part_size,
+        GEX_EVENT_NOW,
+        /*flags*/0,
+        nonce, am_size, am_align_level1,
+        part_offset
+      );
+      
+      part_offset += part_size;
+    }
+  }
+
+  // look for chance to escalate actual synchronization achieved
+  if(sync_lb == rma_put_then_am_sync::src_cb) {
+    src_cb->handle = reinterpret_cast<uintptr_t>(src_h);
+    if(0 == gex_Event_Test(src_h))
+      return rma_put_then_am_sync::src_now;
+  }
+  
+  return sync_lb; // no sync escalation
+}
+
+// instantiate all cases of rma_put_then_am_master_protocol
+#define INSTANTIATE(sync_lb, packed_protocol) \
+  template \
+  gasnet::rma_put_then_am_sync \
+  gasnet::rma_put_then_am_master_protocol<sync_lb, packed_protocol>( \
+      team &tm, intrank_t rank_d, \
+      void *buf_d, void const *buf_s, std::size_t buf_size, \
+      progress_level am_level, void *am_cmd, std::size_t am_size, std::size_t am_align, \
+      gasnet::handle_cb *src_cb, \
+      gasnet::reply_cb *rem_cb \
+    );
+
+INSTANTIATE(gasnet::rma_put_then_am_sync::src_now, true)
+INSTANTIATE(gasnet::rma_put_then_am_sync::src_now, false)
+INSTANTIATE(gasnet::rma_put_then_am_sync::src_cb, true)
+INSTANTIATE(gasnet::rma_put_then_am_sync::src_cb, false)
+#undef INSTANTIATE
+
+namespace {
+  void am_long_master_packed_cmd(
+      gex_Token_t token,
+      void *payload, size_t payload_size,
+      gex_AM_Arg_t reply_cb_lo, gex_AM_Arg_t reply_cb_hi,
+      gex_AM_Arg_t cmd_size_align15_level1,
+      gex_AM_Arg_t a0, gex_AM_Arg_t a1, gex_AM_Arg_t a2, gex_AM_Arg_t a3,
+      gex_AM_Arg_t a4, gex_AM_Arg_t a5, gex_AM_Arg_t a6, gex_AM_Arg_t a7,
+      gex_AM_Arg_t a8, gex_AM_Arg_t a9, gex_AM_Arg_t a10, gex_AM_Arg_t a11,
+      gex_AM_Arg_t a12
+    ) {
+    
+    size_t cmd_size = cmd_size_align15_level1>>(1+15);
+    size_t cmd_align = (cmd_size_align15_level1>>1) & ((1<<15)-1);
+    bool level_user = cmd_size_align15_level1 & 1;
+    
+    gex_AM_Arg_t buf[13] = {a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12};
+    rpc_as_lpc *m = rpc_as_lpc::build_eager((void*)buf, cmd_size, cmd_align);
+    
+    detail::persona_tls &tls = detail::the_persona_tls;
+    
+    tls.enqueue(
+      backend::master,
+      level_user ? progress_level::user : progress_level::internal,
+      m,
+      /*known_active=*/std::integral_constant<bool, !UPCXX_BACKEND_GASNET_PAR>()
+    );
+
+    if(!(reply_cb_lo == 0x0 && reply_cb_hi == 0x0))
+      gex_AM_ReplyShort2(token, id_am_reply_cb, 0, reply_cb_lo, reply_cb_hi);
+  }
+
+  struct am_long_reassembly_state: rpc_as_lpc {
+    par_atomic<int> credits{0};
+    gex_AM_Arg_t reply_cb_lo, reply_cb_hi;
+  };
+
+  par_mutex am_long_reassembly_lock;
+  std::unordered_map<std::uint64_t, am_long_reassembly_state*> am_long_reassembly_table;
+  
+  void am_long_master_payload_part(
+      gex_Token_t token,
+      void *payload_part, size_t payload_part_size,
+      gex_AM_Arg_t nonce,
+      gex_AM_Arg_t cmd_size,
+      gex_AM_Arg_t cmd_align_level1,
+      gex_AM_Arg_t reply_cb_lo, gex_AM_Arg_t reply_cb_hi
+    ) {
+
+    gex_Token_Info_t info;
+    gex_Token_Info(token, &info, GEX_TI_SRCRANK);
+    uint64_t key = uint64_t(info.gex_srcrank)<<32 ^ nonce;
+    
+    int credits_total = 1 + cmd_size;
+
+    int cmd_align = cmd_align_level1 >> 1;
+    int cmd_level = cmd_align_level1 & 1;
+    
+    am_long_reassembly_state *st;
+
+    am_long_reassembly_lock.lock();
+    {
+      auto got = am_long_reassembly_table.insert({key, nullptr});
+      if(got.second) {
+        st = rpc_as_lpc::build_eager<am_long_reassembly_state>(nullptr, cmd_size, cmd_align);
+        got.first->second = st;
+      }
+      else
+        st = got.first->second;
+
+      st->reply_cb_lo = reply_cb_lo;
+      st->reply_cb_hi = reply_cb_hi;
+      int credits_after = 1 + st->credits.fetch_add(1, std::memory_order_acq_rel);
+      
+      if(credits_after == credits_total) {
+        am_long_reassembly_table.erase(got.first);
+        // completion handled outside of lock below...
+      }
+      else
+        st = nullptr; // disable completion below
+    }
+    am_long_reassembly_lock.unlock();
+
+    if(st != nullptr) {
+      // completion
+      detail::persona_tls &tls = detail::the_persona_tls;
+      tls.enqueue(
+        backend::master,
+        cmd_level ? progress_level::user : progress_level::internal,
+        st,
+        /*known_active=*/std::integral_constant<bool, !UPCXX_BACKEND_GASNET_PAR>()
+      );
+      
+      if(!(reply_cb_lo == 0x0 && reply_cb_hi == 0x0))
+        gex_AM_ReplyShort2(token, id_am_reply_cb, 0, reply_cb_lo, reply_cb_hi);
+    }
+  }
+
+  void am_long_master_cmd_part(
+      gex_Token_t token,
+      void *cmd_part, size_t cmd_part_size,
+      gex_AM_Arg_t nonce,
+      gex_AM_Arg_t cmd_size,
+      gex_AM_Arg_t cmd_align_level1,
+      gex_AM_Arg_t cmd_part_offset
+    ) {
+
+    gex_Token_Info_t info;
+    gex_Token_Info(token, &info, GEX_TI_SRCRANK);
+    uint64_t key = uint64_t(info.gex_srcrank)<<32 ^ nonce;
+    
+    int credits_total = 1 + cmd_size;
+    int credits_after_optimistic;
+    
+    int cmd_align = cmd_align_level1 >> 1;
+    int cmd_level = cmd_align_level1 & 1;
+
+    am_long_reassembly_state *st;
+
+    am_long_reassembly_lock.lock();
+    {
+      auto got = am_long_reassembly_table.insert({key, nullptr});
+      if(got.second) {
+        st = rpc_as_lpc::build_eager<am_long_reassembly_state>(nullptr, cmd_size, cmd_align);
+        got.first->second = st;
+      }
+      else
+        st = got.first->second;
+
+      credits_after_optimistic = cmd_part_size + st->credits.load(std::memory_order_relaxed);
+      
+      if(credits_after_optimistic == credits_total)
+        am_long_reassembly_table.erase(got.first);
+    }
+    am_long_reassembly_lock.unlock();
+
+    std::memcpy((char*)st->payload + cmd_part_offset, cmd_part, cmd_part_size);
+
+    if(cmd_part_offset == 0)
+      st->the_vtbl.execute_and_delete = command<detail::lpc_base*>::get_executor(am_long_reassembly_state::reader_of(st));
+    
+    int credits_after = cmd_part_size + st->credits.fetch_add(cmd_part_size, std::memory_order_acq_rel);
+
+    if(credits_after == credits_total) {
+      if(credits_after_optimistic != credits_total) {
+        am_long_reassembly_lock.lock();
+        am_long_reassembly_table.erase(key);
+        am_long_reassembly_lock.unlock();
+      }
+      
+      // completion
+      gex_AM_Arg_t reply_cb_lo = st->reply_cb_lo;
+      gex_AM_Arg_t reply_cb_hi = st->reply_cb_hi;
+      
+      detail::persona_tls &tls = detail::the_persona_tls;
+      tls.enqueue(
+        backend::master,
+        cmd_level ? progress_level::user : progress_level::internal,
+        st,
+        /*known_active=*/std::integral_constant<bool, !UPCXX_BACKEND_GASNET_PAR>()
+      );
+      
+      if(!(reply_cb_lo == 0x0 && reply_cb_hi == 0x0))
+        gex_AM_ReplyShort2(token, id_am_reply_cb, 0, reply_cb_lo, reply_cb_hi);
+    }
+  }
+    
+  void am_reply_cb(gex_Token_t, gex_AM_Arg_t cb_lo, gex_AM_Arg_t cb_hi) {
+    gasnet::reply_cb *cb = am_arg_decode_ptr<gasnet::reply_cb>(cb_lo, cb_hi);
+    cb->fire();
   }
 }
 
@@ -1673,5 +2188,11 @@ GASNETT_IDENT(UPCXX_IdentString_LibraryVersion, "$UPCXXLibraryVersion: " _STRING
 #endif
 #ifdef  UPCXX_GIT_VERSION
 GASNETT_IDENT(UPCXX_IdentString_GitVersion, "$UPCXXGitVersion: " _STRINGIFY(UPCXX_GIT_VERSION) " $");
+#endif
+
+#if UPCXX_CUDA_ENABLED
+  GASNETT_IDENT(UPCXX_IdentString_CUDAEnabled, "$UPCXXCUDAEnabled: 1 $");
+#else
+  GASNETT_IDENT(UPCXX_IdentString_CUDAEnabled, "$UPCXXCUDAEnabled: 0 $");
 #endif
 

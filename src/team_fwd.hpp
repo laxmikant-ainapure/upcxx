@@ -21,6 +21,9 @@ namespace upcxx {
     // Get the promise pointer from the master map.
     template<typename T>
     promise<T>* registered_promise(digest id, int initial_anon=0);
+
+    template<typename T, typename ...U>
+    T* registered_state(digest id, U &&...ctor_args);
   }
   
   class team;
@@ -32,6 +35,15 @@ namespace upcxx {
   //public:
     team& here() const {
       return *static_cast<team*>(detail::registry[dig_]);
+    }
+
+    future<team&> when_here() const {
+      team *pteam = static_cast<team*>(detail::registry[dig_]);
+      // issue170: Currently the only form of team construction has barrier semantics,
+      // such that a newly created team_id cannot arrive at user-level progress anywhere
+      // until after the local representative has been constructed.
+      UPCXX_ASSERT(pteam != nullptr);
+      return make_future<team&>(*pteam);
     }
     
     #define UPCXX_COMPARATOR(op) \
@@ -114,8 +126,8 @@ namespace upcxx {
   team& local_team();
   
   namespace detail {
-    extern raw_storage<team> the_world_team;
-    extern raw_storage<team> the_local_team;    
+    extern detail::raw_storage<team> the_world_team;
+    extern detail::raw_storage<team> the_local_team;    
   }
 }
 #endif

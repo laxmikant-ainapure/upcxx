@@ -59,10 +59,10 @@ using upcxx::global_ptr;
 using namespace std;
 using namespace bench;
 
-const vector<size_t> buf_sizes = os_env<vector<size_t>>("sizes", vector<size_t>({1<<10}));
-const vector<int> nebr_nums = os_env<vector<int>>("nebrs", std::vector<int>({10}));
-const double nebr_stdev = os_env<double>("nebr_stdev", 10.0);
-const double wait_secs = os_env<double>("wait_secs", 1.0);
+vector<size_t> buf_sizes;
+vector<int> nebr_nums;
+double nebr_stdev;
+double wait_secs;
 
 struct nebr_t {
   intrank_t rank;
@@ -159,7 +159,7 @@ std::size_t exchange_via_rput(mesh_t &m) {
     });
   }
   
-  unsigned spins = 0;
+  //unsigned spins = 0;
   
   while(
       acks_out != (int)m.out_nebrs.size() ||
@@ -215,7 +215,6 @@ std::size_t exchange_via_rdzv(mesh_t &m) {
 ////////////////////////////////////////////////////////////////////////////////
 // AMLong based exchange zone
 
-#include <sched.h>
 #include <upcxx/upcxx_internal.hpp>
 
 #if !NOBS_DISCOVERY
@@ -274,14 +273,9 @@ std::size_t exchange_via_amlong(mesh_t &m) {
       lcs.push_back(lc);
   }
   
-  unsigned spins = 0;
   do {
     gasnet_AMPoll();
     UPCXX_ASSERT_ALWAYS(amlong_acks_in[amlong_epoch] <= (int)m.in_nebr_n);
-    
-    // TODO: remove this when the upcxx runtime stops doing this (issue 153)
-    if(++spins % 128 == 0)
-      sched_yield();
   }
   while(amlong_acks_in[amlong_epoch] != (int)m.in_nebr_n);
   
@@ -289,16 +283,10 @@ std::size_t exchange_via_amlong(mesh_t &m) {
   amlong_epoch += 1;
   amlong_epoch &= 0x0fffffff; // stay within range of gex_AM_Arg_t (signed).
   
-  spins = 0;
   while(!lcs.empty()) {
     gasnet_AMPoll();
     while(!lcs.empty() && 0 == gex_Event_Test(lcs.front()))
       lcs.pop_front();
-
-    // this exists for fairness since the upcxx progress engine does something similar
-    // TODO: remove this when the upcxx runtime stops doing this (issue 153)
-    if(++spins % 128 == 0)
-      sched_yield();
   }
   
   return buf_size*m.out_nebrs.size();
@@ -362,6 +350,12 @@ auto make_row = [](int nebr_n, size_t buf_size, const char *via) {
 
 int main() {
   upcxx::init();
+
+  buf_sizes = os_env<vector<size_t>>("sizes", vector<size_t>({1<<10}));
+  nebr_nums = os_env<vector<int>>("nebrs", std::vector<int>({10}));
+  nebr_stdev = os_env<double>("nebr_stdev", 10.0);
+  wait_secs = os_env<double>("wait_secs", 1.0);
+
   setup_exchange_via_amlong();
   
   UPCXX_ASSERT_ALWAYS(

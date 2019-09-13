@@ -130,6 +130,19 @@ namespace upcxx {
     global_fnptr<Ret(Arg...)> globalize_fnptr(Ret(*fn)(Arg...)) {
       return global_fnptr<Ret(Arg...)>(fn);
     }
+
+    template<typename Fn, typename Fn1 = typename std::decay<Fn>::type>
+    struct globalize_fnptr_return {
+      using type = Fn;
+    };
+    template<typename Fn, typename Ret, typename ...Arg>
+    struct globalize_fnptr_return<Fn, Ret(*)(Arg...)> {
+      using type = global_fnptr<Ret(Arg...)>;
+    };
+    template<typename Fn, typename Ret, typename ...Arg>
+    struct globalize_fnptr_return<Fn, Ret(&)(Arg...)> {
+      using type = global_fnptr<Ret(Arg...)>;
+    };
   }
 }
 

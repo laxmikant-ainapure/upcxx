@@ -65,7 +65,7 @@ namespace upcxx {
     -> typename detail::rpc_ff_return<Fn(Arg...), completions<>>::type {
 
     static_assert(
-      upcxx::trait_forall<
+      detail::trait_forall<
           is_definitely_serializable,
           typename binding<Arg>::on_wire_type...
         >::value,
@@ -93,7 +93,7 @@ namespace upcxx {
     -> typename detail::rpc_ff_return<Fn(Arg...), Cxs>::type {
 
     static_assert(
-      upcxx::trait_forall<
+      detail::trait_forall<
           is_definitely_serializable,
           typename binding<Arg>::on_wire_type...
         >::value,
@@ -136,28 +136,19 @@ namespace upcxx {
   // rpc
   
   namespace detail {
-    template<typename CxsState>
-    struct rpc_recipient_after {
-      intrank_t initiator_;
-      persona *initiator_persona_;
-      CxsState *state_;
+    template<typename PointerToLpcStalled>
+    struct rpc_recipient_after;
 
-      struct operation_satisfier {
-        CxsState *state;
-        template<typename ...T>
-        void operator()(T &&...vals) {
-          state->template operator()<operation_cx_event>(std::forward<T>(vals)...);
-          delete state;
-        }
-      };
+    template<typename ...T>
+    struct rpc_recipient_after<detail::lpc_dormant<T...>*> {
+      intrank_t initiator;
+      detail::lpc_dormant<T...> *remote_lpc;
       
       template<typename ...Arg>
-      void operator()(Arg &&...args) {
-        backend::template send_am_persona<progress_level::user>(
-          upcxx::world(),
-          initiator_,
-          initiator_persona_,
-          upcxx::bind(operation_satisfier{state_}, std::forward<Arg>(args)...)
+      void operator()(Arg &&...arg) const {
+        backend::template send_awaken_lpc<T...>(
+          upcxx::world(), initiator,
+          remote_lpc, std::tuple<T...>(std::forward<Arg>(arg)...)
         );
       }
     };
@@ -175,15 +166,15 @@ namespace upcxx {
       );
       
       static_assert(
-        (upcxx::trait_forall_tupled<binding_is_immediate, results_tuple>::value &&
-         upcxx::trait_forall_tupled<packing_is_owning, results_tuple>::value),
+        (detail::binding_all_immediate<results_tuple>::value &&
+         detail::trait_forall_tupled<serialization_references_buffer_not, results_tuple>::value),
         "rpc return values may not have type dist_object<T>&, team&, or view<T>."
       );
       
       template<typename Event>
       using tuple_t = typename std::conditional<
           std::is_same<Event, operation_cx_event>::value,
-          /*Event == operation_cx_event:*/unpacked_of_t<results_tuple>,
+          /*Event == operation_cx_event:*/deserialized_type_of_t<results_tuple>,
           /*Event != operation_cx_event:*/std::tuple<>
         >::type;
     };
@@ -210,7 +201,7 @@ namespace upcxx {
       -> typename detail::rpc_return<Fn(Arg...), Cxs>::type {
       
       static_assert(
-        upcxx::trait_forall<
+        detail::trait_forall<
             is_definitely_serializable,
             typename binding<Arg>::on_wire_type...
           >::value,
@@ -223,30 +214,32 @@ namespace upcxx {
           Cxs
         >;
       
-      cxs_state_t *state = new cxs_state_t{std::move(cxs)};
+      cxs_state_t state(std::move(cxs));
       
       auto returner = detail::completions_returner<
           /*EventPredicate=*/detail::event_is_here,
           /*EventValues=*/detail::rpc_event_values<Fn&&(Arg&&...)>,
           Cxs
-        >{*state};
-
+        >(state);
+      
       intrank_t initiator = backend::rank_me;
-      persona *initiator_persona = &upcxx::current_persona();
-      auto fn_bound = upcxx::bind(std::forward<Fn>(fn), std::forward<Arg>(args)...);
+      auto *op_lpc = std::move(state).template to_lpc_dormant<operation_cx_event>();
+      
+      using fn_bound_t = typename detail::bind<Fn&&, Arg&&...>::return_type;
+      fn_bound_t fn_bound = upcxx::bind(std::forward<Fn>(fn), std::forward<Arg>(args)...);
       
       backend::template send_am_master<progress_level::user>(
         tm, recipient,
         upcxx::bind(
-          [=](unpacked_of_t<decltype(fn_bound)> &fn_bound1) {
+          [=](deserialized_type_of_t<fn_bound_t> &&fn_bound1) {
             return upcxx::apply_as_future(std::move(fn_bound1))
               .then(
                 // Wish we could just use a lambda here, but since it has
                 // to take variadic Arg... we have to call to an outlined
                 // class. I'm not sure if even C++14's allowance of `auto`
                 // lambda args would be enough.
-                detail::rpc_recipient_after<cxs_state_t>{
-                  initiator, initiator_persona, state
+                detail::rpc_recipient_after<decltype(op_lpc)>{
+                  initiator, op_lpc
                 }
               );
           },
@@ -256,7 +249,7 @@ namespace upcxx {
       
       // send_am_master doesn't support async source-completion, so we know
       // its trivially satisfied.
-      state->template operator()<source_cx_event>();
+      state.template operator()<source_cx_event>();
       
       return returner();
     }

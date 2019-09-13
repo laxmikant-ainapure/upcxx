@@ -4,6 +4,7 @@
 #include <string.h>
 #include <new>
 #include <assert.h>
+#include <cstddef>
 #include <upcxx/upcxx.hpp>
 
 #ifndef DESTROY
@@ -29,7 +30,11 @@ using namespace std;
   cerr << rank_me << ": ERROR at " << __LINE__ << ": " << stream << endl; \
 } while(0)
 
+#if __cplusplus > 201700L 
+using byte = std::byte;
+#else
 typedef unsigned char byte;
+#endif
 
 #define VAL(sz,i) ((byte)(((sz) << 2) | ((i) & 0x3)))
 
@@ -47,7 +52,8 @@ int main(int argc, char **argv) {
 
   // determine an upper bound on the shared heap size
   size_t heapsz = 128<<20;
-  const char *szstr = getenv("UPCXX_SEGMENT_MB");
+  const char *szstr = upcxx::getenv_console("UPCXX_SHARED_HEAP_SIZE");
+  if (!szstr) szstr = upcxx::getenv_console("UPCXX_SEGMENT_MB");
   if (szstr) {
     float val = atof(szstr);
     if (val > 0) heapsz = val * (1<<20);
@@ -99,7 +105,7 @@ int main(int argc, char **argv) {
           byte val = VAL(sz,i);
           *lp = val;
           assert(*lp == val);
-          memset(lp, val, sz);
+          memset(lp, static_cast<int>(val), sz);
           upcxx::global_ptr<byte> cgp = upcxx::try_global_ptr(lp);
           if (!cgp) ERROR("try_global_ptr("<<lp<<") returned null");
           else if (cgp != gp) ERROR("cgp:[" << cgp << "] != gp:[" << gp << "]");

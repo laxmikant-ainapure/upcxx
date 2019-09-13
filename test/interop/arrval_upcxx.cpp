@@ -159,8 +159,10 @@ int main(int argc, char **argv) {
   }
   delete [] bufs;
 
+  upcxx::barrier();
+  if (!rank_me) std::cout << "SUCCESS" << std::endl;
+
   upcxx::finalize();
 
-  if (!rank_me) std::cout << "SUCCESS" << std::endl;
   return 0;
 }

@@ -113,6 +113,10 @@ namespace {
   constexpr gex_DT_t get_gex_dt<int64_t>() { return GEX_DT_I64; }
   template<>
   constexpr gex_DT_t get_gex_dt<uint64_t>() { return GEX_DT_U64; }
+  template<>
+  constexpr gex_DT_t get_gex_dt<float>() { return GEX_DT_FLT; }
+  template<>
+  constexpr gex_DT_t get_gex_dt<double>() { return GEX_DT_DBL; }
   
   template<typename T>
   gex_Event_t shim_gex_AD_OpNB(
@@ -148,13 +152,34 @@ namespace {
     ) {
     return gex_AD_OpNB_U64(ad, p, rank, addr, op, val1, val2, flags);
   }
+  template<>
+  gex_Event_t shim_gex_AD_OpNB<float>(
+      gex_AD_t ad, float *p, intrank_t rank, void *addr,
+      int op, float val1, float val2, int flags
+    ) {
+    return gex_AD_OpNB_FLT(ad, p, rank, addr, op, val1, val2, flags);
+  }
+  template<>
+  gex_Event_t shim_gex_AD_OpNB<double>(
+      gex_AD_t ad, double *p, intrank_t rank, void *addr,
+      int op, double val1, double val2, int flags
+    ) {
+    return gex_AD_OpNB_DBL(ad, p, rank, addr, op, val1, val2, flags);
+  }
 }
 
 template<typename T>
 atomic_domain<T>::atomic_domain(std::vector<atomic_op> const &ops, team &tm) {
   atomic_gex_ops = 0;
   for (auto next_op : ops) atomic_gex_ops |= to_gex_op_map[static_cast<int>(next_op)];
-  
+ 
+  if (std::is_floating_point<T>::value) {
+    int prohibited_ops = atomic_gex_ops &
+      (GEX_OP_AND|GEX_OP_FAND|GEX_OP_OR|GEX_OP_FOR|GEX_OP_XOR|GEX_OP_FXOR);
+    UPCXX_ASSERT(prohibited_ops == 0,
+      "atomic_domain on floating-point types may not use " << opset_gex_to_string(prohibited_ops) << std::endl);
+  }
+
   parent_tm_ = &tm;
   
   if(atomic_gex_ops != 0) {
@@ -222,3 +247,6 @@ template class upcxx::atomic_domain<int32_t>;
 template class upcxx::atomic_domain<uint32_t>;
 template class upcxx::atomic_domain<int64_t>;
 template class upcxx::atomic_domain<uint64_t>;
+template class upcxx::atomic_domain<float>;
+template class upcxx::atomic_domain<double>;
+

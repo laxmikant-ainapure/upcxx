@@ -16,7 +16,171 @@
 
 namespace upcxx
 {
-  
+  namespace detail {
+    // In the following classes, FinalType will be one of:
+    //   rput_cbs_byref<CxStateHere, CxStateRemote>
+    //   rput_cbs_byval<T, CxStateHere, CxStateRemote>
+    // So there is a pattern of a class inheriting a base-class which has
+    // the derived class as a template argument. This allows the base
+    // class to access the derived class without using virtual functions.
+    
+    // rput_cb_source: rput_cbs_{byref|byval} inherits this to hold
+    // source-copmletion details.
+    template<typename FinalType, typename CxStateHere, typename CxStateRemote,
+             bool sync = completions_is_event_sync<
+                 typename CxStateHere::completions_t,
+                 source_cx_event
+               >::value,
+             // only use handle when the user has asked for source_cx
+             // notification AND hasn't specified that it be sync.
+             bool use_handle = !sync && completions_has_event<
+                 typename CxStateHere::completions_t,
+                 source_cx_event
+               >::value
+            >
+    struct rput_cb_source;
+
+    // rput_cb_operation: rput_cbs_{byref|byval} inherits this to hold
+    // operation-completion details.
+    template<typename FinalType, typename CxStateHere, typename CxStateRemote,
+             bool definitely_static_scope = completions_is_event_sync<
+                 typename CxStateHere::completions_t,
+                 operation_cx_event
+               >::value
+            >
+    struct rput_cb_operation;
+
+    ////////////////////////////////////////////////////////////////////
+
+    // rput_cb_source: Case when the user has an action for source_cx_event.
+    // We extend a handle_cb which will fire the completions and transition
+    // control to rput_cb_operation.
+    template<typename FinalType, typename CxStateHere, typename CxStateRemote>
+    struct rput_cb_source<
+        FinalType, CxStateHere, CxStateRemote,
+        /*sync=*/false, /*use_handle=*/true
+      >:
+      backend::gasnet::handle_cb {
+      
+      static constexpr auto mode = rma_put_sync::src_cb;
+
+      backend::gasnet::handle_cb* source_cb() {
+        return this;
+      }
+      backend::gasnet::handle_cb* first_handle_cb() {
+        return this;
+      }
+      
+      void execute_and_delete(backend::gasnet::handle_cb_successor add_succ) {
+        auto *cbs = static_cast<FinalType*>(this);
+        
+        cbs->state_here.template operator()<source_cx_event>();
+        
+        add_succ(
+          static_cast<
+              rput_cb_operation<FinalType, CxStateHere, CxStateRemote>*
+            >(cbs)
+        );
+      }
+    };
+
+    // rput_cb_source: Case user does not care about source_cx_event.
+    template<typename FinalType, typename CxStateHere, typename CxStateRemote,
+             bool sync>
+    struct rput_cb_source<
+        FinalType, CxStateHere, CxStateRemote,
+        sync, /*use_handle=*/false
+      > {
+      static constexpr auto mode =
+        sync ? rma_put_sync::src_now : rma_put_sync::src_into_op_cb;
+      
+      backend::gasnet::handle_cb* source_cb() {
+        return nullptr;
+      }
+      backend::gasnet::handle_cb* first_handle_cb() {
+        return static_cast<FinalType*>(this)->operation_cb();
+      }
+    };
+
+    ////////////////////////////////////////////////////////////////////
+
+    // rput_cb_remote: Inherited by rput_cb_operation to handle sending
+    // remote rpc events upon operation completion.
+    template<typename FinalType, typename CxStateHere, typename CxStateRemote,
+             bool has_remote = !CxStateRemote::empty>
+    struct rput_cb_remote;
+    
+    template<typename FinalType, typename CxStateHere, typename CxStateRemote>
+    struct rput_cb_remote<FinalType, CxStateHere, CxStateRemote, /*has_remote=*/true> {
+      rput_cb_remote() {
+        upcxx::current_persona().undischarged_n_ += 1;
+      }
+
+      void send_remote() {
+        auto *cbs = static_cast<FinalType*>(this);
+        
+        backend::send_am_master<progress_level::user>(
+          upcxx::world(), cbs->rank_d,
+          upcxx::bind(
+            [](CxStateRemote &&st) {
+              return st.template operator()<remote_cx_event>();
+            },
+            std::move(cbs->state_remote)
+          )
+        );
+
+        upcxx::current_persona().undischarged_n_ -= 1;
+      }
+    };
+    
+    template<typename FinalType, typename CxStateHere, typename CxStateRemote>
+    struct rput_cb_remote<FinalType, CxStateHere, CxStateRemote, /*has_remote=*/false> {
+      void send_remote() {/*nop*/}
+    };
+    
+    // rput_cb_operation: Case when the user wants synchronous operation
+    // completion.
+    template<typename FinalType, typename CxStateHere, typename CxStateRemote>
+    struct rput_cb_operation<
+        FinalType, CxStateHere, CxStateRemote, /*definitely_static_scope=*/true
+      >:
+      rput_cb_remote<FinalType, CxStateHere, CxStateRemote> {
+
+      static constexpr bool definitely_static_scope = true;
+      
+      backend::gasnet::handle_cb* operation_cb() {
+        return nullptr;
+      }
+    };
+
+    // rput_cb_operation: Case with non-blocking operation completion. We
+    // inherit from rput_cb_remote which will dispatch to either sending remote
+    // completion events or nop.
+    template<typename FinalType, typename CxStateHere, typename CxStateRemote>
+    struct rput_cb_operation<
+        FinalType, CxStateHere, CxStateRemote, /*definitely_static_scope=*/false
+      >:
+      rput_cb_remote<FinalType, CxStateHere, CxStateRemote>,
+      backend::gasnet::handle_cb {
+
+      static constexpr bool definitely_static_scope = false;
+      
+      backend::gasnet::handle_cb* operation_cb() {
+        return this;
+      }
+      
+      void execute_and_delete(backend::gasnet::handle_cb_successor) {
+        auto *cbs = static_cast<FinalType*>(this);
+        
+        this->send_remote(); // may nop depending on rput_cb_remote case.
+        
+        cbs->state_here.template operator()<operation_cx_event>();
+        
+        delete cbs; // cleanup object, no more events
+      }
+    };
+  }
+
   namespace detail {
 
     struct memvec_t {
@@ -264,7 +428,7 @@ namespace upcxx
     static_assert(std::is_convertible<S, const T*>::value,
                   "SrcIter and DestIter need to be over same base T type");
 
-    UPCXX_ASSERT((detail::completions_has_event<Cxs, operation_cx_event>::value |
+    UPCXX_ASSERT_ALWAYS((detail::completions_has_event<Cxs, operation_cx_event>::value |
                   detail::completions_has_event<Cxs, remote_cx_event>::value),
                  "Not requesting either operation or remote completion is surely an "
                  "error. You'll have know way of ever knowing when the target memory is "
@@ -287,25 +451,23 @@ namespace upcxx
     std::vector<upcxx::detail::memvec_t>  dest(std::distance(dst_runs_begin, dst_runs_end));
     auto dv=dest.begin();
     std::size_t dstsize=0;
-    intrank_t gpdrank = 0; // zero is a valid rank for gasnet to set event flag.
+    intrank_t gpdrank = upcxx::rank_me(); // default for empty sequence is self
     if(dest.size()!=0) gpdrank = std::get<0>(*dst_runs_begin).rank_; //hoist gpdrank assign out of loop
     for(DestIter d=dst_runs_begin; !(d==dst_runs_end); ++d,++dv)
       {
-        UPCXX_ASSERT(gpdrank==std::get<0>(*d).rank_);
+	UPCXX_ASSERT(std::get<0>(*d), "pointer arguments to rput_irregular may not be null");
+        UPCXX_ASSERT(gpdrank==std::get<0>(*d).rank_, "pointer arguments to rput_irregular must all target the same affinity");
         dv->gex_addr=(std::get<0>(*d)).raw_ptr_;
         dv->gex_len =std::get<1>(*d)*tsize;
         dstsize+=dv->gex_len;
       }
 
-    UPCXX_ASSERT( !(dest.size() == 0 && detail::completions_has_event<Cxs, remote_cx_event>::value),
-                  "Cannot request remote completion without providing at least one global_ptr "
-                  "in the destination sequence." );
-    
     std::size_t srcsize=0;
     std::vector<upcxx::detail::memvec_t> src(std::distance(src_runs_begin, src_runs_end));
     auto sv=src.begin();
     for(SrcIter s=src_runs_begin; !(s==src_runs_end); ++s,++sv)
       {
+	UPCXX_ASSERT(std::get<0>(*s), "pointer arguments to rput_irregular may not be null");
         sv->gex_addr=std::get<0>(*s);
         sv->gex_len =std::get<1>(*s)*tsize;
         srcsize+=sv->gex_len;
@@ -358,7 +520,7 @@ namespace upcxx
                   "SrcIter and DestIter need to be over same base T type");
  
     
-    UPCXX_ASSERT((detail::completions_has_event<Cxs, operation_cx_event>::value |
+    UPCXX_ASSERT_ALWAYS((detail::completions_has_event<Cxs, operation_cx_event>::value |
                   detail::completions_has_event<Cxs, remote_cx_event>::value),
                  "Not requesting either operation or remote completion is surely an "
                  "error. You'll have know way of ever knowing when the target memory is "
@@ -382,6 +544,7 @@ namespace upcxx
     std::size_t dstsize=0;
     for(DestIter d=dst_runs_begin; !(d==dst_runs_end); ++d,++dv)
       {
+	UPCXX_ASSERT(std::get<0>(*d), "pointer arguments to rget_irregular may not be null");
         dv->gex_addr=(std::get<0>(*d));
         dv->gex_len =std::get<1>(*d)*tsize;
         dstsize+=dv->gex_len;
@@ -390,19 +553,17 @@ namespace upcxx
     std::vector<upcxx::detail::memvec_t> src(std::distance(src_runs_begin, src_runs_end));
     auto sv=src.begin();
     std::size_t srcsize=0;
-    intrank_t rank_s = 0; // zero is a valid rank for gasnet to perform event completion
+    intrank_t rank_s = upcxx::rank_me(); // default for empty sequence is self
     if(src.size()!=0) rank_s = std::get<0>(*src_runs_begin).rank_; // hoist rank_s assign out of loop
     for(SrcIter s=src_runs_begin; !(s==src_runs_end); ++s,++sv)
       {
+	UPCXX_ASSERT(std::get<0>(*s), "pointer arguments to rget_irregular may not be null");
         UPCXX_ASSERT(rank_s==std::get<0>(*s).rank_,
-                     "All ranks in rput need to target the same rank");
+                     "pointer arguments to rget_irregular must all target the same affinity");
         sv->gex_addr=std::get<0>(*s).raw_ptr_;
         sv->gex_len =std::get<1>(*s)*tsize;
         srcsize+=sv->gex_len;
       }
-    UPCXX_ASSERT(!(src.size() ==0  && detail::completions_has_event<Cxs, remote_cx_event>::value),
-                 "Cannot request remote completion without providing at least one global_ptr "
-                 "in the source sequence.");
     
 
     UPCXX_ASSERT(dstsize==srcsize);
@@ -446,7 +607,7 @@ namespace upcxx
                   "RMA operations only work on DefinitelyTriviallySerializable types."
                   );
     
-    UPCXX_ASSERT((
+    UPCXX_ASSERT_ALWAYS((
                   detail::completions_has_event<Cxs, operation_cx_event>::value |
                   detail::completions_has_event<Cxs, remote_cx_event>::value),
                  "Not requesting either operation or remote completion is surely an "
@@ -479,27 +640,24 @@ namespace upcxx
     // during the resize. This new way is to do a `reserve` followed by `push_back's`.
     dst_ptrs.reserve(std::distance(dst_runs_begin, dst_runs_end));
  
-    intrank_t dst_rank = 0; // zero is a valid rank for gasnet to perform completion
+    intrank_t dst_rank = upcxx::rank_me(); // default for empty sequence is self
     if(dst_ptrs.capacity() !=0) dst_rank = (*dst_runs_begin).rank_;
     for(DestIter d=dst_runs_begin; !(d == dst_runs_end); ++d) {
-      UPCXX_ASSERT(dst_rank == (*d).rank_,
-        "All global_ptr's in destination must reference memory from the same rank."
-      );
+      UPCXX_ASSERT(*d, "pointer arguments to rput_regular may not be null");
+      UPCXX_ASSERT(dst_rank==(*d).rank_, "pointer arguments to rput_regular must all target the same affinity");
       dst_rank = (*d).rank_;
       dst_ptrs.push_back((*d).raw_ptr_);
     }
-
-    UPCXX_ASSERT(!(dst_ptrs.size()==0  && detail::completions_has_event<Cxs, remote_cx_event>::value),
-                 "Cannot request remote completion without providing at least one global_ptr "
-                 "in the destination sequence." );
 
     std::vector<void*> src_ptrs;
 
     src_ptrs.reserve(std::distance(src_runs_begin, src_runs_end));
   
 
-    for(SrcIter s=src_runs_begin; !(s == src_runs_end); ++s)
+    for(SrcIter s=src_runs_begin; !(s == src_runs_end); ++s) {
+      UPCXX_ASSERT((*s), "pointer arguments to rput_regular may not be null");
       src_ptrs.push_back(const_cast<void*>((void const*)*s));
+    }
 
     UPCXX_ASSERT(src_ptrs.size()*src_run_length == dst_ptrs.size()*dst_run_length,
                  "Source and destination must contain same number of elements.");
@@ -551,7 +709,7 @@ namespace upcxx
     static_assert(is_definitely_trivially_serializable<T>::value,
                   "RMA operations only work on DefinitelyTriviallySerializable types.");
     
-    UPCXX_ASSERT((detail::completions_has_event<Cxs, operation_cx_event>::value |
+    UPCXX_ASSERT_ALWAYS((detail::completions_has_event<Cxs, operation_cx_event>::value |
                   detail::completions_has_event<Cxs, remote_cx_event>::value),
                  "Not requesting either operation or remote completion is surely an "
                  "error. You'll have know way of ever knowing when the target memory is "
@@ -578,23 +736,23 @@ namespace upcxx
     std::vector<void*> dst_ptrs;
     dst_ptrs.reserve(std::distance(dst_runs_begin, dst_runs_end));
  
-    for(DestIter d=dst_runs_begin; !(d == dst_runs_end); ++d)
+    for(DestIter d=dst_runs_begin; !(d == dst_runs_end); ++d) {
+      UPCXX_ASSERT((*d), "pointer arguments to rget_regular may not be null");
       dst_ptrs.push_back((void*)*d);
+    }
 
     
     std::vector<void*> src_ptrs;
     src_ptrs.reserve(std::distance(src_runs_begin, src_runs_end));
    
-    intrank_t src_rank = 0; // gasnet accepts rank zero for empty message
+    intrank_t src_rank = upcxx::rank_me(); // default for empty sequence is self
     if(src_ptrs.capacity() != 0) src_rank = (*src_runs_begin).rank_;
     for(SrcIter s=src_runs_begin; !(s == src_runs_end); ++s) {
-      UPCXX_ASSERT(src_rank == (*s).rank_,
-        "All global_ptr's in source runs must reference memory on the same rank."
-      );
+      UPCXX_ASSERT((*s), "pointer arguments to rget_regular may not be null");
+      UPCXX_ASSERT(src_rank==(*s).rank_, "pointer arguments to rget_regular must all target the same affinity");
       src_ptrs.push_back((*s).raw_ptr_);
       src_rank = (*s).rank_;
     }
-
  
     
     UPCXX_ASSERT(
@@ -648,6 +806,8 @@ namespace upcxx
       "safe to read or write again."
                          );
     
+    UPCXX_ASSERT(src_base && dest_base, "pointer arguments to rput_strided may not be null");
+
     using cxs_here_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::rput_event_values,
@@ -714,12 +874,14 @@ namespace upcxx
     static_assert(is_definitely_trivially_serializable<T>::value,
       "RMA operations only work on DefinitelyTriviallySerializable types.");
     
-    UPCXX_ASSERT((detail::completions_has_event<Cxs, operation_cx_event>::value |
+    UPCXX_ASSERT_ALWAYS((detail::completions_has_event<Cxs, operation_cx_event>::value |
                   detail::completions_has_event<Cxs, remote_cx_event>::value),
                  "Not requesting either operation or remote completion is surely an "
                  "error. You'll have know way of ever knowing when the target memory is "
                  "safe to read or write again.");
  
+    UPCXX_ASSERT(src_base && dest_base, "pointer arguments to rget_strided may not be null");
+
     using cxs_here_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::rput_event_values,

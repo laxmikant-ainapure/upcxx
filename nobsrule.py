@@ -69,31 +69,39 @@ def upcxx_backend_id():
 def upcxx_make():
   return shplit(env("UPCXX_MAKE", "make -j 8"))
 
-@cached # only execute once per nobs invocation
-def _pthread():
-  """
-  Platform specific logic for finding pthreads flags goes here.
-  """
-  return {'pthread':{'libflags':['-pthread']}}
-  
 @rule(cli='pthread')
+@coroutine
 def pthread(cxt):
   """
   Return the library-set for building against pthreads. 
   """
-  return _pthread()
+  cxx = yield cxt.cxx()
+  if is_pgi(cxx):
+    flag = '-lpthread'
+  else:
+    flag = '-pthread'
+  yield {'pthread':{'libflags':[flag]}}
 
 @rule(cli='omp')
+@coroutine
 def openmp(cxt):
-  return {'openmp': {
-    'ppflags': ['-fopenmp'],
-    'libflags': ['-fopenmp']
+  cxx = yield cxt.cxx()
+  if is_pgi(cxx):
+    flags = ['-mp']
+  else:
+    flags = ['-fopenmp']
+  
+  yield {'openmp': {
+    'ppflags': flags,
+    'libflags': flags
   }}
 
-def invoke(cmd):
+def invoke(cmd, shell=False):
   import subprocess as subp
   try:
-    p = subp.Popen(cmd, stdin=subp.PIPE, stdout=subp.PIPE, stderr=subp.PIPE, close_fds=True)
+    # Need to use shell=True so that commands parsed from nvcc are executed as
+    # if in a shell.
+    p = subp.Popen(' '.join(cmd), stdin=subp.PIPE, stdout=subp.PIPE, stderr=subp.PIPE, close_fds=True, shell=shell)
   except OSError as e:
     return (e.errno, '', '')
   out,err = p.communicate()
@@ -106,7 +114,7 @@ def invoke_on_file(suffix, contents, file_to_cmd, file_to_outs=lambda x:[]):
   fd,name = tempfile.mkstemp(suffix=suffix)
   os.write(fd, contents)
   os.close(fd)
-  ans = invoke(file_to_cmd(name))
+  ans = invoke(file_to_cmd(name), shell=True)
   for f in [name] + list(file_to_outs(name)):
     try: os.remove(f)
     except OSError: pass
@@ -127,7 +135,7 @@ def cuda_cached():
   
   ##############################################################################
   # scrape the preprocessor flags and backend compiler
-  res,out,err = invoke(nvcc+['--dryrun','-c','foo.cpp','-o','foo.o'])
+  res,out,err = invoke(nvcc+['--dryrun','-c','foo.cpp','-o','foo.o'], shell=True)
   if res != 0:
     raise errorlog.LoggedError(
       'nvcc error',
@@ -141,13 +149,15 @@ def cuda_cached():
   
   for line in lines:
     m1 = re.match(r'^#\$ INCLUDES=(.*)$', line)
-    m2 = re.match(r'^#\$ ([A-Za-z_+-]+) ', line)
+    m2 = re.match(r'^#\$ ([A-Za-z0-9_+-/."]+) ', line)
     if m1:
       flags = m1.group(1).split()
       flags = [flag[1:-1] if flag.startswith('"') else flag for flag in flags]
       ppflags += [flag for flag in flags if re.match('^(-D|-I)', flag)]
     elif m2:
-      compiler = {'gcc':'g++', 'clang':'clang++', 'icc':'icpc'}[m2.group(1)]
+      compiler_bindir = os.path.dirname(m2.group(1))
+      compiler_binary = {'gcc':'g++', 'clang':'clang++', 'icc':'icpc', 'pgcc':'pgc++'}[os.path.basename(m2.group(1))]
+      compiler = os.path.join(compiler_bindir, compiler_binary)
 
   if env('UPCXX_CUDA_CPPFLAGS', None) is not None:
     # override scraped ppflags
@@ -159,12 +169,12 @@ def cuda_cached():
     libflags = libflags.split()
   else:
     # scrape the link flags
-    res,out,err = invoke(nvcc+['--dryrun','foo.o'])
+    res,out,err = invoke(nvcc+['--dryrun','foo.o'], shell=True)
     if res != 0:
       raise errorlog.LoggedError('nvcc error', 'Failed to invoke nvcc (exit=%d).\nMake sure CUDA is installed and nvcc is in your PATH.'%res)
     line = [line for line in err.split('\n') if line != ''][-1] # last line
     m1 = re.match(r'^#\$ ([A-Z_]+)=', line)
-    m2 = re.match(r'^#\$ ([A-Za-z_+-]+) ', line)
+    m2 = re.match(r'^#\$ ([A-Za-z0-9_+-/."]+) ', line)
     libflags = []
     
     if not(m1 is None and m2):
@@ -242,7 +252,7 @@ def requires_pthread(cxt, src):
 def requires_openmp(cxt, src):
   return False
 
-@rule(cli='required_libraries', path_arg='src')
+@rule(cli='q', path_arg='src')
 @coroutine
 def required_libraries(cxt, src):
   """
@@ -255,12 +265,12 @@ def required_libraries(cxt, src):
     maybe_gasnet = {}
   
   if cxt.requires_pthread(src):
-    maybe_pthread = cxt.pthread()
+    maybe_pthread = yield cxt.pthread()
   else:
     maybe_pthread = {}
 
   if cxt.requires_openmp(src):
-    maybe_openmp = cxt.openmp()
+    maybe_openmp = yield cxt.openmp()
   else:
     maybe_openmp = {}
 
@@ -271,7 +281,7 @@ def gasnet_user(cxt):
   value = env('GASNET', None)
   
   if not value:
-    value = 'https://upcxx.lbl.gov/third-party/GASNet-2019.3.tar.gz'
+    value = 'https://gasnet.lbl.gov/EX/GASNet-2019.9.0.tar.gz'
   
   from urlparse import urlparse
   isurl = urlparse(value).netloc != ''
@@ -409,16 +419,26 @@ def cc(cxt):
   # Otherwise use intelligent defaults.
   yield ans_cross or ans_user or ans_default
 
+def is_pgi(cmd):
+  _,out,_ = version_of(cmd)
+  import re
+  return re.search('PGI Compilers and Tools', out) is not None
+
 @rule(cli='ldflags')
 def ldflags(cxt):
   return shplit(env('LDFLAGS',''))
 
 @rule()
+@coroutine
 def lang_c11(cxt):
   """
   String list to engage C11 language dialect for the C compiler.
   """
-  return ['-std=c11']
+  cc = yield cxt.cc()
+  if any(arg.startswith('-std=c') for arg in cc):
+    yield []
+  else:
+    yield ['-std=c11'] if not is_pgi(cc) else []
 
 @rule()
 @coroutine
@@ -428,8 +448,11 @@ def lang_cxx11(cxt):
   """
   cxx = yield cxt.cxx()
   _,out,_ = yield version_of(cxx)
-  
-  if '(ICC)' in out.split():
+
+  if any(arg.startswith('-std=c++') for arg in cxx):
+    yield []
+  elif any(token in out for token in ['(ICC)']):
+  #elif any(token in out for token in ['PGI Compilers and Tools','(ICC)']):
     yield ['-std=c++14']
   else:
     yield ['-std=c++11']
@@ -448,7 +471,8 @@ def comp_lang(cxt, src):
     yield cxx + cxx11
   elif ext in c_exts:
     cc = yield cxt.cc()
-    yield cc + cxt.lang_c11()
+    c11 = yield cxt.lang_c11()
+    yield cc + c11
   else:
     raise Exception("Unrecognized source file extension: "+src)
 
@@ -531,7 +555,7 @@ def comp_lang_pp_cg(cxt, src, libset):
     comp +
     ['-O%d'%optlev] +
     (['-g'] if dbgsym else []) +
-    ['-Wall'] +
+    (['-Wall'] if not is_pgi(comp) else []) +
     libset_cgflags(libset)
   )
 
@@ -580,7 +604,7 @@ class includes:
   Ask compiler for all the non-system headers pulled in by preprocessing
   the given source file. Returns the list of paths to included files.
   """
-  version_bump = 6
+  version_bump = 7
   
   @traced
   @coroutine
@@ -593,23 +617,38 @@ class includes:
     comp_pp = yield cxt.comp_lang_pp(src, global_libset)
     
     yield (src, comp_pp)
-  
+
   @coroutine
   def execute(me):
     src, comp_pp = yield me.src_and_compiler()
     
     # See here for getting this to work with other compilers:
     #  https://projects.coin-or.org/ADOL-C/browser/trunk/autoconf/depcomp?rev=357
-    cmd = comp_pp + ['-DNOBS_DISCOVERY','-MM','-MT','x',src]
+    cmd = comp_pp + ['-DNOBS_DISCOVERY','-M','-MT','x']
+    
+    if is_pgi(comp_pp):
+      cmd += ['-E']
+    cmd += [src]
     
     mk = yield subexec.launch(cmd, capture_stdout=True)
     mk = mk[mk.index(":")+1:]
     
     deps = shplit(mk.replace("\\\n",""))[1:] # first is source file
     deps = map(os.path.abspath, deps)
+
+    # prune files not in the upcxx tree (would be accomplished by -MM in compiler
+    # command above except PGI doesn't implement that correctly)
+    top_dir = here()
+    deps = [d for d in deps if
+      path_within_dir(d, top_dir) or
+      path_within_dir(d, me.memodb.path_art)
+    ]
+    
     me.depend_files(*deps)
     deps = map(os_extra.realpath, deps)
-    
+    deps = sorted(set(deps))
+
+    #print>>sys.stderr, 'INC DEPS:',deps
     yield deps
 
 @rule_memoized(path_arg=0)
@@ -1179,7 +1218,6 @@ class gasnet_configured:
     else:
       cc, cxx, debug, config, source_dir, user_args = yield me.get_config()
       config_args, config_env = config
-      
       build_dir = me.mkpath(key=None)
       os.makedirs(build_dir)
       
@@ -1190,20 +1228,28 @@ class gasnet_configured:
         env1['CC'] = ' '.join(cc)
       if 'CXX' not in env1:
         env1['CXX'] = ' '.join(cxx)
-      
+
+      # gasnet can't handle `-fsanitize=xxx`, so we just drop it
+      # TODO: Instead of dropping the flag, we can suppress its effect with:
+      # env['ASAN_OPTIONS'] = 'detect_leaks=0'
+      env1['CXX'] = ' '.join([s for s in env1['CXX'].split() if not s.startswith('-fsanitize=')])
+    
+      # these arguments enforce GASNet defaults that UPC++ relies upon
+      # to ensure that users cannot break our dependencies by setting GASNET_CONFIGURE_ARGS
+      # For details, see GASNet configure --help
       misc_conf_opts = [
-        # disable non-EX conduits to prevent configure failures when that hardware is detected
-        '--disable-psm','--disable-mxm','--disable-portals4','--disable-ofi',
-        # disable the parsync mode which is not used by UPCXX
-        '--disable-parsync',
+        '--disable-parsync', '--enable-seq', '--enable-par',
+        '--enable-pthreads',
+        '--disable-segment-everything',
       ]
       
       print>>sys.stderr, 'Configuring GASNet...'
       yield subexec.launch(
         [os.path.join(source_dir, 'configure')] +
         config_args +
-        (['--enable-debug'] if debug else []) +
-        misc_conf_opts + user_args,
+        user_args + 
+        misc_conf_opts +
+        (['--enable-debug'] if debug else ['--disable-debug']),
         
         cwd = build_dir,
         env = env1

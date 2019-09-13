@@ -37,7 +37,7 @@ int main () {
         //unlock the other threads
         thread_barrier += 1;
       });
-  // create another thread to issue the rputs
+  // create another thread to issue the rget
   thread submit_thread( [&]() {  
       // create a completion object to execute a LPC on the progress_thread
       // which verifies that the value we got was the rank of our neighbor

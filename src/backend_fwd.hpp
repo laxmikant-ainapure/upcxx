@@ -53,6 +53,10 @@ namespace upcxx {
   class persona;
   class persona_scope;
   class team;
+  namespace detail {
+    template<typename ...T>
+    struct lpc_dormant;
+  }
   
   void init();
   bool initialized();
@@ -78,8 +82,13 @@ namespace upcxx {
   persona_scope& default_persona_scope();
   persona_scope& top_persona_scope();
   
-  bool progress_required(persona_scope &ps = top_persona_scope());
-  void discharge(persona_scope &ps = top_persona_scope());
+  // bool progress_required(persona_scope &ps = top_persona_scope());
+  bool progress_required();
+  bool progress_required(persona_scope &ps);
+
+  // void discharge(persona_scope &ps = top_persona_scope());
+  void discharge();
+  void discharge(persona_scope &ps);
   
   namespace detail {
     int progressing();
@@ -153,13 +162,17 @@ namespace backend {
   template<progress_level level, typename Fn>
   void send_am_persona(team &tm, intrank_t recipient_rank, persona *recipient_persona, Fn &&fn);
 
+  template<typename ...T>
+  void send_awaken_lpc(team &tm, intrank_t recipient, detail::lpc_dormant<T...> *lpc, std::tuple<T...> &&vals);
+
   template<progress_level level, typename Fn>
   void bcast_am_master(team &tm, Fn &&fn);
   
   intrank_t team_rank_from_world(team &tm, intrank_t rank);
   intrank_t team_rank_from_world(team &tm, intrank_t rank, intrank_t otherwise);
   intrank_t team_rank_to_world(team &tm, intrank_t peer);
-  
+
+  extern const bool all_ranks_definitely_local;
   bool rank_is_local(intrank_t r);
   
   void* localize_memory(intrank_t rank, std::uintptr_t raw);

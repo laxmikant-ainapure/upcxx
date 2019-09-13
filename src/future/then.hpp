@@ -69,7 +69,7 @@ namespace upcxx {
       //void destruct_early();
       
       void leave_active(future_header_dependent *hdr) {
-        auto proxied = apply_futured_as_future<Fn&, FuArg&>()(this->fn_, this->dep_);
+        auto proxied = apply_futured_as_future<Fn&&, FuArg&>()(std::move(this->fn_), this->dep_);
         
         void *me_mem = this->storage_;
         this->dep_.cleanup_ready();
@@ -105,7 +105,7 @@ namespace upcxx {
       }
       
       void leave_active(future_header_dependent *hdr) {
-        auto proxied = apply_futured_as_future<Fn&, FuArg&>()(this->fn_, this->dep_);
+        auto proxied = apply_futured_as_future<Fn&&, FuArg&>()(std::move(this->fn_), this->dep_);
         
         void *me_mem = this->storage_;
         this->dep_.cleanup_ready();
@@ -128,10 +128,11 @@ namespace upcxx {
         Arg, Fn,
         future1<FnRetKind,FnRetT...>, /*arg_trivial=*/false
       > {
+
+      using return_type = future1<future_kind_shref<future_header_ops_dependent>, FnRetT...>;
       
       template<typename Arg1, typename Fn1>
-      future1<future_kind_shref<future_header_ops_dependent>, FnRetT...>
-      operator()(Arg1 &&arg, Fn1 &&fn) {
+      return_type operator()(Arg1 &&arg, Fn1 &&fn) {
         future_header_dependent *hdr = new future_header_dependent;
         hdr->incref(1); // another for function execution
         
@@ -162,10 +163,13 @@ namespace upcxx {
         Arg, Fn,
         future1<FnRetKind,FnRetT...>, /*arg_trivial=*/true
       > {
+
+      using return_type = future1<FnRetKind,FnRetT...>;
+      
       // Return type used to be: future1<future_kind_shref<future_header_ops_general>, FnRetT...>
       // Was there a reason for type-erasing it to the general kind?
       template<typename Arg1, typename Fn1>
-      future1<FnRetKind,FnRetT...> operator()(Arg1 &&arg, Fn1 &&fn) {
+      return_type operator()(Arg1 &&arg, Fn1 &&fn) {
         return apply_futured_as_future<Fn1&&, Arg1&&>()(
           std::forward<Fn1>(fn),
           std::forward<Arg1>(arg)
@@ -173,39 +177,41 @@ namespace upcxx {
       }
     };
   } // namespace detail
-  
-  // a>>b === a.then(b)
-  template<typename ArgKind, typename Fn1, typename ...ArgT>
-  inline auto operator>>(future1<ArgKind,ArgT...> arg, Fn1 &&fn)
-    -> decltype(
-      detail::future_then<
-        future1<ArgKind,ArgT...>,
-        typename std::decay<Fn1>::type
-      >()(
-        std::move(arg),
-        std::forward<Fn1>(fn)
-      )
-    ) {
-    return detail::future_then<
-        future1<ArgKind,ArgT...>,
-        typename std::decay<Fn1>::type
-      >()(
-        std::move(arg),
-        std::forward<Fn1>(fn)
-      );
-  }
-  
-  template<typename Fn1, typename ...ArgT>
-  inline future<ArgT...>& operator>>=(future<ArgT...> &arg, Fn1 &&fn) {
-    arg = detail::future_then<
-        future<ArgT...>,
-        typename std::decay<Fn1>::type
-      >()(
-        std::move(arg),
-        std::forward<Fn1>(fn)
-      );
-    return arg;
-  }
+
+  #if 0
+    // a>>b === a.then(b)
+    template<typename ArgKind, typename Fn1, typename ...ArgT>
+    inline auto operator>>(future1<ArgKind,ArgT...> arg, Fn1 &&fn)
+      -> decltype(
+        detail::future_then<
+          future1<ArgKind,ArgT...>,
+          typename std::decay<Fn1>::type
+        >()(
+          std::move(arg),
+          std::forward<Fn1>(fn)
+        )
+      ) {
+      return detail::future_then<
+          future1<ArgKind,ArgT...>,
+          typename std::decay<Fn1>::type
+        >()(
+          std::move(arg),
+          std::forward<Fn1>(fn)
+        );
+    }
+    
+    template<typename Fn1, typename ...ArgT>
+    inline future<ArgT...>& operator>>=(future<ArgT...> &arg, Fn1 &&fn) {
+      arg = detail::future_then<
+          future<ArgT...>,
+          typename std::decay<Fn1>::type
+        >()(
+          std::move(arg),
+          std::forward<Fn1>(fn)
+        );
+      return arg;
+    }
+  #endif
     
   namespace detail {
     template<typename Arg, typename Fn, typename FnRetKind, typename ...FnRetT>
@@ -214,10 +220,11 @@ namespace upcxx {
         /*arg_trivial=*/false,
         /*fnret_trivial=*/false
       > {
+
+      using return_type = future1<future_kind_shref<future_header_ops_dependent>, FnRetT...>;
       
       template<typename Arg1, typename Fn1>
-      future1<future_kind_shref<future_header_ops_dependent>, FnRetT...>
-      operator()(Arg1 &&arg, Fn1 &&fn) {
+      return_type operator()(Arg1 &&arg, Fn1 &&fn) {
         future_header_dependent *hdr = new future_header_dependent;
         
         union body_union_t {
@@ -245,8 +252,10 @@ namespace upcxx {
         /*arg_trivial=*/true,
         fnret_trivial
       > {
+      using return_type = future1<FnRetKind, FnRetT...> ;
+
       template<typename Arg1, typename Fn1>
-      future1<FnRetKind, FnRetT...> operator()(Arg1 &&arg, Fn1 &&fn) {
+      return_type operator()(Arg1 &&arg, Fn1 &&fn) {
         return apply_futured_as_future<Fn1&&,Arg1&&>()(
           std::forward<Fn1>(fn),
           std::forward<Arg1>(arg)
@@ -260,9 +269,10 @@ namespace upcxx {
         /*arg_trivial=*/false,
         /*fnret_trivial=*/true
       > {
+      using return_type =future1<future_kind_mapped<Arg,Fn>, FnRetT...>;
+
       template<typename Arg1, typename Fn1>
-      future1<future_kind_mapped<Arg,Fn>, FnRetT...>
-      operator()(Arg1 &&arg, Fn1 &&fn) {
+      return_type operator()(Arg1 &&arg, Fn1 &&fn) {
         return future_impl_mapped<Arg,Fn,FnRetT...>{
           std::forward<Arg1>(arg),
           std::forward<Fn1>(fn)

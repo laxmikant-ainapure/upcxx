@@ -15,11 +15,11 @@ function upcxx_sourceme {
   
   # convert argument to absolute path
   function absify {
-    python -c "import os; import sys; sys.stdout.write(os.path.abspath('$1'));"
+    ${UPCXX_PYTHON:-python} -c "import os; import sys; sys.stdout.write(os.path.abspath('$1'));"
   }
   
   # use the current directory as the root for the build tree
-  NOBS_ROOT="$(python -c 'import os; import sys; sys.stdout.write(os.path.abspath(os.getcwd()));')"
+  NOBS_ROOT=`pwd -P`
   NOBS_PATH="${NOBS_ROOT}/nobs"
   
   if [ ! -e "$NOBS_PATH" ]; then

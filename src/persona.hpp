@@ -47,6 +47,7 @@ namespace upcxx {
   public:
     backend::persona_state backend_state_;
     cuda::persona_state cuda_state_;
+    std::intptr_t undischarged_n_; // num reasons progress_required() is true
   
   private:
     persona* get_owner() const;
@@ -59,7 +60,8 @@ namespace upcxx {
       peer_inbox_(),
       self_inbox_(),
       pros_deferred_trivial_(),
-      backend_state_() {
+      backend_state_(),
+      undischarged_n_(0) {
     }
   
   public:
@@ -69,7 +71,8 @@ namespace upcxx {
       peer_inbox_(),
       self_inbox_(),
       pros_deferred_trivial_(),
-      backend_state_() {
+      backend_state_(),
+      undischarged_n_(0) {
     }
     
     bool active_with_caller() const;
@@ -146,7 +149,7 @@ namespace upcxx {
       
       persona_scope_raw *next_;
       std::uintptr_t persona_xor_default_;
-      persona_scope *next_unique_;
+      persona_scope_raw *next_unique_;
       detail::persona_tls *tls; // used by `persona_scope_redundant`
       union {
         void *lock_; // used by `persona_scope`
@@ -184,7 +187,11 @@ namespace upcxx {
     friend struct detail::persona_tls;
     
   private:
-    constexpr persona_scope() = default;
+    // the_default_dummy_'s constructor
+    persona_scope() {
+      // immediately invalidate this scope
+      this->next_ = reinterpret_cast<persona_scope_raw*>(0x1);
+    }
     
     persona_scope(persona &persona, detail::persona_tls &tls);
     
@@ -192,6 +199,8 @@ namespace upcxx {
     persona_scope(Mutex &lock, persona &persona, detail::persona_tls &tls);
     
   public:
+    static persona_scope the_default_dummy_;
+    
     persona_scope(persona &persona);
     
     template<typename Mutex>
@@ -201,7 +210,7 @@ namespace upcxx {
     
     persona_scope(persona_scope &&that) {
       *static_cast<detail::persona_scope_raw*>(this) = static_cast<detail::persona_scope_raw&>(that);
-      that.next_ = reinterpret_cast<persona_scope*>(0x1);
+      that.next_ = reinterpret_cast<persona_scope_raw*>(0x1);
     }
     
     ~persona_scope();
@@ -221,10 +230,10 @@ namespace upcxx {
       persona default_persona;
       // persona_scope default_scope;
       persona_scope_raw default_scope_raw;
-      // persona_scope *top = &this->default_scope;
-      std::uintptr_t top_xor_default; // = xor(top, &this->default_scope)
-      // persona_scope *top_unique = &this->default_scope;
-      std::uintptr_t top_unique_xor_default;  // = xor(top_unique, &this->default_scope)
+      // persona_scope_raw *top = &this->default_scope_raw;
+      std::uintptr_t top_xor_default; // = xor(top, &this->default_scope_raw)
+      // persona_scope_raw *top_unique = &this->default_scope_raw;
+      std::uintptr_t top_unique_xor_default;  // = xor(top_unique, &this->default_scope_raw)
       // persona *top_persona = &this->default_persona;
       std::uintptr_t top_persona_xor_default;  // = xor(top_persona, &this->default_persona)
       
@@ -276,12 +285,12 @@ namespace upcxx {
                         ^ reinterpret_cast<std::uintptr_t>(val);
       }
       
-      persona_scope* get_top_unique_scope() const {
-        return reinterpret_cast<persona_scope*>(
+      persona_scope_raw* get_top_unique_scope() const {
+        return reinterpret_cast<persona_scope_raw*>(
           top_unique_xor_default ^ reinterpret_cast<std::uintptr_t>(&default_scope())
         );
       }
-      void set_top_unique_scope(persona_scope *val) {
+      void set_top_unique_scope(persona_scope_raw *val) {
         top_unique_xor_default = reinterpret_cast<std::uintptr_t>(&default_scope())
                                ^ reinterpret_cast<std::uintptr_t>(val);
       }
@@ -303,7 +312,7 @@ namespace upcxx {
       // lambda may execute in the calling context if permitted.
       template<typename Fn, bool known_active>
       void during(persona&, progress_level level, Fn &&fn, std::integral_constant<bool,known_active> known_active1 = {});
-      
+
       // Enqueue a promise to be fulfilled during user progress of a currently
       // active persona.
       template<typename ...T>
@@ -323,6 +332,17 @@ namespace upcxx {
       
       template<bool known_active=false>
       void enqueue(persona&, progress_level level, detail::lpc_base *m, std::integral_constant<bool,known_active> known_active1 = {});
+
+      // Enqueue a quiesced promise (one with no other activity concurrently
+      // occurring) to be fulfilled during progress of given persona
+      template<typename ...T, bool known_active=false>
+      void enqueue_quiesced_promise(
+        persona &target, progress_level level,
+        future_header_promise<T...> *pro_hdr, std::intptr_t result_plus_anon,
+        std::integral_constant<bool,known_active> known_active1 = {});
+      
+      bool progress_required();
+      bool progress_required(persona_scope &bottom);
       
       // Call `fn` on each `persona&` active with calling thread.
       template<typename Fn>
@@ -393,7 +413,7 @@ namespace upcxx {
     > {
     
     using results_type = typename decltype(upcxx::apply_as_future(fn))::results_type;
-    using results_promise = upcxx::tuple_types_into_t<results_type, promise>;
+    using results_promise = detail::tuple_types_into_t<results_type, promise>;
     
     detail::persona_tls &tls = detail::the_persona_tls;
     
@@ -476,7 +496,7 @@ namespace upcxx {
       tls.set_top_unique_scope(this);
     }
     else
-      this->next_unique_ = reinterpret_cast<persona_scope*>(0x1);
+      this->next_unique_ = reinterpret_cast<persona_scope_raw*>(0x1);
     
     UPCXX_ASSERT(p.active_with_caller(tls));
   }
@@ -514,13 +534,13 @@ namespace upcxx {
       tls.set_top_unique_scope(this);
     }
     else
-      this->next_unique_ = reinterpret_cast<persona_scope*>(0x1);
+      this->next_unique_ = reinterpret_cast<persona_scope_raw*>(0x1);
     
     UPCXX_ASSERT(p.active_with_caller(tls));
   }
   
   inline persona_scope::~persona_scope() {
-    if(this->next_ != reinterpret_cast<persona_scope*>(0x1)) {
+    if(this->next_ != reinterpret_cast<persona_scope_raw*>(0x1)) {
       detail::persona_tls &tls = detail::the_persona_tls;
       
       UPCXX_ASSERT(this == tls.get_top_scope());
@@ -528,7 +548,7 @@ namespace upcxx {
       tls.set_top_scope(this->next_);
       tls.set_top_persona(this->next_->get_persona(tls));
       
-      if(this->next_unique_ != reinterpret_cast<persona_scope*>(0x1)) {
+      if(this->next_unique_ != reinterpret_cast<persona_scope_raw*>(0x1)) {
         this->get_persona(tls)->set_owner(nullptr);
         tls.set_top_unique_scope(this->next_unique_);
       }
@@ -551,13 +571,15 @@ namespace upcxx {
   }
   
   inline persona_scope& default_persona_scope() {
-    detail::persona_tls &tls = detail::the_persona_tls;
-    return tls.default_scope();
+    return persona_scope::the_default_dummy_;
   }
   
   inline persona_scope& top_persona_scope() {
     detail::persona_tls &tls = detail::the_persona_tls;
-    return *static_cast<persona_scope*>(tls.get_top_scope());
+    detail::persona_scope_raw *top = tls.get_top_scope();
+    return top == &tls.default_scope_raw
+      ? persona_scope::the_default_dummy_
+      : *static_cast<persona_scope*>(top);
   }
   
   //////////////////////////////////////////////////////////////////////
@@ -586,7 +608,7 @@ namespace upcxx {
     else
       p.peer_inbox_[(int)level].send(std::forward<Fn>(fn));
   }
-  
+
   template<typename ...T>
   void detail::persona_tls::fulfill_during_user_of_active(
       persona &per,
@@ -690,18 +712,64 @@ namespace upcxx {
       p.peer_inbox_[(int)level].enqueue(m);
   }
 
+  template<typename ...T, bool known_active>
+  void detail::persona_tls::enqueue_quiesced_promise(
+      persona &target, progress_level level,
+      future_header_promise<T...> *pro_hdr,
+      std::intptr_t result_plus_anon,
+      std::integral_constant<bool, known_active>
+    ) {
+    auto *meta = &pro_hdr->pro_meta;
+    UPCXX_ASSERT(meta->deferred_decrements == 0); // promise not quiesced!
+    meta->deferred_decrements = result_plus_anon;
+    
+    if(known_active || target.active_with_caller(*this)) {
+      if(level == progress_level::user &&
+         future_header_promise<T...>::is_trivially_deletable)
+        target.pros_deferred_trivial_.enqueue(&meta->base);
+      else
+        target.self_inbox_[(int)level].enqueue(&meta->base);
+    }
+    else
+      target.peer_inbox_[(int)level].enqueue(&meta->base);
+  }
+  
+  inline bool detail::persona_tls::progress_required() {
+    persona_tls &tls = *this;
+    persona_scope_raw *ps = tls.get_top_scope();
+    persona *p = ps->get_persona(tls);
+    return p->undischarged_n_ != 0;
+  }
+  
+  inline bool detail::persona_tls::progress_required(persona_scope &bottom) {
+    persona_tls &tls = *this;
+    persona_scope_raw *ps = tls.get_top_scope();
+    persona_scope_raw *bot = &bottom == &persona_scope::the_default_dummy_
+      ? &tls.default_scope_raw
+      : static_cast<persona_scope_raw*>(&bottom);
+    
+    while(true) {
+      persona *p = ps->get_persona(tls);
+      if(p->undischarged_n_ != 0)
+        return true;
+      if(ps == bot)
+        return false;
+      ps = ps->next_;
+    }
+  }
+  
   template<typename Fn>
   inline void detail::persona_tls::foreach_active_as_top(Fn &&fn) {
     persona_tls &tls = *this;
-    persona_scope *u = tls.get_top_unique_scope();
+    persona_scope_raw *ps = tls.get_top_unique_scope();
     do {
-      persona *p = u->get_persona(tls);
+      persona *p = ps->get_persona(tls);
       detail::persona_scope_redundant as_top(*p, tls);
       fn(*p);
-      u = u->next_unique_;
-    } while(u != nullptr);
+      ps = ps->next_unique_;
+    } while(ps != nullptr);
   }
-  
+
   inline int detail::persona_tls::burst_internal(persona &p) {
     constexpr int q_internal = (int)progress_level::internal;
     

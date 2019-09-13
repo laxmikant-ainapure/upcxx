@@ -368,7 +368,7 @@ namespace upcxx {
         /*EventValues=*/detail::reduce_scalar_event_values<T>,
         Cxs>;
       
-      upcxx::raw_storage<cxs_state_t> cxs_st_raw;
+      detail::raw_storage<cxs_state_t> cxs_st_raw;
       
       ~reduce_state() {
         cxs_st_raw.destruct();
@@ -667,12 +667,12 @@ namespace upcxx {
         // We have all of our expected contributions.
         if(rank_me == 0) {
           // We are root, time to broadcast result.
-          auto bound = upcxx::bind([=](T &value) {
+          auto bound = upcxx::bind([=](T &&value) {
                 auto it = detail::registry.find(id);
                 reduce_state *me = static_cast<reduce_state*>(it->second);
                 
                 detail::registry.erase(it);
-                me->cxs_st_raw.value.template operator()<operation_cx_event>(std::move(value));
+                me->cxs_st_raw.value().template operator()<operation_cx_event>(std::move(value));
                 delete me;
               },
               std::move(state->accum)
@@ -681,7 +681,7 @@ namespace upcxx {
           if(!one_not_all)
             backend::bcast_am_master<progress_level::user>(tm, bound);
           
-          state->cxs_st_raw.value.template operator()<operation_cx_event>(std::move(std::get<0>(bound.b_)));
+          state->cxs_st_raw.value().template operator()<operation_cx_event>(std::move(std::get<0>(bound.b_)));
           delete state;
           detail::registry.erase(id);
         }
@@ -698,7 +698,8 @@ namespace upcxx {
           backend::template send_am_master<progress_level::internal>(
             tm, parent,
             upcxx::bind(
-              [=](T &value, decltype(detail::globalize_fnptr(std::declval<Op>())) const &op) {
+              //[=](T &value, decltype(detail::globalize_fnptr(std::declval<Op>())) const &op) {
+              [=](T &&value, typename detail::globalize_fnptr_return<Op>::type const &op)->void {
                 reduce_state::contribute(tm_id.here(), root, id, op, static_cast<T&&>(value), nullptr);
               },
               state->accum, detail::globalize_fnptr(op)
@@ -707,7 +708,7 @@ namespace upcxx {
           
           if(one_not_all) {
             // accum has been moved-out from, so this is a bogus (but valid) value
-            state->cxs_st_raw.value.template operator()<operation_cx_event>(std::move(state->accum));
+            state->cxs_st_raw.value().template operator()<operation_cx_event>(std::move(state->accum));
             delete state;
             detail::registry.erase(id);
           }

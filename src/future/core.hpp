@@ -31,6 +31,12 @@
     }
 #endif
 
+#if __PGI // TODO: range of impacted versions and/or C++ standard?
+  // Work around a bug leading to nullptr initialization for a function pointer
+  // See PR#119 for more details
+  #define UPCXX_PROMISE_VTABLE_HACK 1
+#endif
+
 namespace upcxx {
   namespace detail {
     //////////////////////////////////////////////////////////////////////
@@ -130,8 +136,9 @@ namespace upcxx {
       // "a->status_" must be "status_proxying" or "status_proxying_active".
       static future_header* drop_for_proxied(future_header *a);
     };
-    
-    struct future_header_nil {
+
+    template<typename=void>
+    struct future_header_nil1 {
       // The "nil" future, not to be used. Only exists so that future_impl_shref's don't
       // have to test for nullptr, instead they'll just see its negative ref_n_.
       static constexpr future_header the_nil = {
@@ -145,6 +152,11 @@ namespace upcxx {
         return const_cast<future_header*>(&the_nil);
       }
     };
+
+    template<typename VoidThanks>
+    constexpr future_header future_header_nil1<VoidThanks>::the_nil;
+
+    using future_header_nil = future_header_nil1<>;
     
     ////////////////////////////////////////////////////////////////////
     // future_header_dependent: dependent headers are those that...
@@ -394,7 +406,7 @@ namespace upcxx {
         this->base_header.status_ = status_results_yes;
       }
       
-      static constexpr bool is_trivially_deletable = upcxx::trait_forall<std::is_trivially_destructible, T...>::value;
+      static constexpr bool is_trivially_deletable = detail::trait_forall<std::is_trivially_destructible, T...>::value;
 
       void delete_me_ready() {
         results_of(&this->base_header).~results_t();
@@ -568,6 +580,7 @@ namespace upcxx {
     };
     
     // This builds the promise_vtable corresponding to future_header_promise<T...>.
+  
     template<typename ...T>
     struct the_promise_vtable {
       static constexpr promise_vtable vtbl{
@@ -583,6 +596,19 @@ namespace upcxx {
     template<typename ...T>
     constexpr promise_vtable the_promise_vtable<T...>::vtbl;
     
+    #if UPCXX_PROMISE_VTABLE_HACK
+    // This empty-parameter specialization is redundant, the general <T...> case
+    // redues to something functionally equivalent. Unfortunately, the PGI linker
+    // is not initializing the `execute_and_delete` fnptr of vtbl correctly.
+    // By specializing the empty case, the linker treats it differently (not
+    // as weak definition) and compile-time initialization looks good again.
+    template<>
+    struct the_promise_vtable<> {
+      // This can't be constexpr because then we would run into link issues when mixing C++17 apps with pre-17 upcxx builds
+      static const promise_vtable vtbl;
+    };
+    #endif
+
     template<typename ...T>
     future_header_promise<T...>::future_header_promise():
       base_header_result(),
@@ -782,9 +808,9 @@ namespace upcxx {
         b_refs -= b_unit;
       
       // write back a->ref_n_
-      {int trash; (a_unit == 1 ? a->ref_n_ : trash) = a_refs;}
+      if(a_unit == 1) a->ref_n_ = a_refs;
       // write back b->ref_n_
-      {int trash; (b_unit == 1 ? b->ref_n_ : trash) = b_refs;}
+      if(b_unit == 1) b->ref_n_ = b_refs;
       
       if(0 == a_refs) {
         // must be a dependent since if it were a result it couldn't have zero refs
@@ -812,7 +838,7 @@ namespace upcxx {
       // write back a->ref_n_
       a->ref_n_ = a_refs;
       // write back b->ref_n_
-      {int trash; (b_unit == 1 ? b->ref_n_ : trash) = b_refs;}
+      if(b_unit == 1) b->ref_n_ = b_refs;
       
       if(0 == a_refs) {
         if(a->status_ == status_proxying)

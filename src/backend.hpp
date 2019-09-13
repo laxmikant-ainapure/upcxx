@@ -21,10 +21,17 @@ namespace upcxx {
     return backend::master;
   }
   
-  inline bool progress_required(persona_scope&) {
-    return false;
+  inline bool progress_required() {
+    return detail::the_persona_tls.progress_required();
+  }
+  inline bool progress_required(persona_scope &bottom) {
+    return detail::the_persona_tls.progress_required(bottom);
   }
   
+  inline void discharge() {
+    while(upcxx::progress_required())
+      upcxx::progress(progress_level::internal);
+  }
   inline void discharge(persona_scope &ps) {
     while(upcxx::progress_required(ps))
       upcxx::progress(progress_level::internal);
@@ -192,7 +199,7 @@ namespace backend {
   //////////////////////////////////////////////////////////////////////////////
   
   inline bool rank_is_local(intrank_t r) {
-    return std::uintptr_t(r) - std::uintptr_t(pshm_peer_lb) < std::uintptr_t(pshm_peer_n);
+    return all_ranks_definitely_local || std::uintptr_t(r) - std::uintptr_t(pshm_peer_lb) < std::uintptr_t(pshm_peer_n);
     // Is equivalent to...
     // return pshm_peer_lb <= r && r < pshm_peer_ub;
   }

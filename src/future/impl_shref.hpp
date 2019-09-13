@@ -2,6 +2,7 @@
 #define _9a741fd1_dcc1_4fe9_829f_ae86fa6b86ab
 
 #include <upcxx/future/core.hpp>
+#include <upcxx/utility.hpp>
 
 // TODO: Consider adding debug checks for operations against a moved-out of
 // future_impl_shref.
@@ -116,21 +117,21 @@ namespace upcxx {
         return HeaderOps::is_trivially_ready_result || hdr_->status_ == future_header::status_ready;
       }
       
-      upcxx::constant_function<std::tuple<T&...>> result_lrefs_getter() const {
+      detail::constant_function<std::tuple<T&...>> result_lrefs_getter() const {
         return {
-          upcxx::tuple_lrefs(
+          detail::tuple_lrefs(
             future_header_result<T...>::results_of(hdr_->result_)
           )
         };
       }
       
       auto result_rvals()
-        -> decltype(
-          upcxx::tuple_rvals(
+        UPCXX_RETURN_DECLTYPE(
+          detail::tuple_rvals(
             future_header_result<T...>::results_of(hdr_->result_)
           )
         ) {
-        return upcxx::tuple_rvals(
+        return detail::tuple_rvals(
           future_header_result<T...>::results_of(hdr_->result_)
         );
       }
@@ -230,9 +231,9 @@ namespace upcxx {
         future_header_ops_result_ready::template dropref<T...>(this->header_(), /*maybe_nil*/std::false_type());
       }
       
-      upcxx::constant_function<std::tuple<T&...>> result_lrefs_getter() const {
+      detail::constant_function<std::tuple<T&...>> result_lrefs_getter() const {
         return {
-          upcxx::tuple_lrefs(
+          detail::tuple_lrefs(
             future_header_result<T...>::results_of(this->header_())
           )
         };

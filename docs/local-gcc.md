@@ -88,3 +88,8 @@ drawbacks to using LD_LIBRARY PATH.
   add -rpath options to the link command (and some UPC++ backends use GASNet
   conduits that will default to linking with MPI for job spawning).
 
+#### 6. Link the compiler-dependent libraries statically
+
+If all else fails, one can opt-out of dynamic linking of libstdc++ by passing
+`-static-libgcc -static-libstdc++` to g++, upcxx, or mpicxx when linking.  This
+can greatly increase the size of the executable, but should be 100% reliable.

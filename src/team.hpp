@@ -26,6 +26,26 @@ namespace upcxx {
       
       return pro;
     }
+
+    template<typename T, typename ...U>
+    T* registered_state(digest id, U &&...ctor_args) {
+      UPCXX_ASSERT(backend::master.active_with_caller());
+      
+      T *thing;
+      
+      // We use dist_master_registry to map from `dist_id<T>` to
+      // `promise<dist_object<T>&>*`
+      auto it_and_inserted = registry.insert({id, nullptr});
+      
+      if(it_and_inserted.second) {
+        thing = new T(std::forward<U>(ctor_args)...);
+        it_and_inserted.first->second = static_cast<void*>(thing);
+      }
+      else
+        thing = static_cast<T*>(it_and_inserted.first->second);
+      
+      return thing;
+    }
   }
   
   inline bool local_team_contains(intrank_t rank) {
@@ -33,10 +53,10 @@ namespace upcxx {
   }
   
   inline team& world() {
-    return detail::the_world_team.value;
+    return detail::the_world_team.value();
   }
   inline team& local_team() {
-    return detail::the_local_team.value;
+    return detail::the_local_team.value();
   }
 
   // team references are bound using their id's.
@@ -44,7 +64,9 @@ namespace upcxx {
   struct binding<team&> {
     using on_wire_type = team_id;
     using off_wire_type = team&;
+    using off_wire_future_type = typename detail::make_future<team&>::return_type;
     using stripped_type = team&;
+    static constexpr bool immediate = true;
     
     static team_id on_wire(team const &o) {
       return o.id();
@@ -52,6 +74,10 @@ namespace upcxx {
     
     static team& off_wire(team_id id) {
       return id.here();
+    }
+
+    static off_wire_future_type off_wire_future(team_id id) {
+      return upcxx::make_future<team&>(id.here());
     }
   };
   

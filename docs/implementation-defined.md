@@ -3,9 +3,21 @@
 This document describes stable features supported by this implementation that
 go beyond the requirements of the UPC++ Specification.
 
+## Version Identification ##
+
+The following macro definitions are provided by `upcxx/upcxx.hpp`:
+
+  * `UPCXX_VERSION`:
+    An integer literal providing the release version of the implementation, 
+    in the format [YYYY][MM][PP] corresponding to release YYYY.MM.PP
+  * `UPCXX_SPEC_VERSION`:
+    An integer literal providing the revision of the UPC++ specification
+    to which this implementation adheres. See the specification for the specified value.
+
 ## Serialization ##
 
-The following `std::` types enjoy the following serialization behavior...
+The following `std::` types enjoy the following serialization behavior:
+
   * pair<A,B>:
     + DefinitelyTriviallySerializable: so long as A and B are DefinitelyTriviallySerializable.
     + DefinitelySerializable: so long as A and B are DefinitelySerializable.

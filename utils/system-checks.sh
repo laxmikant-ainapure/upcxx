@@ -48,16 +48,19 @@ platform_sanity_checks() {
         if test Linux = "$KERNEL" || test Darwin = "$KERNEL" ; then
             KERNEL_GOOD=1
         fi
-        if test -n "$CRAY_PRGENVCRAY" ; then
-            echo 'ERROR: UPC++ on Cray XC currently requires PrgEnv-gnu or PrgEnv-intel. Please do: `module switch PrgEnv-cray PrgEnv-gnu` or `module switch PrgEnv-cray PrgEnv-intel`'
+        if test -n "$CRAY_PRGENVCRAY" && expr "$CRAY_CC_VERSION" : "^[78]" > /dev/null; then
+            echo 'ERROR: UPC++ on Cray XC with PrgEnv-cray requires cce/9.0 or newer.'
+            exit 1
+        elif test -n "$CRAY_PRGENVCRAY" && expr x"$CRAY_PE_CCE_VARIANT" : "xCC=Classic" > /dev/null; then
+            echo 'ERROR: UPC++ on Cray XC with PrgEnv-cray does not support the "-classic" compilers such as' $(grep -o 'cce/[^:]*' <<<$LOADEDMODULES)
             exit 1
         elif test -n "$CRAY_PRGENVPGI" ; then
-            echo 'ERROR: UPC++ on Cray XC currently requires PrgEnv-gnu or PrgEnv-intel. Please do: `module switch PrgEnv-pgi PrgEnv-gnu` or `module switch PrgEnv-pgi PrgEnv-intel`'
+            echo 'ERROR: UPC++ on Cray XC currently requires PrgEnv-gnu, intel or cray. Please do: `module switch PrgEnv-pgi PrgEnv-FAMILY` for your preferred compiler FAMILY'
             exit 1
         elif test -n "$CRAY_PRGENVINTEL" && ( test -z "$GCC_VERSION" || expr "$GCC_VERSION" : "^[2345]" > /dev/null || expr "$GCC_VERSION" : "^6.[123]" > /dev/null ) ; then
             echo 'ERROR: UPC++ on Cray XC with PrgEnv-intel must also have the gcc module loaded (version 6.4 or newer). Please do: `module load gcc`'
             exit 1
-        elif test -n "$CRAY_PRGENVGNU" || test -n "$CRAY_PRGENVINTEL" ; then
+        elif test -n "$CRAY_PRGENVCRAY$CRAY_PRGENVINTEL$CRAY_PRGENVCRAY" ; then
             CC=${CC:-cc}
             CXX=${CXX:-CC}
 	    # second condition eliminates build warnings in CI for: GASNET=build_or_inst_dir install -single
@@ -78,14 +81,23 @@ platform_sanity_checks() {
             ARCH_GOOD=1
         elif test ppc64le = "$ARCH" ; then
             ARCH_GOOD=1
+        elif test aarch64 = "$ARCH" ; then
+            ARCH_GOOD=1
+            # ARM-based Cray XC not yet tested
+            if test -n "$CRAY_PEVERSION" ; then
+              ARCH_GOOD=
+            fi
         elif expr "$ARCH" : 'i.86' >/dev/null 2>&1 ; then
             ARCH_BAD=1
         fi
 
+        # absify compilers
+        CXX=`type -p ${CXX%% *}`${CXX/${CXX%% *}/}
+        CC=`type -p ${CC%% *}`${CC/${CC%% *}/}
         if test -z "$UPCXX_INSTALL_QUIET" ; then
-            type -p ${CXX%% *}
+            echo $CXX
             $CXX --version 2>&1 | grep -v 'warning #10315'
-            type -p ${CC%% *}
+            echo $CC
             $CC --version 2>&1 | grep -v 'warning #10315'
             echo " "
         fi
@@ -99,7 +111,20 @@ platform_sanity_checks() {
         elif echo "$CXXVERS" | egrep 'Apple LLVM version ([8-9]\.|[1-9][0-9])' 2>&1 > /dev/null ; then
             COMPILER_GOOD=1
         elif echo "$CXXVERS" | egrep 'PGI Compilers and Tools'  > /dev/null ; then
-            COMPILER_BAD=1
+            if [[ "$ARCH,$KERNEL" = 'x86_64,Linux' ]] &&
+                 egrep ' +(19|[2-9][0-9])\.[0-9]+-' <<<"$CXXVERS" 2>&1 >/dev/null ; then
+               # Ex: "pgc++ 19.7-0 LLVM 64-bit target on x86-64 Linux -tp nehalem"
+               # 19.1 and newer "GOOD"
+               COMPILER_GOOD=1
+            elif [[ "$ARCH,$KERNEL" = 'ppc64le,Linux' ]] &&
+                 egrep ' +(18\.10|(19|[2-9][0-9])\.[0-9]+)-' <<<"$CXXVERS" 2>&1 >/dev/null ; then
+               # Ex: "pgc++ 18.10-0 linuxpower target on Linuxpower"
+               # 18.10 and newer "GOOD" (no 18.x was released for x > 10)
+               COMPILER_GOOD=1
+            else
+               # Unsuported platform or version
+               COMPILER_BAD=1
+            fi
         elif echo "$CXXVERS" | egrep 'IBM XL'  > /dev/null ; then
             COMPILER_BAD=1
         elif echo "$CXXVERS" | egrep 'Free Software Foundation' 2>&1 > /dev/null &&
@@ -116,22 +141,37 @@ platform_sanity_checks() {
             #     g++-7 (Homebrew GCC 7.2.0) 7.2.0
             #     foo (GCC) 7.2.0
             COMPILER_GOOD=1
+            # Arm Ltd's gcc not yet tested
+            if test aarch64 = "$ARCH" && echo "$CXXVERS" | head -1 | egrep ' +\(ARM' 2>&1 > /dev/null ; then
+              COMPILER_GOOD=
+            fi
         elif echo "$CXXVERS" | egrep 'clang version [23]' 2>&1 > /dev/null ; then
             COMPILER_BAD=1
-        elif echo "$CXXVERS" | egrep 'clang version ([4-9]\.|[1-9][0-9])' 2>&1 > /dev/null ; then
+        elif test x86_64 = "$ARCH" && echo "$CXXVERS" | egrep 'clang version ([4-9]\.|[1-9][0-9])' 2>&1 > /dev/null ; then
             COMPILER_GOOD=1
-            # PrgEnv-llvm should be Untested (neither GOOD nor BAD)
-            if test -n "$CRAY_PRGENVGNU" ; then
+        elif test ppc64le = "$ARCH" && echo "$CXXVERS" | egrep 'clang version ([5-9]\.|[1-9][0-9])' 2>&1 > /dev/null ; then
+	    # Issue #236: ppc64le/clang support floor is 5.x. clang-4.x/ppc has correctness issues and is deliberately left "unvalidated"
+            COMPILER_GOOD=1
+        elif test aarch64 = "$ARCH" && echo "$CXXVERS" | egrep 'clang version ([4-9]\.|[1-9][0-9])' 2>&1 > /dev/null ; then
+            COMPILER_GOOD=1
+            # Arm Ltd's clang not yet tested
+            if echo "$CXXVERS" | egrep '^Arm C' 2>&1 > /dev/null ; then
               COMPILER_GOOD=
             fi
         fi
 
-        local RECOMMEND='We recommend one of the following C++ compilers (or any later versions):
-           Linux on x86_64:   g++ 6.4.0, LLVM/clang 4.0.0, Intel C 17.0.2
-           Linux on ppc64le:  g++ 6.4.0
+        local RECOMMEND
+        read -r -d '' RECOMMEND<<'EOF'
+We recommend one of the following C++ compilers (or any later versions):
+           Linux on x86_64:   g++ 6.4.0, LLVM/clang 4.0.0, PGI 19.1, Intel C 17.0.2
+           Linux on ppc64le:  g++ 6.4.0, LLVM/clang 5.0.0, PGI 18.10
+           Linux on aarch64:  g++ 6.4.0, LLVM/clang 4.0.0
            macOS on x86_64:   g++ 6.4.0, Xcode/clang 8.0.0
            Cray XC systems:   PrgEnv-gnu with gcc/6.4.0 environment module loaded
-                              PrgEnv-intel with Intel C 17.0.2 and gcc/6.4.0 environment module loaded'
+                              PrgEnv-intel with Intel C 17.0.2 and gcc/6.4.0 environment module loaded
+                              PrgEnv-cray with cce/9.0.0 environment module loaded
+                              ALCF's PrgEnv-llvm/4.0
+EOF
         if test -n "$ARCH_BAD" ; then
             echo "ERROR: This version of UPC++ does not support the '$ARCH' architecture."
             echo "ERROR: $RECOMMEND"

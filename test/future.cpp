@@ -63,7 +63,7 @@ future<int> fib(int i) {
   }
   else
     return when_all(fib(i-1), fib(i-2))
-      >> [=](int x1, int x2)->future<int> {
+      .then([=](int x1, int x2)->future<int> {
         static int iter = 0;
         
         // branches are equivalent, they just test more of future's
@@ -79,7 +79,7 @@ future<int> fib(int i) {
         else {
           return make_future(x1 + x2);
         }
-      };
+      });
 }
 
 #if 0
@@ -101,8 +101,8 @@ int main() {
   const int arg = 5;
   
   future<int> ans0 = fib(arg);
-  future<int> ans1 = ans0 >> [](int x) { return x+1; } >> fib;
-  future<int> ans2 = /*future<int>*/(ans1.then_pure([](int x){return 2*x;})) >> fib;
+  future<int> ans1 = ans0.then([](int x) { return x+1; }).then(fib);
+  future<int> ans2 = /*future<int>*/(ans1.then_pure([](int x){return 2*x;})).then(fib);
   
   when_all(
       // stress nested concatenation

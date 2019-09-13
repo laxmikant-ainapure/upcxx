@@ -15,6 +15,10 @@ extern "C" {
 // otherwise, returns 0 and all other functions declared in this header have undefined behavior.
 extern int upcxx_upc_is_linked(void);
 
+// returns non-zero iff Berkeley UPC Runtime is using -pthreads mode,
+// which potentially maps multiple UPC threads to this process
+extern int upcxx_upc_is_pthreads(void);
+
 // Initialize the Berkeley UPC runtime system (if needed) 
 // and return the GASNet-EX objects which are SHARED with upcr
 extern void upcxx_upc_init(

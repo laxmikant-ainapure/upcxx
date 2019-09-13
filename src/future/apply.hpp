@@ -3,6 +3,7 @@
 
 #include <upcxx/future/core.hpp>
 #include <upcxx/future/make_future.hpp>
+#include <upcxx/utility.hpp>
 
 namespace upcxx {
 namespace detail {
@@ -21,10 +22,10 @@ namespace detail {
   template<typename Fn, typename Args, int ...ai>
   struct apply_tupled_as_future_dispatch<
       Fn, Args,
-      /*ArgIxs=*/upcxx::index_sequence<ai...>,
+      /*ArgIxs=*/detail::index_sequence<ai...>,
       /*Return=*/void
     > {
-    using return_type = decltype(upcxx::make_future());
+    using return_type = detail::make_future<>::return_type;
     
     return_type operator()(Fn fn, Args args) {
       static_cast<Fn&&>(fn)(std::get<ai>(static_cast<Args&&>(args))...);
@@ -36,7 +37,7 @@ namespace detail {
   struct apply_variadic_as_future_dispatch<
       Fn, /*Args=*/std::tuple<Arg...>, /*Return=*/void
     > {
-    using return_type = decltype(upcxx::make_future());
+    using return_type = detail::make_future<>::return_type;
     
     return_type operator()(Fn fn, Arg ...arg) {
       static_cast<Fn&&>(fn)(static_cast<Arg&&>(arg)...);
@@ -50,10 +51,10 @@ namespace detail {
   template<typename Fn, typename Args, int ...ai, typename Return>
   struct apply_tupled_as_future_dispatch<
       Fn, Args,
-      /*ArgIxs=*/upcxx::index_sequence<ai...>,
+      /*ArgIxs=*/detail::index_sequence<ai...>,
       Return
     > {
-    using return_type = decltype(upcxx::make_future<Return>(std::declval<Return>()));
+    using return_type = typename detail::make_future<Return>::return_type;
     
     return_type operator()(Fn fn, Args args) {
       return upcxx::make_future<Return>(
@@ -66,7 +67,7 @@ namespace detail {
   struct apply_variadic_as_future_dispatch<
       Fn, /*Args=*/std::tuple<Arg...>, Return
     > {
-    using return_type = decltype(upcxx::make_future<Return>(std::declval<Return>()));
+    using return_type = typename detail::make_future<Return>::return_type;
     
     return_type operator()(Fn fn, Arg ...arg) {
       return upcxx::make_future<Return>(
@@ -81,7 +82,7 @@ namespace detail {
   template<typename Fn, typename Args, int ...ai, typename Kind, typename ...T>
   struct apply_tupled_as_future_dispatch<
       Fn, Args,
-      /*ArgIxs=*/upcxx::index_sequence<ai...>,
+      /*ArgIxs=*/detail::index_sequence<ai...>,
       /*Return=*/future1<Kind,T...>
     > {
     using return_type = future1<Kind,T...>;
@@ -115,7 +116,7 @@ namespace detail {
     >:
     apply_tupled_as_future_dispatch<
       Fn, Args,
-      /*ArgIxs=*/upcxx::make_index_sequence<sizeof...(Arg)>,
+      /*ArgIxs=*/detail::make_index_sequence<sizeof...(Arg)>,
       /*Return=*/typename std::result_of<Fn(Arg...)>::type
     > {
   };
@@ -133,7 +134,7 @@ namespace detail {
   template<typename Fn, typename Arg, typename Kind, typename ...T>
   struct apply_futured_as_future_help<Fn, Arg, /*ArgD=*/future1<Kind,T...>> {
     using tupled = apply_tupled_as_future_help<
-      Fn, /*Args=*/std::tuple<typename upcxx::add_lref_if_nonref<T>::type...>
+      Fn, /*Args=*/std::tuple<typename detail::add_lref_if_nonref<T>::type...>
     >;
     
     using return_type = typename tupled::return_type;
@@ -160,7 +161,7 @@ namespace detail {
 namespace upcxx {
   template<typename Fn, typename ...Arg>
   auto apply_as_future(Fn &&fn, Arg &&...arg)
-    -> decltype(
+    UPCXX_RETURN_DECLTYPE(
       detail::apply_variadic_as_future_dispatch<
           Fn&&, std::tuple<Arg&&...>,
           typename std::result_of<Fn&&(Arg&&...)>::type
@@ -174,7 +175,7 @@ namespace upcxx {
 
   template<typename Fn, typename Args>
   auto apply_tupled_as_future(Fn &&fn, Args &&args)
-    -> decltype(
+    UPCXX_RETURN_DECLTYPE(
       detail::apply_tupled_as_future<Fn&&,Args&&>()(
         static_cast<Fn&&>(fn), static_cast<Args&&>(args)
       )

@@ -2,6 +2,8 @@
 
 using namespace std;
 
+namespace detail = upcxx::detail;
+
 using upcxx::detail::future_header;
 using upcxx::detail::future_header_nil;
 using upcxx::detail::future_header_dependent;
@@ -11,23 +13,21 @@ using upcxx::detail::future_body_proxy_;
 template<typename ...T>
 using future_header_result = upcxx::detail::future_header_result<T...>;
 
-constexpr future_header future_header_nil::the_nil
-#if 0
-= {
-  /*ref_n_*/-1,
-  /*status_*/future_header::status_active + 666,
-  /*sucs_head_*/nullptr,
-  {/*result_*/nullptr}
-}
-#endif
-;
-
 future_header future_header_result<>::the_always = {
   /*ref_n_*/-1,
   /*status_*/upcxx::detail::future_header::status_ready,
   /*sucs_head_*/nullptr,
   {/*result_*/&upcxx::detail::future_header_result<>::the_always}
 };
+
+#if UPCXX_PROMISE_VTABLE_HACK
+const detail::promise_vtable detail::the_promise_vtable<>::vtbl{
+  /*meta_offset_from_header*/
+  offsetof(future_header_promise<>, pro_meta),
+  /*fulfill_deferred_and_drop*/
+  promise_vtable::fulfill_deferred_and_drop_trivial
+};
+#endif
 
 namespace {
   __thread future_header_dependent **active_tail_ = nullptr;
@@ -129,9 +129,9 @@ void future_header::entered_ready_with_sucs(future_header *result, dependency_li
     result_refs -= result_refs_unit;
   
   // write back this->ref_n_
-  {int trash; (this_refs_unit == 1 ? this->ref_n_ : trash) = this_refs;}
+  if(this_refs_unit == 1) this->ref_n_ = this_refs;
   // write back result->ref_n_
-  {int trash; (result_refs_unit == 1 ? result->ref_n_ : trash) = result_refs;}
+  if(result_refs_unit == 1) result->ref_n_ = result_refs;
   
   if(0 == this_refs) {
     // we know result != this, hence we're a future_header_dependent
@@ -228,7 +228,7 @@ void future_header_dependent::enter_proxying(
     
     // write back proxied->ref_n_
     // we know it wont be zero because either we're referencing it or our successors are
-    {int trash; (proxied_refs_wb ? proxied->ref_n_ : trash) = proxied_refs;}
+    if(proxied_refs_wb) proxied->ref_n_ = proxied_refs;
     
     if(this_refs == 0) {
       // nobody points to us, so we die...

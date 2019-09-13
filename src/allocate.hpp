@@ -30,8 +30,8 @@ namespace upcxx {
   
   //////////////////////////////////////////////////////////////////////
   
-  template<typename T, std::size_t alignment = alignof(T)>
-  global_ptr<T> allocate(std::size_t n = 1) {
+  template<typename T>
+  global_ptr<T> allocate(std::size_t n = 1, std::size_t alignment = alignof(T)) {
     void *p = upcxx::allocate(n * sizeof(T), alignment);
     return p == nullptr
       ? global_ptr<T>(nullptr)

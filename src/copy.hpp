@@ -87,6 +87,8 @@ namespace upcxx {
     const std::size_t size = n*sizeof(T);
 
     constexpr int host_device = -1;
+
+    UPCXX_ASSERT(src && dest, "pointer arguments to copy may not be null");
     
     using cxs_here_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_here,
@@ -152,8 +154,7 @@ namespace upcxx {
       if(dev_d == host_device)
         bounce_d = buf_d;
       else {
-        bounce_d = upcxx::allocate(size, 64);
-        UPCXX_ASSERT_ALWAYS(bounce_d != nullptr, "UPC++ failed to allocate a temporary internal buffer form shared heap. Please run with a bigger shared heap.");
+        bounce_d = backend::gasnet::allocate(size, 64, &backend::gasnet::sheap_footprint_rdzv);
       }
       
       backend::send_am_master<progress_level::internal>(
@@ -164,7 +165,7 @@ namespace upcxx {
               detail::rma_copy_put(rank_d, bounce_d, bounce_s, size,
               backend::gasnet::make_handle_cb([=]() {
                   if(dev_s != host_device)
-                    upcxx::deallocate(bounce_s);
+                    backend::gasnet::deallocate(bounce_s, &backend::gasnet::sheap_footprint_rdzv);
                   
                   backend::send_am_persona<progress_level::internal>(
                     upcxx::world(), rank_d, initiator_per,
@@ -173,7 +174,7 @@ namespace upcxx {
                       
                       auto bounce_d_cont = [=]() {
                         if(dev_d != host_device)
-                          upcxx::deallocate(bounce_d);
+                          backend::gasnet::deallocate(bounce_d, &backend::gasnet::sheap_footprint_rdzv);
 
                         cxs_remote_heaped->template operator()<remote_cx_event>();
                         cxs_here->template operator()<operation_cx_event>();
@@ -195,8 +196,7 @@ namespace upcxx {
           if(dev_s == host_device)
             make_bounce_s_cont(buf_s)();
           else {
-            void *bounce_s = upcxx::allocate(size, 64);
-            UPCXX_ASSERT_ALWAYS(bounce_s != nullptr, "UPC++ failed to allocate a temporary internal buffer form shared heap. Please run with a bigger shared heap.");
+            void *bounce_s = backend::gasnet::allocate(size, 64, &backend::gasnet::sheap_footprint_rdzv);
             
             detail::rma_copy_local(
               host_device, bounce_s, dev_s, buf_s, size,
@@ -221,15 +221,14 @@ namespace upcxx {
           backend::send_am_master<progress_level::internal>(
             upcxx::world(), rank_d,
             upcxx::bind(
-              [=](cxs_remote_t &cxs_remote) {
-                void *bounce_d = dev_d == host_device ? buf_d : upcxx::allocate(size, 64);
-                UPCXX_ASSERT_ALWAYS(dev_d == host_device || bounce_d != nullptr, "UPC++ failed to allocate a temporary internal buffer form shared heap. Please run with a bigger shared heap.");
+              [=](cxs_remote_t &&cxs_remote) {
+                void *bounce_d = dev_d == host_device ? buf_d : backend::gasnet::allocate(size, 64, &backend::gasnet::sheap_footprint_rdzv);
                 
                 detail::rma_copy_get(bounce_d, rank_s, bounce_s, size,
                   backend::gasnet::make_handle_cb([=]() {
                     auto bounce_d_cont = [=]() {
                       if(dev_d != host_device)
-                        upcxx::deallocate(bounce_d);
+                        backend::gasnet::deallocate(bounce_d, &backend::gasnet::sheap_footprint_rdzv);
                       
                       const_cast<cxs_remote_t&>(cxs_remote).template operator()<remote_cx_event>();
 
@@ -237,7 +236,7 @@ namespace upcxx {
                         upcxx::world(), rank_s, initiator_per,
                         [=]() {
                           if(dev_s != host_device)
-                            upcxx::deallocate(bounce_s);
+                            backend::gasnet::deallocate(bounce_s, &backend::gasnet::sheap_footprint_rdzv);
                           else {
                             // source didnt use bounce buffer, need to source_cx now
                             cxs_here->template operator()<source_cx_event>();
@@ -264,9 +263,8 @@ namespace upcxx {
       if(dev_s == host_device)
         make_bounce_s_cont(buf_s)();
       else {
-        void *bounce_s = upcxx::allocate(size, 64);
-        UPCXX_ASSERT_ALWAYS(bounce_s != nullptr, "UPC++ failed to allocate a temporary internal buffer form shared heap. Please run with a bigger shared heap.");
-
+        void *bounce_s = backend::gasnet::allocate(size, 64, &backend::gasnet::sheap_footprint_rdzv);
+        
         detail::rma_copy_local(host_device, bounce_s, dev_s, buf_s, size, cuda::make_event_cb(make_bounce_s_cont(bounce_s)));
       }
     }

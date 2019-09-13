@@ -4,17 +4,32 @@
 #include <upcxx/diagnostic.hpp>
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <functional>
 #include <iostream>
 #include <sstream>
 #include <tuple>
 #include <utility>
+#include <new> // launder
+
+#include <cstdlib> // posix_memalign
+
+// UPCXX_RETURN_DECLTYPE(type): use this inplace of "-> decltype(type)" so that
+// for compilers which choke on such return types (icc) it can be elided in
+// the presence of C++14.
+#if !defined(__INTEL_COMPILER) || __cplusplus <= 201199L
+  #define UPCXX_RETURN_DECLTYPE(...) -> decltype(__VA_ARGS__)
+#else
+  #define UPCXX_RETURN_DECLTYPE(...)
+#endif
 
 namespace upcxx {
+namespace detail {
   //////////////////////////////////////////////////////////////////////
-  // nop_function
-  
+  // detail::nop_function
+
   template<typename Sig>
   struct nop_function;
   
@@ -38,8 +53,8 @@ namespace upcxx {
   }
   
   //////////////////////////////////////////////////////////////////////
-  // constant_function
-  
+  // detail::constant_function
+
   template<typename T>
   struct constant_function {
     T value_;
@@ -56,100 +71,267 @@ namespace upcxx {
     return constant_function<T>{std::move(value)};
   }
 
-  #if 0 // broken code
-    //////////////////////////////////////////////////////////////////////
-    // function_ref: reference to a function. Useful when you want to pass
-    // a lambda into a subroutine knowing the lambda won't be used after
-    // the subroutine exits. A regular std::function could be used in this
-    // case but this has the advantage of doing no heap allocations and
-    // no virtual call for the destructor.
-    //
-    // void my_foreach(int n, function_ref<void(int)> fn) {
-    //   for(int i=0; i < n; i++)
-    //     fn(i);
-    // }
-    //
-    // my_foreach(10, [=](int i) { cout << "i="<<i<<'\n'; });
-    
-    template<typename Sig>
-    class function_ref;
-    
-    template<typename Ret, typename ...Arg>
-    class function_ref<Ret(Arg...)> {
-      Ret(*invoker_)(Arg...);
-      void *fn_;
-      
-    private:
-      template<typename Fn>
-      static Ret the_invoker(void *fn, Arg ...arg) {
-        return reinterpret_cast<Fn*>(fn)->operator()(static_cast<Arg>(arg)...);
-      }
-      
-      static Ret the_nop_invoker(void *fn, Arg ...arg) {
-        return nop_function<Ret(Arg...)>{}();
-      }
-      
-    public:
-      function_ref():
-        invoker_(the_nop_invoker),
-        fn_(nullptr) {
-      }
-      template<typename Fn>
-      function_ref(Fn &&fn):
-        invoker_(the_invoker<typename std::remove_reference<Fn>::type>),
-        fn_(reinterpret_cast<void*>(const_cast<Fn*>(&fn))) {
-      }
-      function_ref(const function_ref&) = default;
-      function_ref& operator=(const function_ref&) = default;
-      function_ref(function_ref&&) = default;
-      function_ref& operator=(function_ref&&) = default;
-      
-      Ret operator()(Arg ...arg) const {
-        return invoker_(fn_, static_cast<Arg>(arg)...);
-      }
-    };
+  //////////////////////////////////////////////////////////////////////////////
+  // detail::memcpy_aligned
+
+  template<std::size_t align>
+  inline void memcpy_aligned(void *dst, void const *src, std::size_t sz) noexcept {
+    std::memcpy(__builtin_assume_aligned(dst, align),
+                __builtin_assume_aligned(src, align), sz);
+  }
+
+  //////////////////////////////////////////////////////////////////////////////
+  // detail::launder & detail::launder_unconstructed
+
+  // *Hopefully*, make it impossible for the compiler to prove to itself that
+  // that `p` doesn't point to an object of type T. This can be used when you
+  // know the underlying bytes encode a valid T, but it hasn't been actually
+  // constructed as such.
+  template<typename T>
+  T* launder_unconstructed(T *p) noexcept {
+    asm("" : "+rm"(p) : "rm"(p) :);
+    return p;
+  }
+
+  #if __cpp_lib_launder >= 201606 // std::launder is not reliably available in C++17 (eg clang 8)
+    template<typename T>
+    constexpr T* launder(T *p) {
+      return std::launder(p);
+    }
+  #else
+    template<typename T>
+    T* launder(T *p) noexcept {
+      return launder_unconstructed(p);
+    }
   #endif
   
-  //////////////////////////////////////////////////////////////////////
-  // raw_storage<T>: Like std::aligned_storage, except more convenient to work
-  // with. The typed value exists in the `value` member, but isnt implicitly
-  // constructed. Construction should be done by user with placement new like:
-  //   `::new(&raw.value) T{...}`.
-  // Also, the value won't be implicilty destructed either. That too is the user's
-  // responsibility.
+  //////////////////////////////////////////////////////////////////////////////
+  // detail::construct_default: Default constructs a T object if possible,
+  // otherwise cheat (UB!) to convince compiler such an object already existed.
+
+  namespace help {
+    template<typename T>
+    T* construct_default(void *spot, std::true_type deft_ctor) {
+      return reinterpret_cast<T*>(::new(spot) T); // extra reinterpret_cast needed for T = U[n] (compiler bug?!)
+    }
+    template<typename T>
+    T* construct_default(void *spot, std::false_type deft_ctor) {
+      return detail::template launder_unconstructed<T>(reinterpret_cast<T*>(spot));
+    }
+  }
   
   template<typename T>
-  union raw_storage {
-    typename std::aligned_storage<sizeof(T), alignof(T)>::type raw;
-    T value;
-    
-    raw_storage() {};
-    ~raw_storage() {};
-    
-    // Copy/assignment happen on the flat bytes of T.
-    raw_storage(raw_storage const &that): raw(that.raw) {}
-    raw_storage& operator=(raw_storage const &that) {
-      this->raw = that.raw;
-      return *this;
-    }
-
-    // Invoke value's destructor.
-    void destruct() {
-      value.~T();
-    }
-
-    // Move value out into a temporary and destruct it.
-    T value_and_destruct() {
-      T ans(std::move(value));
-      value.~T();
+  T* construct_default(void *spot) {
+    return help::template construct_default<T>(
+      spot,
+      std::integral_constant<bool, std::is_default_constructible<T>::value>()
+    );
+  }
+  
+  //////////////////////////////////////////////////////////////////////////////
+  // detail::construct_trivial: Constructs T objects from raw bytes. If
+  // T doesn't have the appropriate constructors, this will cheat (UB!) by
+  // copying the bytes and then *blessing* the memory as holding a valid T.
+  
+  namespace help {
+    template<typename T>
+    T* construct_trivial(void *dest, const void *src, std::true_type deft_ctor, std::true_type triv_copy) {
+      using T1 = typename std::remove_const<T>::type;
+      T1 *ans = reinterpret_cast<T1*>(::new(dest) T1);
+      detail::template memcpy_aligned<alignof(T1)>(ans, src, sizeof(T1));
       return ans;
+    }
+    template<typename T>
+    T* construct_trivial(void *dest, const void *src, std::true_type deft_ctor, std::false_type triv_copy) {
+      using T1 = typename std::remove_const<T>::type;
+      ::new(dest) T1;
+      detail::template memcpy_aligned<alignof(T1)>(dest, src, sizeof(T1));
+      return detail::template launder<T1>(reinterpret_cast<T1*>(dest));
+    }
+    template<typename T, bool any>
+    T* construct_trivial(void *dest, const void *src, std::false_type deft_ctor, std::integral_constant<bool,any> triv_copy) {
+      detail::template memcpy_aligned<alignof(T)>(dest, src, sizeof(T));
+      return detail::launder_unconstructed(reinterpret_cast<T*>(dest));
+    }
+    
+    template<typename T>
+    T* construct_trivial(void *dest, const void *src, std::size_t n, std::true_type deft_ctor, std::true_type triv_copy) {
+      using T1 = typename std::remove_const<T>::type;
+      T1 *ans = nullptr;
+      for(std::size_t i=n; i != 0;)
+        ans = ::new((T1*)dest + --i) T1;
+      detail::template memcpy_aligned<alignof(T1)>(ans, src, n*sizeof(T1));
+      return ans;
+    }
+    template<typename T>
+    T* construct_trivial(void *dest, const void *src, std::size_t n, std::true_type deft_ctor, std::false_type triv_copy) {
+      using T1 = typename std::remove_const<T>::type;
+      for(std::size_t i=n; i != 0;)
+        ::new((T1*)dest + --i) T1;
+      detail::template memcpy_aligned<alignof(T1)>(dest, src, n*sizeof(T1));
+      return detail::template launder<T1>(reinterpret_cast<T1*>(dest));
+    }
+    template<typename T, bool any>
+    T* construct_trivial(void *dest, const void *src, std::size_t n, std::false_type deft_ctor, std::integral_constant<bool,any> triv_copy) {
+      detail::template memcpy_aligned<alignof(T)>(dest, src, n*sizeof(T));
+      return detail::launder_unconstructed(reinterpret_cast<T*>(dest));
+    }
+  }
+  
+  template<typename T>
+  T* construct_trivial(void *dest, const void *src) {
+    return help::template construct_trivial<T>(
+        dest, src, 
+        std::integral_constant<bool, std::is_default_constructible<T>::value>(),
+        std::integral_constant<bool, std::is_trivially_copyable<T>::value>()
+      );
+  }
+  template<typename T>
+  T* construct_trivial(void *dest, const void *src, std::size_t n) {
+    return help::template construct_trivial<T>(
+        dest, src, n,
+        std::integral_constant<bool, std::is_default_constructible<T>::value>(),
+        std::integral_constant<bool, std::is_trivially_copyable<T>::value>()
+      );
+  }
+  
+  //////////////////////////////////////////////////////////////////////////////
+  // detail::destruct
+
+  template<typename T>
+  void destruct(T &x) noexcept { x.~T(); }
+  
+  template<typename T, std::size_t n>
+  void destruct(T (&x)[n]) noexcept {
+    for(std::size_t i=0; i != n; i++)
+      destruct(x[i]);
+  }
+  
+  //////////////////////////////////////////////////////////////////////////////
+  // detail::alloc_aligned
+
+  inline void* alloc_aligned(std::size_t size, std::size_t align) noexcept {
+    UPCXX_ASSERT(
+      align != 0 && (align & (align-1)) == 0,
+      "upcxx::detail::alloc_aligned: Invalid align="<<align
+    );
+
+    // Note: do not use std::aligned_alloc (C++17) since it does not *portably*
+    // support extended alignments (those greater than std::max_align_t), and
+    // thus is no better than ::operator new().
+
+    // Make align = max(align, sizeof(void*))
+    align -= 1;
+    align |= sizeof(void*)-1;
+    align += 1;
+    // Round size up to a multiple of alignment
+    size = (size + align-1) & -align;
+    
+    void *p;
+    int err = posix_memalign(&p, align, size);
+    UPCXX_ASSERT_ALWAYS(err == 0,
+      "upcxx::detail::alloc_aligned: posix_memalign(align="<<align<<", size="<<size<<"): failed with return="<<err
+    );
+    return p;
+  }
+
+  //////////////////////////////////////////////////////////////////////////////
+  // detail::is_aligned
+
+  inline bool is_aligned(void const *x, std::size_t align) {
+    UPCXX_ASSERT((align & (align-1)) == 0, "align must be a power of 2");
+    return 0 == (reinterpret_cast<std::uintptr_t>(x) & (align-1));
+  }
+  
+  //////////////////////////////////////////////////////////////////////////////
+  // xaligned_storage: like std::aligned_storage::type except:
+  //   1. Supports extended alignemnts greater than alignof(std::max_align_t)
+  //   2. Does not guarantee that `sizeof(xaligned_storage<S,A>::type) == S` since it might
+  //      include padding space to achieve the alignemnt dynamically.
+  //   3. Does not guarantee to be a trivial type.
+  //   4. Access to the aligned memory is provided by the `storage()` member,
+  //      alignment of the xaligned_storage object itself is unspecified.
+  //
+  // The intenteded use case is for small stack-allocated serialization buffers.
+  // The other potential use case is to hold overly-aligned types, but currently
+  // we have none so for that usage we stick to `std::aligned_storage<>::type`.
+  
+  template<std::size_t size, std::size_t align,
+           bool valid = 0 == (align & (align-1)),
+           bool extended = (align > alignof(std::max_align_t))>
+  struct xaligned_storage;
+
+  template<std::size_t size, std::size_t align>
+  struct xaligned_storage<size, align, /*valid=*/true, /*extended=*/false> {
+    typename std::aligned_storage<(size + align-1) & -align, align>::type storage_;
+
+    void const* storage() const noexcept { return &storage_; }
+    void*       storage()       noexcept { return &storage_; }
+  };
+  
+  template<std::size_t size, std::size_t align>
+  struct xaligned_storage<size, align, /*valid=*/true, /*extended=*/true> {
+    char xbuf_[size + align-1];
+    
+    void const* storage() const noexcept {
+      std::uintptr_t u = reinterpret_cast<std::uintptr_t>(&xbuf_);
+      return &xbuf_[-u & (align-1)];
+    }
+    void*       storage()       noexcept {
+      std::uintptr_t u = reinterpret_cast<std::uintptr_t>(&xbuf_);
+      return &xbuf_[-u & (align-1)];
+    }
+
+    xaligned_storage() noexcept = default;
+    xaligned_storage(xaligned_storage const &that) noexcept {
+      detail::memcpy_aligned<align>(this->storage(), that.storage(), size);
+    }
+    xaligned_storage& operator=(xaligned_storage const &that) noexcept {
+      if(this != &that)
+        detail::memcpy_aligned<align>(this->storage(), that.storage(), size);
+      return *this;
     }
   };
 
+  //////////////////////////////////////////////////////////////////////////////
+  // detail::raw_storage<T>: Like std::aligned_storage<>::type, except more convenient.
+  // The typed value exists in the `value()` member, but isnt implicitly
+  // constructed. Construction should be done by user with placement new like:
+  //   `::new(&my_storage) T(...)`.
+  // Also, the value won't be implicilty destructed either. That too is the user's
+  // responsibility.
+
+  template<typename T>
+  class raw_storage {
+    typename std::aligned_storage<sizeof(T), alignof(T)>::type raw_;
+
+  public:
+    void* raw() noexcept {
+      return &raw_;
+    }
+    
+    T& value() noexcept {
+      return *detail::launder(reinterpret_cast<T*>(&raw_));
+    }
+    
+    // Invoke value's destructor.
+    void destruct() noexcept {
+      detail::destruct(value());
+    }
+
+    // Move value out into return value and destruct a temporary and destruct it.
+    T value_and_destruct() noexcept {
+      T &val = this->value();
+      T ans(std::move(val));
+      detail::destruct(val);
+      return ans;
+    }
+  };
+  
   //////////////////////////////////////////////////////////////////////
   // trait_forall: logical conjunction of one trait applied to
   // variadically-many argument types.
-  
+
   template<template<typename...> class Test, typename ...T>
   struct trait_forall;
   template<template<typename...> class Test>
@@ -228,7 +410,7 @@ namespace upcxx {
 
   //////////////////////////////////////////////////////////////////////
 
-  namespace detail {
+  namespace help {
     template<int n, int ...s>
     struct make_index_sequence: make_index_sequence<n-1, n-1, s...> {};
 
@@ -239,11 +421,11 @@ namespace upcxx {
   }
   
   template<int n>
-  using make_index_sequence = typename detail::make_index_sequence<n>::type;
+  using make_index_sequence = typename help::make_index_sequence<n>::type;
 
-  //////////////////////////////////////////////////////////////////////
-  // add_lref_if_nonref: Add a lvalue-reference (&) to type T if T isn't
-  // already a reference (& or &&) type.
+  //////////////////////////////////////////////////////////////////////////////
+  // add_lref_if_nonref: Add a lvalue-reference (&) to type T if T isn't already
+  // a reference (& or &&) type.
   
   template<typename T>
   struct add_lref_if_nonref { using type = T&; };
@@ -253,46 +435,74 @@ namespace upcxx {
   
   template<typename T>
   struct add_lref_if_nonref<T&&> { using type = T&&; };
+
+  //////////////////////////////////////////////////////////////////////////////
+  // add_clref_if_nonref: Add a const-lvalue-reference (const &) to type T if T
+  // isn't already a reference (& or &&) type.
+  
+  template<typename T>
+  struct add_clref_if_nonref { using type = T const&; };
+  
+  template<typename T>
+  struct add_clref_if_nonref<T&> { using type = T&; };
+  
+  template<typename T>
+  struct add_clref_if_nonref<T&&> { using type = T&&; };
+
+  //////////////////////////////////////////////////////////////////////////////
+  // add_rref_if_nonref: Add a rvalue-reference (&&) to type T if T isn't
+  // already a reference (& or &&) type.
+  
+  template<typename T>
+  struct add_rref_if_nonref { using type = T&&; };
+  
+  template<typename T>
+  struct add_rref_if_nonref<T&> { using type = T&; };
+  
+  template<typename T>
+  struct add_rref_if_nonref<T&&> { using type = T&&; };
   
   //////////////////////////////////////////////////////////////////////
-  
+
+  #if 0
   template<typename Tup>
   struct decay_tupled;
   template<typename ...T>
   struct decay_tupled<std::tuple<T...>> {
     typedef std::tuple<typename std::decay<T>::type...> type;
   };
+  #endif
   
   //////////////////////////////////////////////////////////////////////
   // get_or_void & tuple_element_or_void: analogs of std::get &
   // std::tuple_elemenet which return void for out-of-range indices
+
+  #if 0
+  template<int i, typename TupRef,
+           bool in_range = (
+             0 <= i &&
+             i < std::tuple_size<typename std::decay<TupRef>::type>::value
+           )>
+  struct tuple_get_or_void {
+    auto operator()(TupRef t)
+      -> decltype(std::get<i>(t)) {
+      return std::get<i>(t);
+    }
+  };
   
-  namespace detail {
-    template<int i, typename TupRef,
-             bool in_range = (
-               0 <= i &&
-               i < std::tuple_size<typename std::decay<TupRef>::type>::value
-             )>
-    struct tuple_get_or_void {
-      auto operator()(TupRef t)
-        -> decltype(std::get<i>(t)) {
-        return std::get<i>(t);
-      }
-    };
-    
-    template<int i, typename TupRef>
-    struct tuple_get_or_void<i, TupRef, /*in_range=*/false>{
-      void operator()(TupRef t) {}
-    };
-  }
+  template<int i, typename TupRef>
+  struct tuple_get_or_void<i, TupRef, /*in_range=*/false>{
+    void operator()(TupRef t) {}
+  };
   
   template<int i, typename Tup>
   auto get_or_void(Tup &&tup)
     -> decltype(
-      detail::tuple_get_or_void<i,Tup>()(std::forward<Tup>(tup))
+      tuple_get_or_void<i,Tup>()(std::forward<Tup>(tup))
     ) {
-    return detail::tuple_get_or_void<i,Tup>()(std::forward<Tup>(tup));
+    return tuple_get_or_void<i,Tup>()(std::forward<Tup>(tup));
   }
+  #endif
   
   template<int i, typename Tup,
            bool in_range = 0 <= i && i < std::tuple_size<Tup>::value>
@@ -309,7 +519,7 @@ namespace upcxx {
   // back unmodified. If the tuple itself isn't passed in with `&`
   // then this will only work if all components are `&` or `&&`.
   
-  namespace detail {
+  namespace help {
     template<typename Tup, int i,
              typename Ti = typename std::tuple_element<i, typename std::decay<Tup>::type>::type>
     struct tuple_lrefs_get;
@@ -351,12 +561,12 @@ namespace upcxx {
   template<typename Tup>
   inline auto tuple_lrefs(Tup &&tup)
     -> decltype(
-      detail::tuple_lrefs(
+      help::tuple_lrefs(
         std::forward<Tup>(tup),
         make_index_sequence<std::tuple_size<typename std::decay<Tup>::type>::value>()
       )
     ) {
-    return detail::tuple_lrefs(
+    return help::tuple_lrefs(
       std::forward<Tup>(tup),
       make_index_sequence<std::tuple_size<typename std::decay<Tup>::type>::value>()
     );
@@ -369,7 +579,7 @@ namespace upcxx {
   // passed by non-const `&`, otherwise the non-reference type is used
   // and the value is moved or copied from the input to output tuple.
   
-  namespace detail {
+  namespace help {
     template<typename Tup, int i,
              typename Ti = typename std::tuple_element<i, typename std::decay<Tup>::type>::type>
     struct tuple_rvals_get;
@@ -446,12 +656,12 @@ namespace upcxx {
   template<typename Tup>
   inline auto tuple_rvals(Tup &&tup)
     -> decltype(
-      detail::tuple_rvals(
+      help::tuple_rvals(
         std::forward<Tup>(tup),
         make_index_sequence<std::tuple_size<typename std::decay<Tup>::type>::value>()
       )
     ) {
-    return detail::tuple_rvals(
+    return help::tuple_rvals(
       std::forward<Tup>(tup),
       make_index_sequence<std::tuple_size<typename std::decay<Tup>::type>::value>()
     );
@@ -461,29 +671,29 @@ namespace upcxx {
   // apply_tupled: Apply a callable against an argument list wrapped
   // in a tuple.
   
-  namespace detail {
+  namespace help {
     template<typename Fn, typename Tup, int ...i>
     inline auto apply_tupled(
         Fn &&fn, Tup &&args, index_sequence<i...>
       )
-      -> decltype(fn(std::get<i>(args)...)) {
-      return fn(std::get<i>(args)...);
+      -> decltype(static_cast<Fn&&>(fn)(std::get<i>(static_cast<Tup&&>(args))...)) {
+      return static_cast<Fn&&>(fn)(std::get<i>(static_cast<Tup&&>(args))...);
     }
   }
   
   template<typename Fn, typename Tup>
   inline auto apply_tupled(Fn &&fn, Tup &&args)
     -> decltype(
-      detail::apply_tupled(
+      help::apply_tupled(
         std::forward<Fn>(fn), std::forward<Tup>(args),
         make_index_sequence<std::tuple_size<Tup>::value>()
       )
     ) {
-    return detail::apply_tupled(
+    return help::apply_tupled(
       std::forward<Fn>(fn), std::forward<Tup>(args),
       make_index_sequence<std::tuple_size<Tup>::value>()
     );
   }
-}
-
+} // namespace detail
+} // namespace upcxx
 #endif

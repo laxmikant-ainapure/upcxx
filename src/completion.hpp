@@ -4,6 +4,7 @@
 #include <upcxx/backend.hpp>
 #include <upcxx/bind.hpp>
 #include <upcxx/future.hpp>
+#include <upcxx/lpc_dormant.hpp>
 #include <upcxx/persona.hpp>
 #include <upcxx/utility.hpp>
 
@@ -41,12 +42,14 @@ namespace upcxx {
   template<typename Event, progress_level level = progress_level::user>
   struct future_cx {
     using event_t = Event;
+    using deserialized_cx = future_cx<Event,level>;
   };
 
   // Promise completion
   template<typename Event, typename ...T>
   struct promise_cx {
     using event_t = Event;
+    using deserialized_cx = promise_cx<Event,T...>;
     promise<T...> &pro_;
   };
 
@@ -54,18 +57,21 @@ namespace upcxx {
   template<typename Event>
   struct buffered_cx {
     using event_t = Event;
+    using deserialized_cx = buffered_cx<Event>;
   };
 
   // Synchronous completion via blocking on network/peers
   template<typename Event>
   struct blocking_cx {
     using event_t = Event;
+    using deserialized_cx = blocking_cx<Event>;
   };
 
   // LPC completion
   template<typename Event, typename Fn>
   struct lpc_cx {
     using event_t = Event;
+    using deserialized_cx = lpc_cx<Event,Fn>;
     
     persona *target_;
     Fn fn_;
@@ -80,6 +86,7 @@ namespace upcxx {
   template<typename Event, typename Fn>
   struct rpc_cx {
     using event_t = Event;
+    using deserialized_cx = rpc_cx<Event, typename serialization_traits<Fn>::deserialized_type>;
     
     Fn fn_;
     rpc_cx(Fn fn): fn_(std::move(fn)) {}
@@ -189,9 +196,7 @@ namespace upcxx {
   namespace detail {
     template<typename Event>
     struct support_as_future {
-      using as_future_t = completions<future_cx<Event>>;
-
-      static constexpr as_future_t as_future() {
+      static constexpr completions<future_cx<Event>> as_future() {
         return {future_cx<Event>{}};
       }
     };
@@ -199,10 +204,7 @@ namespace upcxx {
     template<typename Event>
     struct support_as_promise {
       template<typename ...T>
-      using as_promise_t = completions<promise_cx<Event, T...>>;
-
-      template<typename ...T>
-      static constexpr as_promise_t<T...> as_promise(promise<T...> &pro) {
+      static constexpr completions<promise_cx<Event, T...>> as_promise(promise<T...> &pro) {
         return {promise_cx<Event, T...>{pro}};
       }
     };
@@ -210,30 +212,23 @@ namespace upcxx {
     template<typename Event>
     struct support_as_lpc {
       template<typename Fn>
-      using as_lpc_t = completions<lpc_cx<Event, Fn>>;
-
-      template<typename Fn>
-      static constexpr as_lpc_t<Fn> as_lpc(persona &target, Fn func) {
+      static constexpr completions<lpc_cx<Event, Fn>> as_lpc(persona &target, Fn func) {
         return {
-          lpc_cx<Event, Fn>{target, static_cast<Fn&&>(func)}
+          lpc_cx<Event, Fn>{target, std::forward<Fn>(func)}
         };
       }
     };
 
     template<typename Event>
     struct support_as_buffered {
-      using as_buffered_t = completions<buffered_cx<Event>>;
-
-      static constexpr as_buffered_t as_buffered() {
+      static constexpr completions<buffered_cx<Event>> as_buffered() {
         return {buffered_cx<Event>{}};
       }
     };
 
     template<typename Event>
     struct support_as_blocking {
-      using as_blocking_t = completions<blocking_cx<Event>>;
-
-      static constexpr as_blocking_t as_blocking() {
+      static constexpr completions<blocking_cx<Event>> as_blocking() {
         return {blocking_cx<Event>{}};
       }
     };
@@ -241,19 +236,13 @@ namespace upcxx {
     template<typename Event>
     struct support_as_rpc {
       template<typename Fn, typename ...Args>
-      using rpc_cx_t =
-        rpc_cx<Event,
-               decltype(upcxx::bind(std::declval<Fn>(),
-                                    std::declval<Args>()...))>;
-
-      template<typename Fn, typename ...Args>
-      using as_rpc_t = completions<rpc_cx_t<Fn, Args...>>;
-      
-      template<typename Fn, typename ...Args>
-      static as_rpc_t<Fn&&, Args&&...> as_rpc(Fn &&fn, Args &&...args) {
+      static completions<
+          rpc_cx<Event, typename detail::bind<Fn&&, Args&&...>::return_type>
+        >
+      as_rpc(Fn &&fn, Args &&...args) {
         return {
-          rpc_cx_t<Fn&&, Args&&...>{
-            upcxx::bind(static_cast<Fn&&>(fn), static_cast<Args&&>(args)...)
+          rpc_cx<Event, typename detail::bind<Fn&&, Args&&...>::return_type>{
+            upcxx::bind(std::forward<Fn>(fn), std::forward<Args>(args)...)
           }
         };
       }
@@ -305,6 +294,14 @@ namespace upcxx {
       promise<T...> pro_;
       
       cx_state(future_cx<Event,level>) {}
+
+      lpc_dormant<T...>* to_lpc_dormant(lpc_dormant<T...> *tail) && {
+        return detail::make_lpc_dormant_quiesced_promise<T...>(
+          upcxx::current_persona(), progress_level::user,
+          std::move(pro_),
+          tail
+        );
+      }
       
       void operator()(T ...vals) {
         backend::fulfill_during<level>(std::move(pro_), std::tuple<T...>(std::forward<T>(vals)...));
@@ -316,9 +313,20 @@ namespace upcxx {
     struct cx_state<promise_cx<Event,T...>, std::tuple<T...>> {
       promise<T...> &pro_;
 
-      cx_state(promise_cx<Event,T...> cx):
+      cx_state(promise_cx<Event,T...> &&cx):
         pro_(cx.pro_) {
         pro_.require_anonymous(1);
+      }
+
+      lpc_dormant<T...>* to_lpc_dormant(lpc_dormant<T...> *tail) && {
+        promise<T...> *pro = &pro_;
+        return detail::make_lpc_dormant(
+          upcxx::current_persona(), progress_level::user,
+          [=](T &&...results) {
+            backend::fulfill_during<progress_level::user>(*pro, std::tuple<T...>(std::move(results)...));
+          },
+          tail
+        );
       }
       
       void operator()(T ...vals) {
@@ -330,9 +338,20 @@ namespace upcxx {
     struct cx_state<promise_cx<Event,T...>, std::tuple<>> {
       promise<T...> &pro_;
 
-      cx_state(promise_cx<Event,T...> cx):
+      cx_state(promise_cx<Event,T...> &&cx):
         pro_(cx.pro_) {
         pro_.require_anonymous(1);
+      }
+      
+      lpc_dormant<>* to_lpc_dormant(lpc_dormant<> *tail) && {
+        promise<T...> *pro = &pro_;
+        return detail::make_lpc_dormant(
+          upcxx::current_persona(), progress_level::user,
+          [=]() {
+            backend::fulfill_during<progress_level::user>(*pro, 1);
+          },
+          tail
+        );
       }
       
       void operator()() {
@@ -344,9 +363,20 @@ namespace upcxx {
     struct cx_state<promise_cx<Event>, std::tuple<>> {
       promise<> &pro_;
 
-      cx_state(promise_cx<Event> cx):
+      cx_state(promise_cx<Event> &&cx):
         pro_(cx.pro_) {
         pro_.require_anonymous(1);
+      }
+
+      lpc_dormant<>* to_lpc_dormant(lpc_dormant<> *tail) && {
+        promise<> *pro = &pro_;
+        return detail::make_lpc_dormant<>(
+          upcxx::current_persona(), progress_level::user,
+          [=]() {
+            backend::fulfill_during<progress_level::user>(*pro, 1);
+          },
+          tail
+        );
       }
       
       void operator()() {
@@ -359,15 +389,22 @@ namespace upcxx {
       persona *target_;
       Fn fn_;
       
-      cx_state(lpc_cx<Event,Fn> cx):
+      cx_state(lpc_cx<Event,Fn> &&cx):
         target_(cx.target_),
         fn_(std::move(cx.fn_)) {
+        upcxx::current_persona().undischarged_n_ += 1;
+      }
+
+      lpc_dormant<T...>* to_lpc_dormant(lpc_dormant<T...> *tail) && {
+        upcxx::current_persona().undischarged_n_ -= 1;
+        return detail::make_lpc_dormant(*target_, progress_level::user, std::move(fn_), tail);
       }
       
       void operator()(T ...vals) {
         target_->lpc_ff(
-          std::bind(std::move(fn_), std::forward<T>(vals)...)
+          detail::lpc_bind<Fn,T...>(std::forward<Fn>(fn_), std::forward<T>(vals)...)
         );
+        upcxx::current_persona().undischarged_n_ -= 1;
       }
     };
     
@@ -375,13 +412,13 @@ namespace upcxx {
     struct cx_state<rpc_cx<Event,Fn>, std::tuple<T...>> {
       Fn fn_;
       
-      cx_state(rpc_cx<Event,Fn> cx):
+      cx_state(rpc_cx<Event,Fn> &&cx):
         fn_{std::move(cx.fn_)} {
       }
       
-      auto operator()(T ...vals) ->
-        decltype(fn_(std::forward<T>(vals)...)) {
-        return fn_(std::forward<T>(vals)...);
+      typename std::result_of<Fn&&(T...)>::type
+      operator()(T ...vals) {
+        return std::move(fn_)(static_cast<T>(vals)...);
       }
     };
   }
@@ -430,6 +467,25 @@ namespace upcxx {
       
       template<typename Event, typename ...V>
       void operator()(V &&...vals) {/*nop*/}
+
+      struct event_bound {
+        template<typename ...V>
+        void operator()(V &&...vals) {/*nop*/}
+      };
+      
+      template<typename Event>
+      event_bound bind_event() && {
+        return event_bound{};
+      }
+
+      template<typename Event>
+      typename detail::tuple_types_into<
+          typename EventValues::template tuple_t<Event>,
+          lpc_dormant
+        >::type*
+      to_lpc_dormant() && {
+        return nullptr;
+      }
     };
 
     template<bool event_selected, typename EventValues, typename Cx>
@@ -442,7 +498,7 @@ namespace upcxx {
       > {
       static constexpr bool empty = true;
 
-      completions_state_head(Cx cx) {}
+      completions_state_head(Cx &&cx) {}
       
       template<typename Event, typename ...V>
       void operator()(V&&...) {/*nop*/}
@@ -459,7 +515,7 @@ namespace upcxx {
 
       cx_state<Cx, typename EventValues::template tuple_t<cx_event_t<Cx>>> state_;
       
-      completions_state_head(Cx cx):
+      completions_state_head(Cx &&cx):
         state_(std::move(cx)) {
       }
       
@@ -482,6 +538,26 @@ namespace upcxx {
             std::is_same<Event, typename Cx::event_t>::value
           >{},
           std::forward<V>(vals)...
+        );
+      }
+      
+      template<typename Event, typename Lpc>
+      Lpc* to_lpc_dormant_case(std::true_type, Lpc *tail) && {
+        return std::move(state_).to_lpc_dormant(tail);
+      }
+
+      template<typename Event, typename Lpc>
+      Lpc* to_lpc_dormant_case(std::false_type, Lpc *tail) && {
+        return tail;
+      }
+
+      template<typename Event, typename Lpc>
+      Lpc* to_lpc_dormant(Lpc *tail) && {
+        return std::move(*this).template to_lpc_dormant_case<Event>(
+          std::integral_constant<bool,
+            std::is_same<Event, typename Cx::event_t>::value
+          >(),
+          tail
         );
       }
     };
@@ -512,7 +588,11 @@ namespace upcxx {
         head_t(cxs.head_moved()),
         tail_t(cxs.tail_moved()) {
       }
-
+      completions_state(head_t &&head, tail_t &&tail):
+        head_t(std::move(head)),
+        tail_t(std::move(tail)) {
+      }
+      
       head_t& head() { return static_cast<head_t&>(*this); }
       head_t const& head() const { return *this; }
       
@@ -522,140 +602,163 @@ namespace upcxx {
       template<typename Event, typename ...V>
       void operator()(V &&...vals) {
         // fire the head element
-        head_t::template operator()<Event>(vals...);
+        head_t::template operator()<Event>(std::forward<V>(vals)...);
         // recurse to fire remaining elements
-        tail_t::template operator()<Event>(std::move(vals)...);
+        tail_t::template operator()<Event>(std::forward<V>(vals)...);
+      }
+
+      template<typename Event>
+      struct event_bound {
+        template<typename ...V>
+        void operator()(completions_state &&me, V &&...vals) {
+          // fire the head element
+          static_cast<head_t&>(me).template operator()<Event>(std::forward<V>(vals)...);
+          // recurse to fire remaining elements
+          static_cast<tail_t&>(me).template operator()<Event>(std::forward<V>(vals)...);
+        }
+      };
+      
+      template<typename Event>
+      typename detail::template bind<event_bound<Event>, completions_state>::return_type
+      bind_event() && {
+        return upcxx::bind(event_bound<Event>(), std::move(*this));
+      }
+
+      template<typename Event>
+      typename detail::tuple_types_into<
+          typename EventValues::template tuple_t<Event>,
+          lpc_dormant
+        >::type*
+      to_lpc_dormant() && {
+        return static_cast<head_t&&>(*this).template to_lpc_dormant<Event>(
+          static_cast<tail_t&&>(*this).template to_lpc_dormant<Event>()
+        );
       }
     };
   }
 
   //////////////////////////////////////////////////////////////////////
-  // Packing a completions_state of rpc_cx's
-
-  namespace detail {
-    template<typename EventValues, typename Event, typename Fn>
-    struct packing_skippable_dumb<
-        detail::completions_state_head<
-          /*event_enabled=*/true, EventValues, rpc_cx<Event,Fn>
-        >
-      > {
-      using type = detail::completions_state_head<true, EventValues, rpc_cx<Event,Fn>>;
-
-      template<typename Ub, bool skippable>
-      static auto ubound(Ub ub, type const &s, std::integral_constant<bool,skippable>) ->
-        decltype(packing<Fn>::ubound(ub, s.state_.fn_, std::false_type())) {
-        return packing<Fn>::ubound(ub, s.state_.fn_, std::false_type());
-      }
-      
-      template<bool skippable>
-      static void pack(parcel_writer &w, type const &s, std::integral_constant<bool,skippable>) {
-        packing<Fn>::pack(w, s.state_.fn_, std::false_type());
-      }
-
-      using unpacked_t = detail::completions_state_head<true, EventValues, rpc_cx<Event,unpacked_of_t<Fn>>>;
-      
-      static void skip(parcel_reader &r) {
-        packing<Fn>::skip(r);
-      }
-      
-      template<bool skippable>
-      static void unpack(parcel_reader &r, void *into, std::integral_constant<bool,skippable>) {
-        return packing<Fn>::unpack(r, into, std::false_type());
-      }
-    };
-  }
-
+  // Serialization of a completions_state of rpc_cx's
+  
   template<typename EventValues, typename Event, typename Fn>
-  struct packing<
-      detail::completions_state_head<
-        /*event_enabled=*/true, EventValues, rpc_cx<Event,Fn>
-      >
-    >: detail::packing_skippable_smart<
+  struct serialization<
       detail::completions_state_head<
         /*event_enabled=*/true, EventValues, rpc_cx<Event,Fn>
       >
     > {
+    using type = detail::completions_state_head<true, EventValues, rpc_cx<Event,Fn>>;
+
+    static constexpr bool is_definitely_serializable = serialization_traits<Fn>::is_definitely_serializable;
+    
+    template<typename Ub>
+    static auto ubound(Ub ub, type const &s)
+      UPCXX_RETURN_DECLTYPE(
+        ub.template cat_ubound_of<Fn>(s.state_.fn_)
+      ) {
+      return ub.template cat_ubound_of<Fn>(s.state_.fn_);
+    }
+
+    template<typename Writer>
+    static void serialize(Writer &w, type const &s) {
+      w.template push<Fn>(s.state_.fn_);
+    }
+
+    using deserialized_type = detail::completions_state_head<
+        true, EventValues,
+        rpc_cx<Event, typename serialization_traits<Fn>::deserialized_type>
+      >;
+    
+    static constexpr bool skip_is_fast = serialization_traits<Fn>::skip_is_fast;
+    static constexpr bool references_buffer = serialization_traits<Fn>::references_buffer;
+    
+    template<typename Reader>
+    static void skip(Reader &r) {
+      r.template skip<Fn>();
+    }
+
+    template<typename Reader>
+    static deserialized_type* deserialize(Reader &r, void *spot) {
+      return new(spot) deserialized_type(r.template pop<Fn>());
+    }
   };
 
   template<typename EventValues, typename Cx>
-  struct packing<
+  struct serialization<
       detail::completions_state_head</*event_enabled=*/false, EventValues, Cx>
     >:
-    packing_empty<
-      detail::completions_state_head</*event_enabled=*/false, EventValues, Cx>
+    detail::serialization_trivial<
+      detail::completions_state_head</*event_enabled=*/false, EventValues, Cx>,
+      /*empty=*/true
     > {
+    static constexpr bool is_definitely_serializable = true;
   };
   
   template<template<typename> class EventPredicate,
            typename EventValues>
-  struct packing<
+  struct serialization<
       detail::completions_state<EventPredicate, EventValues, completions<>>
     >:
-    packing_empty<
-      detail::completions_state<EventPredicate, EventValues, completions<>>
+    detail::serialization_trivial<
+      detail::completions_state<EventPredicate, EventValues, completions<>>,
+      /*empty=*/true
     > {
+    static constexpr bool is_definitely_serializable = true;
   };
-
-  namespace detail {
-    template<template<typename> class EventPredicate,
-             typename EventValues, typename CxH, typename ...CxT>
-    struct packing_skippable_dumb<
-        detail::completions_state<EventPredicate, EventValues, completions<CxH,CxT...>>
-      > {
-      using type = detail::completions_state<EventPredicate, EventValues, completions<CxH,CxT...>>;
-
-      template<typename Ub, bool skippable>
-      static auto ubound(Ub ub, type const &cxs, std::integral_constant<bool,skippable>)
-        -> decltype(packing<typename type::tail_t>::ubound(
-          packing<typename type::head_t>::ubound(
-            ub, cxs.head(), std::false_type()
-          ),
-          cxs.tail(), std::false_type()
-        )) {
-        return packing<typename type::tail_t>::ubound(
-          packing<typename type::head_t>::ubound(
-            ub, cxs.head(), std::false_type()
-          ),
-          cxs.tail(), std::false_type()
-        );
-      }
-
-      template<bool skippable>
-      static void pack(parcel_writer &w, type const &cxs, std::integral_constant<bool,skippable>) {
-        packing<typename type::head_t>::pack(w, cxs.head(), std::false_type());
-        packing<typename type::tail_t>::pack(w, cxs.tail(), std::false_type());
-      }
-
-      using unpacked_t = detail::completions_state<
-          EventPredicate, EventValues,
-          completions<unpacked_of_t<CxH>, unpacked_of_t<CxT>...>
-        >;
-      
-      static void skip(parcel_reader &r) {
-        packing<typename type::head_t>::skip(r);
-        packing<typename type::tail_t>::skip(r);
-      }
-
-      template<bool skippable>
-      static void unpack(parcel_reader &r, void *into, std::integral_constant<bool,skippable>) {
-        // DANGER: we never actually call any completions_state constructors, only
-        // the completions_state_head constructors in our inheritance chain.
-        packing<typename type::head_t>::unpack(r, (typename type::head_t*)(type*)into, std::false_type());
-        packing<typename type::tail_t>::unpack(r, (typename type::tail_t*)(type*)into, std::false_type());
-      }
-    };
-  }
 
   template<template<typename> class EventPredicate,
            typename EventValues, typename CxH, typename ...CxT>
-  struct packing<
-      detail::completions_state<EventPredicate, EventValues, completions<CxH,CxT...>>
-    >:
-    detail::packing_skippable_smart<
+  struct serialization<
       detail::completions_state<EventPredicate, EventValues, completions<CxH,CxT...>>
     > {
+    using type = detail::completions_state<EventPredicate, EventValues, completions<CxH,CxT...>>;
+
+    static constexpr bool is_definitely_serializable =
+      serialization_traits<typename type::head_t>::is_definitely_serializable &&
+      serialization_traits<typename type::tail_t>::is_definitely_serializable;
+    
+    template<typename Ub>
+    static auto ubound(Ub ub, type const &cxs)
+      UPCXX_RETURN_DECLTYPE(
+        ub.template cat_ubound_of<typename type::head_t>(cxs.head())
+          .template cat_ubound_of<typename type::tail_t>(cxs.tail())
+      ) {
+      return ub.template cat_ubound_of<typename type::head_t>(cxs.head())
+               .template cat_ubound_of<typename type::tail_t>(cxs.tail());
+    }
+
+    template<typename Writer>
+    static void serialize(Writer &w, type const &cxs) {
+      w.template push<typename type::head_t>(cxs.head());
+      w.template push<typename type::tail_t>(cxs.tail());
+    }
+
+    using deserialized_type = detail::completions_state<
+        EventPredicate, EventValues,
+        completions<typename CxH::deserialized_cx,
+                    typename CxT::deserialized_cx...>
+      >;
+
+    static constexpr bool skip_is_fast =
+      serialization_traits<typename type::head_t>::skip_is_fast &&
+      serialization_traits<typename type::tail_t>::skip_is_fast;
+    static constexpr bool references_buffer =
+      serialization_traits<typename type::head_t>::references_buffer ||
+      serialization_traits<typename type::tail_t>::references_buffer;
+
+    template<typename Reader>
+    static void skip(Reader &r) {
+      r.template skip<typename type::head_t>();
+      r.template skip<typename type::tail_t>();
+    }
+
+    template<typename Reader>
+    static deserialized_type* deserialize(Reader &r, void *spot) {
+      typename type::head_t h = r.template pop<typename type::head_t>();
+      typename type::tail_t t = r.template pop<typename type::tail_t>();
+      return new(spot) deserialized_type(std::move(h), std::move(t));
+    }
   };
-  
+
   //////////////////////////////////////////////////////////////////////
   // detail::completions_returner: Manage return type for completions<...>
   // object. Construct one of these instances against a
