@@ -48,11 +48,14 @@ namespace upcxx {
     private detail::future_impl_shref<
       detail::future_header_ops_promise, T...
     > {
-    
-    friend detail::promise_meta* detail::promise_meta_of<T...>(promise<T...>&);
-    friend detail::future_header_promise<T...>* detail::promise_header_of<T...>(promise<T...> &pro);
-    friend detail::future_header_promise<T...>* detail::promise_steal_header_of<T...>(promise<T...> &&pro);
-    
+
+    // workaround a bug in cudafe++
+    using promise_cfe = upcxx::promise<T...>;
+
+    friend detail::promise_meta* detail::promise_meta_of<T...>(promise_cfe &pro);
+    friend detail::future_header_promise<T...>* detail::promise_header_of<T...>(promise_cfe &pro);
+    friend detail::future_header_promise<T...>* detail::promise_steal_header_of<T...>(promise_cfe &&pro);
+
     promise(detail::future_header *hdr):
       detail::future_impl_shref<detail::future_header_ops_promise, T...>(hdr) {
     }
