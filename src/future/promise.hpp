@@ -49,7 +49,7 @@ namespace upcxx {
       detail::future_header_ops_promise, T...
     > {
 
-    // workaround a bug in cudafe++
+    // workaround a bug in cudafe++, see issue #274 for details
     using promise_cfe = upcxx::promise<T...>;
 
     friend detail::promise_meta* detail::promise_meta_of<T...>(promise_cfe &pro);
