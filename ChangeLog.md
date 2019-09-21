@@ -5,6 +5,20 @@ This is the ChangeLog for public releases of [UPC++](https://upcxx.lbl.gov).
 For information on using UPC++, see: [README.md](README.md)    
 For information on installing UPC++, see: [INSTALL.md](INSTALL.md)
 
+### 20XX.YY.ZZ: PENDING
+
+New features/enhancements: (see specification and programmer's guide for full details)
+
+* ...
+
+Notable bug fixes:
+
+* issue #271: Use of `-pthread` in `example/prog-guide/Makefile` breaks PGI
+
+Breaking changes:
+
+* ...
+
 ### 2019.09.14: Release 2019.9.0
 
 New features/enhancements: (see specification and programmer's guide for full details)
