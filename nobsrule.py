@@ -430,18 +430,6 @@ def ldflags(cxt):
 
 @rule()
 @coroutine
-def lang_c11(cxt):
-  """
-  String list to engage C11 language dialect for the C compiler.
-  """
-  cc = yield cxt.cc()
-  if any(arg.startswith('-std=c') for arg in cc):
-    yield []
-  else:
-    yield ['-std=c11'] if not is_pgi(cc) else []
-
-@rule()
-@coroutine
 def lang_cxx11(cxt):
   """
   String list to engage C++11 language dialect for the C++ compiler.
@@ -471,8 +459,7 @@ def comp_lang(cxt, src):
     yield cxx + cxx11
   elif ext in c_exts:
     cc = yield cxt.cc()
-    c11 = yield cxt.lang_c11()
-    yield cc + c11
+    yield cc
   else:
     raise Exception("Unrecognized source file extension: "+src)
 
