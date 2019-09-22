@@ -122,7 +122,11 @@ def invoke_on_file(suffix, contents, file_to_cmd, file_to_outs=lambda x:[]):
 
 @rule(cli='cuda')
 def cuda(cxt):
-  return cuda_cached()
+  cxx = cxt.cxx().wait()
+  if is_nvcc(cxx):
+    return {'cuda': {'ppflags': [], 'libflags': [ '-lcuda' ]}}
+  else:
+    return cuda_cached()
 
 @cached
 def cuda_cached():
