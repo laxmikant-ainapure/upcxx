@@ -76,7 +76,7 @@ def pthread(cxt):
   Return the library-set for building against pthreads. 
   """
   cxx = yield cxt.cxx()
-  if is_pgi(cxx):
+  if is_pgi(cxx) or is_nvcc(cxx):
     flag = '-lpthread'
   else:
     flag = '-pthread'
@@ -424,6 +424,11 @@ def is_pgi(cmd):
   import re
   return re.search('PGI Compilers and Tools', out) is not None
 
+def is_nvcc(cmd):
+  _,out,_ = version_of(cmd)
+  import re
+  return re.search('Cuda compiler driver', out) is not None
+
 @rule(cli='ldflags')
 def ldflags(cxt):
   return shplit(env('LDFLAGS',''))
@@ -540,9 +545,9 @@ def comp_lang_pp_cg(cxt, src, libset):
   
   yield (
     comp +
-    ['-O%d'%optlev] +
+    (['-O%d'%optlev] if not is_nvcc(comp) else []) +
     (['-g'] if dbgsym else []) +
-    (['-Wall'] if not is_pgi(comp) else []) +
+    (['-Wall'] if not is_pgi(comp) and not is_nvcc(comp) else []) +
     libset_cgflags(libset)
   )
 
