@@ -76,7 +76,7 @@ def pthread(cxt):
   Return the library-set for building against pthreads. 
   """
   cxx = yield cxt.cxx()
-  if is_pgi(cxx):
+  if is_pgi(cxx) or is_nvcc(cxx):
     flag = '-lpthread'
   else:
     flag = '-pthread'
@@ -88,6 +88,8 @@ def openmp(cxt):
   cxx = yield cxt.cxx()
   if is_pgi(cxx):
     flags = ['-mp']
+  elif is_nvcc(cxx):
+    flags = ['-Xcompiler','-fopenmp']
   else:
     flags = ['-fopenmp']
   
@@ -122,7 +124,11 @@ def invoke_on_file(suffix, contents, file_to_cmd, file_to_outs=lambda x:[]):
 
 @rule(cli='cuda')
 def cuda(cxt):
-  return cuda_cached()
+  cxx = cxt.cxx().wait()
+  if is_nvcc(cxx):
+    return {'cuda': {'ppflags': [], 'libflags': [ '-lcuda' ]}}
+  else:
+    return cuda_cached()
 
 @cached
 def cuda_cached():
@@ -424,21 +430,14 @@ def is_pgi(cmd):
   import re
   return re.search('PGI Compilers and Tools', out) is not None
 
+def is_nvcc(cmd):
+  _,out,_ = version_of(cmd)
+  import re
+  return re.search('Cuda compiler driver', out) is not None
+
 @rule(cli='ldflags')
 def ldflags(cxt):
   return shplit(env('LDFLAGS',''))
-
-@rule()
-@coroutine
-def lang_c11(cxt):
-  """
-  String list to engage C11 language dialect for the C compiler.
-  """
-  cc = yield cxt.cc()
-  if any(arg.startswith('-std=c') for arg in cc):
-    yield []
-  else:
-    yield ['-std=c11'] if not is_pgi(cc) else []
 
 @rule()
 @coroutine
@@ -471,8 +470,7 @@ def comp_lang(cxt, src):
     yield cxx + cxx11
   elif ext in c_exts:
     cc = yield cxt.cc()
-    c11 = yield cxt.lang_c11()
-    yield cc + c11
+    yield cc
   else:
     raise Exception("Unrecognized source file extension: "+src)
 
@@ -553,9 +551,9 @@ def comp_lang_pp_cg(cxt, src, libset):
   
   yield (
     comp +
-    ['-O%d'%optlev] +
+    (['-O%d'%optlev] if not is_nvcc(comp) else []) +
     (['-g'] if dbgsym else []) +
-    (['-Wall'] if not is_pgi(comp) else []) +
+    (['-Wall'] if not is_pgi(comp) and not is_nvcc(comp) else []) +
     libset_cgflags(libset)
   )
 
