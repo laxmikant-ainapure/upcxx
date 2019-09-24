@@ -16,8 +16,6 @@ UPCXX_CODEMODE ?= debug
 export UPCXX_CODEMODE
 CXX = $(UPCXX_INSTALL)/bin/upcxx
 
-OPENMP_FLAGS = -fopenmp
-
 EXTRA_FLAGS = -g
 
 # Programs to build, assuming each has a corresponding *.cpp file
