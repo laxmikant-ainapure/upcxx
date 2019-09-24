@@ -88,6 +88,8 @@ def openmp(cxt):
   cxx = yield cxt.cxx()
   if is_pgi(cxx):
     flags = ['-mp']
+  elif is_nvcc(cxx):
+    flags = ['-Xcompiler','-fopenmp']
   else:
     flags = ['-fopenmp']
   
