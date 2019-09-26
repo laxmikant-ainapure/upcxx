@@ -112,6 +112,22 @@ do-gasnet-configure: force
 gasnet-single: do-gasnet-configure
 	 $(MAKE) -C "gasnet.$(GASNET_CODEMODE)/$(GASNET_CONDUIT)-conduit" $(GASNET_THREADMODE)
 
+#
+# On-demand compile of a single instance of libgasnet by full path
+#
+# NOTE: $(all_libgasnet) or the equivalent multiple rules could be generated
+# by automake or cmake instead of using this GNU Make syntax
+all_libgasnet = $(foreach codemode,   opt debug,             \
+                $(foreach conduit,    smp udp mpi ibv aries, \
+                $(foreach threadmode, seq par,               \
+                  gasnet.$(codemode)/$(conduit)-conduit/libgasnet-$(conduit)-$(threadmode).a)))
+$(all_libgasnet): force
+	@tmp=`echo $@ | tr .- //`;              \
+	 codemode=`echo $$tmp | cut -d/ -f2`;   \
+	 conduit=`echo $$tmp | cut -d/ -f3`;    \
+	 threadmode=`echo $$tmp | cut -d/ -f7`; \
+	 $(MAKE) gasnet-single GASNET_CODEMODE=$$codemode GASNET_CONDUIT=$$conduit GASNET_THREADMODE=$$threadmode
+
 ##
 ## Standard (not incremental) targets for GASNet (opt and debug)
 ##
