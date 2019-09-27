@@ -240,7 +240,7 @@ libupcxx_sources = \
 libupcxx_objs = $(addsuffix .o,$(notdir $(basename $(libupcxx_sources))))
 libupcxx.a: $(libupcxx_objs); ar rcs $@ $?
 do-libupcxx: force
-	@$(MAKE) -C $(UPCXX_DIR)/lib -f "$(builddir)/Makefile" libupcxx.a
+	@$(MAKE) -C $(UPCXX_DIR)/lib -f "$(builddir)/Makefile" libupcxx.a upcxx_headers.d
 
 #
 # On-demand compile of a single instance of libupcxx and required libgasnet
@@ -287,7 +287,6 @@ $(all_libupcxx): force
 
 # These could be just `...` to avoid GNU Make extension
 conduit_list = $(shell grep GASNETI_CONDUITS gasnet.$(GASNET_CODEMODE)/gasnet_config.h | cut -d\" -f2)
-header_list = $(shell cd "$(top_srcdir)/src" && find . -name '*.hpp')
 
 # TODO: header_list contains some internal headers we don't need to install
 
@@ -325,10 +324,12 @@ do-upcxx-install: force
 	     dst="$(prefix)/upcxx.$(UPCXX_CODEMODE).$$backend.$$conduit";    \
 	     mkdir -p "$$dst/lib" || exit $$?;                               \
 	     cp $$src/lib/libupcxx.a "$$dst/lib/" || exit $$?;               \
-	     for header in $(header_list); do                                \
-	       dir="$$dst/include/upcxx/`dirname $$header`";                 \
-	       mkdir -p "$$dir" || exit $$?;                                 \
-	       cp $$src/include/upcxx/$$header "$$dir/" || exit $$?;         \
+	     for file in `cd $$src && find include/upcxx/ -name '*.hpp'`; do \
+               file=`echo $$file | tr -s /`;                                 \
+	       if grep "$$file" $$src/lib/upcxx_headers.d >/dev/null; then   \
+	         mkdir -p "$$dst/`dirname $$file`" || exit $$?;              \
+	         cp $$src/$$file "$$dst/$$file" || exit $$?;                 \
+	       fi;                                                           \
 	     done;                                                           \
 	     mkdir -p "$$dst/bin" || exit $$?;                               \
 	     $(MAKE) do-upcxx-meta UPCXX_BACKEND=$$backend                   \
