@@ -191,47 +191,47 @@ LIBUPCXX_C_COMPILE   := $(GASNET_CC)  $(GASNET_CPPFLAGS)    $(GASNET_CFLAGS) \
 LIBUPCXX_CXX_COMPILE := $(GASNET_CXX) $(GASNET_CXXCPPFLAGS) $(GASNET_CXXFLAGS) $(LIBUPCXX_STDCXX) \
                         $(LIBUPCXX_DEFINES) -I$(UPCXX_DIR)/include
 
-libupcxx_cxx_sources = \
-	$(top_srcdir)/src/atomic.cpp \
-	$(top_srcdir)/src/backend/gasnet/noise_log.cpp \
-	$(top_srcdir)/src/backend/gasnet/runtime.cpp \
-	$(top_srcdir)/src/barrier.cpp \
-	$(top_srcdir)/src/broadcast.cpp \
-	$(top_srcdir)/src/copy.cpp \
-	$(top_srcdir)/src/cuda.cpp \
-	$(top_srcdir)/src/diagnostic.cpp \
-	$(top_srcdir)/src/digest.cpp \
-	$(top_srcdir)/src/future/core.cpp \
-	$(top_srcdir)/src/global_fnptr.cpp \
-	$(top_srcdir)/src/os_env.cpp \
-	$(top_srcdir)/src/persona.cpp \
-	$(top_srcdir)/src/reduce.cpp \
-	$(top_srcdir)/src/rget.cpp \
-	$(top_srcdir)/src/rput.cpp \
-	$(top_srcdir)/src/segment_allocator.cpp \
-	$(top_srcdir)/src/serialization.cpp \
-	$(top_srcdir)/src/team.cpp \
-	$(top_srcdir)/src/upcxx.cpp \
-	$(top_srcdir)/src/vis.cpp
-libupcxx_c_sources = \
-	$(top_srcdir)/src/backend/gasnet/upc_link.c \
-	$(top_srcdir)/src/dl_malloc.c
+libupcxx_sources = \
+	backend/gasnet/noise_log.cpp \
+	backend/gasnet/runtime.cpp   \
+	backend/gasnet/upc_link.c    \
+	future/core.cpp              \
+	atomic.cpp                   \
+	barrier.cpp                  \
+	broadcast.cpp                \
+	copy.cpp                     \
+	cuda.cpp                     \
+	diagnostic.cpp               \
+	digest.cpp                   \
+	global_fnptr.cpp             \
+	os_env.cpp                   \
+	persona.cpp                  \
+	reduce.cpp                   \
+	rget.cpp                     \
+	rput.cpp                     \
+	segment_allocator.cpp        \
+	serialization.cpp            \
+	team.cpp                     \
+	upcxx.cpp                    \
+	vis.cpp                      \
+	dl_malloc.c
 
-# TODO: generate from the libupcxx_*_source vars:
+# TODO: generate from libupcxx_sources
 libupcxx_objs = $(UPCXX_DIR)/lib/*.o
 
 # TODO: dependencies, objext, etc using automake or cmake
 # Lack of dependences here is the biggest flaw
 do-libupcxx: force
-	@for src in $(libupcxx_cxx_sources); do \
-	  obj=`basename "$$src" .cpp`.o;           \
-	  cmd="$(LIBUPCXX_CXX_COMPILE) -c \"$$src\" -o $(UPCXX_DIR)/lib/$$obj"; \
-	  echo "$$cmd"; eval "$$cmd" || exit $$?; \
-	 done
-	@for src in $(libupcxx_c_sources); do \
-	  obj=`basename "$$src" .c`.o;           \
-	  cmd="$(LIBUPCXX_C_COMPILE) -c \"$$src\" -o $(UPCXX_DIR)/lib/$$obj"; \
-	  echo "$$cmd"; eval "$$cmd" || exit $$?; \
+	@for file in $(libupcxx_sources); do                   \
+	   case $$file in                                      \
+	    *.cpp) stem=`basename $$file .cpp`                 \
+	           cmd="$(LIBUPCXX_CXX_COMPILE)";;             \
+	    *.c)   stem=`basename $$file .c`                   \
+	           cmd="$(LIBUPCXX_C_COMPILE)";;               \
+	    *)     echo unknown source type $$file; exit 1;;   \
+	   esac;                                               \
+	   cmd="$$cmd -c \"$(top_srcdir)/src/$$file\" -o $(UPCXX_DIR)/lib/$$stem.o"; \
+	   echo "$$cmd"; eval "$$cmd" || exit $$?;             \
 	 done
 	ar rcs $(UPCXX_DIR)/lib/libupcxx.a $(libupcxx_objs)
 	ranlib $(UPCXX_DIR)/lib/libupcxx.a
