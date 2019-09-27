@@ -11,13 +11,9 @@
 #
 # All of the following env vars are considered at each invocation:
 #   ASSERT, OPTLVL, DBGSYM, UPCXX_BACKEND, GASNET_CONDUIT
-# For libgasnet:
-#   The minimum required work is done, not configuring or compiling
-#   more than requested.  Normal use of make dependencies ensure things
-#   are not rebuilt if there have been no GASNet source changes.
-# For libupcxx:
-#   The entire library is rebuilt every time due to lack of proper
-#   dependencies.  Adoption of automake or cmake should resolve that.
+# The minimum required work is done, not configuring or compiling
+# more than requested.  Normal use of make dependencies ensure things
+# are not rebuilt unless there have been source changes.
 #
 # The following env vars are considered only at first use:
 #   GASNET, CROSS
@@ -52,6 +48,10 @@ OPTLVL ?= 0
 DBGSYM ?= 1
 UPCXX_BACKEND ?= gasnet_seq
 GASNET_CONDUIT ?= smp
+
+# Derived
+builddir = $(top_builddir)/bld
+VPATH = $(top_srcdir)/src $(top_srcdir)/src/future $(top_srcdir)/src/backend/gasnet
 
 #
 # Determine the GASNET_CODEMODE
@@ -191,6 +191,24 @@ LIBUPCXX_C_COMPILE   := $(GASNET_CC)  $(GASNET_CPPFLAGS)    $(GASNET_CFLAGS) \
 LIBUPCXX_CXX_COMPILE := $(GASNET_CXX) $(GASNET_CXXCPPFLAGS) $(GASNET_CXXFLAGS) $(LIBUPCXX_STDCXX) \
                         $(LIBUPCXX_DEFINES) -I$(UPCXX_DIR)/include
 
+#
+# Dependency tracking:
+#
+
+%.d: %.c   ; $(LIBUPCXX_C_COMPILE)   -E -M -MT '$*.o $@' $< -o $@
+%.d: %.cpp ; $(LIBUPCXX_CXX_COMPILE) -E -M -MT '$*.o $@' $< -o $@
+include $(wildcard *.d)
+
+# Pattern rules with dependency file as extra prerequisite
+%.o: %.c   %.d; $(LIBUPCXX_C_COMPILE)   -c $< -o $@
+%.o: %.cpp %.d; $(LIBUPCXX_CXX_COMPILE) -c $< -o $@
+
+# Pattern rules for first build when dependency file is missing
+# Must be the second of these two rule pairs
+%.o: %.c  ; $(MAKE) -f $(builddir)/Makefile $*.d $@
+%.o: %.cpp; $(MAKE) -f $(builddir)/Makefile $*.d $@
+
+
 libupcxx_sources = \
 	backend/gasnet/noise_log.cpp \
 	backend/gasnet/runtime.cpp   \
@@ -216,25 +234,13 @@ libupcxx_sources = \
 	vis.cpp                      \
 	dl_malloc.c
 
-# TODO: generate from libupcxx_sources
-libupcxx_objs = $(UPCXX_DIR)/lib/*.o
-
-# TODO: dependencies, objext, etc using automake or cmake
-# Lack of dependences here is the biggest flaw
+#
+# Build upcxx library from its sources, with dependency tracking
+#
+libupcxx_objs = $(addsuffix .o,$(notdir $(basename $(libupcxx_sources))))
+libupcxx.a: $(libupcxx_objs); ar rcs $@ $?
 do-libupcxx: force
-	@for file in $(libupcxx_sources); do                   \
-	   case $$file in                                      \
-	    *.cpp) stem=`basename $$file .cpp`                 \
-	           cmd="$(LIBUPCXX_CXX_COMPILE)";;             \
-	    *.c)   stem=`basename $$file .c`                   \
-	           cmd="$(LIBUPCXX_C_COMPILE)";;               \
-	    *)     echo unknown source type $$file; exit 1;;   \
-	   esac;                                               \
-	   cmd="$$cmd -c \"$(top_srcdir)/src/$$file\" -o $(UPCXX_DIR)/lib/$$stem.o"; \
-	   echo "$$cmd"; eval "$$cmd" || exit $$?;             \
-	 done
-	ar rcs $(UPCXX_DIR)/lib/libupcxx.a $(libupcxx_objs)
-	ranlib $(UPCXX_DIR)/lib/libupcxx.a
+	@$(MAKE) -C $(UPCXX_DIR)/lib -f "$(builddir)/Makefile" libupcxx.a
 
 #
 # On-demand compile of a single instance of libupcxx and required libgasnet
