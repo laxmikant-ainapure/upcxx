@@ -1,16 +1,23 @@
 ##
 # THIS IS A WORK-IN-PROGRESS
 #
-# Proof-of-concept for deferred/incremental building of GASNet conduits.
-# To build a single conduit from the top-level upcxx source.
-#   $ make -C bld gasnet-single
+# Proof-of-concept for deferred/incremental building of libraries.
+# To build a single libupcxx and its gasnet conduit from the top-level
+# upcxx source directory:
+#   $ make -C bld upcxx-single
+#
+# Additionally, targets "all", "install", "clean" and "distclean" are
+# provided.  The "install" is still lacking `bin` and `share/doc`.
 #
 # All of the following env vars are considered at each invocation:
-#   OPTLVL, DBGSYM, UPCXX_BACKEND, GASNET_CONDUIT
-# The minimum required work is done, not configuring or compiling
-# more than requested.
-# Normal use of make dependencies ensure things are not rebuilt if
-# there have been no GASNet source changes.
+#   ASSERT, OPTLVL, DBGSYM, UPCXX_BACKEND, GASNET_CONDUIT
+# For libgasnet:
+#   The minimum required work is done, not configuring or compiling
+#   more than requested.  Normal use of make dependencies ensure things
+#   are not rebuilt if there have been no GASNet source changes.
+# For libupcxx:
+#   The entire library is rebuilt every time due to lack of proper
+#   dependencies.  Adoption of automake or cmake should resolve that.
 #
 # The following env vars are considered only at first use:
 #   GASNET, CROSS
@@ -28,12 +35,8 @@
 # such that multiple build dirs can be used per (clean) source dir.  However,
 # that is not implemented yet.
 #
-# At the moment GNU Make extensions are used, including:
-# + .PHONY is a "safety net" and its presence/absence doesn't impact correctness
-# + Uses of 'ifeq' can be replaced with (repeated) shell code or other tricks
-# + Unsure about a uniform portable replacement '?='. However, this is only used
-#   now to give the environment precedence over the defaults - something that
-#   is unnecessary if the (non-human?) caller sets these on the command line.
+# At the moment numerous GNU Make extensions are used, and it is unclear if
+# use of automake or cmake can eliminate them all.
 ##
 
 # Examples: autoconf/automake would replace:
@@ -65,11 +68,19 @@ endif
 # Determine the GASNET_THREADMODE
 # PARAMS: UPCXX_BACKEND
 #
-ifeq ($(UPCXX_BACKEND),gasnet_seq)
+ifeq ($(strip $(UPCXX_BACKEND)),gasnet_seq)
 GASNET_THREADMODE = seq
 else
 GASNET_THREADMODE = par
 endif
+
+#
+# Encode upcxx build directory name.  Used via
+#   $(call UPCXXDIR,$(ASSERT),$(OPTLVL),$(DBGSYM),$(UPCXX_BACKEND),$(GASNET_CONDUIT))
+# or similar.
+#
+UPCXXDIR = upcxx.assert$(1).optlvl$(2).dbgsym$(3).$(4).$(5)
+
 
 dummy:
 	@echo NO DEFAULT TARGET
@@ -153,14 +164,83 @@ gasnet-distclean: force
 ## Targets for incremental builds of libupcxx
 ##
 
+ifeq ($(HAVE_GASNET_FRAGMENT),1)
+include gasnet.$(GASNET_CODEMODE)/$(GASNET_CONDUIT)-conduit/$(GASNET_CONDUIT)-$(GASNET_THREADMODE).mak
+endif
+
+# TODO: magic missing here for DUPCXX_MPSC_QUEUE_*
+LIBUPCXX_DEFINES := -DUPCXX_MPSC_QUEUE_ATOMIC=1 -DUPCXX_ASSERT_ENABLED=$(ASSERT) -DUPCXX_BACKEND=1
+ifeq ($(strip $(UPCXX_BACKEND)),gasnet_seq)
+LIBUPCXX_DEFINES += -DUPCXX_BACKEND_GASNET_SEQ=1
+else
+LIBUPCXX_DEFINES += -DUPCXX_BACKEND_GASNET_PAR=1
+endif
+ifeq ($(UPCXX_CUDA),1)
+LIBUPCXX_DEFINES += -DUPCXX_CUDA_ENABLED=1
+endif
+
+LIBUPCXX_C_COMPILE   := $(GASNET_CC)  $(GASNET_CPPFLAGS)    $(GASNET_CFLAGS) \
+                        $(LIBUPCXX_DEFINES) -I$(UPCXX_DIR)/include
+LIBUPCXX_CXX_COMPILE := $(GASNET_CXX) $(GASNET_CXXCPPFLAGS) $(GASNET_CXXFLAGS) \
+                        $(LIBUPCXX_DEFINES) -I$(UPCXX_DIR)/include
+ifeq ($(findstring -std=c++,$(GASNET_CXX)),)
+LIBUPCXX_CXX_COMPILE += -std=c++11
+endif
+
+libupcxx_cxx_sources = \
+	$(top_srcdir)/src/atomic.cpp \
+	$(top_srcdir)/src/backend/gasnet/noise_log.cpp \
+	$(top_srcdir)/src/backend/gasnet/runtime.cpp \
+	$(top_srcdir)/src/barrier.cpp \
+	$(top_srcdir)/src/broadcast.cpp \
+	$(top_srcdir)/src/copy.cpp \
+	$(top_srcdir)/src/cuda.cpp \
+	$(top_srcdir)/src/diagnostic.cpp \
+	$(top_srcdir)/src/digest.cpp \
+	$(top_srcdir)/src/future/core.cpp \
+	$(top_srcdir)/src/global_fnptr.cpp \
+	$(top_srcdir)/src/os_env.cpp \
+	$(top_srcdir)/src/persona.cpp \
+	$(top_srcdir)/src/reduce.cpp \
+	$(top_srcdir)/src/rget.cpp \
+	$(top_srcdir)/src/rput.cpp \
+	$(top_srcdir)/src/segment_allocator.cpp \
+	$(top_srcdir)/src/serialization.cpp \
+	$(top_srcdir)/src/team.cpp \
+	$(top_srcdir)/src/upcxx.cpp \
+	$(top_srcdir)/src/vis.cpp
+libupcxx_c_sources = \
+	$(top_srcdir)/src/backend/gasnet/upc_link.c \
+	$(top_srcdir)/src/dl_malloc.c
+
+# TODO: generate from the libupcxx_*_source vars:
+libupcxx_objs = $(UPCXX_DIR)/lib/*.o
+
+# TODO: dependencies, objext, etc using automake or cmake
+# Lack of dependences here is the biggest flaw
+do-libupcxx: force
+	@for src in $(libupcxx_cxx_sources); do \
+	  obj=`basename "$$src" .cpp`.o;           \
+	  cmd="$(LIBUPCXX_CXX_COMPILE) -c \"$$src\" -o $(UPCXX_DIR)/lib/$$obj"; \
+	  echo "$$cmd"; eval "$$cmd" || exit $$?; \
+	 done
+	@for src in $(libupcxx_c_sources); do \
+	  obj=`basename "$$src" .c`.o;           \
+	  cmd="$(LIBUPCXX_C_COMPILE) -c \"$$src\" -o $(UPCXX_DIR)/lib/$$obj"; \
+	  echo "$$cmd"; eval "$$cmd" || exit $$?; \
+	 done
+	ar rcs $(UPCXX_DIR)/lib/libupcxx.a $(libupcxx_objs)
+	ranlib $(UPCXX_DIR)/lib/libupcxx.a
+
 #
 # On-demand compile of a single instance of libupcxx and required libgasnet
 # PARAMS: ASSERT, OPTLVL, DBGSYM, UPCXX_BACKEND, GASNET_CONDUIT, GASNET, CROSS
 #
-upcxx-single: force
-	@$(MAKE) gasnet-single
-	@target=upcxx.$(ASSERT).$(OPTLVL).$(DBGSYM).$(UPCXX_BACKEND).$(GASNET_CONDUIT)/libupcxx.a; \
-	 echo "TODO: no rule(s) yet to build $$target"
+upcxx-single: gasnet-single force
+	@dir=$(call UPCXXDIR,$(ASSERT),$(OPTLVL),$(DBGSYM),$(UPCXX_BACKEND),$(GASNET_CONDUIT)); \
+	 mkdir -p $$dir/lib && mkdir -p $$dir/include && \
+	 ln -sf "$(top_srcdir)/src" $$dir/include/upcxx && \
+	 $(MAKE) do-libupcxx HAVE_GASNET_FRAGMENT=1 UPCXX_DIR=$$dir
 
 #
 # On-demand compile of a single instance of libupcxx by fullpath
@@ -172,12 +252,12 @@ all_libupcxx = $(foreach assert,  0 1,                   \
                $(foreach dbgsym,  0 1,                   \
                $(foreach backend, gasnet_seq gasnet_par, \
                $(foreach conduit, smp udp mpi ibv aries, \
-	         upcxx.$(assert).$(optlvl).$(dbgsym).$(backend).$(conduit)/libupcxx.a)))))
+	         $(call UPCXXDIR,$(assert),$(optlvl),$(dbgsym),$(backend),$(conduit))/libupcxx.a)))))
 $(all_libupcxx): force
-	@tmp=`echo $@ | tr . /`; \
-	 assert=`echo $$tmp | cut -d/ -f2`;  \
-	 optlvl=`echo $$tmp | cut -d/ -f3`;  \
-	 dbgsym=`echo $$tmp | cut -d/ -f4`;  \
+	 tmp=`echo $@ | tr . /`; \
+	 assert=`expr "$$tmp" : '.*/assert\([0-1]\)/'`; \
+	 optlvl=`expr "$$tmp" : '.*/optlvl\([0-3]\)/'`; \
+	 dbgsym=`expr "$$tmp" : '.*/dbgsym\([0-1]\)/'`; \
 	 backend=`echo $$tmp | cut -d/ -f5`; \
 	 conduit=`echo $$tmp | cut -d/ -f6`; \
 	 $(MAKE) upcxx-single ASSERT=$$assert OPTLVL=$$optlvl DBGSYM=$$dbgsym \
@@ -193,8 +273,11 @@ $(all_libupcxx): force
 # Helpers to iterate over conduits and backends
 #
 
-# This be just `...` to avoid GNU Make extension
+# These could be just `...` to avoid GNU Make extension
 conduit_list = $(shell grep GASNETI_CONDUITS gasnet.$(GASNET_CODEMODE)/gasnet_config.h | cut -d\" -f2)
+header_list = $(shell cd "$(top_srcdir)/src" && find . -name '*.hpp')
+
+# TODO: header_list contains some internal headers we don't need to install
 
 do-upcxx-all: force
 	@$(MAKE) do-gasnet-configure
@@ -206,10 +289,16 @@ do-upcxx-all: force
 do-upcxx-install: force
 	@for conduit in $(conduit_list); do \
 	   for backend in gasnet_seq gasnet_par; do                          \
-	     src="upcxx.$(ASSERT).$(OPTLVL).$(DBGSYM).$$backend.$$conduit";  \
-	     dst="upcxx.$(UPCXX_CODEMODE).$$backend.$$conduit";              \
-	     mkdir -p "$(prefix)/$dst" || exit $$?;                          \
-	     echo "TODO: install from $$src to $(prefix)/$$dst";             \
+	     src="$(call UPCXXDIR,$(ASSERT),$(OPTLVL),$(DBGSYM),$$backend,$$conduit)"; \
+	     dst="$(prefix)/upcxx.$(UPCXX_CODEMODE).$$backend.$$conduit";    \
+	     mkdir -p "$$dst/lib" || exit $$?;                               \
+	     cp $$src/lib/libupcxx.a "$$dst/lib/" || exit $$?;               \
+	     for header in $(header_list); do                                \
+	       dir="$$dst/include/upcxx/`dirname $$header`";                 \
+	       mkdir -p "$$dir" || exit $$?;                                 \
+	       cp $$src/include/upcxx/$$header "$$dir/" || exit $$?;         \
+	     done; \
+	     echo "TODO: generate upcxx.$(UPCXX_CODEMODE).$$backend.$$conduit/bin/upcxx-meta"; \
 	   done; \
 	 done
 
@@ -222,8 +311,8 @@ upcxx-all: force
 	@$(MAKE) do-upcxx-all ASSERT=0 OPTLVL=3 DBGSYM=0
 upcxx-install: upcxx-all
 	@$(MAKE) do-upcxx-install ASSERT=1 OPTLVL=0 DBGSYM=1 UPCXX_CODEMODE=debug
-	@$(MAKE) do-upcxx-install ASSERT=0 OPTLVL=3 DBGSYM=0 UPCXX_CODEMODE=opt
-	@echo "TODO: automake or cmake can/should install bin and share directories"
+	@$(MAKE) do-upcxx-install ASSERT=0 OPTLVL=3 DBGSYM=0 UPCXX_CODEMODE=O3
+	@echo "TODO: install top-level bin and share directories"
 upcxx-clean: force
 	rm -Rf $(dir $(all_libupcxx))
 upcxx-distclean: upcxx-clean
