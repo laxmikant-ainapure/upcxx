@@ -44,6 +44,7 @@ GASNET      ?= NO DEFAULT
 MAKE        := make
 
 #defaults:
+ASSERT ?= 1
 OPTLVL ?= 0
 DBGSYM ?= 1
 UPCXX_BACKEND ?= gasnet_seq
@@ -147,3 +148,90 @@ gasnet-clean: force
 	@if test -d gasnet.debug; then $(MAKE) -C gasnet.debug clean; fi
 gasnet-distclean: force
 	rm -Rf gasnet.opt gasnet.debug
+
+##
+## Targets for incremental builds of libupcxx
+##
+
+#
+# On-demand compile of a single instance of libupcxx and required libgasnet
+# PARAMS: ASSERT, OPTLVL, DBGSYM, UPCXX_BACKEND, GASNET_CONDUIT, GASNET, CROSS
+#
+upcxx-single: force
+	@$(MAKE) gasnet-single
+	@target=upcxx.$(ASSERT).$(OPTLVL).$(DBGSYM).$(UPCXX_BACKEND).$(GASNET_CONDUIT)/libupcxx.a; \
+	 echo "TODO: no rule(s) yet to build $$target"
+
+#
+# On-demand compile of a single instance of libupcxx by fullpath
+#
+# As noted w/ all_gasnet, use of GNU Make's "foreach" is not required
+# if/when using automake or cmake
+all_libupcxx = $(foreach assert,  0 1,                   \
+               $(foreach optlvl,  0 1 2 3,               \
+               $(foreach dbgsym,  0 1,                   \
+               $(foreach backend, gasnet_seq gasnet_par, \
+               $(foreach conduit, smp udp mpi ibv aries, \
+	         upcxx.$(assert).$(optlvl).$(dbgsym).$(backend).$(conduit)/libupcxx.a)))))
+$(all_libupcxx): force
+	@tmp=`echo $@ | tr . /`; \
+	 assert=`echo $$tmp | cut -d/ -f2`;  \
+	 optlvl=`echo $$tmp | cut -d/ -f3`;  \
+	 dbgsym=`echo $$tmp | cut -d/ -f4`;  \
+	 backend=`echo $$tmp | cut -d/ -f5`; \
+	 conduit=`echo $$tmp | cut -d/ -f6`; \
+	 $(MAKE) upcxx-single ASSERT=$$assert OPTLVL=$$optlvl DBGSYM=$$dbgsym \
+                              UPCXX_BACKEND=$$backend GASNET_CONDUIT=$$conduit
+
+##
+## Standard (not incremental) targets for upcxx install
+## Note that these just cover UPCXX_CODEMODE of O3 or debug
+##
+.PHONY: upcxx-all upcxx-install upcxx-clean upcxx-distclean
+
+#
+# Helpers to iterate over conduits and backends
+#
+
+# This be just `...` to avoid GNU Make extension
+conduit_list = $(shell grep GASNETI_CONDUITS gasnet.$(GASNET_CODEMODE)/gasnet_config.h | cut -d\" -f2)
+
+do-upcxx-all: force
+	@$(MAKE) do-gasnet-configure
+	@for conduit in $(conduit_list); do \
+	   for backend in gasnet_seq gasnet_par; do \
+             $(MAKE) upcxx-single UPCXX_BACKEND=$$backend GASNET_CONDUIT=$$conduit || exit $$?; \
+	   done; \
+	 done
+do-upcxx-install: force
+	@for conduit in $(conduit_list); do \
+	   for backend in gasnet_seq gasnet_par; do                          \
+	     src="upcxx.$(ASSERT).$(OPTLVL).$(DBGSYM).$$backend.$$conduit";  \
+	     dst="upcxx.$(UPCXX_CODEMODE).$$backend.$$conduit";              \
+	     mkdir -p "$(prefix)/$dst" || exit $$?;                          \
+	     echo "TODO: install from $$src to $(prefix)/$$dst";             \
+	   done; \
+	 done
+
+#
+# Standard all, install, clean and distclean
+# There is no configure
+#
+upcxx-all: force
+	@$(MAKE) do-upcxx-all ASSERT=1 OPTLVL=0 DBGSYM=1
+	@$(MAKE) do-upcxx-all ASSERT=0 OPTLVL=3 DBGSYM=0
+upcxx-install: upcxx-all
+	@$(MAKE) do-upcxx-install ASSERT=1 OPTLVL=0 DBGSYM=1 UPCXX_CODEMODE=debug
+	@$(MAKE) do-upcxx-install ASSERT=0 OPTLVL=3 DBGSYM=0 UPCXX_CODEMODE=opt
+	@echo "TODO: automake or cmake can/should install bin and share directories"
+upcxx-clean: force
+	rm -Rf $(dir $(all_libupcxx))
+upcxx-distclean: upcxx-clean
+
+##
+## Top-level targets for testing
+##
+
+all install clean distclean: force
+	@$(MAKE) gasnet-$@
+	@$(MAKE) upcxx-$@
