@@ -164,12 +164,11 @@ gasnet-distclean: force
 ## Targets for incremental builds of libupcxx
 ##
 
-ifeq ($(HAVE_GASNET_FRAGMENT),1)
-include gasnet.$(GASNET_CODEMODE)/$(GASNET_CONDUIT)-conduit/$(GASNET_CONDUIT)-$(GASNET_THREADMODE).mak
+ifneq ($(UPCXX_FRAGMENTS),)
+include $(UPCXX_FRAGMENTS)/$(GASNET_CONDUIT)-conduit/$(GASNET_CONDUIT)-$(GASNET_THREADMODE).mak
 endif
 
-# TODO: magic missing here for DUPCXX_MPSC_QUEUE_*
-LIBUPCXX_DEFINES := -DUPCXX_MPSC_QUEUE_ATOMIC=1 -DUPCXX_ASSERT_ENABLED=$(ASSERT) -DUPCXX_BACKEND=1
+LIBUPCXX_DEFINES := -DUPCXX_ASSERT_ENABLED=$(ASSERT) -DUPCXX_BACKEND=1
 ifeq ($(strip $(UPCXX_BACKEND)),gasnet_seq)
 LIBUPCXX_DEFINES += -DUPCXX_BACKEND_GASNET_SEQ=1
 else
@@ -178,14 +177,19 @@ endif
 ifeq ($(UPCXX_CUDA),1)
 LIBUPCXX_DEFINES += -DUPCXX_CUDA_ENABLED=1
 endif
+# TODO: magic missing here for DUPCXX_MPSC_QUEUE_*
+LIBUPCXX_DEFINES += -DUPCXX_MPSC_QUEUE_ATOMIC=1
+
+ifeq ($(findstring -std=c++,$(GASNET_CXX)),)
+LIBUPCXX_STDCXX := -std=c++11
+else
+LIBUPCXX_STDCXX :=
+endif
 
 LIBUPCXX_C_COMPILE   := $(GASNET_CC)  $(GASNET_CPPFLAGS)    $(GASNET_CFLAGS) \
                         $(LIBUPCXX_DEFINES) -I$(UPCXX_DIR)/include
-LIBUPCXX_CXX_COMPILE := $(GASNET_CXX) $(GASNET_CXXCPPFLAGS) $(GASNET_CXXFLAGS) \
+LIBUPCXX_CXX_COMPILE := $(GASNET_CXX) $(GASNET_CXXCPPFLAGS) $(GASNET_CXXFLAGS) $(LIBUPCXX_STDCXX) \
                         $(LIBUPCXX_DEFINES) -I$(UPCXX_DIR)/include
-ifeq ($(findstring -std=c++,$(GASNET_CXX)),)
-LIBUPCXX_CXX_COMPILE += -std=c++11
-endif
 
 libupcxx_cxx_sources = \
 	$(top_srcdir)/src/atomic.cpp \
@@ -240,7 +244,9 @@ upcxx-single: gasnet-single force
 	@dir=$(call UPCXXDIR,$(ASSERT),$(OPTLVL),$(DBGSYM),$(UPCXX_BACKEND),$(GASNET_CONDUIT)); \
 	 mkdir -p $$dir/lib && mkdir -p $$dir/include && \
 	 ln -sf "$(top_srcdir)/src" $$dir/include/upcxx && \
-	 $(MAKE) do-libupcxx HAVE_GASNET_FRAGMENT=1 UPCXX_DIR=$$dir
+	 $(MAKE) do-libupcxx UPCXX_DIR="$(builddir)/$$dir" \
+	                     UPCXX_FRAGMENTS="$(builddir)/gasnet.$(GASNET_CODEMODE)"
+
 
 #
 # On-demand compile of a single instance of libupcxx by fullpath
@@ -286,6 +292,26 @@ do-upcxx-all: force
              $(MAKE) upcxx-single UPCXX_BACKEND=$$backend GASNET_CONDUIT=$$conduit || exit $$?; \
 	   done; \
 	 done
+do-upcxx-meta: force
+	@dst="$(prefix)/upcxx.$(UPCXX_CODEMODE).$(UPCXX_BACKEND).$(GASNET_CONDUIT)";\
+	 meta="$$dst/bin/upcxx-meta";                                  \
+	 rm -f $$meta || exit $$?;                                     \
+	 (                                                             \
+	   echo "#!/bin/sh";                                           \
+	   echo "CC='$(GASNET_CC)'";                                   \
+	   echo "CPPFLAGS='$(LIBUPCXX_DEFINES) -I$$dst/include $(GASNET_CXXCPPFLAGS)'";\
+	   echo "CXX='$(GASNET_CXX)'";                                 \
+	   echo "CXXFLAGS='$(LIBUPCXX_STDCXX) $(GASNET_CXXFLAGS)'";    \
+	   echo "GASNET_CONDUIT='$(GASNET_CONDUIT)'";                  \
+	   echo "GASNET_INSTALL='$(prefix)/gasnet.$(GASNET_CODEMODE)'";\
+	   echo "LDFLAGS='$(GASNET_LDFLAGS)'";                         \
+	   echo "LIBS='-L$$dst/lib -lupcxx $(GASNET_LIBS)'";           \
+	   echo 'PPFLAGS="$$CPPFLAGS"';                                \
+	   echo 'LIBFLAGS="$$LIBS"';                                   \
+	   echo;                                                       \
+	   echo '[ "$$1" != "" ] && eval echo '"'\$$'"'"$$1"';         \
+	 ) > $$meta || exit $$?;                                       \
+	 chmod 755 $$meta
 do-upcxx-install: force
 	@for conduit in $(conduit_list); do \
 	   for backend in gasnet_seq gasnet_par; do                          \
@@ -297,8 +323,10 @@ do-upcxx-install: force
 	       dir="$$dst/include/upcxx/`dirname $$header`";                 \
 	       mkdir -p "$$dir" || exit $$?;                                 \
 	       cp $$src/include/upcxx/$$header "$$dir/" || exit $$?;         \
-	     done; \
-	     echo "TODO: generate upcxx.$(UPCXX_CODEMODE).$$backend.$$conduit/bin/upcxx-meta"; \
+	     done;                                                           \
+	     mkdir -p "$$dst/bin" || exit $$?;                               \
+	     $(MAKE) do-upcxx-meta UPCXX_BACKEND=$$backend                   \
+	                           GASNET_CONDUIT=$$conduit || exit $$?;     \
 	   done; \
 	 done
 
@@ -310,8 +338,10 @@ upcxx-all: force
 	@$(MAKE) do-upcxx-all ASSERT=1 OPTLVL=0 DBGSYM=1
 	@$(MAKE) do-upcxx-all ASSERT=0 OPTLVL=3 DBGSYM=0
 upcxx-install: upcxx-all
-	@$(MAKE) do-upcxx-install ASSERT=1 OPTLVL=0 DBGSYM=1 UPCXX_CODEMODE=debug
-	@$(MAKE) do-upcxx-install ASSERT=0 OPTLVL=3 DBGSYM=0 UPCXX_CODEMODE=O3
+	@$(MAKE) do-upcxx-install ASSERT=1 OPTLVL=0 DBGSYM=1 UPCXX_CODEMODE=debug \
+	                          UPCXX_FRAGMENTS="$(prefix)/gasnet.debug/include"
+	@$(MAKE) do-upcxx-install ASSERT=0 OPTLVL=3 DBGSYM=0 UPCXX_CODEMODE=O3    \
+	                          UPCXX_FRAGMENTS="$(prefix)/gasnet.opt/include"
 	@echo "TODO: install top-level bin and share directories"
 upcxx-clean: force
 	rm -Rf $(dir $(all_libupcxx))
