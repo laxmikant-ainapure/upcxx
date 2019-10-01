@@ -302,12 +302,12 @@ def main():
             os.environ['GASNET_SPAWNFN'] = 'L'
         else:
             set_ssh_servers(args.sshservers, args.nranks, conduit)
-    elif conduit in ['mpi', 'ibv', 'aries', 'pami']:
+    elif conduit in ['mpi', 'ibv', 'aries', 'pami', 'ucx']:
         spawner = 'gasnetrun_' + conduit
         cmd = ['-n', str(args.nranks)] + cmd
         if args.nnodes:
             cmd = ['-N', str(args.nnodes)] + cmd
-        if conduit == 'ibv':
+        if conduit in ['ibv', 'ucx']:
             set_ssh_servers(args.sshservers, args.nranks, conduit)
     else:
         print_error_and_abort('Unknown GASNet conduit: ' + conduit)
@@ -315,7 +315,8 @@ def main():
     if conduit != 'udp' and args.localhost:
         print('Ignoring -localhost setting: only applies to UDP conduit, not', conduit)
         
-    if args.sshservers and conduit not in ['udp', 'ibv']:
+    # FIXME: ucx intentionally omitted from warning until we claim support
+    if args.sshservers and conduit not in ['udp', 'ibv', 'ucx']:
         print('Ignoring -ssh-servers setting: only applies to UDP and IBV conduits, not', conduit)
         
     if args.cmd_args:
