@@ -302,7 +302,7 @@ def main():
             os.environ['GASNET_SPAWNFN'] = 'L'
         else:
             set_ssh_servers(args.sshservers, args.nranks, conduit)
-    elif conduit in ['mpi', 'ibv', 'aries', 'gemini', 'pami']:
+    elif conduit in ['mpi', 'ibv', 'aries', 'pami']:
         spawner = 'gasnetrun_' + conduit
         cmd = ['-n', str(args.nranks)] + cmd
         if args.nnodes:
