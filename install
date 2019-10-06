@@ -43,8 +43,9 @@ fi
 
 trap failure_and_die ERR
 
-. sourceme
-install_to=$(absify "$install_to")
+# Absify a directory name that may not yet exist
+mkdir -p "$install_to"
+install_to=$(cd "$install_to" && pwd -P)
 
 . utils/system-checks.sh
 sys_info
@@ -53,76 +54,63 @@ platform_settings
 export CC
 export CXX
 
-# Check that Python/nobs is usable
-if ! nobs gasnet_conduit >/dev/null ; then
-    echo_and_die "Error invoking Python"
+# TODO: autoconf or cmake can/should enforce GNU make
+GMAKE=${UPCXX_MAKE:-make -j8}
+
+# TODO: autoconf or cmake can/should find a usable URL fetcher
+if [ -n "$URL_CAT" ] ; then
+  : # keep denf
+elif [ -n "$(type -p curl)" ]; then
+  URL_CAT='curl --retry 5 -LsS'
+elif [ -n "$(type -p wget)" ]; then
+  URL_CAT='wget --tries=5 -nv -O -'
 fi
 
-if [ "$single" -eq 1 ]; then
-  nobs install src/upcxx.cpp "$install_to" \
-    || failure_and_die
-else
-  # Let's not purge nobs before each install FOR DEVELOPERS to:
-  #  1. Make installations after incremental updates fast.
-  #  2. Encourage devs tripping on remaining bugs, so they can be reported.
-  test -d .git || rm -rf .nobs
-  
-  case $(nobs gasnet_user_kind) in
-  tarball|tarball-url|source)
-    ;;
-  *)
-    echo_and_die "GASNET must point to local tarball file, tarball url, or gasnet source tree."
-    ;;
-  esac
-  
-  function foreach_codemode {
-    export ASSERT=1 DBGSYM=1 OPTLEV=0
-    export upcxx_codemode='debug'
-    export gasnet_codemode='debug'
-    foreach_backend
-    
-    if false; then
-      # Attempting O2 is pointless since gasnet forces everyone to O3
-      # through the CXXFLAGS it exports in makefile fragments.
-      export ASSERT=0 DBGSYM=0 OPTLEV=2
-      export upcxx_codemode='O2'
-      export gasnet_codemode='opt'
-      foreach_backend
+# Fetch and/or unpack GASNet-EX
+if [ -r "$GASNET/gasnet_config.h.in" ]; then
+  # Convert relative path of souce directory to absolute if necessary
+  if ! expr "$GASNET" : / >/dev/null; then
+    export GASNET=$(cd "$GASNET" && pwd -P)
+  fi
+elif expr "$GASNET" : '.*\.tar\.gz' >/dev/null; then
+  # Unpack tarball into bld/ unless already present
+  gex_dir="$PWD/bld/`basename $GASNET .tar.gz`"
+  if [ ! -r "$gex_dir/gasnet_config.h.in" ]; then
+    mkdir -p bld
+    if expr "$GASNET" : http >/dev/null; then
+      if [ -z "$URL_CAT" ]; then
+        echo_and_die "Do not know how to fetch a URL (did not find wget or curl)"
+      fi
+      CAT="$URL_CAT"
+    else
+      CAT='cat'
     fi
-    
-    export ASSERT=0 DBGSYM=0 OPTLEV=3
-    export upcxx_codemode='O3'
-    export gasnet_codemode='opt'
-    foreach_backend
-  }
+    eval "$CAT '$GASNET'" | gzip -cd | ( cd bld && tar xf - )
+    [ -r "$gex_dir/gasnet_config.h.in" ] || echo_and_die "Failed to fetch and/or unpack $GASNET"
+  fi
+  export GASNET="$gex_dir"
+else
+  echo_and_die "GASNET must point to local tarball file, tarball url, or gasnet source tree."
+fi
+
+MAKE_CMD="$GMAKE -C bld upcxx_src='$PWD' prefix='${install_to}' GASNET='$GASNET'"
+
+if [ "$single" -eq 1 ]; then
+  echo_and_die "FIXME: --single is UNIMPLEMENTED (may be removed?)"
+  eval $MAKE_CMD install-single
+  if [ $? -ne 0 ]; then failure_and_die; fi
+else
+  eval $MAKE_CMD install
+  if [ $? -ne 0 ]; then failure_and_die; fi
   
-  function foreach_backend {
-    export UPCXX_BACKEND=gasnet_seq
-    foreach_conduit
-    
-    export UPCXX_BACKEND=gasnet_par
-    foreach_conduit
-  }
-  
-  function foreach_conduit {
-    conduits=$(GASNET_CONDUIT='' nobs gasnet_configured_conduits)
-    if [ $? -ne 0 ]; then failure_and_die; fi
-    
-    for conduit in ${conduits}; do
-      export GASNET_INSTALL_TO="${install_to}/gasnet.${gasnet_codemode}"
-      export GASNET_CONDUIT=${conduit}
-      nobs install src/upcxx.cpp "${install_to}/upcxx.${upcxx_codemode}.${UPCXX_BACKEND}.${conduit}" \
-        || failure_and_die
-    done
-  }
-  
-  foreach_codemode
-  
-  conduits=$(nobs gasnet_configured_conduits)
-  conduits_pipes="${conduits//$'\n'/|}"
-  conduits_commas="${conduits//$'\n'/, }"
-  
-  conduit_default=$(GASNET_CONDUIT='' nobs gasnet_conduit)
+  eval $($GMAKE --no-print-directory -C bld/gasnet.opt echovar VARNAME=CONDUITS)
+  conduits_pipes="${CONDUITS// /|}"
+  conduits_commas="${CONDUITS// /, }"
+  if expr "x$CROSS" : xcray-aries- >/dev/null; then
+    conduit_default='aries'
+  else
+    conduit_default='smp'
+  fi
   
   . utils/install-common.sh
   install_common

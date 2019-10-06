@@ -349,7 +349,6 @@ upcxx-install: upcxx-all
 	                          UPCXX_FRAGMENTS="$(prefix)/gasnet.debug/include"
 	@$(MAKE) do-upcxx-install ASSERT=0 OPTLVL=3 DBGSYM=0 UPCXX_CODEMODE=O3    \
 	                          UPCXX_FRAGMENTS="$(prefix)/gasnet.opt/include"
-	@echo "TODO: install top-level bin and share directories"
 upcxx-clean: force
 	rm -Rf $(dir $(all_libupcxx))
 upcxx-distclean: upcxx-clean
