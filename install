@@ -96,7 +96,6 @@ fi
 MAKE_CMD="$GMAKE -C bld upcxx_src='$PWD' prefix='${install_to}' GASNET='$GASNET'"
 
 if [ "$single" -eq 1 ]; then
-  echo_and_die "FIXME: --single is UNIMPLEMENTED (may be removed?)"
   eval $MAKE_CMD install-single
   if [ $? -ne 0 ]; then failure_and_die; fi
 else

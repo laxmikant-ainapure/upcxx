@@ -280,60 +280,63 @@ $(all_libupcxx): force
 ## Note that these just cover UPCXX_CODEMODE of O3 or debug
 ##
 .PHONY: upcxx-all upcxx-install upcxx-clean upcxx-distclean
+.PHONY: do-upcxx-all do-upcxx-meta do-upcxx-install-one do-upcxx-install-all
 
 #
 # Helpers to iterate over conduits and backends
 #
 
-# These could be just `...` to avoid GNU Make extension
-conduit_list = $(shell grep GASNETI_CONDUITS gasnet.$(GASNET_CODEMODE)/gasnet_config.h | cut -d\" -f2)
-
-# TODO: header_list contains some internal headers we don't need to install
-
 do-upcxx-all: force
 	@$(MAKE) do-gasnet-configure
-	@for conduit in $(conduit_list); do \
-	   for backend in gasnet_seq gasnet_par; do \
+	@eval `$(MAKE) --no-print-directory -C gasnet.$(GASNET_CODEMODE) echovar VARNAME=CONDUITS`; \
+	 for conduit in $$CONDUITS; do                                         \
+	   for backend in gasnet_seq gasnet_par; do                            \
              $(MAKE) upcxx-single UPCXX_BACKEND=$$backend GASNET_CONDUIT=$$conduit || exit $$?; \
-	   done; \
+	   done;                                                               \
 	 done
 do-upcxx-meta: force
-	@dst="$(prefix)/upcxx.$(UPCXX_CODEMODE).$(UPCXX_BACKEND).$(GASNET_CONDUIT)";\
-	 meta="$$dst/bin/upcxx-meta";                                  \
+	@meta="$(DST)/bin/upcxx-meta";                                 \
+	 mkdir -p "$(DST)/bin" || exit $$?;                            \
 	 rm -f $$meta || exit $$?;                                     \
 	 (                                                             \
 	   echo "#!/bin/sh";                                           \
 	   echo "CC='$(GASNET_CC)'";                                   \
-	   echo "CPPFLAGS='$(LIBUPCXX_DEFINES) -I$$dst/include $(GASNET_CXXCPPFLAGS)'";\
+	   echo "CPPFLAGS='$(LIBUPCXX_DEFINES) -I$(DST)/include $(GASNET_CXXCPPFLAGS)'";\
 	   echo "CXX='$(GASNET_CXX)'";                                 \
 	   echo "CXXFLAGS='$(LIBUPCXX_STDCXX) $(GASNET_CXXFLAGS)'";    \
 	   echo "GASNET_CONDUIT='$(GASNET_CONDUIT)'";                  \
-	   echo "GASNET_INSTALL='$(prefix)/gasnet.$(GASNET_CODEMODE)'";\
+	   if expr "$(UPCXX_FRAGMENTS)" : gasnet >/dev/null; then      \
+	     echo "GASNET_BUILD='$(builddir)/gasnet.$(GASNET_CODEMODE)'";\
+	   else                                                        \
+	     echo "GASNET_INSTALL='$(prefix)/gasnet.$(GASNET_CODEMODE)'";\
+	   fi;                                                         \
 	   echo "LDFLAGS='$(GASNET_LDFLAGS)'";                         \
-	   echo "LIBS='-L$$dst/lib -lupcxx $(GASNET_LIBS)'";           \
+	   echo "LIBS='-L$(DST)/lib -lupcxx $(GASNET_LIBS)'";          \
 	   echo 'PPFLAGS="$$CPPFLAGS"';                                \
 	   echo 'LIBFLAGS="$$LIBS"';                                   \
 	   echo;                                                       \
 	   echo '[ "$$1" != "" ] && eval echo '"'\$$'"'"$$1"';         \
 	 ) > $$meta || exit $$?;                                       \
 	 chmod 755 $$meta
-do-upcxx-install: force
-	@for conduit in $(conduit_list); do \
+do-upcxx-install-one: force
+	@mkdir -p "$(DST)/lib" || exit $$?;                               \
+	 src="$(call UPCXXDIR,$(ASSERT),$(OPTLVL),$(DBGSYM),$(UPCXX_BACKEND),$(GASNET_CONDUIT))"; \
+	 cp $$src/lib/libupcxx.a "$(DST)/lib/" || exit $$?;               \
+	 for file in `cd $$src && find include/upcxx/ -name '*.hpp'`; do  \
+           file=`echo $$file | tr -s /`;                                  \
+	   if grep "$$file" $$src/lib/upcxx_headers.d >/dev/null; then    \
+	     mkdir -p "$(DST)/`dirname $$file`" || exit $$?;              \
+	     cp $$src/$$file "$(DST)/$$file" || exit $$?;                 \
+	   fi;                                                            \
+	 done
+	@$(MAKE) do-upcxx-meta
+do-upcxx-install-all: force
+	@eval `$(MAKE) --no-print-directory -C gasnet.$(GASNET_CODEMODE) echovar VARNAME=CONDUITS`; \
+	 for conduit in $$CONDUITS; do                                       \
 	   for backend in gasnet_seq gasnet_par; do                          \
-	     src="$(call UPCXXDIR,$(ASSERT),$(OPTLVL),$(DBGSYM),$$backend,$$conduit)"; \
-	     dst="$(prefix)/upcxx.$(UPCXX_CODEMODE).$$backend.$$conduit";    \
-	     mkdir -p "$$dst/lib" || exit $$?;                               \
-	     cp $$src/lib/libupcxx.a "$$dst/lib/" || exit $$?;               \
-	     for file in `cd $$src && find include/upcxx/ -name '*.hpp'`; do \
-               file=`echo $$file | tr -s /`;                                 \
-	       if grep "$$file" $$src/lib/upcxx_headers.d >/dev/null; then   \
-	         mkdir -p "$$dst/`dirname $$file`" || exit $$?;              \
-	         cp $$src/$$file "$$dst/$$file" || exit $$?;                 \
-	       fi;                                                           \
-	     done;                                                           \
-	     mkdir -p "$$dst/bin" || exit $$?;                               \
-	     $(MAKE) do-upcxx-meta UPCXX_BACKEND=$$backend                   \
-	                           GASNET_CONDUIT=$$conduit || exit $$?;     \
+	     $(MAKE) do-upcxx-install-one                                    \
+	       DST="$(prefix)/upcxx.$(UPCXX_CODEMODE).$$backend.$$conduit"   \
+	       UPCXX_BACKEND=$$backend GASNET_CONDUIT=$$conduit || exit $$?; \
 	   done; \
 	 done
 
@@ -345,13 +348,25 @@ upcxx-all: force
 	@$(MAKE) do-upcxx-all ASSERT=1 OPTLVL=0 DBGSYM=1
 	@$(MAKE) do-upcxx-all ASSERT=0 OPTLVL=3 DBGSYM=0
 upcxx-install: upcxx-all
-	@$(MAKE) do-upcxx-install ASSERT=1 OPTLVL=0 DBGSYM=1 UPCXX_CODEMODE=debug \
-	                          UPCXX_FRAGMENTS="$(prefix)/gasnet.debug/include"
-	@$(MAKE) do-upcxx-install ASSERT=0 OPTLVL=3 DBGSYM=0 UPCXX_CODEMODE=O3    \
-	                          UPCXX_FRAGMENTS="$(prefix)/gasnet.opt/include"
+	@$(MAKE) do-upcxx-install-all \
+	         ASSERT=1 OPTLVL=0 DBGSYM=1 UPCXX_CODEMODE=debug \
+	         UPCXX_FRAGMENTS="$(prefix)/gasnet.debug/include"
+	@$(MAKE) do-upcxx-install-all \
+	         ASSERT=0 OPTLVL=3 DBGSYM=0 UPCXX_CODEMODE=O3    \
+	         UPCXX_FRAGMENTS="$(prefix)/gasnet.opt/include"
 upcxx-clean: force
 	rm -Rf $(dir $(all_libupcxx))
 upcxx-distclean: upcxx-clean
+
+#
+# Target for `install --single prefix`
+#
+install-single: upcxx-single
+	@$(MAKE) do-upcxx-install-one DST="$(prefix)" UPCXX_FRAGMENTS="gasnet.$(GASNET_CODEMODE)"
+	@cd "gasnet.$(GASNET_CODEMODE)/$(GASNET_CONDUIT)-conduit" && \
+	    cp libgasnet-$(GASNET_CONDUIT)-$(GASNET_THREADMODE).a $(prefix)/lib/
+
+.PHONY: install-single
 
 ##
 ## Top-level targets for testing
