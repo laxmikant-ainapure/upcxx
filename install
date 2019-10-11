@@ -71,6 +71,7 @@ elif [ -n "$(type -p wget)" ]; then
 fi
 
 # Fetch and/or unpack GASNet-EX
+ORIG_GASNET="$GASNET"
 if [ -r "$GASNET/gasnet_config.h.in" ]; then
   # Convert relative path of souce directory to absolute if necessary
   if ! expr "$GASNET" : / >/dev/null; then
@@ -99,9 +100,7 @@ elif expr "$GASNET" : '.*\.tar\.gz' >/dev/null; then
     rc1=${PIPESTATUS[0]} rc2=${PIPESTATUS[1]}
     [ $rc1 -eq 0 ] || echo_and_die "Failed to gunzip '$GASNET' (corrupted or truncated?)"
     [ $rc2 -eq 0 ] || echo_and_die "Failed to untar '$GASNET' (corrupted or truncated?)"
-    [ -r "$gex_dir/gasnet_config.h.in" ] || echo_and_die "File '$GASNET' does not appear to contain GASNet"
-    [ -r "$gex_dir/gasnetex.h" ] || echo_and_die "File '$GASNET' does not contain GASNet-EX (GASNet-1 or GASNet_Tools?)"
-    # TODO: verify minimum version
+    [ -r "$gex_dir/gasnet_config.h.in" ] || echo_and_die "GASNET='$ORIG_GASNET' does not appear to contain GASNet"
     trap failure_and_die ERR  # restore error handler
     [ -n "$gex_tmp" ] && rm -f "$gex_tmp"
   fi
@@ -109,6 +108,18 @@ elif expr "$GASNET" : '.*\.tar\.gz' >/dev/null; then
 else
   echo_and_die "GASNET must point to local tarball file, tarball url, or gasnet source tree."
 fi
+
+# verify distinguishing files
+[ -r "$GASNET/gasnetex.h" ] || \
+    echo_and_die "GASNET='$ORIG_GASNET' does not contain GASNet-EX (GASNet-1 or GASNet_Tools?)"
+
+# verify minimum version
+HAVE_MAJ=$(grep -o -m1 'GEX_SPEC_VERSION_MAJOR.*' "$GASNET/docs/GASNet-EX.txt" | cut -d' ' -f2-)
+HAVE_MIN=$(grep -o -m1 'GEX_SPEC_VERSION_MINOR.*' "$GASNET/docs/GASNet-EX.txt" | cut -d' ' -f2-)
+WANT_MAJ=$(grep -o -m1 'UPCXX_REQUIRES_GEX_SPEC_VERSION_MAJOR.*' src/backend/gasnet/runtime_internal.hpp | cut -d' ' -f2-)
+WANT_MIN=$(grep -o -m1 'UPCXX_REQUIRES_GEX_SPEC_VERSION_MINOR.*' src/backend/gasnet/runtime_internal.hpp | cut -d' ' -f2-)
+[[ ($HAVE_MAJ -gt $WANT_MAJ) || (($HAVE_MAJ -eq $WANT_MAJ) && ($HAVE_MIN -ge $WANT_MIN)) ]] || \
+    echo_and_die "GASNET='$ORIG_GASNET' does not contain GASNet-EX implementing specification version $WANT_MAJ.$WANT_MIN or newer"
 
 MAKE_CMD="$GMAKE -C bld upcxx_src='$PWD' prefix='${install_to}' GASNET='$GASNET'"
 
