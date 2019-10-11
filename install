@@ -61,7 +61,7 @@ GMAKE=${UPCXX_MAKE:-make -j8}
 if [ -n "$URL_CAT" ] ; then
   : # keep denf
 elif [ -n "$(type -p curl)" ]; then
-  URL_CAT='curl --retry 5 -LsS'
+  URL_CAT='curl --retry 5 -LsSf'
 elif [ -n "$(type -p wget)" ]; then
   URL_CAT='wget --tries=5 -nv -O -'
 fi
@@ -75,18 +75,31 @@ if [ -r "$GASNET/gasnet_config.h.in" ]; then
 elif expr "$GASNET" : '.*\.tar\.gz' >/dev/null; then
   # Unpack tarball into bld/ unless already present
   gex_dir="$PWD/bld/`basename $GASNET .tar.gz`"
+  gex_tmp=''
   if [ ! -r "$gex_dir/gasnet_config.h.in" ]; then
+    trap - ERR # suspend error handler for detailed diagnostics
     mkdir -p bld
     if expr "$GASNET" : http >/dev/null; then
       if [ -z "$URL_CAT" ]; then
         echo_and_die "Do not know how to fetch a URL (did not find wget or curl)"
       fi
-      CAT="$URL_CAT"
+      gex_tmp="$gex_dir.tar.gz"
+      eval "$URL_CAT '$GASNET' >'$gex_tmp'"
+      [[ $? -eq 0 && -r "$gex_tmp" ]] || echo_and_die "Failed to fetch '$GASNET'"
+      GASNET="$gex_tmp"
     else
-      CAT='cat'
+      [ -e "$GASNET" ] || echo_and_die "File '$GASNET' does not exist"
+      [ -r "$GASNET" ] || echo_and_die "Cannot read file '$GASNET'"
     fi
-    eval "$CAT '$GASNET'" | gzip -cd | ( cd bld && tar xf - )
-    [ -r "$gex_dir/gasnet_config.h.in" ] || echo_and_die "Failed to fetch and/or unpack $GASNET"
+    gzip -cd "$GASNET" | ( cd bld && tar xf - )
+    rc1=${PIPESTATUS[0]} rc2=${PIPESTATUS[1]}
+    [ $rc1 -eq 0 ] || echo_and_die "Failed to gunzip '$GASNET' (corrupted or truncated?)"
+    [ $rc2 -eq 0 ] || echo_and_die "Failed to untar '$GASNET' (corrupted or truncated?)"
+    [ -r "$gex_dir/gasnet_config.h.in" ] || echo_and_die "File '$GASNET' does not appear to contain GASNet"
+    [ -r "$gex_dir/gasnetex.h" ] || echo_and_die "File '$GASNET' does not contain GASNet-EX (GASNet-1 or GASNet_Tools?)"
+    # TODO: verify minimum version
+    trap failure_and_die ERR  # restore error handler
+    [ -n "$gex_tmp" ] && rm -f "$gex_tmp"
   fi
   export GASNET="$gex_dir"
 else
