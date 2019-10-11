@@ -1,9 +1,9 @@
 //SNIPPET
-bool check_convergence(double *u, int n_local, const double EXPECTED_VAL,
+bool check_convergence(double *u, long n_local, const double EXPECTED_VAL,
                        const double EPSILON, long stepi)
 {
   double err = 0;
-  for (int i = 1; i < n_local - 1; i++)
+  for (long i = 1; i < n_local - 1; i++)
     err = max(err, fabs(EXPECTED_VAL - u[i]));
   // upcxx collective to get max error over all processes
   double max_err = upcxx::reduce_all(err, upcxx::op_fast_max).wait();
