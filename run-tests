@@ -63,7 +63,7 @@ export DBGSYM=${DBGSYM:=1}
 export OPTLEV=${OPTLEV:=0}
 
 # Enable offline installers with an embedded GASNet-EX tarball
-gex_offline=`/bin/ls "$PWD"/src/GASNet-2???.*.tar.gz 2> /dev/null | sort -t. -k1,1 -k2,2n -k3n | tail -1`
+gex_offline=`/bin/ls "$PWD"/src/GASNet-{stable,2???.*}.tar.gz 2> /dev/null | sort -t. -k1,1 -k2,2n -k3n | tail -1`
 if [[ -z "$GASNET" && -r "$gex_offline" ]]; then
   export GASNET="$gex_offline"
   echo GASNET=$GASNET
