@@ -35,6 +35,7 @@ int main(int argc, char **argv) {
   int r_nbr = (upcxx::rank_me() + 1) % upcxx::rank_n();
   upcxx::global_ptr<double> uL = u_g.fetch(l_nbr).wait();
   upcxx::global_ptr<double> uR = u_g.fetch(r_nbr).wait();
+  upcxx::barrier(); // optional - wait for all ranks to finish init
   // iteratively solve
   for (long stepi = 0; stepi < MAX_ITER; stepi++) {
     // alternate between red and black

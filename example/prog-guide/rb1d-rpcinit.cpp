@@ -36,6 +36,7 @@ int main(int argc, char **argv) {
   int r_nbr = (upcxx::rank_me() + 1) % upcxx::rank_n();
   upcxx::global_ptr<double> uL = upcxx::rpc(l_nbr,[](){ return u_g; }).wait();
   upcxx::global_ptr<double> uR = upcxx::rpc(r_nbr,[](){ return u_g; }).wait();
+  upcxx::barrier(); // optional - wait for all ranks to finish init
   // iteratively solve
   for (long stepi = 0; stepi < MAX_ITER; stepi++) {
     // alternate between red and black
