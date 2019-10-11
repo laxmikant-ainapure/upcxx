@@ -5,7 +5,7 @@
 
 using namespace std;
 
-#include "rb1d-av-check.cpp"
+#include "rb1d-check.cpp"
 
 
 //SNIPPET

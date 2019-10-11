@@ -34,7 +34,7 @@ EXAMPLES = \
   dmap-atomics-test \
   dmap-conjoined-test \
   dmap-promises-test \
-  rb1d-av \
+  rb1d \
   hello-world \
   view-histogram1 \
   view-histogram2 \
