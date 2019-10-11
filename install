@@ -37,8 +37,12 @@ fi
 
 # Enable offline installers with an embedded GASNet-EX tarball
 gex_offline=`/bin/ls "$PWD"/src/GASNet-2???.*.tar.gz 2> /dev/null | sort -t. -k1,1 -k2,2n -k3n | tail -1`
-if [[ -z "$GASNET" && -r "$gex_offline" ]]; then
+if [ -n "$GASNET" ] ; then
+  : # Keep user's value
+elif [ -r "$gex_offline" ]; then
   export GASNET="$gex_offline"
+else
+  export GASNET='https://gasnet-bugs.lbl.gov/nightly/unlisted/GASNet-stable.tar.gz'
 fi
 
 trap failure_and_die ERR
