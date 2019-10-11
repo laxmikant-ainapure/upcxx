@@ -15,10 +15,14 @@
   #if UPCXX_BACKEND_GASNET
     #include <gasnet.h>
     #include <gasnet_coll.h>
+    #define UPCXX_REQUIRES_GEX_SPEC_VERSION_MAJOR  0
+    #define UPCXX_REQUIRES_GEX_SPEC_VERSION_MINOR  7
     #if GASNET_RELEASE_VERSION_MAJOR < 2000
       // User is trying to compile against GASNet-1, or some other gasnet.h header that is not GASNet-EX
       #error UPC++ requires a current version of GASNet-EX (not to be confused with GASNet-1). Please unset $GASNET to use the default GASNet-EX layer.
-    #elif GEX_SPEC_VERSION_MINOR < 7
+    #elif GEX_SPEC_VERSION_MAJOR <  UPCXX_REQUIRES_GEX_SPEC_VERSION_MAJOR || \
+         (GEX_SPEC_VERSION_MAJOR == UPCXX_REQUIRES_GEX_SPEC_VERSION_MAJOR && \
+          GEX_SPEC_VERSION_MINOR <  UPCXX_REQUIRES_GEX_SPEC_VERSION_MINOR)
       // User is trying to compile with a GASNet-EX version that does not meet our currnet minimum requirement:
       // spec v0.7: require gex_Coll_BarrierNB() semantic change for upcxx::barrier()
       #error This version of UPC++ requires GASNet-EX version 2018.12.0 or newer. Please unset $GASNET to use the default GASNet-EX layer.
