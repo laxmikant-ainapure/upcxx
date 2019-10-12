@@ -246,13 +246,18 @@ do-libupcxx: force
 # On-demand compile of a single instance of libupcxx and required libgasnet
 # PARAMS: ASSERT, OPTLVL, DBGSYM, UPCXX_BACKEND, GASNET_CONDUIT, GASNET, CROSS
 #
-upcxx-single: gasnet-single force
+do-upcxx-single: force
 	@dir=$(call UPCXXDIR,$(ASSERT),$(OPTLVL),$(DBGSYM),$(UPCXX_BACKEND),$(GASNET_CONDUIT)); \
-	 mkdir -p $$dir/lib && mkdir -p $$dir/include && \
-	 ln -sf "$(top_srcdir)/src" $$dir/include/upcxx && \
-	 $(MAKE) do-libupcxx UPCXX_DIR="$(builddir)/$$dir" \
-	                     UPCXX_FRAGMENTS="$(builddir)/gasnet.$(GASNET_CODEMODE)"
+	 mkdir -p $$dir/lib && mkdir -p $$dir/include &&      \
+	 rm -f $$dir/include/upcxx &&                         \
+	 ln -s "$(top_srcdir)/src" $$dir/include/upcxx &&     \
+	 $(MAKE) do-libupcxx UPCXX_DIR="$(builddir)/$$dir"
+upcxx-single: gasnet-single
+	 $(MAKE) do-upcxx-single UPCXX_FRAGMENTS="$(builddir)/gasnet.$(GASNET_CODEMODE)"
+upcxx-single-bld: force
+	 $(MAKE) do-upcxx-single UPCXX_FRAGMENTS="$(GASNET)"
 
+.PHONY: do-upcxx-single upcxx-single upcxx-single-bld
 
 #
 # On-demand compile of a single instance of libupcxx by fullpath
@@ -305,8 +310,8 @@ do-upcxx-meta: force
 	   echo "CXX='$(GASNET_CXX)'";                                 \
 	   echo "CXXFLAGS='$(LIBUPCXX_STDCXX) $(GASNET_CXXFLAGS)'";    \
 	   echo "GASNET_CONDUIT='$(GASNET_CONDUIT)'";                  \
-	   if expr "$(UPCXX_FRAGMENTS)" : gasnet >/dev/null; then      \
-	     echo "GASNET_BUILD='$(builddir)/gasnet.$(GASNET_CODEMODE)'";\
+	   if test -n "$(GASNET_BUILD)" ; then                         \
+	     echo "GASNET_BUILD='$(GASNET_BUILD)'";                    \
 	   else                                                        \
 	     echo "GASNET_INSTALL='$(prefix)/gasnet.$(GASNET_CODEMODE)'";\
 	   fi;                                                         \
@@ -334,7 +339,7 @@ do-upcxx-install-all: force
 	@eval `$(MAKE) --no-print-directory -C gasnet.$(GASNET_CODEMODE) echovar VARNAME=CONDUITS`; \
 	 for conduit in $$CONDUITS; do                                       \
 	   for backend in gasnet_seq gasnet_par; do                          \
-	     $(MAKE) do-upcxx-install-one                                    \
+	     $(MAKE) do-upcxx-install-one GASNET_BUILD=''                    \
 	       DST="$(prefix)/upcxx.$(UPCXX_CODEMODE).$$backend.$$conduit"   \
 	       UPCXX_BACKEND=$$backend GASNET_CONDUIT=$$conduit || exit $$?; \
 	   done; \
@@ -359,14 +364,18 @@ upcxx-clean: force
 upcxx-distclean: upcxx-clean
 
 #
-# Target for `install --single prefix`
+# Targets for `install --single prefix`
 #
-install-single: upcxx-single
-	@$(MAKE) do-upcxx-install-one DST="$(prefix)" UPCXX_FRAGMENTS="gasnet.$(GASNET_CODEMODE)"
-	@cd "gasnet.$(GASNET_CODEMODE)/$(GASNET_CONDUIT)-conduit" && \
+do-install-single: force
+	@$(MAKE) do-upcxx-install-one DST="$(prefix)" UPCXX_FRAGMENTS="$(GASNET_BUILD)"
+	@cd "$(GASNET_BUILD)/$(GASNET_CONDUIT)-conduit" && \
 	    cp libgasnet-$(GASNET_CONDUIT)-$(GASNET_THREADMODE).a $(prefix)/lib/
+install-single-src: upcxx-single
+	@$(MAKE) do-install-single GASNET_BUILD="$(builddir)/gasnet.$(GASNET_CODEMODE)"
+install-single-bld: upcxx-single-bld
+	@$(MAKE) do-install-single GASNET_BUILD="$(GASNET)"
 
-.PHONY: install-single
+.PHONY: do-install-single install-single-src install-single-bld
 
 ##
 ## Top-level targets for testing

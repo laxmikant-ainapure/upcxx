@@ -72,7 +72,15 @@ fi
 
 # Fetch and/or unpack GASNet-EX
 ORIG_GASNET="$GASNET"
-if [ -r "$GASNET/gasnet_config.h.in" ]; then
+gex_builddir=0
+if [[ "$single" -eq 1 && -r "$GASNET/gasnet_config.h" ]] ; then
+  # single + GASNET=builddir (may or may not be a srcdir as well)
+  gex_builddir=1
+  # Convert relative path of build directory to absolute if necessary
+  if ! expr "$GASNET" : / >/dev/null; then
+    export GASNET=$(cd "$GASNET" && pwd -P)
+  fi
+elif [ -r "$GASNET/gasnet_config.h.in" ]; then
   # Convert relative path of souce directory to absolute if necessary
   if ! expr "$GASNET" : / >/dev/null; then
     export GASNET=$(cd "$GASNET" && pwd -P)
@@ -109,13 +117,25 @@ else
   echo_and_die "GASNET must point to local tarball file, tarball url, or gasnet source tree."
 fi
 
-# verify distinguishing files
-[ -r "$GASNET/gasnetex.h" ] || \
+if [ "$gex_builddir" -eq 1 ]; then
+  if [ -e "$GASNET/configure" ] ; then
+    gex_header="$GASNET/gasnetex.h"
+  else
+    gex_header=''  # TODO: any non G-1 file to check in a VPATH build directory?
+  fi
+  gex_spec_file="$GASNET/gasnet_config.h"
+else
+  gex_header="$GASNET/gasnetex.h"
+  gex_spec_file="$GASNET/docs/GASNet-EX.txt"
+fi
+
+# verify distinguishing file (if any)
+[[ -z "$gex_header" || -r "$gex_header" ]] || \
     echo_and_die "GASNET='$ORIG_GASNET' does not contain GASNet-EX (GASNet-1 or GASNet_Tools?)"
 
 # verify minimum version
-HAVE_MAJ=$(grep -o -m1 'GEX_SPEC_VERSION_MAJOR.*' "$GASNET/docs/GASNet-EX.txt" | cut -d' ' -f2-)
-HAVE_MIN=$(grep -o -m1 'GEX_SPEC_VERSION_MINOR.*' "$GASNET/docs/GASNet-EX.txt" | cut -d' ' -f2-)
+HAVE_MAJ=$(grep -o -m1 'EX_SPEC_VERSION_MAJOR.*' "$gex_spec_file" | cut -d' ' -f2-)
+HAVE_MIN=$(grep -o -m1 'EX_SPEC_VERSION_MINOR.*' "$gex_spec_file" | cut -d' ' -f2-)
 WANT_MAJ=$(grep -o -m1 'UPCXX_REQUIRES_GEX_SPEC_VERSION_MAJOR.*' src/backend/gasnet/runtime_internal.hpp | cut -d' ' -f2-)
 WANT_MIN=$(grep -o -m1 'UPCXX_REQUIRES_GEX_SPEC_VERSION_MINOR.*' src/backend/gasnet/runtime_internal.hpp | cut -d' ' -f2-)
 [[ ($HAVE_MAJ -gt $WANT_MAJ) || (($HAVE_MAJ -eq $WANT_MAJ) && ($HAVE_MIN -ge $WANT_MIN)) ]] || \
@@ -124,7 +144,8 @@ WANT_MIN=$(grep -o -m1 'UPCXX_REQUIRES_GEX_SPEC_VERSION_MINOR.*' src/backend/gas
 MAKE_CMD="$GMAKE -C bld upcxx_src='$PWD' prefix='${install_to}' GASNET='$GASNET'"
 
 if [ "$single" -eq 1 ]; then
-  eval $MAKE_CMD install-single
+  [ $gex_builddir == 1 ] && target=install-single-bld || target=install-single-src
+  eval $MAKE_CMD $target
   if [ $? -ne 0 ]; then failure_and_die; fi
 else
   eval $MAKE_CMD install
