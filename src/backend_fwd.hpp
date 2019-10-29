@@ -187,8 +187,14 @@ namespace backend {
 // Public API implementations:
 
 namespace upcxx {
-  inline intrank_t rank_n() { return backend::rank_n; }
-  inline intrank_t rank_me() { return backend::rank_me; }
+  inline intrank_t rank_n() {
+    UPCXX_ASSERT(backend::rank_n != -1, "upcxx::rank_n() called before upcxx::init()");
+    return backend::rank_n;
+  }
+  inline intrank_t rank_me() {
+    UPCXX_ASSERT(backend::rank_n != -1, "upcxx::rank_me() called before upcxx::init()");
+    return backend::rank_me;
+   }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
