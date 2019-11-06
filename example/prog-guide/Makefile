@@ -6,17 +6,22 @@
 # or (for bash)
 # export UPCXX_INSTALL=<myinstalldir>; make hello-world
 
-ifeq ($(wildcard $(UPCXX_INSTALL)/bin/upcxx-meta),)
+ifeq ($(UPCXX_INSTALL),)
+$(warning UPCXX_INSTALL environment variable is not set, assuming upcxx is in the PATH)
+UPCXX=upcxx
+else
+ifeq ($(wildcard $(UPCXX_INSTALL)/bin/upcxx),)
 $(error Please set UPCXX_INSTALL=/path/to/upcxx/install)
+else
+UPCXX=$(UPCXX_INSTALL)/bin/upcxx
+endif
 endif
 
 UPCXX_THREADMODE ?= seq
 export UPCXX_THREADMODE
 UPCXX_CODEMODE ?= debug
 export UPCXX_CODEMODE
-CXX = $(UPCXX_INSTALL)/bin/upcxx
-
-OPENMP_FLAGS = -fopenmp
+CXX = $(UPCXX)
 
 EXTRA_FLAGS = -g
 
@@ -29,7 +34,7 @@ EXAMPLES = \
   dmap-atomics-test \
   dmap-conjoined-test \
   dmap-promises-test \
-  rb1d-av \
+  rb1d \
   hello-world \
   view-histogram1 \
   view-histogram2 \
