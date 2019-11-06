@@ -540,8 +540,6 @@ namespace backend {
     using gasnet::bcast_as_lpc;
     using gasnet::bcast_payload_header;
     
-    using Fn = typename std::decay<Fn1>::type;
-    
     auto ub = detail::command<detail::lpc_base*>::ubound(
       empty_storage_size.cat_size_of<bcast_payload_header>(),
       fn
