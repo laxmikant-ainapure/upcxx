@@ -13,6 +13,7 @@ New features/enhancements: (see specification and programmer's guide for full de
 
 Notable bug fixes:
 
+* issue #247: unused-local-typedef warning for some compilers
 * issue #271: Use of `-pthread` in `example/prog-guide/Makefile` breaks PGI
 
 Breaking changes:
