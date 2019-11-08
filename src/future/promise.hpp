@@ -61,12 +61,12 @@ namespace upcxx {
     }
     
   public:
-    promise(std::intptr_t anons=0):
+    promise(std::intptr_t deps=1):
       detail::future_impl_shref<detail::future_header_ops_promise, T...>(
         &(new detail::future_header_promise<T...>)->base_header_result
       ) {
-      UPCXX_ASSERT(anons >= 0);
-      detail::promise_meta_of(*this)->countdown += anons;
+      UPCXX_ASSERT(deps >= 1);
+      detail::promise_meta_of(*this)->countdown = deps;
     }
     
     promise(const promise&) = delete;
