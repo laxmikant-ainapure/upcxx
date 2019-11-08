@@ -1615,9 +1615,9 @@ void gasnet::after_gasnet() {
       
       #if UPCXX_BACKEND_GASNET_SEQ
         if(&p == &backend::master)
-          exec_n += gasnet::master_hcbs.burst(4);
+          exec_n += gasnet::master_hcbs.burst(/*spinning=*/false);
       #elif UPCXX_BACKEND_GASNET_PAR
-        exec_n += p.backend_state_.hcbs.burst(4);
+        exec_n += p.backend_state_.hcbs.burst(/*spinning=*/false);
       #endif
       
       exec_n += tls.burst_internal(p);
@@ -1662,9 +1662,9 @@ void upcxx::progress(progress_level level) {
       
       #if UPCXX_BACKEND_GASNET_SEQ
         if(&p == &backend::master)
-          exec_n += gasnet::master_hcbs.burst(4);
+          exec_n += gasnet::master_hcbs.burst(/*spinning=*/true);
       #elif UPCXX_BACKEND_GASNET_PAR
-        exec_n += p.backend_state_.hcbs.burst(4);
+        exec_n += p.backend_state_.hcbs.burst(/*spinning=*/true);
       #endif
       
       exec_n += tls.burst_internal(p);
@@ -2133,11 +2133,46 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////
 
-inline int handle_cb_queue::burst(int burst_n) {
+inline int handle_cb_queue::burst(bool maybe_spinning) {
+  // Gasnet present's its asynchrony through pollable handles which is
+  // problematic for us since we need to guess a good strategy for choosing
+  // handles to poll which minimizes time wasted polling non-ready handles.
+  // A simple heuristic is that handles retire approximately in injection order,
+  // thus we ought to focus our time polling the front of the queue as that's
+  // where ready handles are likely to be clustered. Our default strategy is to
+  // begin at the front of the queue and keep polling until we hit N consecutive
+  // non-ready handles, after which we abort. If our heuristic is accurate and
+  // N is good, then after N handles are observed non-ready we can assume that
+  // all handles that follow are probably also non-ready, justifying our abort.
+  //
+  // If the `maybe_spinning` flag is set, then we assume the CPU has no better
+  // work to do than finding ready handles, and so we dynamically modify our abort
+  // criteria to compsensate for the case when there are ready handles following
+  // an unfortunate N-cluster of non-ready ones. If an invocation of burst()
+  // finds no ready handles and exits via the abort path, we increment the
+  // aborted_burst_n_ counter. Upon beginning a burst() scan, we set our N value
+  // to linearly increase with the abort counter so that a recent history of
+  // repeated failure motivates us to look harder for ready handles.
+
   int exec_n = 0;
   handle_cb **pp = &this->head_;
+
+  int aborted_burst_n = this->aborted_burst_n_;
+  // If we aren't in a progress() spin, just ignore the abort counter.
+  int aborted_burst_n_and_spinning = maybe_spinning ? aborted_burst_n : 0;
   
-  while(burst_n-- && *pp != nullptr) {
+  // This is N, the number of consecutive non-ready handles which will trigger
+  // an abort.
+  int miss_limit = 4 + aborted_burst_n_and_spinning;
+
+  // Our current tally of consecutive non-ready handles as we scan the queue.
+  // A negative initial value has the effect of polling that many non-ready
+  // handles without contributing to the abort-triggering condition. As a
+  // history of aborted burst()'s pile up, this grows in negativity to allow us
+  // to see beyond the nefarious N-cluster which may have percolated to the front.
+  int miss_n = -4*aborted_burst_n_and_spinning;
+  
+  while(*pp != nullptr) {
     handle_cb *p = *pp;
     gex_Event_t ev = reinterpret_cast<gex_Event_t>(p->handle);
     
@@ -2151,10 +2186,30 @@ inline int handle_cb_queue::burst(int burst_n) {
       p->execute_and_delete(handle_cb_successor{this, pp});
       
       exec_n += 1;
+      
+      // Break the miss streak. Intentionally clobber negative values since now
+      // that the app has learned of completed communication, it may have more
+      // productive work to do outside of progress(), so we should feel pressure
+      // to abort.
+      miss_n = 0;
+      
+      aborted_burst_n = 0; // Reset abort history.
     }
-    else
+    else {
+      miss_n += 1;
+      if(miss_n == miss_limit) { // Miss streak triggered abort.
+        // Only increase abort history if we are spinning and this burst() was
+        // entirely fruitless.
+        if(maybe_spinning && exec_n == 0)
+          aborted_burst_n = std::min<int>(aborted_burst_n + 1, 1024);
+        break;
+      }
+      
       pp = &p->next_;
+    }
   }
+
+  this->aborted_burst_n_ = aborted_burst_n;
   
   return exec_n;
 }
@@ -2163,7 +2218,6 @@ inline int handle_cb_queue::burst(int burst_n) {
 // from: upcxx/os_env.hpp
 
 namespace upcxx {
-
   template<>
   bool os_env(const std::string &name, const bool &otherwise) {
     return !!gasnett_getenv_yesno_withdefault(name.c_str(), otherwise);
