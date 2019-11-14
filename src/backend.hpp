@@ -69,30 +69,6 @@ namespace backend {
   void fulfill_during_(
       std::integral_constant<progress_level, progress_level::internal>,
       detail::future_header_promise<T...> *pro, // takes ref
-      std::tuple<T...> vals,
-      persona &active_per
-    ) {
-  
-    struct fulfiller {
-      detail::future_header_promise<T...> *pro; // holds ref
-      std::tuple<T...> vals;
-      void operator()() {
-        detail::promise_fulfill_result(pro, std::move(vals));
-        pro->dropref();
-      }
-    };
-    
-    detail::the_persona_tls.during(
-      active_per, progress_level::internal,
-      fulfiller{pro, std::move(vals)},
-      /*known_active=*/std::true_type()
-    );
-  }
-  
-  template<typename ...T>
-  void fulfill_during_(
-      std::integral_constant<progress_level, progress_level::internal>,
-      detail::future_header_promise<T...> *pro, // takes ref
       std::intptr_t anon,
       persona &active_per
     ) {
@@ -107,6 +83,23 @@ namespace backend {
     );
   }
   
+  template<typename ...T>
+  void fulfill_during_(
+      std::integral_constant<progress_level, progress_level::internal>,
+      detail::future_header_promise<T...> *pro, // takes ref
+      std::tuple<T...> &&vals,
+      persona &active_per
+    ) {
+
+    pro->base_header_result.construct_results(std::move(vals));
+    
+    fulfill_during_(
+      std::integral_constant<progress_level, progress_level::internal>(),
+      pro, /*anon*/1,
+      active_per
+    );
+  }
+  
   //////////////////////////////////////////////////////////////////////////////
   // fulfill_during_<level=user>
   
@@ -114,10 +107,13 @@ namespace backend {
   void fulfill_during_(
       std::integral_constant<progress_level, progress_level::user>,
       detail::future_header_promise<T...> *pro, // takes ref
-      std::tuple<T...> vals,
+      std::tuple<T...> &&vals,
       persona &active_per
     ) {
-    detail::the_persona_tls.fulfill_during_user_of_active(active_per, /*move ref*/pro, std::move(vals));
+
+    pro->base_header_result.construct_results(std::move(vals));
+    
+    detail::the_persona_tls.fulfill_during_user_of_active(active_per, /*move ref*/pro, /*deps*/1);
   }
   
   template<typename ...T>

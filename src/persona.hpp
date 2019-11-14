@@ -316,9 +316,7 @@ namespace upcxx {
       // Enqueue a promise to be fulfilled during user progress of a currently
       // active persona.
       template<typename ...T>
-      void fulfill_during_user_of_active(persona&, future_header_promise<T...> *pro_hdr/*takes ref*/, std::tuple<T...> vals);
-      template<typename ...T>
-      void fulfill_during_user_of_active(persona&, future_header_promise<T...> *pro_hdr/*takes ref*/, std::intptr_t anon);
+      void fulfill_during_user_of_active(persona&, future_header_promise<T...> *pro_hdr/*takes ref*/, std::intptr_t deps);
       
       // Enqueue a lambda onto persona's progress level queue. Unlike
       // `during`, lambda will definitely not execute in calling context.
@@ -606,12 +604,12 @@ namespace upcxx {
     else
       p.peer_inbox_[(int)level].send(std::forward<Fn>(fn));
   }
-
+  
   template<typename ...T>
   void detail::persona_tls::fulfill_during_user_of_active(
       persona &per,
       future_header_promise<T...> *pro_hdr, // take ref
-      std::tuple<T...> vals
+      std::intptr_t deps
     ) {
     
     UPCXX_ASSERT(per.active_with_caller(*this));
@@ -627,34 +625,7 @@ namespace upcxx {
     
     promise_meta *meta = &pro_hdr->pro_meta;
     
-    pro_hdr->base_header_result.construct_results(std::move(vals));
-    
-    if(0 == meta->deferred_decrements++) { // ensure not already in the queue
-      pro_hdr->incref(1);
-      
-      if(future_header_promise<T...>::is_trivially_deletable)
-        per.pros_deferred_trivial_.enqueue(&meta->base);
-      else
-        per.self_inbox_[user].enqueue(&meta->base);
-    }
-  }
-  
-  template<typename ...T>
-  void detail::persona_tls::fulfill_during_user_of_active(
-      persona &per,
-      future_header_promise<T...> *pro_hdr, // take ref
-      std::intptr_t anon
-    ) {
-    
-    UPCXX_ASSERT(per.active_with_caller(*this));
-    
-    // See blurb just above in other `fulfill_during_user_of_active`.
-    
-    constexpr int user = (int)progress_level::user;
-    
-    promise_meta *meta = &pro_hdr->pro_meta;
-    
-    if(anon == (meta->deferred_decrements += anon)) { // ensure not already in the queue
+    if(deps == (meta->deferred_decrements += deps)) { // ensure not already in the queue
       pro_hdr->incref(1);
       
       if(future_header_promise<T...>::is_trivially_deletable)

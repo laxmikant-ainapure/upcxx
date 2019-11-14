@@ -34,6 +34,7 @@ team::team(team &&that):
   me_(that.me_) {
   
   UPCXX_ASSERT(backend::master.active_with_caller());
+  UPCXX_ASSERT(that.id_ != digest{~0ull, ~0ull});
   
   that.id_ = digest{~0ull, ~0ull}; // the tombstone id value
   

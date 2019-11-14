@@ -390,10 +390,6 @@ namespace upcxx {
         hdr->enter_ready(hdr);
       }
       
-      bool results_constructed() const {
-        return this->base_header.status_ == status_results_yes;
-      }
-      
       template<typename ...U>
       void construct_results(U &&...values) {
         UPCXX_ASSERT(this->base_header.status_ == status_results_no);
@@ -408,6 +404,14 @@ namespace upcxx {
         this->base_header.status_ = status_results_yes;
       }
       
+      template<typename ...U>
+      void reconstruct_results(std::tuple<U...> &&values) {
+        UPCXX_ASSERT(this->base_header.status_ != status_results_no);
+        results_of(&this->base_header).~results_t();
+        ::new(&this->results_raw_) std::tuple<T...>(std::move(values));
+        this->base_header.status_ = status_results_yes;
+      }
+
       static constexpr bool is_trivially_deletable = detail::trait_forall<std::is_trivially_destructible, T...>::value;
 
       void delete_me_ready() {
@@ -474,10 +478,9 @@ namespace upcxx {
         this->base_header.enter_ready(&this->base_header);
       }
       
-      bool results_constructed() const { return false; }
-      
       void construct_results() {}
       void construct_results(std::tuple<>) {}
+      void reconstruct_results(std::tuple<>) {}
       
       static constexpr bool is_trivially_deletable = true;
       

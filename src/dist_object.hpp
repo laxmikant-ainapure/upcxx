@@ -106,21 +106,26 @@ namespace upcxx {
     }
     
     dist_object(dist_object const&) = delete;
-    
+
     dist_object(dist_object &&that) noexcept:
       tm_(that.tm_),
       id_(that.id_),
       value_(std::move(that.value_)) {
       
+      UPCXX_ASSERT(backend::master.active_with_caller());
+      UPCXX_ASSERT(that.id_ != digest{~0ull, ~0ull});
+
       that.id_ = digest{~0ull, ~0ull}; // the tombstone id value
-      
-      auto *pro = new detail::future_header_promise<dist_object<T>&>;
-      detail::promise_fulfill_result(pro, *this);
-      
-      void *pro_void = static_cast<void*>(pro);
-      std::swap(pro_void, detail::registry[id_]);
-      
-      static_cast<detail::future_header_promise<dist_object<T>&>*>(pro_void)->dropref();
+
+      // Moving is painful for us because the original constructor (of that)
+      // created a promise, set its result to point to that, and then
+      // deferred its fulfillment until user progress. We hackishly overwrite
+      // the promise/future's result with our new address. Whether or not the
+      // deferred fulfillment has happened doesn't matter, but will determine
+      // whether the app observes the same future taking different values at
+      // different times (definitely not usual for futures).
+      static_cast<detail::future_header_promise<dist_object<T>&>*>(detail::registry[id_])
+        ->base_header_result.reconstruct_results(std::tuple<dist_object<T>&>(*this));
     }
     
     ~dist_object() {
