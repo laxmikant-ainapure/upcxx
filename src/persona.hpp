@@ -316,14 +316,9 @@ namespace upcxx {
       // Enqueue a promise to be fulfilled during user progress of a currently
       // active persona.
       template<typename ...T>
-      void fulfill_during_user_of_active(persona&, promise<T...> &pro, std::tuple<T...> vals);
+      void fulfill_during_user_of_active(persona&, future_header_promise<T...> *pro_hdr/*takes ref*/, std::tuple<T...> vals);
       template<typename ...T>
-      void fulfill_during_user_of_active(persona&, promise<T...> &pro, std::intptr_t anon);
-      
-      template<typename ...T>
-      void fulfill_during_user_of_active(persona&, promise<T...> &&pro, std::tuple<T...> vals);
-      template<typename ...T>
-      void fulfill_during_user_of_active(persona&, promise<T...> &&pro, std::intptr_t anon);
+      void fulfill_during_user_of_active(persona&, future_header_promise<T...> *pro_hdr/*takes ref*/, std::intptr_t anon);
       
       // Enqueue a lambda onto persona's progress level queue. Unlike
       // `during`, lambda will definitely not execute in calling context.
@@ -333,13 +328,16 @@ namespace upcxx {
       template<bool known_active=false>
       void enqueue(persona&, progress_level level, detail::lpc_base *m, std::integral_constant<bool,known_active> known_active1 = {});
 
-      // Enqueue a quiesced promise (one with no other activity concurrently
-      // occurring) to be fulfilled during progress of given persona
+      // Enqueue a quiesced promise (one on which no other dependency
+      // requirement/fulfillment will occur) to be fulfilled during progress of
+      // given persona
       template<typename ...T, bool known_active=false>
       void enqueue_quiesced_promise(
         persona &target, progress_level level,
-        future_header_promise<T...> *pro_hdr, std::intptr_t result_plus_anon,
-        std::integral_constant<bool,known_active> known_active1 = {});
+        future_header_promise<T...> *pro,
+        std::intptr_t result_plus_anon,
+        std::integral_constant<bool,known_active> known_active1 = {}
+      );
       
       bool progress_required();
       bool progress_required(persona_scope &bottom);
@@ -612,7 +610,8 @@ namespace upcxx {
   template<typename ...T>
   void detail::persona_tls::fulfill_during_user_of_active(
       persona &per,
-      promise<T...> &pro, std::tuple<T...> vals
+      future_header_promise<T...> *pro_hdr, // take ref
+      std::tuple<T...> vals
     ) {
     
     UPCXX_ASSERT(per.active_with_caller(*this));
@@ -626,13 +625,12 @@ namespace upcxx {
     
     constexpr int user = (int)progress_level::user;
     
-    auto *hdr = detail::promise_header_of(pro);
-    promise_meta *meta = detail::promise_meta_of(pro);
+    promise_meta *meta = &pro_hdr->pro_meta;
     
-    hdr->base_header_result.construct_results(std::move(vals));
+    pro_hdr->base_header_result.construct_results(std::move(vals));
     
-    if(0 == meta->deferred_decrements++) { // Already in the queue?
-      hdr->incref(1);
+    if(0 == meta->deferred_decrements++) { // ensure not already in the queue
+      pro_hdr->incref(1);
       
       if(future_header_promise<T...>::is_trivially_deletable)
         per.pros_deferred_trivial_.enqueue(&meta->base);
@@ -644,42 +642,26 @@ namespace upcxx {
   template<typename ...T>
   void detail::persona_tls::fulfill_during_user_of_active(
       persona &per,
-      promise<T...> &pro, std::intptr_t anon
+      future_header_promise<T...> *pro_hdr, // take ref
+      std::intptr_t anon
     ) {
-      
+    
     UPCXX_ASSERT(per.active_with_caller(*this));
     
-    // See blurb just above in other `fulfill_during_user_of_top`.
+    // See blurb just above in other `fulfill_during_user_of_active`.
     
     constexpr int user = (int)progress_level::user;
     
-    auto *hdr = detail::promise_header_of(pro);
-    promise_meta *meta = detail::promise_meta_of(pro);
+    promise_meta *meta = &pro_hdr->pro_meta;
     
-    if(anon == (meta->deferred_decrements += anon)) { // Already in the queue?
-      hdr->incref(1);
+    if(anon == (meta->deferred_decrements += anon)) { // ensure not already in the queue
+      pro_hdr->incref(1);
       
       if(future_header_promise<T...>::is_trivially_deletable)
         per.pros_deferred_trivial_.enqueue(&meta->base);
       else
         per.self_inbox_[user].enqueue(&meta->base);
     }
-  }
-  
-  template<typename ...T>
-  void detail::persona_tls::fulfill_during_user_of_active(
-      persona &per,
-      promise<T...> &&pro, std::tuple<T...> vals
-    ) {
-    this->fulfill_during_user_of_active(per, static_cast<promise<T...>&>(pro), std::move(vals));
-  }
-  
-  template<typename ...T>
-  void detail::persona_tls::fulfill_during_user_of_active(
-      persona &per,
-      promise<T...> &&pro, std::intptr_t anon
-    ) {
-    this->fulfill_during_user_of_active(per, static_cast<promise<T...>&>(pro), anon);
   }
   
   template<typename Fn, bool known_active>
@@ -715,11 +697,11 @@ namespace upcxx {
   template<typename ...T, bool known_active>
   void detail::persona_tls::enqueue_quiesced_promise(
       persona &target, progress_level level,
-      future_header_promise<T...> *pro_hdr,
+      detail::future_header_promise<T...> *pro, // takes ref
       std::intptr_t result_plus_anon,
       std::integral_constant<bool, known_active>
     ) {
-    auto *meta = &pro_hdr->pro_meta;
+    auto *meta = &pro->pro_meta;
     UPCXX_ASSERT(meta->deferred_decrements == 0); // promise not quiesced!
     meta->deferred_decrements = result_plus_anon;
     

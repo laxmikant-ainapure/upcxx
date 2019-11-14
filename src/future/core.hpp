@@ -115,10 +115,11 @@ namespace upcxx {
       }
 
       // Modify the refcount, but do not take action.
-      void incref(int n) {
+      future_header* incref(int n) {
         int ref_n = this->ref_n_;
         int trash;
         (ref_n >= 0 ? this->ref_n_ : trash) = ref_n + n;
+        return this;
       }
       int decref(int n) { // returns new refcount
         int ref_n = this->ref_n_;
@@ -185,8 +186,9 @@ namespace upcxx {
       
       // Override refcount arithmetic with more efficient form since we
       // know future_header_dependents are never statically allocated.
-      void incref(int n) {
+      future_header_dependent* incref(int n) {
         this->ref_n_ += n;
+        return this;
       }
       int decref(int n) {
         return (this->ref_n_ -= n);
@@ -423,8 +425,9 @@ namespace upcxx {
       
       // Override refcount arithmetic to take advantage of the fact that we
       // don't have any value-carrying futures statically allocated.
-      void incref(int n) {
+      future_header_result* incref(int n) {
         this->base_header.ref_n_ += n;
+        return this;
       }
       int decref(int n) {
         return (this->base_header.ref_n_ -= n);
@@ -482,8 +485,9 @@ namespace upcxx {
       void delete_me() { operator delete(this); }
       
       // Inherit generic header refcount ops
-      void incref(int n) {
+      future_header_result* incref(int n) {
         this->base_header.incref(n);
+        return this;
       }
       int decref(int n) {
         return this->base_header.decref(n);
@@ -562,11 +566,16 @@ namespace upcxx {
       
       // Override refcount arithmetic with more efficient form since we
       // know `future_header_promise`'s are never statically allocated.
-      void incref(int n) {
+      future_header_promise* incref(int n) {
         this->base_header_result.base_header.ref_n_ += n;
+        return this;
       }
       int decref(int n) {
         return (this->base_header_result.base_header.ref_n_ -= n);
+      }
+
+      void dropref() {
+        future_header_ops_promise::template dropref<T...>(&this->base_header_result.base_header, std::false_type());
       }
       
       void fulfill(std::intptr_t n) {

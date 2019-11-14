@@ -33,7 +33,7 @@ namespace upcxx {
     }
     
     future<dist_object<T>&> when_here() const {
-      return detail::registered_promise<dist_object<T>&>(dig_)->get_future();
+      return detail::promise_get_future(detail::registered_promise<dist_object<T>&>(dig_));
     }
     
     #define UPCXX_COMPARATOR(op) \
@@ -82,7 +82,7 @@ namespace upcxx {
       id_ = tm.next_collective_id(detail::internal_only());
       
       backend::fulfill_during<progress_level::user>(
-          *detail::registered_promise<dist_object<T>&>(id_),
+          detail::registered_promise<dist_object<T>&>(id_)->incref(1),
           std::tuple<dist_object<T>&>(*this),
           backend::master
         );
@@ -95,7 +95,7 @@ namespace upcxx {
       id_ = tm.next_collective_id(detail::internal_only());
       
       backend::fulfill_during<progress_level::user>(
-          *detail::registered_promise<dist_object<T>&>(id_),
+          detail::registered_promise<dist_object<T>&>(id_)->incref(1),
           std::tuple<dist_object<T>&>(*this),
           backend::master
         );
@@ -114,20 +114,19 @@ namespace upcxx {
       
       that.id_ = digest{~0ull, ~0ull}; // the tombstone id value
       
-      promise<dist_object<T>&> *pro = new promise<dist_object<T>&>;
-      
-      pro->fulfill_result(*this);
+      auto *pro = new detail::future_header_promise<dist_object<T>&>;
+      detail::promise_fulfill_result(pro, *this);
       
       void *pro_void = static_cast<void*>(pro);
       std::swap(pro_void, detail::registry[id_]);
       
-      delete static_cast<promise<dist_object<T>&>*>(pro_void);
+      static_cast<detail::future_header_promise<dist_object<T>&>*>(pro_void)->dropref();
     }
     
     ~dist_object() {
       if(id_ != digest{~0ull, ~0ull}) {
         auto it = detail::registry.find(id_);
-        delete static_cast<promise<dist_object<T>&>*>(it->second);
+        static_cast<detail::future_header_promise<dist_object<T>&>*>(it->second)->dropref();
         detail::registry.erase(it);
       }
     }

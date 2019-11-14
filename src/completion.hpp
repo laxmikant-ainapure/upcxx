@@ -50,7 +50,7 @@ namespace upcxx {
   struct promise_cx {
     using event_t = Event;
     using deserialized_cx = promise_cx<Event,T...>;
-    promise<T...> &pro_;
+    detail::promise_shref<T...> pro_;
   };
 
   // Synchronous completion via best-effort buffering
@@ -205,7 +205,7 @@ namespace upcxx {
     struct support_as_promise {
       template<typename ...T>
       static constexpr completions<promise_cx<Event, T...>> as_promise(promise<T...> &pro) {
-        return {promise_cx<Event, T...>{pro}};
+        return {promise_cx<Event, T...>{detail::promise_as_shref(pro)}};
       }
     };
 
@@ -294,96 +294,106 @@ namespace upcxx {
     
     template<typename Event, progress_level level, typename ...T>
     struct cx_state<future_cx<Event,level>, std::tuple<T...>> {
-      promise<T...> pro_;
-      
-      cx_state(future_cx<Event,level>) {}
+      future_header_promise<T...> *pro_; // holds ref
 
+      cx_state(future_cx<Event,level>):
+        pro_(new future_header_promise<T...>) {
+      }
+
+      detail::promise_future_t<T...> get_future() const {
+        return detail::promise_get_future(pro_);
+      }
+      
       lpc_dormant<T...>* to_lpc_dormant(lpc_dormant<T...> *tail) && {
         return detail::make_lpc_dormant_quiesced_promise<T...>(
-          upcxx::current_persona(), progress_level::user,
-          std::move(pro_),
-          tail
+          upcxx::current_persona(), progress_level::user, /*move ref*/pro_, tail
         );
       }
       
       void operator()(T ...vals) {
-        backend::fulfill_during<level>(std::move(pro_), std::tuple<T...>(static_cast<T&&>(vals)...));
+        backend::fulfill_during<level>(
+          /*move ref*/pro_, std::tuple<T...>(static_cast<T&&>(vals)...)
+        );
       }
     };
 
     // promise and events have matching (non-empty) types
     template<typename Event, typename ...T>
     struct cx_state<promise_cx<Event,T...>, std::tuple<T...>> {
-      promise<T...> &pro_;
+      future_header_promise<T...> *pro_; // holds ref
 
       cx_state(promise_cx<Event,T...> &&cx):
-        pro_(cx.pro_) {
-        pro_.require_anonymous(1);
+        pro_(cx.pro_.steal_header()) {
+        detail::promise_require_anonymous(pro_, 1);
       }
 
       lpc_dormant<T...>* to_lpc_dormant(lpc_dormant<T...> *tail) && {
-        promise<T...> *pro = &pro_;
+        future_header_promise<T...> *pro = /*move ref*/pro_;
         return detail::make_lpc_dormant(
           upcxx::current_persona(), progress_level::user,
-          [=](T &&...results) {
-            backend::fulfill_during<progress_level::user>(*pro, std::tuple<T...>(static_cast<T&&>(results)...));
+          [/*move ref*/pro](T &&...results) {
+            backend::fulfill_during<progress_level::user>(
+              /*move ref*/pro, std::tuple<T...>(static_cast<T&&>(results)...)
+            );
           },
           tail
         );
       }
       
       void operator()(T ...vals) {
-        backend::fulfill_during<progress_level::user>(pro_, std::tuple<T...>(static_cast<T&&>(vals)...));
+        backend::fulfill_during<progress_level::user>(
+          /*move ref*/pro_, std::tuple<T...>(static_cast<T&&>(vals)...)
+        );
       }
     };
     // event is empty
     template<typename Event, typename ...T>
     struct cx_state<promise_cx<Event,T...>, std::tuple<>> {
-      promise<T...> &pro_;
+      future_header_promise<T...> *pro_; // holds ref
 
       cx_state(promise_cx<Event,T...> &&cx):
-        pro_(cx.pro_) {
-        pro_.require_anonymous(1);
+        pro_(cx.pro_.steal_header()) {
+        detail::promise_require_anonymous(pro_, 1);
       }
       
       lpc_dormant<>* to_lpc_dormant(lpc_dormant<> *tail) && {
-        promise<T...> *pro = &pro_;
+        future_header_promise<T...> *pro = /*move ref*/pro_;
         return detail::make_lpc_dormant(
           upcxx::current_persona(), progress_level::user,
-          [=]() {
-            backend::fulfill_during<progress_level::user>(*pro, 1);
+          [/*move ref*/pro]() {
+            backend::fulfill_during<progress_level::user>(/*move ref*/pro, 1);
           },
           tail
         );
       }
       
       void operator()() {
-        backend::fulfill_during<progress_level::user>(pro_, 1);
+        backend::fulfill_during<progress_level::user>(/*move ref*/pro_, 1);
       }
     };
     // promise and event are empty
     template<typename Event>
     struct cx_state<promise_cx<Event>, std::tuple<>> {
-      promise<> &pro_;
+      future_header_promise<> *pro_; // holds ref
 
       cx_state(promise_cx<Event> &&cx):
-        pro_(cx.pro_) {
-        pro_.require_anonymous(1);
+        pro_(cx.pro_.steal_header()) {
+        detail::promise_require_anonymous(pro_, 1);
       }
 
       lpc_dormant<>* to_lpc_dormant(lpc_dormant<> *tail) && {
-        promise<> *pro = &pro_;
+        future_header_promise<> *pro = /*move ref*/pro_;
         return detail::make_lpc_dormant<>(
           upcxx::current_persona(), progress_level::user,
-          [=]() {
-            backend::fulfill_during<progress_level::user>(*pro, 1);
+          [/*move ref*/pro]() {
+            backend::fulfill_during<progress_level::user>(/*move ref*/pro, 1);
           },
           tail
         );
       }
       
       void operator()() {
-        backend::fulfill_during<progress_level::user>(pro_, 1);
+        backend::fulfill_during<progress_level::user>(/*move ref*/pro_, 1);
       }
     };
     
@@ -818,7 +828,7 @@ namespace upcxx {
       using return_t = std::tuple<
           future_from_tuple_t<
             // kind for promise-built future
-            detail::future_kind_shref<detail::future_header_ops_result>,
+            detail::future_kind_shref<detail::future_header_ops_promise>,
             typename EventValues::template tuple_t<CxH_event>
           >,
           TailReturn_tuplees...
@@ -831,7 +841,7 @@ namespace upcxx {
       completions_returner_head(CxState &s, Tail &&tail):
         ans_{
           std::tuple_cat(
-            std::make_tuple(s.head().state_.pro_.get_future()),
+            std::make_tuple(s.head().state_.get_future()),
             tail()
           )
         } {
@@ -850,7 +860,7 @@ namespace upcxx {
       using return_t = std::tuple<
           future_from_tuple_t<
             // kind for promise-built future
-            detail::future_kind_shref<detail::future_header_ops_result>,
+            detail::future_kind_shref<detail::future_header_ops_promise>,
             typename EventValues::template tuple_t<CxH_event>
           >,
           TailReturn_not_tuple
@@ -861,12 +871,12 @@ namespace upcxx {
       
       template<typename CxState, typename Tail>
       completions_returner_head(CxState &s, Tail &&tail):
-        ans_{
+        ans_(
           std::make_tuple(
-            s.head().state_.pro_.get_future(),
+            s.head().state_.get_future(),
             tail()
           )
-        } {
+        ) {
       }
     };
 
@@ -880,7 +890,7 @@ namespace upcxx {
       
       using return_t = future_from_tuple_t<
           // kind for promise-built future
-          detail::future_kind_shref<detail::future_header_ops_result>,
+          detail::future_kind_shref<detail::future_header_ops_promise>,
           typename EventValues::template tuple_t<CxH_event>
         >;
       
@@ -889,9 +899,9 @@ namespace upcxx {
       
       template<typename CxState, typename Tail>
       completions_returner_head(CxState &s, Tail&&):
-        ans_{
-          s.head().state_.pro_.get_future()
-        } {
+        ans_(
+          s.head().state_.get_future()
+        ) {
       }
     };
     

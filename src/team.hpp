@@ -7,22 +7,22 @@
 namespace upcxx {
   namespace detail {
     template<typename T>
-    promise<T>* registered_promise(digest id, int initial_anon) {
+    future_header_promise<T>* registered_promise(digest id, int initial_anon) {
       UPCXX_ASSERT(backend::master.active_with_caller());
       
-      promise<T> *pro;
+      future_header_promise<T> *pro;
       
       // We use dist_master_registry to map from `dist_id<T>` to
       // `promise<dist_object<T>&>*`
       auto it_and_inserted = registry.insert({id, nullptr});
       
       if(it_and_inserted.second) {
-        pro = new promise<T>;
-        pro->require_anonymous(initial_anon);
+        pro = new future_header_promise<T>;
+        detail::promise_require_anonymous(pro, initial_anon);
         it_and_inserted.first->second = static_cast<void*>(pro);
       }
       else
-        pro = static_cast<promise<T>*>(it_and_inserted.first->second);
+        pro = static_cast<future_header_promise<T>*>(it_and_inserted.first->second);
       
       return pro;
     }

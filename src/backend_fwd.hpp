@@ -136,23 +136,14 @@ namespace backend {
   
   template<progress_level level, typename ...T>
   void fulfill_during(
-      promise<T...> &pro, std::tuple<T...> vals,
+      detail::future_header_promise<T...> *pro, // takes ref
+      std::tuple<T...> vals,
       persona &active_per = current_persona()
     );
   template<progress_level level, typename ...T>
   void fulfill_during(
-      promise<T...> &pro, std::intptr_t anon,
-      persona &active_per = current_persona()
-    );
-  
-  template<progress_level level, typename ...T>
-  void fulfill_during(
-      promise<T...> &&pro, std::tuple<T...> vals,
-      persona &active_per = current_persona()
-    );
-  template<progress_level level, typename ...T>
-  void fulfill_during(
-      promise<T...> &&pro, std::intptr_t anon,
+      detail::future_header_promise<T...> *pro, // takes ref
+      std::intptr_t anon,
       persona &active_per = current_persona()
     );
   
