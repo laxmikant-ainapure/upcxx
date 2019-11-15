@@ -389,6 +389,10 @@ namespace upcxx {
         UPCXX_ASSERT(hdr->status_ == status_results_yes);
         hdr->enter_ready(hdr);
       }
+
+      bool results_constructible() const {
+        return this->base_header.status_ == status_results_no;
+      }
       
       template<typename ...U>
       void construct_results(U &&...values) {
@@ -478,6 +482,10 @@ namespace upcxx {
         this->base_header.enter_ready(&this->base_header);
       }
       
+      bool results_constructible() const {
+        return true;
+      }
+
       void construct_results() {}
       void construct_results(std::tuple<>) {}
       void reconstruct_results(std::tuple<>) {}

@@ -88,7 +88,7 @@ namespace upcxx {
     template<typename ...T>
     void promise_fulfill_result(future_header_promise<T...> *hdr, std::tuple<T...> &&values) {
       UPCXX_ASSERT(
-        !hdr->base_header_result.results_constructed(),
+        hdr->base_header_result.results_constructible(),
         "Attempted to call `fulfill_result` multiple times on the same promise."
       );
       hdr->base_header_result.construct_results(std::move(values));
@@ -99,14 +99,16 @@ namespace upcxx {
     void promise_require_anonymous(future_header_promise<T...> *hdr, std::intptr_t n) {
       UPCXX_ASSERT(hdr->pro_meta.countdown > 0,
         "Called `require_anonymous()` on a ready promise.");
-      UPCXX_ASSERT(hdr->pro_meta.countdown + n > 0,
-        "Calling `require_anonymous("<<n<<")` would put this promise in a ready or negative state.");
+      UPCXX_ASSERT(n >= 0,
+        "Calling `require_anonymous()` with a negative value ("<<n<<") is undefined behavior.");
       
       hdr->pro_meta.countdown += n;
     }
 
     template<typename ...T>
     void promise_fulfill_anonymous(future_header_promise<T...> *hdr, std::intptr_t n) {
+      UPCXX_ASSERT(n >= 0,
+        "Calling `fulfill_anonymous()` with a negative value ("<<n<<") is undefined behavior.");
       hdr->fulfill(n);
     }
 
