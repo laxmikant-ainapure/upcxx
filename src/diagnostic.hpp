@@ -39,7 +39,7 @@ namespace upcxx {
 #define UPCXX_ASSERT_ALWAYS(...) UPCXX_ASSERT_DISPATCH(__VA_ARGS__, UPCXX_ASSERT_2, UPCXX_ASSERT_1, _DUMMY)(__VA_ARGS__)
 
 // In debug mode this will abort. In non-debug this is a nop.
-#define UPCXX_INVOKE_UB() ::upcxx::assert_failed(__FILE__, __LINE__)
+#define UPCXX_INVOKE_UB() UPCXX_ASSERT(false)
 
 namespace upcxx {
   // ostream-like class which will print to standard error with as
