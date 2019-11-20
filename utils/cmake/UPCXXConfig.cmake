@@ -1,8 +1,8 @@
 #[=======================================================================[.rst:
-FindUPCXX
+UPCXXConfig
 -------
 
-Find a UPC++ implementation.
+Configuration for UPC++.
 
 UPC++ is a C++ library that supports Partitioned Global Address Space
 (PGAS) programming, and is designed to interoperate smoothly and
@@ -101,17 +101,17 @@ if( UPCXX_META_EXECUTABLE )
       if( UPCXX_INCLUDE )
         string( REGEX REPLACE "^-I" "" option ${option} )
         list( APPEND UPCXX_INCLUDE_DIRS ${option})
-      endif()
-      string(REGEX MATCH "^-D" UPCXX_DEFINE ${option})
-      if( UPCXX_DEFINE )
-        string( REGEX REPLACE "^-D" "" option ${option} )
-        list( APPEND UPCXX_DEFINITIONS ${option})
       else()
-        list( APPEND UPCXX_OPTIONS ${option})
+        string(REGEX MATCH "^-D" UPCXX_DEFINE ${option})
+        if( UPCXX_DEFINE )
+          string( REGEX REPLACE "^-D" "" option ${option} )
+          list( APPEND UPCXX_DEFINITIONS ${option})
+        else()
+          list( APPEND UPCXX_OPTIONS ${option})
+        endif()
       endif()
     endforeach()
   endif()
-
   if(UPCXX_LDFLAGS)
     string(REGEX REPLACE "[ ]+" ";" UPCXX_LDFLAGS ${UPCXX_LDFLAGS})
     foreach( option ${UPCXX_LDFLAGS} )
@@ -172,7 +172,7 @@ mark_as_advanced( UPCXX_FOUND UPCXX_META_EXECUTABLE UPCXX_INCLUDE_DIRS
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args( UPCXX
   REQUIRED_VARS UPCXX_META_EXECUTABLE UPCXX_LIBRARIES UPCXX_INCLUDE_DIRS
-                UPCXX_DEFINITIONS UPCXX_OPTIONS UPCXX_LINK_OPTIONS 
+                UPCXX_DEFINITIONS UPCXX_LINK_OPTIONS
                 UPCXX_COMPATIBLE_COMPILER
   VERSION_VAR UPCXX_VERSION_STRING
   HANDLE_COMPONENTS)
@@ -182,13 +182,15 @@ message(STATUS "UPC++ requires the c++${UPCXX_CXX_STANDARD} standard.")
 
 # Export a UPCXX::upcxx target for modern cmake projects
 if( UPCXX_FOUND AND NOT TARGET UPCXX::upcxx )
+  message(STATUS "${UPCXX_DEFINITIONS}" )
+  message(STATUS "${UPCXX_OPTIONS}" )
   add_library( UPCXX::upcxx INTERFACE IMPORTED )
   set_target_properties( UPCXX::upcxx PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES "${UPCXX_INCLUDE_DIRS}"
-    INTERFACE_LINK_LIBRARIES      "${UPCXX_LIBRARIES}" 
-    INTERFACE_LINK_OPTIONS      "${UPCXX_LINK_OPTIONS}" 
-    INTERFACE_COMPILE_DEFINITIONS "${UPCXX_DEFINITIONS}" 
-    INTERFACE_COMPILE_OPTIONS "${UPCXX_OPTIONS}" 
+    INTERFACE_LINK_LIBRARIES      "${UPCXX_LIBRARIES}"
+    INTERFACE_LINK_OPTIONS        "${UPCXX_LINK_OPTIONS}"
+    INTERFACE_COMPILE_DEFINITIONS "${UPCXX_DEFINITIONS}"
+    INTERFACE_COMPILE_OPTIONS     "${UPCXX_OPTIONS}"
     INTERFACE_COMPILE_FEATURES    "cxx_std_${UPCXX_CXX_STANDARD}"
     )
   set(UPCXX_LIBRARIES UPCXX::upcxx)
