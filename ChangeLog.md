@@ -15,6 +15,7 @@ Notable bug fixes:
 
 * issue #247: unused-local-typedef warning for some compilers
 * issue #271: Use of `-pthread` in `example/prog-guide/Makefile` breaks PGI
+* issue #282: Improve installed CMake package files
 
 Breaking changes:
 
