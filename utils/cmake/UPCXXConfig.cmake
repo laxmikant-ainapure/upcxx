@@ -21,8 +21,8 @@ cmake_minimum_required( VERSION 3.11 ) # Require CMake 3.11+
 # Set up some auxillary vars if hints have been set
 
 
-if( UPCXX_INSTALL )
-  find_program( UPCXX_META_EXECUTABLE upcxx-meta HINTS ${UPCXX_INSTALL}/bin NO_DEFAULT_PATH )
+if(DEFINED ENV{UPCXX_INSTALL} )
+  find_program( UPCXX_META_EXECUTABLE upcxx-meta HINTS "$ENV{UPCXX_INSTALL}/bin" NO_DEFAULT_PATH )
 else()
   find_program( UPCXX_META_EXECUTABLE upcxx-meta )
 endif()
