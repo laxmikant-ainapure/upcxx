@@ -59,7 +59,10 @@ if( UPCXX_META_EXECUTABLE )
 
   #get absolute path, resolving symbolic links, of CMAKE_CXX_COMPILER
   get_filename_component(ABS_CMAKE_CXX_PATH ${CMAKE_CXX_COMPILER} REALPATH /)
-  message(STATUS "${ABS_UPCXX_CXX_PATH} vs ${ABS_CMAKE_CXX_PATH}")
+  if (DEFINED ENV{UPCXX_VERBOSE} )
+    message(STATUS "UPCXX_CXX_COMPILER=${ABS_UPCXX_CXX_PATH}")
+    message(STATUS "CMAKE_CXX_COMPILER=${ABS_CMAKE_CXX_PATH}")
+  endif()
 
   set( UPCXX_COMPATIBLE_COMPILER FALSE)
   if("${ABS_UPCXX_CXX_PATH}" STREQUAL "${ABS_CMAKE_CXX_PATH}")
@@ -182,8 +185,13 @@ message(STATUS "UPC++ requires the c++${UPCXX_CXX_STANDARD} standard.")
 
 # Export a UPCXX::upcxx target for modern cmake projects
 if( UPCXX_FOUND AND NOT TARGET UPCXX::upcxx )
-  message(STATUS "${UPCXX_DEFINITIONS}" )
-  message(STATUS "${UPCXX_OPTIONS}" )
+  if (DEFINED ENV{UPCXX_VERBOSE} )
+    message(STATUS "UPCXX_INCLUDE_DIRS: ${UPCXX_INCLUDE_DIRS}" )
+    message(STATUS "UPCXX_DEFINITIONS:  ${UPCXX_DEFINITIONS}" )
+    message(STATUS "UPCXX_OPTIONS:      ${UPCXX_OPTIONS}" )
+    message(STATUS "UPCXX_LINK_OPTIONS: ${UPCXX_LINK_OPTIONS}" )
+    message(STATUS "UPCXX_LIBRARIES:    ${UPCXX_LIBRARIES}" )
+  endif()
   add_library( UPCXX::upcxx INTERFACE IMPORTED )
   set_target_properties( UPCXX::upcxx PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES "${UPCXX_INCLUDE_DIRS}"
