@@ -146,17 +146,19 @@ if( UPCXX_META_EXECUTABLE )
   unset( UPCXX_OPTIMIZATION )
 endif()
 
-foreach( dir ${UPCXX_UPCXX_INCLUDE_DIRS} )
-  if( EXISTS ${dir}/upcxx/upcxx.h )
+foreach( dir ${UPCXX_INCLUDE_DIRS} )
+  if( EXISTS ${dir}/upcxx/upcxx.hpp )
     set( version_pattern 
-      "^#define[\t ]+UPCXX_VERSION[\t ]+([0-9]+)$"
+      "#[\t ]*define[\t ]+UPCXX_VERSION[\t ]+([0-9]+)"
       )
-    file( STRINGS ${dir}/upcxx/upcxx.h upcxx_version
+    #message(STATUS "checking ${dir}/upcxx/upcxx.hpp for ${version_pattern}" )
+    file( STRINGS ${dir}/upcxx/upcxx.hpp upcxx_version
       REGEX ${version_pattern} )
+    #message(STATUS "upcxx_version ${upcxx_version}" )
 
-    foreach( match ${upcxx_version} )
-      set(UPCXX_VERSION_STRING ${CMAKE_MATCH_2})
-    endforeach()
+    if( ${upcxx_version} MATCHES ${version_pattern} )
+      set(UPCXX_VERSION_STRING ${CMAKE_MATCH_1})
+    endif()
 
     unset( upcxx_version )
     unset( version_pattern )
