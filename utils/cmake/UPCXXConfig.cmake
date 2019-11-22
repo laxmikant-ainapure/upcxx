@@ -17,7 +17,7 @@ or in the bin sub-directory located inside the path pointed by the
 #]=======================================================================]
 
 
-cmake_minimum_required( VERSION 3.11 ) # Require CMake 3.11+
+cmake_minimum_required( VERSION 3.6 )
 
 option(UPCXX_VERBOSE "Verbose UPC++ detection" OFF)
 function(UPCXX_VERB MESSAGE)
@@ -162,6 +162,7 @@ if( UPCXX_META_EXECUTABLE )
     foreach( option ${UPCXX_CXXFLAGS} )
       string(REGEX MATCH "^-std=" tmp_option ${option})
       if( tmp_option )
+        set( UPCXX_CXX_STD_FLAG ${option} )
         string( REGEX REPLACE "^-std=.+\\+\\+" "" UPCXX_CXX_STANDARD ${option} )
       endif()
     endforeach()
@@ -219,19 +220,26 @@ message(STATUS "UPCXX_CODEMODE=$ENV{UPCXX_CODEMODE}")
 
 # Export a UPCXX::upcxx target for modern cmake projects
 if( UPCXX_FOUND AND NOT TARGET UPCXX::upcxx )
-  UPCXX_VERB( "UPCXX_INCLUDE_DIRS: ${UPCXX_INCLUDE_DIRS}" )
-  UPCXX_VERB( "UPCXX_DEFINITIONS:  ${UPCXX_DEFINITIONS}" )
-  UPCXX_VERB( "UPCXX_OPTIONS:      ${UPCXX_OPTIONS}" )
-  UPCXX_VERB( "UPCXX_LINK_OPTIONS: ${UPCXX_LINK_OPTIONS}" )
-  UPCXX_VERB( "UPCXX_LIBRARIES:    ${UPCXX_LIBRARIES}" )
   add_library( UPCXX::upcxx INTERFACE IMPORTED )
+  if (CMAKE_VERSION VERSION_GREATER 3.8.0)
+    set_property(TARGET UPCXX::upcxx PROPERTY
+      INTERFACE_COMPILE_FEATURES  "cxx_std_${UPCXX_CXX_STANDARD}"
+    )
+  elseif(DEFINED UPCXX_CXX_STD_FLAG)
+    UPCXX_VERB("UPCXX_CXX_STD_FLAG=${UPCXX_CXX_STD_FLAG}")
+    list( APPEND UPCXX_OPTIONS ${UPCXX_CXX_STD_FLAG})
+  endif()
   set_target_properties( UPCXX::upcxx PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES "${UPCXX_INCLUDE_DIRS}"
     INTERFACE_LINK_LIBRARIES      "${UPCXX_LIBRARIES}"
     INTERFACE_LINK_OPTIONS        "${UPCXX_LINK_OPTIONS}"
     INTERFACE_COMPILE_DEFINITIONS "${UPCXX_DEFINITIONS}"
     INTERFACE_COMPILE_OPTIONS     "${UPCXX_OPTIONS}"
-    INTERFACE_COMPILE_FEATURES    "cxx_std_${UPCXX_CXX_STANDARD}"
     )
   set(UPCXX_LIBRARIES UPCXX::upcxx)
+  UPCXX_VERB( "UPCXX_INCLUDE_DIRS: ${UPCXX_INCLUDE_DIRS}" )
+  UPCXX_VERB( "UPCXX_DEFINITIONS:  ${UPCXX_DEFINITIONS}" )
+  UPCXX_VERB( "UPCXX_OPTIONS:      ${UPCXX_OPTIONS}" )
+  UPCXX_VERB( "UPCXX_LINK_OPTIONS: ${UPCXX_LINK_OPTIONS}" )
+  UPCXX_VERB( "UPCXX_LIBRARIES:    ${UPCXX_LIBRARIES}" )
 endif()

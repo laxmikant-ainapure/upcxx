@@ -1,6 +1,6 @@
 # Simple test driver for UPCXX CMake package
 
-cmake_minimum_required (VERSION 3.11)
+cmake_minimum_required (VERSION 3.6)
 project (upcxx_test)
 
 if(DEFINED ENV{UPCXX_INSTALL})
