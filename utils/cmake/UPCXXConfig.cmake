@@ -203,6 +203,28 @@ if(UPCXX_VERSION_STRING)
   message( STATUS "UPCXX VERSION: " ${UPCXX_VERSION_STRING} )
 endif()
 
+# CMake bug #15826: CMake's ill-advised deduplication mis-feature breaks certain types
+# of compiler arguments, see: https://gitlab.kitware.com/cmake/cmake/issues/15826
+# Here we workaround the problem as best we can to prevent compile failures
+function(UPCXX_FIX_FRAGILE_OPTS var)
+  set(fragile_option_pat ";(-+param);([^;]+);")
+  set(temp ";${${var}};")
+  while (temp MATCHES "${fragile_option_pat}") 
+    # should NOT need a loop here, but regex replace is buggy, at least in cmake 3.6
+    if (CMAKE_VERSION VERSION_LESS 3.12.0)
+      # no known workaround, must strip these options
+      string(REGEX REPLACE "${fragile_option_pat}" ";" temp "${temp}")
+    else()
+      # use the SHELL: prefix introduced in cmake 3.12
+      string(REGEX REPLACE "${fragile_option_pat}" ";SHELL:\\1 \\2;" temp "${temp}")
+    endif()
+  endwhile()
+  list(FILTER temp EXCLUDE REGEX "^$") # strip surrounding empties
+  set("${var}" "${temp}" PARENT_SCOPE)
+endfunction()
+UPCXX_FIX_FRAGILE_OPTS(UPCXX_OPTIONS)
+UPCXX_FIX_FRAGILE_OPTS(UPCXX_LINK_OPTIONS)
+
 # Determine if we've found UPCXX
 mark_as_advanced( UPCXX_FOUND UPCXX_META_EXECUTABLE UPCXX_INCLUDE_DIRS
                   UPCXX_LIBRARIES UPCXX_DEFINITIONS UPCXX_CXX_STANDARD
@@ -225,7 +247,7 @@ message(STATUS "UPCXX_CODEMODE=$ENV{UPCXX_CODEMODE}")
 if( UPCXX_FOUND AND NOT TARGET UPCXX::upcxx )
   add_library( UPCXX::upcxx INTERFACE IMPORTED )
   # Handle various CMake version dependencies
-  if (CMAKE_VERSION VERSION_GREATER 3.8.0)
+  if (NOT CMAKE_VERSION VERSION_LESS 3.8.0)
     set_property(TARGET UPCXX::upcxx PROPERTY
       INTERFACE_COMPILE_FEATURES  "cxx_std_${UPCXX_CXX_STANDARD}"
     )
@@ -233,12 +255,12 @@ if( UPCXX_FOUND AND NOT TARGET UPCXX::upcxx )
     UPCXX_VERB("UPCXX_CXX_STD_FLAG=${UPCXX_CXX_STD_FLAG}")
     list( APPEND UPCXX_OPTIONS ${UPCXX_CXX_STD_FLAG})
   endif()
-  if (CMAKE_VERSION VERSION_GREATER 3.13.0)
+  if (CMAKE_VERSION VERSION_LESS 3.13.0)
+    list( APPEND UPCXX_OPTIONS "$<LINK_ONLY:${UPCXX_LINK_OPTIONS}>")
+  else()
     set_property(TARGET UPCXX::upcxx PROPERTY
       INTERFACE_LINK_OPTIONS        "${UPCXX_LINK_OPTIONS}"
     )
-  else()
-    list( APPEND UPCXX_OPTIONS "$<LINK_ONLY:${UPCXX_LINK_OPTIONS}>")
   endif()
   set_target_properties( UPCXX::upcxx PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES "${UPCXX_INCLUDE_DIRS}"
