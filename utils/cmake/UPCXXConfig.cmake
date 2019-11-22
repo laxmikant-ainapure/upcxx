@@ -18,9 +18,16 @@ or in the bin sub-directory located inside the path pointed by the
 
 
 cmake_minimum_required( VERSION 3.11 ) # Require CMake 3.11+
+
+option(UPCXX_VERBOSE "Verbose UPC++ detection" OFF)
+function(UPCXX_VERB MESSAGE)
+  if (UPCXX_VERBOSE OR DEFINED ENV{UPCXX_VERBOSE} )
+    message(STATUS "${MESSAGE}")
+  endif()
+endfunction()
+
+
 # Set up some auxillary vars if hints have been set
-
-
 if(DEFINED ENV{UPCXX_INSTALL} )
   find_program( UPCXX_META_EXECUTABLE upcxx-meta HINTS "$ENV{UPCXX_INSTALL}/bin" NO_DEFAULT_PATH )
 else()
@@ -75,10 +82,8 @@ if( UPCXX_META_EXECUTABLE )
 
   #get absolute path, resolving symbolic links, of CMAKE_CXX_COMPILER
   get_filename_component(ABS_CMAKE_CXX_PATH ${CMAKE_CXX_COMPILER} REALPATH /)
-  if (DEFINED ENV{UPCXX_VERBOSE} )
-    message(STATUS "UPCXX_CXX_COMPILER=${ABS_UPCXX_CXX_PATH}")
-    message(STATUS "CMAKE_CXX_COMPILER=${ABS_CMAKE_CXX_PATH}")
-  endif()
+  UPCXX_VERB("UPCXX_CXX_COMPILER=${ABS_UPCXX_CXX_PATH}")
+  UPCXX_VERB("CMAKE_CXX_COMPILER=${ABS_CMAKE_CXX_PATH}")
 
   set( UPCXX_COMPATIBLE_COMPILER FALSE)
   if("${ABS_UPCXX_CXX_PATH}" STREQUAL "${ABS_CMAKE_CXX_PATH}")
@@ -205,13 +210,11 @@ message(STATUS "UPCXX_CODEMODE=$ENV{UPCXX_CODEMODE}")
 
 # Export a UPCXX::upcxx target for modern cmake projects
 if( UPCXX_FOUND AND NOT TARGET UPCXX::upcxx )
-  if (DEFINED ENV{UPCXX_VERBOSE} )
-    message(STATUS "UPCXX_INCLUDE_DIRS: ${UPCXX_INCLUDE_DIRS}" )
-    message(STATUS "UPCXX_DEFINITIONS:  ${UPCXX_DEFINITIONS}" )
-    message(STATUS "UPCXX_OPTIONS:      ${UPCXX_OPTIONS}" )
-    message(STATUS "UPCXX_LINK_OPTIONS: ${UPCXX_LINK_OPTIONS}" )
-    message(STATUS "UPCXX_LIBRARIES:    ${UPCXX_LIBRARIES}" )
-  endif()
+  UPCXX_VERB( "UPCXX_INCLUDE_DIRS: ${UPCXX_INCLUDE_DIRS}" )
+  UPCXX_VERB( "UPCXX_DEFINITIONS:  ${UPCXX_DEFINITIONS}" )
+  UPCXX_VERB( "UPCXX_OPTIONS:      ${UPCXX_OPTIONS}" )
+  UPCXX_VERB( "UPCXX_LINK_OPTIONS: ${UPCXX_LINK_OPTIONS}" )
+  UPCXX_VERB( "UPCXX_LIBRARIES:    ${UPCXX_LIBRARIES}" )
   add_library( UPCXX::upcxx INTERFACE IMPORTED )
   set_target_properties( UPCXX::upcxx PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES "${UPCXX_INCLUDE_DIRS}"
