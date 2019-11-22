@@ -149,8 +149,9 @@ if( UPCXX_META_EXECUTABLE )
     string(REGEX REPLACE "[ ]+" ";" UPCXX_LDFLAGS ${UPCXX_LDFLAGS})
     foreach( option ${UPCXX_LDFLAGS} )
       string(STRIP ${option} option)
-      string(REGEX MATCH "^-O" UPCXX_OPTIMIZATION ${option})
-      if(NOT UPCXX_OPTIMIZATION)
+      if (option MATCHES "^-O" AND CMAKE_BUILD_TYPE)
+        # filter -O options when CMake is handling that
+      else()
         list( APPEND UPCXX_LINK_OPTIONS ${option})
       endif()
     endforeach()
@@ -160,10 +161,13 @@ if( UPCXX_META_EXECUTABLE )
   if(UPCXX_CXXFLAGS)
     string(REGEX REPLACE "[ ]+" ";" UPCXX_CXXFLAGS ${UPCXX_CXXFLAGS})
     foreach( option ${UPCXX_CXXFLAGS} )
-      string(REGEX MATCH "^-std=" tmp_option ${option})
-      if( tmp_option )
+      if( option MATCHES "^-+std=(c|gnu)\\+\\+([0-9]+)" )
         set( UPCXX_CXX_STD_FLAG ${option} )
-        string( REGEX REPLACE "^-std=.+\\+\\+" "" UPCXX_CXX_STANDARD ${option} )
+        set( UPCXX_CXX_STANDARD ${CMAKE_MATCH_2})
+      elseif (option MATCHES "^-O" AND CMAKE_BUILD_TYPE)
+        # filter -O options when CMake is handling that
+      else()
+        list( APPEND UPCXX_OPTIONS ${option})
       endif()
     endforeach()
   endif()
@@ -174,7 +178,6 @@ if( UPCXX_META_EXECUTABLE )
   unset( UPCXX_LDFLAGS )
   unset( UPCXX_INCLUDE )
   unset( UPCXX_DEFINE )
-  unset( UPCXX_OPTIMIZATION )
 endif()
 
 foreach( dir ${UPCXX_INCLUDE_DIRS} )
@@ -221,6 +224,7 @@ message(STATUS "UPCXX_CODEMODE=$ENV{UPCXX_CODEMODE}")
 # Export a UPCXX::upcxx target for modern cmake projects
 if( UPCXX_FOUND AND NOT TARGET UPCXX::upcxx )
   add_library( UPCXX::upcxx INTERFACE IMPORTED )
+  # Handle various CMake version dependencies
   if (CMAKE_VERSION VERSION_GREATER 3.8.0)
     set_property(TARGET UPCXX::upcxx PROPERTY
       INTERFACE_COMPILE_FEATURES  "cxx_std_${UPCXX_CXX_STANDARD}"
@@ -229,12 +233,19 @@ if( UPCXX_FOUND AND NOT TARGET UPCXX::upcxx )
     UPCXX_VERB("UPCXX_CXX_STD_FLAG=${UPCXX_CXX_STD_FLAG}")
     list( APPEND UPCXX_OPTIONS ${UPCXX_CXX_STD_FLAG})
   endif()
+  if (CMAKE_VERSION VERSION_GREATER 3.13.0)
+    set_property(TARGET UPCXX::upcxx PROPERTY
+      INTERFACE_LINK_OPTIONS        "${UPCXX_LINK_OPTIONS}"
+    )
+  else()
+    list( APPEND UPCXX_OPTIONS "$<LINK_ONLY:${UPCXX_LINK_OPTIONS}>")
+  endif()
   set_target_properties( UPCXX::upcxx PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES "${UPCXX_INCLUDE_DIRS}"
     INTERFACE_LINK_LIBRARIES      "${UPCXX_LIBRARIES}"
-    INTERFACE_LINK_OPTIONS        "${UPCXX_LINK_OPTIONS}"
     INTERFACE_COMPILE_DEFINITIONS "${UPCXX_DEFINITIONS}"
-    INTERFACE_COMPILE_OPTIONS     "${UPCXX_OPTIONS}"
+    # ensures that UPCXX_OPTIONS is only added for CXX compilation:
+    INTERFACE_COMPILE_OPTIONS     "$<$<COMPILE_LANGUAGE:CXX>:${UPCXX_OPTIONS}>"
     )
   set(UPCXX_LIBRARIES UPCXX::upcxx)
   UPCXX_VERB( "UPCXX_INCLUDE_DIRS: ${UPCXX_INCLUDE_DIRS}" )
