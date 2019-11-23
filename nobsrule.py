@@ -448,7 +448,7 @@ def lang_cxx11(cxt):
   cxx = yield cxt.cxx()
   _,out,_ = yield version_of(cxx)
 
-  if any(arg.startswith('-std=c++') for arg in cxx):
+  if any(arg.startswith('-std=c++') or arg.startswith('-std=gnu++') for arg in cxx):
     yield []
   elif any(token in out for token in ['(ICC)']):
   #elif any(token in out for token in ['PGI Compilers and Tools','(ICC)']):
