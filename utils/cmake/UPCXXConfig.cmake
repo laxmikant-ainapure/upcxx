@@ -33,6 +33,9 @@ if(DEFINED ENV{UPCXX_INSTALL} )
 else()
   find_program( UPCXX_META_EXECUTABLE upcxx-meta )
 endif()
+if (NOT EXISTS "${UPCXX_META_EXECUTABLE}")
+  message(WARNING "Failed to find UPC++ command interface 'upcxx-meta'. Please set UPCXX_INSTALL=/path/to/upcxx or add /path/to/upcxx/bin to $PATH")
+endif()
 
 
 if( UPCXX_META_EXECUTABLE )
