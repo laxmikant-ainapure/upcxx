@@ -103,7 +103,7 @@ if( UPCXX_META_EXECUTABLE )
   else()
     get_filename_component(UPCXX_CXX_NAME ${ABS_UPCXX_CXX_PATH} NAME)
     get_filename_component(CMAKE_CXX_NAME ${ABS_CMAKE_CXX_PATH} NAME)
-    message(STATUS "${UPCXX_CXX_NAME} vs ${CMAKE_CXX_NAME}")
+    UPCXX_VERB("compiler names: ${UPCXX_CXX_NAME} vs ${CMAKE_CXX_NAME}")
     if("${UPCXX_CXX_NAME}" STREQUAL "${CMAKE_CXX_NAME}")
       #compare the versions
       execute_process( COMMAND ${UPCXX_CXX_COMPILER}  --version OUTPUT_VARIABLE UPCXX_CXX_COMPILER_VERSION)
@@ -118,8 +118,7 @@ if( UPCXX_META_EXECUTABLE )
   endif()
 
   if( NOT UPCXX_COMPATIBLE_COMPILER )
-    message(WARNING "UPCXX CXX compiler provided by upcxx-meta (${UPCXX_CXX_COMPILER} -- ${ABS_UPCXX_CXX_PATH}) is different from CMAKE_CXX_COMPILER (${CMAKE_CXX_COMPILER} -- ${ABS_CMAKE_CXX_PATH})")
-    message(WARNING "UPCXX cannot be used.")
+    message(WARNING "Compiler compatibility check failed!\nUPCXX compiler provided by upcxx-meta CXX:\n    ${UPCXX_CXX_COMPILER} ->\n    ${ABS_UPCXX_CXX_PATH}\nis different from CMAKE_CXX_COMPILER:\n    ${CMAKE_CXX_COMPILER} ->\n    ${ABS_CMAKE_CXX_PATH}\n\nPlease either pass cmake: -DCMAKE_CXX_COMPILER=${UPCXX_CXX_COMPILER}\nor re-install UPC++ with: CXX=${CMAKE_CXX_COMPILER}\n")
   endif()
 
   unset(ABS_UPCXX_CXX_PATH)
