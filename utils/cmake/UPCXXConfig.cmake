@@ -209,7 +209,7 @@ endif()
 # of compiler arguments, see: https://gitlab.kitware.com/cmake/cmake/issues/15826
 # Here we workaround the problem as best we can to prevent compile failures
 function(UPCXX_FIX_FRAGILE_OPTS var)
-  set(fragile_option_pat ";(-+param);([^;]+);")
+  set(fragile_option_pat ";(-+param|-+Xcompiler);([^;]+);")
   set(temp ";${${var}};")
   while (temp MATCHES "${fragile_option_pat}") 
     # should NOT need a loop here, but regex replace is buggy, at least in cmake 3.6
