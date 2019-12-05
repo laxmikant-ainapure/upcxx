@@ -262,6 +262,7 @@ if( UPCXX_FOUND AND NOT TARGET UPCXX::upcxx )
      # For 3.12, must also undo SHELL: which is not correctly handled by INTERFACE_LINK_LIBRARIES
      string(REGEX REPLACE "SHELL:" "" UPCXX_LINK_OPTIONS_cleaned "${UPCXX_LINK_OPTIONS}")
      set(UPCXX_LIBRARIES "${UPCXX_LINK_OPTIONS_cleaned} ${UPCXX_LIBRARIES}")
+     string(STRIP "${UPCXX_LIBRARIES}" UPCXX_LIBRARIES)
      unset(UPCXX_LINK_OPTIONS_cleaned)
   endif()
   set_target_properties( UPCXX::upcxx PROPERTIES
