@@ -163,15 +163,24 @@ if( UPCXX_META_EXECUTABLE )
   if(UPCXX_CXXFLAGS)
     string(REGEX REPLACE "[ ]+" ";" UPCXX_CXXFLAGS ${UPCXX_CXXFLAGS})
     foreach( option ${UPCXX_CXXFLAGS} )
-      if( option MATCHES "^-+std=(c|gnu)\\+\\+([0-9]+)" )
+      if( option MATCHES "^-+std=(c|gnu)\\+\\+([0-9a-z]+)" )
         set( UPCXX_CXX_STD_FLAG ${option} )
         set( UPCXX_CXX_STANDARD ${CMAKE_MATCH_2})
+        # Compilers use 'provisional' standard arguments for unratified specs,
+        # But CMake uses the final ratified name for compiler features 
+        string(REGEX REPLACE "[01]x$" "11" UPCXX_CXX_STANDARD "${UPCXX_CXX_STANDARD}")
+        string(REGEX REPLACE "1y$" "14" UPCXX_CXX_STANDARD "${UPCXX_CXX_STANDARD}")
+        string(REGEX REPLACE "1z$" "17" UPCXX_CXX_STANDARD "${UPCXX_CXX_STANDARD}")
+        string(REGEX REPLACE "2a$" "20" UPCXX_CXX_STANDARD "${UPCXX_CXX_STANDARD}")
       elseif (option MATCHES "^-O" AND CMAKE_BUILD_TYPE)
         # filter -O options when CMake is handling that
       else()
         list( APPEND UPCXX_OPTIONS ${option})
       endif()
     endforeach()
+  endif()
+  if(NOT UPCXX_CXX_STANDARD)
+    set(UPCXX_CXX_STANDARD "11") # default base version
   endif()
 
   unset( UPCXX_CXXFLAGS )
@@ -240,7 +249,7 @@ find_package_handle_standard_args( UPCXX
   VERSION_VAR UPCXX_VERSION_STRING
   HANDLE_COMPONENTS)
 
-message(STATUS "UPC++ requires the c++${UPCXX_CXX_STANDARD} standard.")
+message(STATUS "This UPC++ install requires the c++${UPCXX_CXX_STANDARD} standard.")
 message(STATUS "UPCXX_NETWORK=${UPCXX_NETWORK}")
 message(STATUS "UPCXX_THREADMODE=$ENV{UPCXX_THREADMODE}")
 message(STATUS "UPCXX_CODEMODE=$ENV{UPCXX_CODEMODE}")
@@ -249,7 +258,11 @@ message(STATUS "UPCXX_CODEMODE=$ENV{UPCXX_CODEMODE}")
 if( UPCXX_FOUND AND NOT TARGET UPCXX::upcxx )
   add_library( UPCXX::upcxx INTERFACE IMPORTED )
   # Handle various CMake version dependencies
-  if (NOT CMAKE_VERSION VERSION_LESS 3.8.0)
+  # CMake older than 3.8 lacks cxx_std_* features
+  # CMake 3.8..3.11 max is cxx_std_17
+  if (  (NOT CMAKE_VERSION VERSION_LESS 3.8.0 AND NOT UPCXX_CXX_STANDARD GREATER "17") 
+     OR (NOT CMAKE_VERSION VERSION_LESS 3.12.0 AND NOT UPCXX_CXX_STANDARD GREATER "20") 
+     )
     set_property(TARGET UPCXX::upcxx PROPERTY
       INTERFACE_COMPILE_FEATURES  "cxx_std_${UPCXX_CXX_STANDARD}"
     )
