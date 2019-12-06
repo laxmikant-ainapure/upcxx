@@ -35,15 +35,17 @@ std::string test_name(const char *file) {
 #ifdef UPCXX_BACKEND
   template<typename=void>
   void print_test_header_(const char *file) {
-      if(0 == upcxx::rank_me()) {
+      if(!upcxx::initialized() || 0 == upcxx::rank_me()) {
           std::cout << KLBLUE << "Test: " << test_name(file) << KNORM << std::endl;
+      }
+      if(upcxx::initialized() && 0 == upcxx::rank_me()) {
           std::cout << KLBLUE << "Ranks: " << upcxx::rank_n() << KNORM << std::endl;
       }
   }
 
   template<typename=void>
   void print_test_success(bool success=true) {
-      if(upcxx::backend::init_count > 0) {
+      if(upcxx::initialized()) {
           // include a barrier to ensure all other threads have finished working.
           // flush stdout to prevent any garbling of output
           upcxx::barrier();
