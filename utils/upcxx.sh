@@ -13,8 +13,16 @@ function verbose {
 }
 
 function set_upcxx_var {
-  local var=UPCXX_`echo "$1" | awk '{ print toupper($0) }'`
-  local val=`echo "$2" | awk '{ print tolower($0) }'`
+  local var="UPCXX_$1"
+  local val="$2"
+  if [[ ${BASH_VERSINFO[0]} -ge 4 ]] ; then 
+    # use case modification operators when avail, for efficiency
+    var="${var^^}"
+    val="${val,,}"
+  else # legacy bash (eg macOS), fork additional processes
+    var=`echo "$var" | awk '{ print toupper($0) }'`
+    val=`echo "$val" | awk '{ print tolower($0) }'`
+  fi
   # per-var processing
   case $var in
     UPCXX_CODEMODE)
@@ -56,15 +64,16 @@ for ((i = 1 ; i <= $# ; i++)); do
   arg="${@:i:1}"
   case $arg in 
     +(-)network=*|+(-)threadmode=*|+(-)codemode=*)
-      var=`echo "$arg" | cut -d= -f1 | awk -F- '{print $NF}'`
-      val=`echo "$arg" | cut -d= -f2-`
+      var="${arg%%=*}"
+      var="${var##+(-)}"
+      val="${arg#*=}"
       eval set_upcxx_var "$var" "$val"
       # swallow current arg
       set -- "${@:1:i-1}" "${@:i+1}"
       i=$((i-1))
     ;;
     +(-)network|+(-)threadmode|+(-)codemode)
-      var=`echo "$arg" | awk -F- '{print $NF}'`
+      var="${arg##+(-)}"
       val="${@:i+1:1}"
       eval set_upcxx_var "$var" "$val"
       # swallow current and next arg
@@ -72,7 +81,7 @@ for ((i = 1 ; i <= $# ; i++)); do
       i=$((i-1))
     ;;
     -Wc,*) # -Wc,anything : anything is passed-thru uninterpreted
-      val=`echo "$arg" | cut -d, -f2-`
+      val="${arg#*,}"
       set -- "${@:1:i-1}" "$val" "${@:i+1}"
     ;;
     -E|-c|-S) dolink='' ;;
