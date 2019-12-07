@@ -404,10 +404,10 @@ def cxx(cxt):
       )
     )
   
-  # If the cross-config script set it, use it.
-  # Otherwise honor the CXX env-variable.
+  # User-provided CXX env-variable has highest priority.
+  # Otherwise if the cross-config script set it, use it.
   # Otherwise use intelligent defaults.
-  yield ans_cross or ans_user or path_expand(ans_default)
+  yield ans_user or ans_cross or path_expand(ans_default)
 
 @rule(cli='cc')
 @coroutine
@@ -436,10 +436,10 @@ def cc(cxt):
       )
     )
   
-  # If the cross-config script set it, use it.
-  # Otherwise honor the CC env-variable.
+  # User-provided CC env-variable has highest priority.
+  # Otherwise, if the cross-config script set it, use it.
   # Otherwise use intelligent defaults.
-  yield ans_cross or ans_user or path_expand(ans_default)
+  yield ans_user or ans_cross or path_expand(ans_default)
 
 def is_pgi(cmd):
   _,out,_ = version_of(cmd)
