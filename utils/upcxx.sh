@@ -33,7 +33,7 @@ function set_upcxx_var {
 if ! test -x "$UPCXX_META" ; then
   error UPCXX_META not found
 fi
-prefix="`dirname $UPCXX_META`/.."
+prefix="${UPCXX_META%/*/*}" # strip the last two components in the path
 if ! test -d "$prefix" ; then
   error install prefix $prefix not found
 fi
