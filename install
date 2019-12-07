@@ -199,7 +199,7 @@ par)
   ;;
 esac
 
-${install_to}/upcxx.\${UPCXX_CODEMODE}.\${UPCXX_BACKEND}.\${UPCXX_NETWORK}/bin/upcxx-meta \$*
+exec ${install_to}/upcxx.\${UPCXX_CODEMODE}.\${UPCXX_BACKEND}.\${UPCXX_NETWORK}/bin/upcxx-meta \$*
 EOF
   chmod 755 "${install_to}/bin/upcxx-meta"
   cat <<EOF >| "${install_to}/bin/upcxx"
