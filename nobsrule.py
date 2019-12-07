@@ -365,6 +365,18 @@ def gasnet_install_to(cxt):
 ## Compiler toolcahin etc.
 ########################################################################
 
+# given a command list, return the same list with first argument $PATH-expanded into an absolute path
+# if a $PATH search fails, the input is returned unchanged
+def path_expand(cmd):
+  #sys.stderr.write('path_expand  : '+' '.join(cmd)+'\n')
+  exe = cmd[0]
+  _,exe,_ = output_of(['/bin/bash', '-c', 'type -p ' + exe])
+  exe = exe.strip()
+  if exe: # empty means search failed
+    cmd[0] = exe
+  #sys.stderr.write('path_expand => '+' '.join(cmd)+'\n')
+  return cmd
+
 @rule(cli='cxx')
 @coroutine
 def cxx(cxt):
@@ -373,6 +385,8 @@ def cxx(cxt):
   """
   _, cross_env = yield cxt.gasnet_config()
   ans_cross = shplit(cross_env.get('CXX',''))
+  if ans_cross:
+    ans_cross = path_expand(ans_cross)
   
   ans_default = []
   if env('CRAYPE_DIR', None):
@@ -393,7 +407,7 @@ def cxx(cxt):
   # If the cross-config script set it, use it.
   # Otherwise honor the CXX env-variable.
   # Otherwise use intelligent defaults.
-  yield ans_cross or ans_user or ans_default
+  yield ans_cross or ans_user or path_expand(ans_default)
 
 @rule(cli='cc')
 @coroutine
@@ -403,6 +417,8 @@ def cc(cxt):
   """
   _, cross_env = yield cxt.gasnet_config()
   ans_cross = shplit(cross_env.get('CC',''))
+  if ans_cross:
+    ans_cross = path_expand(ans_cross)
   
   ans_default = []
   if env('CRAYPE_DIR', None):
@@ -423,7 +439,7 @@ def cc(cxt):
   # If the cross-config script set it, use it.
   # Otherwise honor the CC env-variable.
   # Otherwise use intelligent defaults.
-  yield ans_cross or ans_user or ans_default
+  yield ans_cross or ans_user or path_expand(ans_default)
 
 def is_pgi(cmd):
   _,out,_ = version_of(cmd)
