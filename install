@@ -77,12 +77,12 @@ if [[ "$single" -eq 1 && -r "$GASNET/gasnet_config.h" ]] ; then
   # single + GASNET=builddir (may or may not be a srcdir as well)
   gex_builddir=1
   # Convert relative path of build directory to absolute if necessary
-  if ! expr "$GASNET" : / >/dev/null; then
+  if ! expr "$GASNET" : ^/ >/dev/null; then
     export GASNET=$(cd "$GASNET" && pwd -P)
   fi
 elif [ -r "$GASNET/gasnet_config.h.in" ]; then
   # Convert relative path of souce directory to absolute if necessary
-  if ! expr "$GASNET" : / >/dev/null; then
+  if ! expr "$GASNET" : ^/ >/dev/null; then
     export GASNET=$(cd "$GASNET" && pwd -P)
   fi
 elif expr "$GASNET" : '.*\.tar\.gz' >/dev/null; then
