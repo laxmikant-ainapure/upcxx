@@ -12,18 +12,18 @@ echovar: force; @echo $(VARNAME)=\"$($(VARNAME))\"
 # To prevent application of pass-through rule upon 'include':
 Makefile $(upcxx_src)/Makefile.rules: ; @# empty rule
 
-# TODO: this is more complicated than necessary
+# TODO: default conduit selection should be at configure time
 install-hook: force
 	@eval $$($(MAKE) --no-print-directory -C bld/gasnet.opt echovar VARNAME=CONDUITS) && \
-	 if expr "x$(CROSS)" : xcray-aries- >/dev/null; then \
+	 if [[ -n "$$GASNET_CONDUIT" ]]; then                \
+	   conduit_default="$$GASNET_CONDUIT";               \
+	 elif expr "x$(CROSS)" : xcray-aries- >/dev/null; then \
 	   conduit_default='aries';                          \
 	 else                                                \
 	   conduit_default='smp';                            \
 	 fi &&                                               \
 	 cd $(upcxx_src) &&                                  \
 	 . utils/install-common.sh &&                        \
-	 conduits_pipes="$${CONDUITS// /|}"                  \
-	 conduits_commas="$${CONDUITS// /, }"                \
 	 install_to="$(prefix)" install_common
 
 install: force

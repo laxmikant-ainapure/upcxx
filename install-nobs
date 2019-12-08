@@ -118,10 +118,7 @@ else
   
   foreach_codemode
   
-  conduits=$(nobs gasnet_configured_conduits)
-  conduits_pipes="${conduits//$'\n'/|}"
-  conduits_commas="${conduits//$'\n'/, }"
-  
+  CONDUITS=$(nobs gasnet_configured_conduits)
   conduit_default=$(GASNET_CONDUIT='' nobs gasnet_conduit)
   
   . utils/install-common.sh

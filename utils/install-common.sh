@@ -1,4 +1,8 @@
 function install_common {
+  CONDUITS=$(echo $CONDUITS) # newlines become spaces
+  conduits_pipes="${CONDUITS// /|}"
+  conduits_commas="${CONDUITS// /, }"
+
   mkdir -p "${install_to}/bin"
   cat <<EOF >| "${install_to}/bin/upcxx-meta"
 #!/bin/bash
