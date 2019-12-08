@@ -31,8 +31,7 @@
 # such that multiple build dirs can be used per (clean) source dir.  However,
 # that is not implemented yet.
 #
-# At the moment numerous GNU Make extensions are used, and it is unclear if
-# use of automake or cmake can eliminate them all.
+# Numerous GNU Make extensions are used.
 ##
 
 # From configure:
@@ -49,6 +48,13 @@ GASNET_CONDUIT ?= smp
 # Derived
 builddir = $(top_builddir)/bld
 VPATH = $(top_srcdir)/src $(top_srcdir)/src/future $(top_srcdir)/src/backend/gasnet
+
+# libupcxx configuration space
+ALL_ASSERTS  = 0 1
+ALL_OPTLVLS  = 0 1 2 3
+ALL_DBGSYMS  = 0 1
+ALL_BACKENDS = gasnet_seq gasnet_par
+ALL_CONDUITS = smp udp mpi ibv aries
 
 #
 # Determine the GASNET_CODEMODE
@@ -125,10 +131,8 @@ gasnet-single: do-gasnet-configure
 #
 # On-demand compile of a single instance of libgasnet by full path
 #
-# NOTE: $(all_libgasnet) or the equivalent multiple rules could be generated
-# by automake or cmake instead of using this GNU Make syntax
 all_libgasnet = $(foreach codemode,   opt debug,             \
-                $(foreach conduit,    smp udp mpi ibv aries, \
+                $(foreach conduit,    $(ALL_CONDUITS),       \
                 $(foreach threadmode, seq par,               \
                   gasnet.$(codemode)/$(conduit)-conduit/libgasnet-$(conduit)-$(threadmode).a)))
 $(all_libgasnet): force
@@ -261,13 +265,11 @@ upcxx-single-bld: force
 #
 # On-demand compile of a single instance of libupcxx by fullpath
 #
-# As noted w/ all_gasnet, use of GNU Make's "foreach" is not required
-# if/when using automake or cmake
-all_libupcxx = $(foreach assert,  0 1,                   \
-               $(foreach optlvl,  0 1 2 3,               \
-               $(foreach dbgsym,  0 1,                   \
-               $(foreach backend, gasnet_seq gasnet_par, \
-               $(foreach conduit, smp udp mpi ibv aries, \
+all_libupcxx = $(foreach assert,  $(ALL_ASSERTS),        \
+               $(foreach optlvl,  $(ALL_OPTLVLS),        \
+               $(foreach dbgsym,  $(ALL_DBGSYMS),        \
+               $(foreach backend, $(ALL_BACKENDS),       \
+               $(foreach conduit, $(ALL_CONDUITS),       \
 	         $(call UPCXXDIR,$(assert),$(optlvl),$(dbgsym),$(backend),$(conduit))/libupcxx.a)))))
 $(all_libupcxx): force
 	 tmp=`echo $@ | tr . /`; \
@@ -295,7 +297,7 @@ do-upcxx-all: force
 	@eval `$(MAKE) --no-print-directory -C gasnet.$(GASNET_CODEMODE) echovar VARNAME=CONDUITS`; \
 	 targets='';                                                           \
 	 for conduit in $$CONDUITS; do                                         \
-	   for backend in gasnet_seq gasnet_par; do                            \
+	   for backend in $(ALL_BACKENDS); do                                  \
 	     targets="$$targets $(call UPCXXDIR,$(ASSERT),$(OPTLVL),$(DBGSYM),$$backend,$$conduit)/libupcxx.a";\
 	   done;                                                               \
 	 done;                                                                 \
@@ -339,7 +341,7 @@ do-upcxx-install-one: force
 do-upcxx-install-all: force
 	@eval `$(MAKE) --no-print-directory -C gasnet.$(GASNET_CODEMODE) echovar VARNAME=CONDUITS`; \
 	 for conduit in $$CONDUITS; do                                       \
-	   for backend in gasnet_seq gasnet_par; do                          \
+	   for backend in $(ALL_BACKENDS); do                                \
 	     $(MAKE) do-upcxx-install-one GASNET_BUILD=''                    \
 	       DST="$(prefix)/upcxx.$(UPCXX_CODEMODE).$$backend.$$conduit"   \
 	       UPCXX_BACKEND=$$backend GASNET_CONDUIT=$$conduit || exit $$?; \
