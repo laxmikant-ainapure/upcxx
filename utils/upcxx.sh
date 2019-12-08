@@ -39,7 +39,7 @@ function set_upcxx_var {
 }
 
 if ! test -x "$UPCXX_META" ; then
-  error UPCXX_META not found
+  error UPCXX_META=$UPCXX_META not found
 fi
 prefix="${UPCXX_META%/*/*}" # strip the last two components in the path
 if ! test -d "$prefix" ; then
@@ -126,14 +126,13 @@ for var in UPCXX_CODEMODE UPCXX_NETWORK UPCXX_THREADMODE ; do
   eval verbose $var=\$$var
 done
 
+dump=`$UPCXX_META DUMP`
+[[ -z "$dump" ]] && error "failure in UPCXX_META=$UPCXX_META"
+eval $dump
 for var in CC CXX CXXFLAGS CPPFLAGS LDFLAGS LIBS ; do 
-  val=`$UPCXX_META $var`
-  eval $var=\$val
-  verbose "$UPCXX_META $var: $val"
-  if [[ -z "$CC" ]] ; then
-    error "upcxx-meta failed."
-  fi
+  eval verbose "$var: \$$var"
 done
+
 EXTRAFLAGS=""
 if [[ $dohelp ]] ; then
   cat<<EOF
