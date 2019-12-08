@@ -35,7 +35,7 @@ config_cmd="./configure --prefix='${install_to}'"
 [[ "$single" -eq 1 ]] && config_cmd+=' --single'
 eval $config_cmd
 
-# TODO: autoconf or cmake can/should enforce GNU make
+# TODO: configure should enforce GNU make
 GMAKE=${UPCXX_MAKE:-make -j8}
 
 if [ "$single" -eq 1 ]; then

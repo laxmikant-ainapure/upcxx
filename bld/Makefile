@@ -382,3 +382,6 @@ install-single-bld: upcxx-single-bld
 all install clean distclean: force
 	@$(MAKE) gasnet-$@
 	@$(MAKE) upcxx-$@
+
+# TODO: restore parallel builds when/if mangled dependency files is resovled
+.NOTPARALLEL:
