@@ -293,11 +293,13 @@ $(all_libupcxx): force
 do-upcxx-all: force
 	@$(MAKE) do-gasnet-configure
 	@eval `$(MAKE) --no-print-directory -C gasnet.$(GASNET_CODEMODE) echovar VARNAME=CONDUITS`; \
+	 targets='';                                                           \
 	 for conduit in $$CONDUITS; do                                         \
 	   for backend in gasnet_seq gasnet_par; do                            \
-             $(MAKE) upcxx-single UPCXX_BACKEND=$$backend GASNET_CONDUIT=$$conduit || exit $$?; \
+	     targets="$$targets $(call UPCXXDIR,$(ASSERT),$(OPTLVL),$(DBGSYM),$$backend,$$conduit)/libupcxx.a";\
 	   done;                                                               \
-	 done
+	 done;                                                                 \
+	 $(MAKE) $$targets
 do-upcxx-meta: force
 	@meta="$(DST)/bin/upcxx-meta";                                 \
 	 mkdir -p "$(DST)/bin" || exit $$?;                            \
