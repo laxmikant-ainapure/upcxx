@@ -60,7 +60,7 @@ platform_sanity_checks() {
         elif test -n "$CRAY_PRGENVINTEL" && ( test -z "$GCC_VERSION" || expr "$GCC_VERSION" : "^[2345]" > /dev/null || expr "$GCC_VERSION" : "^6.[123]" > /dev/null ) ; then
             echo 'ERROR: UPC++ on Cray XC with PrgEnv-intel must also have the gcc module loaded (version 6.4 or newer). Please do: `module load gcc`'
             exit 1
-        elif test -n "$CRAY_PRGENVCRAY$CRAY_PRGENVINTEL$CRAY_PRGENVCRAY" ; then
+        elif test -n "$CRAY_PRGENVGNU$CRAY_PRGENVINTEL$CRAY_PRGENVCRAY" ; then
             CC=${CC:-cc}
             CXX=${CXX:-CC}
 	    # second condition eliminates build warnings in CI for: GASNET=build_or_inst_dir install -single
