@@ -272,7 +272,7 @@ all_libupcxx = $(foreach assert,  $(ALL_ASSERTS),        \
                $(foreach conduit, $(ALL_CONDUITS),       \
 	         $(call UPCXXDIR,$(assert),$(optlvl),$(dbgsym),$(backend),$(conduit))/libupcxx.a)))))
 $(all_libupcxx): force
-	 tmp=`echo $@ | tr . /`; \
+	@tmp=`echo $@ | tr . /`; \
 	 assert=`expr "$$tmp" : '.*/assert\([0-1]\)/'`; \
 	 optlvl=`expr "$$tmp" : '.*/optlvl\([0-3]\)/'`; \
 	 dbgsym=`expr "$$tmp" : '.*/dbgsym\([0-1]\)/'`; \
