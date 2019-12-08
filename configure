@@ -1,0 +1,322 @@
+#!/bin/bash
+#
+# This file is NOT generated (e.g. don't look for configure.ac).
+#
+# TODO:
+#  + UPCXX_CUDA/nvcc handling
+#  + UPCXX_MPSC_QUEUE_* handling
+#  + verify GNU Make ??
+#  + sanitize/filter GASNET_CONFIGURE_ARGS ??
+
+#
+# Usage
+#
+
+function usage {
+  cat <<'EOF'
+Usage:
+  --prefix=...
+        Specifies the installation directory.
+        The default is '/usr/local/upcxx'.
+
+  --with-cc=...
+  --with-cxx=...
+        Specify the C and C++ compilers to use.
+        Override the values of $CC and $CXX, if any.
+        The (platform dependent) default is usually appropriate.
+  --with-cross=...
+        Specifies the cross-compilation target name.
+        Overrides the value if $CROSS, if any.
+        The (empty) default is appropriate unless cross-compiling.
+
+  --with-gasnet=...
+        Specifies the URL or path of GASNet sources.
+        Overrides the value of $GASNET, if any.
+        The default is normally sufficient.
+  --with-gasnet-configure-args=...
+        Specifies extra arguments for configuration of GASNet sources.
+        Overrides the value of $GASNET_CONFIGURE_ARGS, if any.
+        The (empty) default is normally sufficient.
+
+  --with-python=...
+        Specify the python interpreter to use.
+        Overrides the value of $UPCXX_PYTHON, if any.
+        Default is to search for various interpreters in $PATH.
+  --with-url-cat=...
+        Specify the command used to fetch URLs to stdout.
+        Default is to search for curl or wget.
+
+  -h|--help|--usage
+        Produces this message.
+  -V|--version
+        Report version and copyright.
+
+See INSTALL.md for additional information.
+EOF
+}
+
+function version {
+  header="src/upcxx.hpp"
+  version=$((grep "#define UPCXX_VERSION" src/upcxx.hpp | head -1 | cut -d' ' -f 3 ) 2> /dev/null)
+  githash=$(git describe --always 2> /dev/null)
+  echo "UPC++ version $version $githash"
+  echo "Copyright (c) 2019, The Regents of the University of California,"
+  echo "through Lawrence Berkeley National Laboratory."
+  echo "https://upcxx.lbl.gov"
+  echo ""
+}
+
+#
+# Global variables
+#
+
+# This script's name and location
+self=$(basename $0)
+UPCXX_SRC=$(cd $(dirname $(type -p $0)) && pwd -P)
+
+# Default installation prefix
+PREFIX=/usr/local/upcxx
+
+# Default python interpreter
+UPCXX_PYTHON=python
+
+# Undocumented "--single" mode
+single=0
+
+# Default GASNet source
+# Enable offline installers with an embedded GASNet-EX tarball
+gex_offline=`/bin/ls "$UPCXX_SRC"/src/GASNet-{stable,2???.*}.tar.gz 2> /dev/null | sort -t. -k1,1 -k2,2n -k3n | tail -1`
+if [[ -r "$gex_offline" ]]; then
+  GASNET="$gex_offline"
+else
+  GASNET='https://gasnet-bugs.lbl.gov/nightly/unlisted/GASNet-stable.tar.gz'
+fi
+
+#
+# Error handling
+#
+
+function echo_and_die {
+  echo $* >&2
+  exit 1
+}
+
+function failure_and_die {
+  echo "UPC++ configuration failed. Please report the entire log above to: upcxx@googlegroups.com" >&2
+  exit 1
+}
+
+function missing_value {
+  echo "ERROR: option '$1' is missing its required value." >&2
+  usage >&2
+  exit 1
+}
+
+trap failure_and_die ERR  # errors are fatal
+
+#
+# Argument parsing
+#
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --prefix=*)
+      PREFIX=${1#*=}
+      [[ -n $PREFIX ]] || missing_value $1
+      ;;
+
+    --with-python=*)
+      UPCXX_PYTHON=${1#*=}
+      [[ -n $UPCXX_PYTHON ]] || missing_value $1
+      ;;
+
+    --with-gasnet=*)
+      GASNET=${1#*=}
+      [[ -n $GASNET ]] || missing_value $1
+      ;;
+
+    --with-gasnet-configure-args=*)
+      GASNET_CONFIGURE_ARGS=${1#*=}
+      [[ -n $GASNET_CONFIGURE_ARGS ]] || missing_value $1
+      ;;
+
+    --with-cc=*)
+      export CC=${1#*=}
+      [[ -n $CC ]] || missing_value $1
+      ;;
+
+    --with-cxx=*)
+      export CXX=${1#*=}
+      [[ -n $CXX ]] || missing_value $1
+      ;;
+
+    --with-cross=*)
+      export CROSS=${1#*=}
+      [[ -n $CROSS ]] || missing_value $1
+      ;;
+
+    --with-url-cat=*)
+      export URL_CAT=${1#*=}
+      [[ -n $URL_CAT ]] || missing_value $1
+      ;;
+
+    -h|--help|--usage)
+      echo 'UPC++ configure script.'
+      echo '======================='
+      usage;
+      exit 0;
+      ;;
+
+    -V|--version)
+      version;
+      exit 0;
+      ;;
+
+    --) 
+      if [[ $# -gt 1 ]]; then
+        shift
+        echo_and_die "$self: unused trailing arguments: $*"
+      fi
+      ;;
+
+    # These are to remain undocumented
+    -v|--verbose) set -x ;;
+    --single) single=1 ;;
+
+    *)
+      echo_and_die "$self: unknown argument $1.  Try '$self --help'."
+      ;;
+  esac
+  shift
+done  
+
+#
+# system-checks
+#
+. $UPCXX_SRC/utils/system-checks.sh
+install_to="$PREFIX" sys_info
+platform_sanity_checks
+platform_settings
+export CC
+export CXX
+
+#
+# Create $PREFIX
+#
+mkdir -p "$PREFIX"
+[[ "$PREFIX" != / ]] && PREFIX=$(cd "$PREFIX" && pwd)
+
+#
+# Setup URL_CAT if not set
+#
+if [ -n "$URL_CAT" ] ; then
+  : # keep defn
+elif [ -n "$(type -p curl)" ]; then
+  URL_CAT='curl --retry 5 -LsSf'
+elif [ -n "$(type -p wget)" ]; then
+  URL_CAT='wget --tries=5 -nv -O -'
+fi
+
+#
+# Unpack GASNet (if required) and verify
+#
+
+ORIG_GASNET="$GASNET"
+GASNET_UNPACKED=""
+gex_builddir=0
+if [[ "$single" -eq 1 && -r "$GASNET/gasnet_config.h" ]] ; then
+  # single + GASNET=builddir (may or may not be a srcdir as well)
+  gex_builddir=1
+  # Convert relative path of build directory to absolute if necessary
+  if ! expr "$GASNET" : ^/ >/dev/null; then
+    export GASNET=$(cd "$GASNET" && pwd -P)
+  fi
+elif [ -r "$GASNET/gasnet_config.h.in" ]; then
+  # Convert relative path of souce directory to absolute if necessary
+  if ! expr "$GASNET" : ^/ >/dev/null; then
+    export GASNET=$(cd "$GASNET" && pwd -P)
+  fi
+elif expr "$GASNET" : '.*\.tar\.gz' >/dev/null; then
+  # Unpack tarball into bld/ unless already present
+  gex_dir="$PWD/bld/`basename $GASNET .tar.gz`"
+  gex_tmp=''
+  if [ ! -r "$gex_dir/gasnet_config.h.in" ]; then
+    trap - ERR # suspend error handler for detailed diagnostics
+    mkdir -p bld
+    if expr "$GASNET" : http >/dev/null; then
+      if [ -z "$URL_CAT" ]; then
+        echo_and_die "Do not know how to fetch a URL (did not find wget or curl)"
+      fi
+      gex_tmp="$gex_dir.tar.gz"
+      echo Fetching $GASNET
+      eval "$URL_CAT '$GASNET' >'$gex_tmp'"
+      [[ $? -eq 0 && -r "$gex_tmp" ]] || echo_and_die "Failed to fetch '$GASNET'"
+      GASNET="$gex_tmp"
+    else
+      [ -e "$GASNET" ] || echo_and_die "File '$GASNET' does not exist"
+      [ -r "$GASNET" ] || echo_and_die "Cannot read file '$GASNET'"
+    fi
+    echo Unpacking $GASNET
+    gzip -cd "$GASNET" | ( cd bld && tar xf - )
+    rc1=${PIPESTATUS[0]} rc2=${PIPESTATUS[1]}
+    [ $rc1 -eq 0 ] || echo_and_die "Failed to gunzip '$GASNET' (corrupted or truncated?)"
+    [ $rc2 -eq 0 ] || echo_and_die "Failed to untar '$GASNET' (corrupted or truncated?)"
+    [ -r "$gex_dir/gasnet_config.h.in" ] || echo_and_die "GASNET='$ORIG_GASNET' does not appear to contain GASNet"
+    trap failure_and_die ERR  # restore error handler
+    [ -n "$gex_tmp" ] && rm -f "$gex_tmp"
+    GASNET_UNPACKED=$gex_dir
+    echo
+  fi
+  export GASNET="$gex_dir"
+else
+  echo_and_die "GASNET must point to local tarball file, tarball url, or gasnet source tree."
+fi
+
+if [ "$gex_builddir" -eq 1 ]; then
+  if [ -e "$GASNET/configure" ] ; then
+    gex_header="$GASNET/gasnetex.h"
+  else
+    gex_header=''  # TODO: any non G-1 file to check in a VPATH build directory?
+  fi
+  gex_spec_file="$GASNET/gasnet_config.h"
+else
+  gex_header="$GASNET/gasnetex.h"
+  gex_spec_file="$GASNET/docs/GASNet-EX.txt"
+fi
+
+# verify distinguishing file (if any)
+[[ -z "$gex_header" || -r "$gex_header" ]] || \
+    echo_and_die "GASNET='$ORIG_GASNET' does not contain GASNet-EX (GASNet-1 or GASNet_Tools?)"
+
+# verify minimum version
+HAVE_MAJ=$(grep -o -m1 'EX_SPEC_VERSION_MAJOR.*' "$gex_spec_file" | cut -d' ' -f2-)
+HAVE_MIN=$(grep -o -m1 'EX_SPEC_VERSION_MINOR.*' "$gex_spec_file" | cut -d' ' -f2-)
+WANT_MAJ=$(grep -o -m1 'UPCXX_REQUIRES_GEX_SPEC_VERSION_MAJOR.*' $UPCXX_SRC/src/backend/gasnet/runtime_internal.hpp | cut -d' ' -f2-)
+WANT_MIN=$(grep -o -m1 'UPCXX_REQUIRES_GEX_SPEC_VERSION_MINOR.*' $UPCXX_SRC/src/backend/gasnet/runtime_internal.hpp | cut -d' ' -f2-)
+[[ ($HAVE_MAJ -gt $WANT_MAJ) || (($HAVE_MAJ -eq $WANT_MAJ) && ($HAVE_MIN -ge $WANT_MIN)) ]] || \
+    echo_and_die "GASNET='$ORIG_GASNET' does not contain GASNet-EX implementing specification version $WANT_MAJ.$WANT_MIN or newer"
+
+#
+# Generate bld/Makefile if needed
+#
+mkdir -p bld
+[[ $(pwd -P) = $UPCXX_SRC ]] || echo "include $UPCXX_SRC/bld/Makefile" > "bld/Makefile"
+
+#
+# Generate top-level Makefile
+#
+cat > Makefile <<EOF
+# This file is generated by the UPC++ configure script
+# Modifications to this file may be overwritten
+export prefix        = $PREFIX
+export upcxx_src     = $UPCXX_SRC
+export upcxx_bld     = $PWD
+export CONFIG_CC     = $CC
+export CONFIG_CXX    = $CXX
+export GASNET        = $GASNET
+export CROSS         = $CROSS
+export UPCXX_PYTHON  = $UPCXX_PYTHON
+export GASNET_UNPACKED = $GASNET_UNPACKED
+export GASNET_CONFIGURE_ARGS = $GASNET_CONFIGURE_ARGS
+include \$(upcxx_src)/Makefile.rules
+EOF

@@ -12,11 +12,6 @@ function failure_and_die {
   exit 1
 }
 
-function echo_and_die {
-  echo $* >&2
-  exit 1
-}
-
 if [[ "$1" = "-h" || "$1" = "--help" ]]; then
   usage
   exit 0
@@ -35,133 +30,22 @@ else
   exit 1
 fi
 
-# Enable offline installers with an embedded GASNet-EX tarball
-gex_offline=`/bin/ls "$PWD"/src/GASNet-{stable,2???.*}.tar.gz 2> /dev/null | sort -t. -k1,1 -k2,2n -k3n | tail -1`
-if [ -n "$GASNET" ] ; then
-  : # Keep user's value
-elif [ -r "$gex_offline" ]; then
-  export GASNET="$gex_offline"
-else
-  export GASNET='https://gasnet-bugs.lbl.gov/nightly/unlisted/GASNet-stable.tar.gz'
-fi
-
-trap failure_and_die ERR
-
-# Absify a directory name that may not yet exist
-mkdir -p "$install_to"
-install_to=$(cd "$install_to" && pwd -P)
-
-. utils/system-checks.sh
-sys_info
-platform_sanity_checks
-platform_settings
-export CC
-export CXX
+# Configure
+config_cmd="./configure --prefix='${install_to}'"
+[[ "$single" -eq 1 ]] && config_cmd+=' --single'
+eval $config_cmd
 
 # TODO: autoconf or cmake can/should enforce GNU make
 GMAKE=${UPCXX_MAKE:-make -j8}
 
-# TODO: autoconf or cmake can/should find a usable URL fetcher
-if [ -n "$URL_CAT" ] ; then
-  : # keep denf
-elif [ -n "$(type -p curl)" ]; then
-  URL_CAT='curl --retry 5 -LsSf'
-elif [ -n "$(type -p wget)" ]; then
-  URL_CAT='wget --tries=5 -nv -O -'
-fi
-
-# Fetch and/or unpack GASNet-EX
-ORIG_GASNET="$GASNET"
-gex_builddir=0
-if [[ "$single" -eq 1 && -r "$GASNET/gasnet_config.h" ]] ; then
-  # single + GASNET=builddir (may or may not be a srcdir as well)
-  gex_builddir=1
-  # Convert relative path of build directory to absolute if necessary
-  if ! expr "$GASNET" : ^/ >/dev/null; then
-    export GASNET=$(cd "$GASNET" && pwd -P)
-  fi
-elif [ -r "$GASNET/gasnet_config.h.in" ]; then
-  # Convert relative path of souce directory to absolute if necessary
-  if ! expr "$GASNET" : ^/ >/dev/null; then
-    export GASNET=$(cd "$GASNET" && pwd -P)
-  fi
-elif expr "$GASNET" : '.*\.tar\.gz' >/dev/null; then
-  # Unpack tarball into bld/ unless already present
-  gex_dir="$PWD/bld/`basename $GASNET .tar.gz`"
-  gex_tmp=''
-  if [ ! -r "$gex_dir/gasnet_config.h.in" ]; then
-    trap - ERR # suspend error handler for detailed diagnostics
-    mkdir -p bld
-    if expr "$GASNET" : http >/dev/null; then
-      if [ -z "$URL_CAT" ]; then
-        echo_and_die "Do not know how to fetch a URL (did not find wget or curl)"
-      fi
-      gex_tmp="$gex_dir.tar.gz"
-      eval "$URL_CAT '$GASNET' >'$gex_tmp'"
-      [[ $? -eq 0 && -r "$gex_tmp" ]] || echo_and_die "Failed to fetch '$GASNET'"
-      GASNET="$gex_tmp"
-    else
-      [ -e "$GASNET" ] || echo_and_die "File '$GASNET' does not exist"
-      [ -r "$GASNET" ] || echo_and_die "Cannot read file '$GASNET'"
-    fi
-    gzip -cd "$GASNET" | ( cd bld && tar xf - )
-    rc1=${PIPESTATUS[0]} rc2=${PIPESTATUS[1]}
-    [ $rc1 -eq 0 ] || echo_and_die "Failed to gunzip '$GASNET' (corrupted or truncated?)"
-    [ $rc2 -eq 0 ] || echo_and_die "Failed to untar '$GASNET' (corrupted or truncated?)"
-    [ -r "$gex_dir/gasnet_config.h.in" ] || echo_and_die "GASNET='$ORIG_GASNET' does not appear to contain GASNet"
-    trap failure_and_die ERR  # restore error handler
-    [ -n "$gex_tmp" ] && rm -f "$gex_tmp"
-  fi
-  export GASNET="$gex_dir"
-else
-  echo_and_die "GASNET must point to local tarball file, tarball url, or gasnet source tree."
-fi
-
-if [ "$gex_builddir" -eq 1 ]; then
-  if [ -e "$GASNET/configure" ] ; then
-    gex_header="$GASNET/gasnetex.h"
-  else
-    gex_header=''  # TODO: any non G-1 file to check in a VPATH build directory?
-  fi
-  gex_spec_file="$GASNET/gasnet_config.h"
-else
-  gex_header="$GASNET/gasnetex.h"
-  gex_spec_file="$GASNET/docs/GASNet-EX.txt"
-fi
-
-# verify distinguishing file (if any)
-[[ -z "$gex_header" || -r "$gex_header" ]] || \
-    echo_and_die "GASNET='$ORIG_GASNET' does not contain GASNet-EX (GASNet-1 or GASNet_Tools?)"
-
-# verify minimum version
-HAVE_MAJ=$(grep -o -m1 'EX_SPEC_VERSION_MAJOR.*' "$gex_spec_file" | cut -d' ' -f2-)
-HAVE_MIN=$(grep -o -m1 'EX_SPEC_VERSION_MINOR.*' "$gex_spec_file" | cut -d' ' -f2-)
-WANT_MAJ=$(grep -o -m1 'UPCXX_REQUIRES_GEX_SPEC_VERSION_MAJOR.*' src/backend/gasnet/runtime_internal.hpp | cut -d' ' -f2-)
-WANT_MIN=$(grep -o -m1 'UPCXX_REQUIRES_GEX_SPEC_VERSION_MINOR.*' src/backend/gasnet/runtime_internal.hpp | cut -d' ' -f2-)
-[[ ($HAVE_MAJ -gt $WANT_MAJ) || (($HAVE_MAJ -eq $WANT_MAJ) && ($HAVE_MIN -ge $WANT_MIN)) ]] || \
-    echo_and_die "GASNET='$ORIG_GASNET' does not contain GASNet-EX implementing specification version $WANT_MAJ.$WANT_MIN or newer"
-
-MAKE_CMD="$GMAKE -C bld upcxx_src='$PWD' prefix='${install_to}' GASNET='$GASNET'"
-
 if [ "$single" -eq 1 ]; then
-  [ $gex_builddir == 1 ] && target=install-single-bld || target=install-single-src
-  eval $MAKE_CMD $target
+  eval $($GMAKE --no-print-directory echovar VARNAME=GASNET)
+  [ -r "$GASNET/gasnet_config.h" ] && target=install-single-bld || target=install-single-src
+  eval $GMAKE $target
   if [ $? -ne 0 ]; then failure_and_die; fi
 else
-  eval $MAKE_CMD install
+  eval $GMAKE install
   if [ $? -ne 0 ]; then failure_and_die; fi
-  
-  eval $($GMAKE --no-print-directory -C bld/gasnet.opt echovar VARNAME=CONDUITS)
-  conduits_pipes="${CONDUITS// /|}"
-  conduits_commas="${CONDUITS// /, }"
-  if expr "x$CROSS" : xcray-aries- >/dev/null; then
-    conduit_default='aries'
-  else
-    conduit_default='smp'
-  fi
-  
-  . utils/install-common.sh
-  install_common
 fi
 
 echo "UPC++ successfully installed"

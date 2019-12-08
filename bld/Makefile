@@ -35,12 +35,9 @@
 # use of automake or cmake can eliminate them all.
 ##
 
-# Examples: autoconf/automake would replace:
+# From configure:
 top_srcdir   = $(upcxx_src)
-top_builddir = $(upcxx_src)
-prefix       = NO DEFAULT
-GASNET      ?= NO DEFAULT
-MAKE        := make
+top_builddir = $(upcxx_bld)
 
 #defaults:
 ASSERT ?= 1
@@ -114,6 +111,7 @@ do-gasnet-configure: force
 	   cmd="$$cmd --enable-pthreads --disable-segment-everything";                \
 	   cmd="$$cmd --enable-$(GASNET_CONDUIT) $(configure_$(GASNET_CODEMODE))";    \
 	   echo "$$cmd";                                                              \
+	   export CC='$(CONFIG_CC)' CXX='$(CONFIG_CXX)';                              \
 	   mkdir -p "$$dir" && cd "$$dir" && eval "$$cmd";                            \
 	 fi
 
@@ -378,7 +376,7 @@ install-single-bld: upcxx-single-bld
 .PHONY: do-install-single install-single-src install-single-bld
 
 ##
-## Top-level targets for testing
+## Top-level targets
 ##
 
 all install clean distclean: force
