@@ -191,10 +191,11 @@ LIBUPCXX_CXX_COMPILE := $(GASNET_CXX) $(GASNET_CXXCPPFLAGS) $(GASNET_CXXFLAGS) $
 
 #
 # Dependency tracking:
+# Use of a temporary file fixes race between include and partial generation
 #
 
-%.d: %.c   ; $(LIBUPCXX_C_COMPILE)   -E -M -MT '$*.o $@' $< -o $@
-%.d: %.cpp ; $(LIBUPCXX_CXX_COMPILE) -E -M -MT '$*.o $@' $< -o $@
+%.d: %.c   ; tmp=tmp$$$$; $(LIBUPCXX_C_COMPILE)   -E -M -MT '$*.o $@' $< -o $$tmp && mv $$tmp $@
+%.d: %.cpp ; tmp=tmp$$$$; $(LIBUPCXX_CXX_COMPILE) -E -M -MT '$*.o $@' $< -o $$tmp && mv $$tmp $@
 include $(wildcard *.d)
 
 # Pattern rules with dependency file as extra prerequisite
@@ -382,6 +383,3 @@ install-single-bld: upcxx-single-bld
 all install clean distclean: force
 	@$(MAKE) gasnet-$@
 	@$(MAKE) upcxx-$@
-
-# TODO: restore parallel builds when/if mangled dependency files is resovled
-.NOTPARALLEL:
