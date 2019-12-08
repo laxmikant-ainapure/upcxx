@@ -47,7 +47,6 @@ GASNET_CONDUIT ?= smp
 
 # Derived
 builddir = $(top_builddir)/bld
-VPATH = $(top_srcdir)/src $(top_srcdir)/src/future $(top_srcdir)/src/backend/gasnet
 
 # libupcxx configuration space
 ALL_ASSERTS  = 0 1
@@ -240,6 +239,7 @@ libupcxx_sources = \
 #
 # Build upcxx library from its sources, with dependency tracking
 #
+VPATH = $(addprefix $(top_srcdir)/src/, $(sort $(dir $(libupcxx_sources))))
 libupcxx_objs = $(addsuffix .o,$(notdir $(basename $(libupcxx_sources))))
 libupcxx.a: $(libupcxx_objs); ar rcs $@ $?
 do-libupcxx: force
