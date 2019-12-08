@@ -126,9 +126,8 @@ for var in UPCXX_CODEMODE UPCXX_NETWORK UPCXX_THREADMODE ; do
   eval verbose $var=\$$var
 done
 
-dump=`$UPCXX_META DUMP`
-[[ -z "$dump" ]] && error "failure in UPCXX_META=$UPCXX_META"
-eval $dump
+source $UPCXX_META SET
+[[ -z "$CC" ]] && error "failure in UPCXX_META=$UPCXX_META"
 for var in CC CXX CXXFLAGS CPPFLAGS LDFLAGS LIBS ; do 
   eval verbose "$var: \$$var"
 done
