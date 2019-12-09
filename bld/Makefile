@@ -83,6 +83,18 @@ endif
 #
 UPCXXDIR = upcxx.assert$(1).optlvl$(2).dbgsym$(3).$(4).$(5)
 
+#
+# Extraction of GASNet Makefile variables (ones not present in .mak fragment)
+# GASNET_VAR_VAL:  VAR="VAL"
+# GASNET_VAR:      VAL
+#
+GASNET_VAR_CMD = $(MAKE) --no-print-directory -C $(builddir)/gasnet.$(GASNET_CODEMODE) echovar VARNAME=$(1)
+GASNET_VAR_VAL = $(shell $(call GASNET_VAR_CMD,$(1)))
+GASNET_VAR     = $(shell $(call GASNET_VAR_CMD,$(1)) | cut -d\" -f2)
+
+# Some useful GASNet variables
+GASNET_CONDUITS   := $(call GASNET_VAR,CONDUITS)
+
 
 dummy:
 	@echo NO DEFAULT TARGET
@@ -294,9 +306,8 @@ $(all_libupcxx): force
 
 do-upcxx-all: force
 	@$(MAKE) do-gasnet-configure
-	@eval `$(MAKE) --no-print-directory -C gasnet.$(GASNET_CODEMODE) echovar VARNAME=CONDUITS`; \
-	 targets='';                                                           \
-	 for conduit in $$CONDUITS; do                                         \
+	@targets='';                                                           \
+	 for conduit in $(GASNET_CONDUITS); do                                 \
 	   for backend in $(ALL_BACKENDS); do                                  \
 	     targets="$$targets $(call UPCXXDIR,$(ASSERT),$(OPTLVL),$(DBGSYM),$$backend,$$conduit)/libupcxx.a";\
 	   done;                                                               \
@@ -339,8 +350,7 @@ do-upcxx-install-one: force
 	 done
 	@$(MAKE) do-upcxx-meta
 do-upcxx-install-all: force
-	@eval `$(MAKE) --no-print-directory -C gasnet.$(GASNET_CODEMODE) echovar VARNAME=CONDUITS`; \
-	 for conduit in $$CONDUITS; do                                       \
+	@for conduit in $(GASNET_CONDUITS); do                               \
 	   for backend in $(ALL_BACKENDS); do                                \
 	     $(MAKE) do-upcxx-install-one GASNET_BUILD=''                    \
 	       DST="$(prefix)/upcxx.$(UPCXX_CODEMODE).$$backend.$$conduit"   \
