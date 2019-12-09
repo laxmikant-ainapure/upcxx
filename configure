@@ -3,7 +3,6 @@
 # This file is NOT generated (e.g. don't look for configure.ac).
 #
 # TODO:
-#  + -std=c++14 for Intel compiler
 #  + UPCXX_CUDA/nvcc handling
 #  + UPCXX_MPSC_QUEUE_* handling
 #  + verify GNU Make ??

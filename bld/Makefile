@@ -94,6 +94,8 @@ GASNET_VAR     = $(shell $(call GASNET_VAR_CMD,$(1)) | cut -d\" -f2)
 
 # Some useful GASNet variables
 GASNET_CONDUITS   := $(call GASNET_VAR,CONDUITS)
+GASNET_CC_FAMILY  := $(call GASNET_VAR,CC_FAMILY)
+GASNET_CXX_FAMILY := $(call GASNET_VAR,CXX_FAMILY)
 
 
 dummy:
@@ -193,10 +195,16 @@ endif
 # TODO: magic missing here for DUPCXX_MPSC_QUEUE_*
 LIBUPCXX_DEFINES += -DUPCXX_MPSC_QUEUE_ATOMIC=1
 
-ifeq ($(findstring -std=c++,$(GASNET_CXX)),)
-LIBUPCXX_STDCXX := -std=c++11
-else
+
+# NOTE: sufficiently old GNU Make lacks 'else if*'
+ifneq ($(findstring -std=c++,$(GASNET_CXX)),)
 LIBUPCXX_STDCXX :=
+else
+ifeq ($(GASNET_CXX_FAMILY),Intel)
+LIBUPCXX_STDCXX := -std=c++14
+else
+LIBUPCXX_STDCXX := -std=c++11
+endif
 endif
 
 LIBUPCXX_C_COMPILE   := $(GASNET_CC)  $(GASNET_CPPFLAGS)    $(GASNET_CFLAGS) \
