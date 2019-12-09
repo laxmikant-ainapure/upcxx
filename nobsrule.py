@@ -1833,6 +1833,8 @@ def install_libset(install_path, name, libset, meta_extra={}):
       metas[k] = flat(metas.get(k), v)
     
     meta_path = join(install_path, 'bin', name+'-meta')
+    # NOTE: the upcxx-meta file format below is rigid due to automated parsing
+    # do NOT add or remove blank lines
     meta_contents = \
 '''#!/bin/sh
 ''' + '\n'.join(
@@ -1841,7 +1843,7 @@ def install_libset(install_path, name, libset, meta_extra={}):
 PPFLAGS="$CPPFLAGS"
 LIBFLAGS="$LIBS"
 
-[ "$1" != "" ] && eval echo '$'"$1"
+[ -n "$1" ] && eval [ -n \\"\$$1\\" ] && eval echo \\"\$$1\\"
 '''
     install_contents(meta_contents, meta_path, 0755)
   
