@@ -143,7 +143,7 @@ if test -n "\$UPCXX_CRAY_CPU_TARGET" && test "\$UPCXX_CRAY_CPU_TARGET" != "\$CRA
   echo " "
 fi 1>&2
 
-PARAMS="CPPFLAGS PPFLAGS CXXFLAGS LIBS LIBFLAGS LDFLAGS CXX CC GASNET_CONDUIT GASNET_INSTALL"
+PARAMS="CPPFLAGS PPFLAGS CXXFLAGS LIBS LIBFLAGS LDFLAGS CXX CC GASNET_CONDUIT GASNET_INSTALL SET DUMP"
 FAIL=true
 for P in \$PARAMS; do
     if [[ "\$1" == "\$P" ]]; then
@@ -199,14 +199,29 @@ par)
   ;;
 esac
 
-${install_to}/upcxx.\${UPCXX_CODEMODE}.\${UPCXX_BACKEND}.\${UPCXX_NETWORK}/bin/upcxx-meta \$*
+meta="${install_to}/upcxx.\${UPCXX_CODEMODE}.\${UPCXX_BACKEND}.\${UPCXX_NETWORK}/bin/upcxx-meta"
+
+if [[ "\$1" == "SET" ]] ; then
+  source "\$meta" ""
+elif [[ "\$1" == "DUMP" ]] ; then
+  # this opens and dumps the variables from the subordinate upcxx-meta
+  # do NOT add any subshells or process forks here, as this branch is motivated by performance
+  i=0
+  while read line; do
+    [ \$((i++)) == 0 ] && continue # omit she-bang
+    [ "\$line" == "" ] && break    # empty line signals end
+    echo "\$line"
+  done < "\$meta"
+else
+  exec "\$meta" \$*
+fi
 EOF
   chmod 755 "${install_to}/bin/upcxx-meta"
   cat <<EOF >| "${install_to}/bin/upcxx"
 #!/bin/bash
 UPCXX_META="${install_to}/bin/upcxx-meta"
 export UPCXX_META
-exec "${install_to}/bin/upcxx.sh" "\$@"
+source "${install_to}/bin/upcxx.sh" "\$@"
 EOF
   chmod 755 "${install_to}/bin/upcxx"
   cp ./utils/upcxx.sh "${install_to}/bin/upcxx.sh"
