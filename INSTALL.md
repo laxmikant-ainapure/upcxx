@@ -74,7 +74,7 @@ The current release is known to work on the following configurations:
 
 * Perl version 5.005 or newer
 
-* GNU Bash (must be installed, user's shell doesn't matter)
+* GNU Bash 3.2 or newer (must be installed, user's shell doesn't matter)
 
 * Make (we recommend GNU make version 3.79 or newer).
 
