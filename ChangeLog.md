@@ -9,7 +9,7 @@ For information on installing UPC++, see: [INSTALL.md](INSTALL.md)
 
 New features/enhancements: (see specification and programmer's guide for full details)
 
-* ...
+* Significantly improve compile latency associated with `upcxx` compiler wrapper script
 
 Notable bug fixes:
 
