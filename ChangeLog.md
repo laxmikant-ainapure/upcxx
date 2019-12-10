@@ -16,6 +16,7 @@ Notable bug fixes:
 * issue #247: unused-local-typedef warning for some compilers
 * issue #271: Use of `-pthread` in `example/prog-guide/Makefile` breaks PGI
 * issue #282: Improve installed CMake package files
+* issue #287: Bogus install warnings on Cray XC regarding CC/CXX
 
 Breaking changes:
 
