@@ -33,9 +33,9 @@ namespace upcxx {
   //////////////////////////////////////////////////////////////////////
   /* detail::promise_shref: Reference counted promise class. Default value
    * is a new promise with 1 outstanding dependency. Has all the members that
-   * `upcxx::promise` does, plus the varoius constructors to support aliasing
-   * copies and assignment. `upcxx::promise` is then a thin veil inheriting from
-   * this but hiding the refcounting functionality. promise_shref *could* be used
+   * `upcxx::promise` does, plus the internal-only accessors to get at the
+   * underlying header thunks. `upcxx::promise` is then a thin veil inheriting from
+   * this but hiding the header accessors. `promise_shref` *could* be used
    * throughout the runtime but actually isn't out of fear that the compiler
    * can't eliminate all the refcounting overhead that we would like it to.
    * So instead, `future_header_promise<T...>*`'s are the usual currency of the
@@ -78,7 +78,7 @@ namespace upcxx {
     // of a upcxx::promise.
     template<typename ...T>
     promise_shref<T...>& promise_as_shref(promise<T...> &pro);
-
+    
     // Do the tricky cast of a promise_meta pointer to its enclosing header.
     template<typename ...T>
     future_header_promise<T...>* promise_header_of(promise_meta *meta) {
@@ -212,10 +212,10 @@ namespace upcxx {
   public:
     promise(std::intptr_t deps=1): detail::promise_shref<T...>(deps) {}
     
-    promise(const promise&) = delete;
+    promise(promise const&) = default;
     promise(promise&&) = default;
-
-    promise& operator=(promise &&) = default;
+    promise& operator=(promise const&) = default;
+    promise& operator=(promise&&) = default;
     
     using detail::promise_shref<T...>::require_anonymous;
     using detail::promise_shref<T...>::fulfill_anonymous;

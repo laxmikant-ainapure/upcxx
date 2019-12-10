@@ -204,7 +204,7 @@ namespace upcxx {
     template<typename Event>
     struct support_as_promise {
       template<typename ...T>
-      static constexpr completions<promise_cx<Event, T...>> as_promise(promise<T...> &pro) {
+      static constexpr completions<promise_cx<Event, T...>> as_promise(promise<T...> pro) {
         return {promise_cx<Event, T...>{detail::promise_as_shref(pro)}};
       }
     };

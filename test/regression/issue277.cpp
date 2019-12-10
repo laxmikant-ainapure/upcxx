@@ -10,11 +10,11 @@ future<> fetch_vals(global_ptr<int> gp, int *dst, int cnt) {
   static 
 #endif
   promise<> p;
-
+  promise<> p1 = p;
   for (int i=0;i<cnt;i++) {
     upcxx::rget(gp+i, dst+i, 1, operation_cx::as_promise(p));
   }
-  return p.finalize();
+  return p1.finalize();
 }
 
 double stack_writer(double v) {
