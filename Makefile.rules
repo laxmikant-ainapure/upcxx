@@ -57,3 +57,4 @@ exe run: force
 .PHONY: force echovar
 .PHONY: install install-hook
 .PHONY: distclean distclean-hook
+.PHONY: exe run
