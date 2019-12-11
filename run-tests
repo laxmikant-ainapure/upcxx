@@ -86,26 +86,13 @@ run_test() {
 
 # Tests that do NOT require thread-safety
 export UPCXX_BACKEND=gasnet_seq
-run_test "atomics.cpp"
-run_test "collectives.cpp"
-run_test "dist_object.cpp"
-#run_test "future.cpp"
-run_test "local_team.cpp"
-run_test "barrier.cpp"
-run_test "rpc_barrier.cpp"
-run_test "rpc_ff_ring.cpp"
-run_test "rput.cpp" 
-run_test "vis.cpp"
-run_test "vis_stress.cpp"
-run_test "uts/uts_ranks.cpp"
+eval $(make echovar VARNAME=testprograms_seq)
+for test in $testprograms_seq; do run_test $test; done
 
 # Tests requiring the thread-safe backend
 export UPCXX_BACKEND=gasnet_par
-#THREADS="$RANKS" run_test "uts/uts_threads.cpp"
-#run_test "lpc_barrier.cpp"
-run_test "rput_thread.cpp"
-run_test "uts/uts_hybrid.cpp"
-run_test "view.cpp"
+eval $(make echovar VARNAME=testprograms_par)
+for test in $testprograms_seq; do run_test $test; done
 
 echo -e "\e[92mAll tests succeded\e[0m"
 
