@@ -314,12 +314,26 @@ $(all_libupcxx): force
 # Helpers to iterate over conduits and backends
 #
 
+# Ugh.  From GNU Make 3.80 NEWS:
+# * The arguments to $(call ...) functions were being stored in $1, $2,
+#   etc. as recursive variables, even though they are fully expanded
+#   before assignment.  This means that escaped dollar signs ($$ etc.)
+#   were not behaving properly.  Now the arguments are stored as simple
+#   variables.  This may mean that if you added extra escaping to your
+#   $(call ...) function arguments you will need to undo it now.
+ifneq ($(firstword $(sort $(MAKE_VERSION) 3.80)), 3.80)
+# older than 3.80
+do_upcxx_all_target = $(call UPCXXDIR,$(ASSERT),$(OPTLVL),$(DBGSYM),$$$$backend,$$$$conduit)
+else
+do_upcxx_all_target = $(call UPCXXDIR,$(ASSERT),$(OPTLVL),$(DBGSYM),$$backend,$$conduit)
+endif
+
 do-upcxx-all: force
 	@$(MAKE) do-gasnet-configure
 	@targets='';                                                           \
 	 for conduit in $(GASNET_CONDUITS); do                                 \
 	   for backend in $(ALL_BACKENDS); do                                  \
-	     targets="$$targets $(call UPCXXDIR,$(ASSERT),$(OPTLVL),$(DBGSYM),$$backend,$$conduit)/libupcxx.a";\
+	     targets="$$targets $(do_upcxx_all_target)/libupcxx.a";\
 	   done;                                                               \
 	 done;                                                                 \
 	 $(MAKE) $$targets
