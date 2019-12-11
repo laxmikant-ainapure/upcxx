@@ -99,9 +99,11 @@ GASNET_VAR_VAL = $(shell $(call GASNET_VAR_CMD,$(1)))
 GASNET_VAR     = $(shell $(call GASNET_VAR_CMD,$(1)) | cut -d\" -f2)
 
 # Some useful GASNet variables
+ifneq ($(wildcard $(builddir)/$(GASNETDIR)),)
 GASNET_CONDUITS   := $(call GASNET_VAR,CONDUITS)
 GASNET_CC_FAMILY  := $(call GASNET_VAR,CC_FAMILY)
 GASNET_CXX_FAMILY := $(call GASNET_VAR,CXX_FAMILY)
+endif
 
 
 dummy:
