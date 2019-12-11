@@ -86,12 +86,15 @@ UPCXXDIR_FN = upcxx.assert$(1).optlvl$(2).dbgsym$(3).$(4).$(5)
 # UPCXXDIR_FN for current values of all params
 UPCXXDIR = $(call UPCXXDIR_FN,$(ASSERT),$(OPTLVL),$(DBGSYM),$(UPCXX_BACKEND),$(GASNET_CONDUIT))
 
+# Similar for GASNet build directory
+GASNETDIR = gasnet.$(GASNET_CODEMODE)
+
 #
 # Extraction of GASNet Makefile variables (ones not present in .mak fragment)
 # GASNET_VAR_VAL:  VAR="VAL"
 # GASNET_VAR:      VAL
 #
-GASNET_VAR_CMD = $(MAKE) --no-print-directory -C $(builddir)/gasnet.$(GASNET_CODEMODE) echovar VARNAME=$(1)
+GASNET_VAR_CMD = $(MAKE) --no-print-directory -C $(builddir)/$(GASNETDIR) echovar VARNAME=$(1)
 GASNET_VAR_VAL = $(shell $(call GASNET_VAR_CMD,$(1)))
 GASNET_VAR     = $(shell $(call GASNET_VAR_CMD,$(1)) | cut -d\" -f2)
 
@@ -120,7 +123,7 @@ force:
 configure_opt=--disable-debug
 configure_debug=--enable-debug
 do-gasnet-configure: force
-	@dir=gasnet.$(GASNET_CODEMODE);                                               \
+	@dir=$(GASNETDIR);                                                            \
 	 if test \! -f "$$dir/gasnet_config.h" ; then                                 \
 	   echo "Configuring $(GASNET_CODEMODE)-mode build of GASNet";                \
 	   if test -n "$(CROSS)"; then                                                \
@@ -142,7 +145,7 @@ do-gasnet-configure: force
 # PARAMS: OPTLVL, DBGSYM, UPCXX_BACKEND, GASNET_CONDUIT, GASNET, CROSS
 #
 gasnet-single: do-gasnet-configure
-	 $(MAKE) -C "gasnet.$(GASNET_CODEMODE)/$(GASNET_CONDUIT)-conduit" $(GASNET_THREADMODE)
+	 $(MAKE) -C "$(GASNETDIR)/$(GASNET_CONDUIT)-conduit" $(GASNET_THREADMODE)
 
 #
 # On-demand compile of a single instance of libgasnet by full path
@@ -282,7 +285,7 @@ do-upcxx-single: force
 	 ln -s "$(top_srcdir)/src" $$dir/include/upcxx &&     \
 	 $(MAKE) do-libupcxx UPCXX_DIR="$(builddir)/$$dir"
 upcxx-single: gasnet-single
-	 $(MAKE) do-upcxx-single UPCXX_FRAGMENTS="$(builddir)/gasnet.$(GASNET_CODEMODE)"
+	 $(MAKE) do-upcxx-single UPCXX_FRAGMENTS="$(builddir)/$(GASNETDIR)"
 upcxx-single-bld: force
 	 $(MAKE) do-upcxx-single UPCXX_FRAGMENTS="$(GASNET)"
 
@@ -355,7 +358,7 @@ do-upcxx-meta: force
 	   if test -n "$(GASNET_BUILD)" ; then                         \
 	     echo "GASNET_BUILD='$(GASNET_BUILD)'";                    \
 	   else                                                        \
-	     echo "GASNET_INSTALL='$(prefix)/gasnet.$(GASNET_CODEMODE)'";\
+	     echo "GASNET_INSTALL='$(prefix)/$(GASNETDIR)'";           \
 	   fi;                                                         \
 	   echo "LDFLAGS='$(GASNET_LDFLAGS)'";                         \
 	   echo "LIBS='-L$(DST)/lib -lupcxx $(GASNET_LIBS)'";          \
@@ -412,7 +415,7 @@ do-install-single: force
 	@cd "$(GASNET_BUILD)/$(GASNET_CONDUIT)-conduit" && \
 	    cp libgasnet-$(GASNET_CONDUIT)-$(GASNET_THREADMODE).a $(prefix)/lib/
 install-single-src: upcxx-single
-	@$(MAKE) do-install-single GASNET_BUILD="$(builddir)/gasnet.$(GASNET_CODEMODE)"
+	@$(MAKE) do-install-single GASNET_BUILD="$(builddir)/$(GASNETDIR)"
 install-single-bld: upcxx-single-bld
 	@$(MAKE) do-install-single GASNET_BUILD="$(GASNET)"
 
