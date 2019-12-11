@@ -12,6 +12,9 @@ EOF
     exit 0
 fi
     
+. sourceme
+test -d .git || rm -rf .nobs
+
 . utils/system-checks.sh
 sys_info
 
@@ -37,20 +40,17 @@ if [ -z "$RANKS" ]; then
 fi
 echo "Running tests on $RANKS ranks"
 
-TMPDIR=$PWD/.testdir_$$
-mkdir $TMPDIR
-cd $TMPDIR
-
 check_result() {
     RESULT=$1
     if test -n "$UPCXX_VERBOSE" ; then
       cat .run-tests.err
     fi
     if test $RESULT -ne 0 || grep "ERROR" .run-tests.err ; then
-        echo -e "\e[91m$2 failed, the trace can be found in $TMPDIR/run-tests.err\e[0m"
+        echo -e "\e[91m$2 failed, the trace can be found in test/run-tests.err\e[0m"
         # force a flush
         cat .run-tests.err > run-tests.err
         rm .run-tests.err
+        rm -rf .nobs
         exit 1
     fi
 }
@@ -62,23 +62,29 @@ export ASSERT=${ASSERT:=1}
 export DBGSYM=${DBGSYM:=1}
 export OPTLEV=${OPTLEV:=0}
 
+# Enable offline installers with an embedded GASNet-EX tarball
+gex_offline=`/bin/ls "$PWD"/src/GASNet-{stable,2???.*}.tar.gz 2> /dev/null | sort -t. -k1,1 -k2,2n -k3n | tail -1`
+if [[ -z "$GASNET" && -r "$gex_offline" ]]; then
+  export GASNET="$gex_offline"
+  echo GASNET=$GASNET
+fi
+
+cd test
+
 echo "Setting up upcxx... (this may take a while)"
 
-[[ -e Makefile || -e bld/Makefile ]] || ../configure --prefix=inst &> .run-tests.err
-check_result $? "Setup (configure)"
-rm -f .run-tests.err
-
-UPCXX_BACKEND=gasnet_seq make exe SRC=../test/hello_upcxx.cpp &> .run-tests.err
-check_result $? "Setup (seq)"
+UPCXX_BACKEND=gasnet_seq nobs exe hello_upcxx.cpp &> .run-tests.err
+check_result $? "Setup"
 rm .run-tests.err
 
-UPCXX_BACKEND=gasnet_par make exe SRC=../test/hello_upcxx.cpp &> .run-tests.err
-check_result $? "Setup (par)"
+UPCXX_BACKEND=gasnet_par nobs exe hello_upcxx.cpp &> .run-tests.err
+check_result $? "Setup"
 rm .run-tests.err
+
 
 run_test() {
     echo "Running test $1"
-    make run SRC="../test/$1"  &> .run-tests.err
+    nobs run "$1" &> .run-tests.err
     check_result $? "Test"
     grep "Test result: " .run-tests.err
     rm .run-tests.err
@@ -110,6 +116,7 @@ run_test "view.cpp"
 echo -e "\e[92mAll tests succeded\e[0m"
 
 cd ..
-rm -rf $TMPDIR
+
+test -d .git || rm -rf .nobs 2>&1 >/dev/null # ignore failures due to races
 
 exit 0
