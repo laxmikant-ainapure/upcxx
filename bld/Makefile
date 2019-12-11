@@ -78,10 +78,13 @@ endif
 
 #
 # Encode upcxx build directory name.  Used via
-#   $(call UPCXXDIR,$(ASSERT),$(OPTLVL),$(DBGSYM),$(UPCXX_BACKEND),$(GASNET_CONDUIT))
+#   $(call UPCXXDIR_FN,$(ASSERT),$(OPTLVL),$(DBGSYM),$(UPCXX_BACKEND),$(GASNET_CONDUIT))
 # or similar.
 #
-UPCXXDIR = upcxx.assert$(1).optlvl$(2).dbgsym$(3).$(4).$(5)
+UPCXXDIR_FN = upcxx.assert$(1).optlvl$(2).dbgsym$(3).$(4).$(5)
+
+# UPCXXDIR_FN for current values of all params
+UPCXXDIR = $(call UPCXXDIR_FN,$(ASSERT),$(OPTLVL),$(DBGSYM),$(UPCXX_BACKEND),$(GASNET_CONDUIT))
 
 #
 # Extraction of GASNet Makefile variables (ones not present in .mak fragment)
@@ -272,7 +275,7 @@ do-libupcxx: force
 # PARAMS: ASSERT, OPTLVL, DBGSYM, UPCXX_BACKEND, GASNET_CONDUIT, GASNET, CROSS
 #
 do-upcxx-single: force
-	@dir=$(call UPCXXDIR,$(ASSERT),$(OPTLVL),$(DBGSYM),$(UPCXX_BACKEND),$(GASNET_CONDUIT)); \
+	@dir=$(UPCXXDIR);                                     \
 	 mkdir -p $$dir/lib && mkdir -p $$dir/include &&      \
 	 rm -f $$dir/include/upcxx &&                         \
 	 ln -s "$(top_srcdir)/src" $$dir/include/upcxx &&     \
@@ -292,7 +295,7 @@ all_libupcxx = $(foreach assert,  $(ALL_ASSERTS),        \
                $(foreach dbgsym,  $(ALL_DBGSYMS),        \
                $(foreach backend, $(ALL_BACKENDS),       \
                $(foreach conduit, $(ALL_CONDUITS),       \
-	         $(call UPCXXDIR,$(assert),$(optlvl),$(dbgsym),$(backend),$(conduit))/libupcxx.a)))))
+	         $(call UPCXXDIR_FN,$(assert),$(optlvl),$(dbgsym),$(backend),$(conduit))/libupcxx.a)))))
 $(all_libupcxx): force
 	@tmp=`echo $@ | tr . /`; \
 	 assert=`expr "$$tmp" : '.*/assert\([0-1]\)/'`; \
@@ -323,9 +326,9 @@ $(all_libupcxx): force
 #   $(call ...) function arguments you will need to undo it now.
 ifneq ($(firstword $(sort $(MAKE_VERSION) 3.80)), 3.80)
 # older than 3.80
-do_upcxx_all_target = $(call UPCXXDIR,$(ASSERT),$(OPTLVL),$(DBGSYM),$$$$backend,$$$$conduit)
+do_upcxx_all_target = $(call UPCXXDIR_FN,$(ASSERT),$(OPTLVL),$(DBGSYM),$$$$backend,$$$$conduit)
 else
-do_upcxx_all_target = $(call UPCXXDIR,$(ASSERT),$(OPTLVL),$(DBGSYM),$$backend,$$conduit)
+do_upcxx_all_target = $(call UPCXXDIR_FN,$(ASSERT),$(OPTLVL),$(DBGSYM),$$backend,$$conduit)
 endif
 
 do-upcxx-all: force
@@ -363,7 +366,7 @@ do-upcxx-meta: force
 	 chmod 755 $$meta
 do-upcxx-install-one: force
 	@mkdir -p "$(DST)/lib" || exit $$?;                               \
-	 src="$(call UPCXXDIR,$(ASSERT),$(OPTLVL),$(DBGSYM),$(UPCXX_BACKEND),$(GASNET_CONDUIT))"; \
+	 src="$(call UPCXXDIR)";                                          \
 	 cp $$src/lib/libupcxx.a "$(DST)/lib/" || exit $$?;               \
 	 for file in `cd $$src && find include/upcxx/ -name '*.hpp'`; do  \
            file=`echo $$file | tr -s /`;                                  \
