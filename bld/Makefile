@@ -269,18 +269,14 @@ libupcxx_sources = \
 
 #
 # Build upcxx library from its sources, with dependency tracking
-# Also populates a bin/ with upcxx-meta and upcxx-run suited use in build tree
+# Also populates a bin/ with upcxx-meta suited use in build tree
 #
 VPATH = $(addprefix $(top_srcdir)/src/, $(sort $(dir $(libupcxx_sources))))
 libupcxx_objs = $(addsuffix .o,$(notdir $(basename $(libupcxx_sources))))
 libupcxx.a: $(libupcxx_objs); ar rcs $@ $?
 do-libupcxx: force
 	@$(MAKE) -C $(UPCXX_DIR)/lib -f "$(builddir)/Makefile" libupcxx.a upcxx_headers.d
-	@$(MAKE) do-upcxx-meta DST=$(UPCXX_DIR) # needed by 'make exe SRC=...'
-	@(echo '#!/bin/bash';                                   \
-	  echo 'export GASNET_PREFIX=$(builddir)/$(GASNETDIR)'; \
-	  echo 'exec $(top_srcdir)/utils/upcxx-run "$$@"';      \
-	 ) > $(UPCXX_DIR)/bin/upcxx-run && chmod +x $(UPCXX_DIR)/bin/upcxx-run
+	@$(MAKE) do-upcxx-meta DST=$(UPCXX_DIR) # needed by 'make (exe|run) SRC=...'
 
 #
 # On-demand compile of a single instance of libupcxx and required libgasnet
@@ -480,6 +476,7 @@ RANKS ?= 4
 
 run: force
 	@$(MAKE) do-exe
-	@eval $(builddir)/$(UPCXXDIR)/bin/upcxx-run -n $(RANKS) $(UPCXX_EXE) $(ARGS)
+	@export GASNET_PREFIX=$(builddir)/$(GASNETDIR); \
+	 eval $(top_srcdir)/utils/upcxx-run -n $(RANKS) $(UPCXX_EXE) $(ARGS)
 
 .PHONY: run
