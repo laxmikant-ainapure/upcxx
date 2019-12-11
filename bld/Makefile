@@ -451,17 +451,35 @@ ABSPATH = $(shell cd $(STARTDIR) && cd $(dir $(1)) && pwd)/$(notdir $(1))
 UPCXX_CSUM = $(firstword $(shell $(UPCXX_CSUMCMD) <<< $(foreach src,$(SRC),$(call ABSPATH,$(src)))))
 UPCXX_EXE  = $(builddir)/$(UPCXXDIR)/exe/$(UPCXX_CSUM).x
 
-# NOTE: only the final $(UPCXX_EXE) may go to stdout
-exe:
+do-exe: force
 	@mkdir -p $(UPCXXDIR)/exe
-	@$(MAKE) $(UPCXXDIR)/libupcxx.a >&2
+	@$(MAKE) $(UPCXXDIR)/libupcxx.a
 	@cd "$(STARTDIR)" || exit $$?;                      \
 	 source $(builddir)/$(UPCXXDIR)/bin/upcxx-meta;     \
 	 eval "$$CXX $$EXTRAFLAGS $$CXXFLAGS $$CPPFLAGS $$LDFLAGS $(SRC) $$LIBS -o $(UPCXX_EXE)"
+
+# NOTE: only the final $(UPCXX_EXE) may go to stdout
+exe: force
+	@$(MAKE) do-exe >&2
 	@echo -n '$(UPCXX_EXE)'
 
 # Clean exe files for current library variant
 ## PARAMS: ASSERT, OPTLVL, DBGSYM, UPCXX_BACKEND, GASNET_CONDUIT
 exe-clean: force; @rm -Rf $(UPCXXDIR)/exe
 
-.PHONY: exe exe-clean
+.PHONY: do-exe exe exe-clean
+
+##
+## "make run SRC='bar.cpp' ARGS='arg1 arg2' RANKS=n
+##
+## Correctly supports multiple source files and relative paths
+## PARAMS: ASSERT, OPTLVL, DBGSYM, UPCXX_BACKEND, GASNET_CONDUIT
+## OPTIONAL PARAMS: RANKS, ARGS
+##
+RANKS ?= 4
+
+run: force
+	@$(MAKE) do-exe
+	@eval $(builddir)/$(UPCXXDIR)/bin/upcxx-run -n $(RANKS) $(UPCXX_EXE) $(ARGS)
+
+.PHONY: run

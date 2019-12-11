@@ -40,10 +40,10 @@ distclean: force
 	@$(MAKE) -C bld $@
 	@$(MAKE) $@-hook
 
-exe: force
+exe run: force
 	@if test -z "$(SRC)"; then \
-	    echo "ERROR: target 'exe' requires a SRC'" >&2; \
-	    echo "example: 'make exe SRC=test/hello_upcxx.cpp'" >&2; \
+	    echo "ERROR: target '$@' requires a SRC'" >&2; \
+	    echo "example: 'make $@ SRC=test/hello_upcxx.cpp'" >&2; \
 	    exit 1; \
 	 fi
 	@$(MAKE) -C bld $@ STARTDIR="$(shell pwd)"
