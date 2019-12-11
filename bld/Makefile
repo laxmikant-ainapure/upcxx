@@ -94,7 +94,7 @@ GASNETDIR = gasnet.$(GASNET_CODEMODE)
 # GASNET_VAR_VAL:  VAR="VAL"
 # GASNET_VAR:      VAL
 #
-GASNET_VAR_CMD = $(MAKE) --no-print-directory -C $(builddir)/$(GASNETDIR) echovar VARNAME=$(1)
+GASNET_VAR_CMD = $(MAKE) -C $(builddir)/$(GASNETDIR) echovar VARNAME=$(1)
 GASNET_VAR_VAL = $(shell $(call GASNET_VAR_CMD,$(1)))
 GASNET_VAR     = $(shell $(call GASNET_VAR_CMD,$(1)) | cut -d\" -f2)
 
@@ -145,7 +145,7 @@ do-gasnet-configure: force
 # PARAMS: OPTLVL, DBGSYM, UPCXX_BACKEND, GASNET_CONDUIT, GASNET, CROSS
 #
 gasnet-single: do-gasnet-configure
-	 $(MAKE) -C "$(GASNETDIR)/$(GASNET_CONDUIT)-conduit" $(GASNET_THREADMODE)
+	@$(MAKE) -C "$(GASNETDIR)/$(GASNET_CONDUIT)-conduit" $(GASNET_THREADMODE)
 
 #
 # On-demand compile of a single instance of libgasnet by full path
@@ -285,9 +285,9 @@ do-upcxx-single: force
 	 ln -s "$(top_srcdir)/src" $$dir/include/upcxx &&     \
 	 $(MAKE) do-libupcxx UPCXX_DIR="$(builddir)/$$dir"
 upcxx-single: gasnet-single
-	 $(MAKE) do-upcxx-single UPCXX_FRAGMENTS="$(builddir)/$(GASNETDIR)"
+	@$(MAKE) do-upcxx-single UPCXX_FRAGMENTS="$(builddir)/$(GASNETDIR)"
 upcxx-single-bld: force
-	 $(MAKE) do-upcxx-single UPCXX_FRAGMENTS="$(GASNET)"
+	@$(MAKE) do-upcxx-single UPCXX_FRAGMENTS="$(GASNET)"
 
 .PHONY: do-upcxx-single upcxx-single upcxx-single-bld
 

@@ -6,6 +6,8 @@ default: all ; @# empty rule
 
 force:
 
+MAKEFLAGS += --no-print-directory
+
 # Echo an arbitrary make/environment variable
 echovar: force; @echo $(VARNAME)=\"$($(VARNAME))\"
 
@@ -14,7 +16,7 @@ Makefile $(upcxx_src)/Makefile.rules: ; @# empty rule
 
 # TODO: default conduit selection should be at configure time
 install-hook: force
-	@eval $$($(MAKE) --no-print-directory -C bld/gasnet.opt echovar VARNAME=CONDUITS) && \
+	@eval $$($(MAKE) -C bld/gasnet.opt echovar VARNAME=CONDUITS) && \
 	 if [[ -n "$$GASNET_CONDUIT" ]]; then                \
 	   conduit_default="$$GASNET_CONDUIT";               \
 	 elif expr "x$(CROSS)" : xcray-aries- >/dev/null; then \
@@ -44,7 +46,7 @@ exe: force
 	    echo "example: 'make exe SRC=test/hello_upcxx.cpp'" >&2; \
 	    exit 1; \
 	 fi
-	@$(MAKE) -C bld $@ --no-print-directory STARTDIR="$(shell pwd)"
+	@$(MAKE) -C bld $@ STARTDIR="$(shell pwd)"
 
 # Default is pass-through
 # TODO?: HOOK and LOCAL "magic" like UPCR's multiconf
