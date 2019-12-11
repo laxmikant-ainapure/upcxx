@@ -146,6 +146,7 @@ do-gasnet-configure: force
 #
 gasnet-single: do-gasnet-configure
 	@$(MAKE) -C "$(GASNETDIR)/$(GASNET_CONDUIT)-conduit" $(GASNET_THREADMODE)
+	@if test $(GASNET_CONDUIT) = udp; then $(MAKE) -C "$(GASNETDIR)/other/amudp" amudprun; fi
 
 #
 # On-demand compile of a single instance of libgasnet by full path
@@ -266,6 +267,7 @@ libupcxx_sources = \
 
 #
 # Build upcxx library from its sources, with dependency tracking
+# Also populates a bin/ with upcxx-meta and upcxx-run suited use in build tree
 #
 VPATH = $(addprefix $(top_srcdir)/src/, $(sort $(dir $(libupcxx_sources))))
 libupcxx_objs = $(addsuffix .o,$(notdir $(basename $(libupcxx_sources))))
@@ -273,6 +275,10 @@ libupcxx.a: $(libupcxx_objs); ar rcs $@ $?
 do-libupcxx: force
 	@$(MAKE) -C $(UPCXX_DIR)/lib -f "$(builddir)/Makefile" libupcxx.a upcxx_headers.d
 	@$(MAKE) do-upcxx-meta DST=$(UPCXX_DIR) # needed by 'make exe SRC=...'
+	@(echo '#!/bin/bash';                                   \
+	  echo 'export GASNET_PREFIX=$(builddir)/$(GASNETDIR)'; \
+	  echo 'exec $(top_srcdir)/utils/upcxx-run "$$@"';      \
+	 ) > $(UPCXX_DIR)/bin/upcxx-run && chmod +x $(UPCXX_DIR)/bin/upcxx-run
 
 #
 # On-demand compile of a single instance of libupcxx and required libgasnet
@@ -458,3 +464,14 @@ exe-clean: force; @rm -Rf $(UPCXXDIR)/exe
 
 .PHONY: exe exe-clean
 
+##
+## Print launcher
+## PARAMS: OPTLVL, DBGSYM, GASNET_CONDUIT
+##
+
+# NOTE: only the final resuly may go to stdout
+spawner launcher: force
+	@$(MAKE) upcxx-single >&2
+	@echo '$(builddir)/$(UPCXXDIR)/bin/upcxx-run'
+
+.PHONY: spawner launcher
