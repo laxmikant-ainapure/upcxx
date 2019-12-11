@@ -50,7 +50,7 @@ builddir = $(top_builddir)/bld
 
 # libupcxx configuration space
 ALL_ASSERTS  = 0 1
-ALL_OPTLVLS  = 0 1 2 3
+ALL_OPTLVLS  = 0 3   # GASNet's DEBUG and NDEBUG, respectively.  Other values reserved for future use.
 ALL_DBGSYMS  = 0 1
 ALL_BACKENDS = gasnet_seq gasnet_par
 ALL_CONDUITS = smp udp mpi ibv aries
