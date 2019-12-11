@@ -218,6 +218,25 @@ elif [ -n "$(type -p wget)" ]; then
 fi
 
 #
+# Find a usable checksum command
+# "Usable" is defined here as 32 or more alphanumerics characters
+# followed by optional space
+#
+UPCXX_CSUMCMD=''
+set -x
+for cmd in shasum sha1sum md5sum md5; do
+  if [[ -n $(type -p $cmd) &&
+        $($cmd <<< '') =~ ^[a-zA-Z0-9]{32,}\ ? ]]; then
+    UPCXX_CSUMCMD=$cmd
+    break
+  fi
+done
+set +x
+if [[ -z "$UPCXX_CSUMCMD" ]]; then
+  echo_and_die Unable to find a usable checksum utility
+fi
+
+#
 # Unpack GASNet (if required) and verify
 #
 
@@ -316,6 +335,7 @@ export CONFIG_CXX    = $CXX
 export GASNET        = $GASNET
 export CROSS         = $CROSS
 export UPCXX_PYTHON  = $UPCXX_PYTHON
+export UPCXX_CSUMCMD = $UPCXX_CSUMCMD
 export GASNET_UNPACKED = $GASNET_UNPACKED
 export GASNET_CONFIGURE_ARGS = $GASNET_CONFIGURE_ARGS
 include \$(upcxx_src)/Makefile.rules

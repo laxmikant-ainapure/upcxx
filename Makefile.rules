@@ -38,6 +38,14 @@ distclean: force
 	@$(MAKE) -C bld $@
 	@$(MAKE) $@-hook
 
+exe: force
+	@if test -z "$(SRC)"; then \
+	    echo "ERROR: target 'exe' requires a SRC'" >&2; \
+	    echo "example: 'make exe SRC=test/hello_upcxx.cpp'" >&2; \
+	    exit 1; \
+	 fi
+	@$(MAKE) -C bld $@ --no-print-directory STARTDIR="$(shell pwd)"
+
 # Default is pass-through
 # TODO?: HOOK and LOCAL "magic" like UPCR's multiconf
 %: force; @$(MAKE) -C bld $@

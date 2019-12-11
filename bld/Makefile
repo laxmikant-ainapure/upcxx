@@ -269,6 +269,7 @@ libupcxx_objs = $(addsuffix .o,$(notdir $(basename $(libupcxx_sources))))
 libupcxx.a: $(libupcxx_objs); ar rcs $@ $?
 do-libupcxx: force
 	@$(MAKE) -C $(UPCXX_DIR)/lib -f "$(builddir)/Makefile" libupcxx.a upcxx_headers.d
+	@$(MAKE) do-upcxx-meta DST=$(UPCXX_DIR) # needed by 'make exe SRC=...'
 
 #
 # On-demand compile of a single instance of libupcxx and required libgasnet
@@ -424,3 +425,33 @@ install-single-bld: upcxx-single-bld
 all install clean distclean: force
 	@$(MAKE) gasnet-$@
 	@$(MAKE) upcxx-$@
+
+##
+## "make exe SRC='foo.cpp src/bar.cpp'"
+## Generated full path to resulting executable on stdout
+##
+## Correctly supports multiple source files and relative paths
+## PARAMS: ASSERT, OPTLVL, DBGSYM, UPCXX_BACKEND, GASNET_CONDUIT
+##
+
+# Hash absolute paths of all filenames in $(SRC) to form executable name
+# The library variant is encoded in $(UPCXXDIR)
+ABSPATH = $(shell cd $(STARTDIR) && cd $(dir $(1)) && pwd)/$(notdir $(1))
+UPCXX_CSUM = $(firstword $(shell $(UPCXX_CSUMCMD) <<< $(foreach src,$(SRC),$(call ABSPATH,$(src)))))
+UPCXX_EXE  = $(builddir)/$(UPCXXDIR)/exe/$(UPCXX_CSUM).x
+
+# NOTE: only the final $(UPCXX_EXE) may go to stdout
+exe:
+	@mkdir -p $(UPCXXDIR)/exe
+	@$(MAKE) $(UPCXXDIR)/libupcxx.a >&2
+	@cd "$(STARTDIR)" || exit $$?;                      \
+	 source $(builddir)/$(UPCXXDIR)/bin/upcxx-meta;     \
+	 eval "$$CXX $$EXTRAFLAGS $$CXXFLAGS $$CPPFLAGS $$LDFLAGS $(SRC) $$LIBS -o $(UPCXX_EXE)"
+	@echo -n '$(UPCXX_EXE)'
+
+# Clean exe files for current library variant
+## PARAMS: ASSERT, OPTLVL, DBGSYM, UPCXX_BACKEND, GASNET_CONDUIT
+exe-clean: force; @rm -Rf $(UPCXXDIR)/exe
+
+.PHONY: exe exe-clean
+
