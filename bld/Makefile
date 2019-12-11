@@ -219,7 +219,9 @@ LIBUPCXX_CXX_COMPILE := $(GASNET_CXX) $(GASNET_CXXCPPFLAGS) $(GASNET_CXXFLAGS) $
 
 %.d: %.c   ; tmp=tmp$$$$; $(LIBUPCXX_C_COMPILE)   -E -M -MT '$*.o $@' $< -o $$tmp && mv $$tmp $@
 %.d: %.cpp ; tmp=tmp$$$$; $(LIBUPCXX_CXX_COMPILE) -E -M -MT '$*.o $@' $< -o $$tmp && mv $$tmp $@
+ifneq ($(wildcard *.d),)
 include $(wildcard *.d)
+endif
 
 # Pattern rules with dependency file as extra prerequisite
 %.o: %.c   %.d; $(LIBUPCXX_C_COMPILE)   -c $< -o $@
