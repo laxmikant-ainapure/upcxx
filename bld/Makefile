@@ -455,7 +455,7 @@ do-exe: force
 	@mkdir -p $(UPCXXDIR)/exe
 	@$(MAKE) $(UPCXXDIR)/libupcxx.a
 	@cd "$(STARTDIR)" || exit $$?;                      \
-	 source $(builddir)/$(UPCXXDIR)/bin/upcxx-meta;     \
+	 source $(builddir)/$(UPCXXDIR)/bin/upcxx-meta SET; \
 	 eval "$$CXX $$EXTRAFLAGS $$CXXFLAGS $$CPPFLAGS $$LDFLAGS $(SRC) $$LIBS -o $(UPCXX_EXE)"
 
 # NOTE: only the final $(UPCXX_EXE) may go to stdout

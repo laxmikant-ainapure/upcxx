@@ -2,6 +2,8 @@
 # Top-level Makefile, minus the configuration variables
 #
 
+SHELL = /bin/bash
+
 default: all ; @# empty rule
 
 force:
