@@ -465,15 +465,3 @@ exe:
 exe-clean: force; @rm -Rf $(UPCXXDIR)/exe
 
 .PHONY: exe exe-clean
-
-##
-## Print launcher
-## PARAMS: OPTLVL, DBGSYM, GASNET_CONDUIT
-##
-
-# NOTE: only the final resuly may go to stdout
-spawner launcher: force
-	@$(MAKE) upcxx-single >&2
-	@echo '$(builddir)/$(UPCXXDIR)/bin/upcxx-run'
-
-.PHONY: spawner launcher
