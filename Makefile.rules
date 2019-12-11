@@ -58,3 +58,50 @@ exe run: force
 .PHONY: install install-hook
 .PHONY: distclean distclean-hook
 .PHONY: exe run
+
+testprograms_seq = \
+	atomics.cpp \
+	collectives.cpp \
+	dist_object.cpp \
+	local_team.cpp \
+	barrier.cpp \
+	rpc_barrier.cpp \
+	rpc_ff_ring.cpp \
+	rput.cpp \
+	vis.cpp \
+	vis_stress.cpp \
+	uts/uts_ranks.cpp \
+
+testprograms_par = \
+	rput_thread.cpp \
+	uts/uts_hybrid.cpp \
+	view.cpp
+
+check: force
+	@tmpfile=.testtmp_$$$$; rm -f $$tmpfile;                  \
+	 run=0; failed=0;                                         \
+	 export UPCXX_BACKEND=gasnet_seq;                         \
+	 for t in $(testprograms_seq); do                         \
+	    echo Running $$t; : $$((++run));                      \
+	    $(MAKE) run SRC=$(upcxx_src)/test/$$t &> $$tmpfile;   \
+	    if [[ $$? != 0 ]] || grep -q ERROR $$tmpfile; then    \
+	      echo FAILED; : $$((++failed));                      \
+	    fi;                                                   \
+	    grep "Test result: " $$tmpfile | sort -u;             \
+	 done;                                                    \
+	 export UPCXX_BACKEND=gasnet_par;                         \
+	 for t in $(testprograms_par); do                         \
+	    echo Running $$t; : $$((++run));                      \
+	    $(MAKE) run SRC=$(upcxx_src)/test/$$t &> $$tmpfile;   \
+	    if [[ $$? != 0 ]] || grep -q ERROR $$tmpfile; then    \
+	      echo FAILED; : $$((++failed));                      \
+	    fi;                                                   \
+	    grep "Test result: " $$tmpfile | sort -u;             \
+	 done;                                                    \
+	 rm -f $$tmpfile;                                         \
+	 if [[ $$failed = 0 ]]; then                              \
+	   echo "PASSED $$run tests";                             \
+	 else                                                     \
+	   echo "FAILED $$failed of $$run tests";                 \
+	 fi;                                                      \
+	 [[ $$failed = 0 ]] # exit code
