@@ -9,10 +9,19 @@ future<> fetch_vals(global_ptr<int> gp, int *dst, int cnt) {
 #if STATIC_PROMISE
   static 
 #endif
-  promise<> p;
+  assert(cnt % 2 == 0);
+  promise<> p(cnt/2);
   promise<> p1 = p;
   for (int i=0;i<cnt;i++) {
-    upcxx::rget(gp+i, dst+i, 1, operation_cx::as_promise(p));
+    if (i & 1) {
+      upcxx::rget(gp+i, dst+i, 1, operation_cx::as_promise(p));
+    } else {
+      upcxx::rget(gp+i, dst+i, 1).then([dst,i,p,p1]() {
+        dst[i] *= 2;  // some post-processing
+        if (i & 2) p.fulfill_anonymous(1);
+        else       p1.fulfill_anonymous(1);
+      }); 
+    }
   }
   return p1.finalize();
 }
@@ -38,8 +47,10 @@ int main() {
   cout << stack_writer(10.1) << endl;
   f.wait();
 
-  for (int i=0;i<cnt;i++)
-    assert(vals[i] == 42);
+  for (int i=0;i<cnt;i++) {
+    if (i & 1) assert(vals[i] == 42);
+    else       assert(vals[i] == 84);
+  }
 
   barrier();
   if (!rank_me()) cout << "SUCCESS" << endl;
