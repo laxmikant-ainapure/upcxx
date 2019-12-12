@@ -369,7 +369,7 @@ do-upcxx-meta: force
 	   echo 'PPFLAGS="$$CPPFLAGS"';                                \
 	   echo 'LIBFLAGS="$$LIBS"';                                   \
 	   echo; : 'DO NOT REMOVE THIS BLANK LINE - IT IS REQUIRED';   \
-	   echo '[ "$$1" != "" ] && eval echo '"'\$$'"'"$$1"';         \
+	   echo '[ -n "$$1" ] && eval [ -n \"\$$$$1\" ] && eval echo \"\$$$$1\"'; \
 	 ) > $$meta || exit $$?;                                       \
 	 chmod 755 $$meta
 do-upcxx-install-one: force
