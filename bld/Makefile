@@ -221,6 +221,21 @@ LIBFLAGS="$$LIBS"
 endef
 export meta_body
 
+# Body of a upcxx-run wrapper in a build dir
+do-upcxx-run: force
+	@file='$(DST)/bin/upcxx-run';                  \
+	 mkdir -p "$(DST)/bin" || exit $$?;        \
+	 rm -f "$$file" || exit $$?;                   \
+	 echo "$$upcxx_run_body" > $$file || exit $$?; \
+	 chmod 755 $$file
+.PHONY: do-upcxx-run
+define upcxx_run_body
+#!/bin/bash
+export GASNET_PREFIX='$(builddir)/$(GASNETDIR)'
+exec '$(top_srcdir)/utils/upcxx-run' "$$@"
+endef
+export upcxx_run_body
+
 ##
 ## Targets for incremental builds of libupcxx
 ##
@@ -314,10 +329,7 @@ libupcxx.a: $(libupcxx_objs); ar rcs $@ $?
 do-libupcxx: force
 	@$(MAKE) -C $(UPCXX_DIR)/lib -f "$(builddir)/Makefile" libupcxx.a upcxx_headers.d
 	@$(MAKE) do-upcxx-meta DST=$(UPCXX_DIR) # needed by 'make exe SRC=...'
-	@(echo '#!/bin/bash';                                   \
-	  echo 'export GASNET_PREFIX=$(builddir)/$(GASNETDIR)'; \
-	  echo 'exec $(top_srcdir)/utils/upcxx-run "$$@"';      \
-	 ) > $(UPCXX_DIR)/bin/upcxx-run && chmod +x $(UPCXX_DIR)/bin/upcxx-run
+	@$(MAKE) do-upcxx-run DST=$(UPCXX_DIR)
 
 #
 # On-demand compile of a single instance of libupcxx and required libgasnet
