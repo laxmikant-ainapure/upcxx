@@ -185,6 +185,43 @@ gasnet-distclean: force
 	rm -Rf gasnet.opt gasnet.debug
 
 ##
+## Targets for generated scripts
+## Uses define/endef, GNU Make's nearest equivalent of a heredoc
+##
+
+# Body of a bottom-level upcxx-meta (build and install)
+do-upcxx-meta: force
+	@file="$(DST)/bin/upcxx-meta";             \
+	 mkdir -p "$(DST)/bin" || exit $$?;        \
+	 rm -f $$file || exit $$?;                 \
+	 echo "$$meta_body" > $$file || exit $$?;  \
+	 chmod 755 $$file
+.PHONY: do-upcxx-meta
+ifneq ($(GASNET_BUILD),)
+GASNET_BUILD_OR_INSTALL = GASNET_BUILD='$(GASNET_BUILD)'
+else
+GASNET_BUILD_OR_INSTALL = GASNET_INSTALL='$(prefix)/$(GASNETDIR)'
+endif
+# NOTE: the upcxx-meta file format below is rigid due to automated parsing
+# do NOT add or remove blank lines
+define meta_body
+#!/bin/sh
+CC='$(GASNET_CC)'
+CPPFLAGS='$(LIBUPCXX_DEFINES) -I$(DST)/include $(GASNET_CXXCPPFLAGS)'
+CXX='$(GASNET_CXX)'
+CXXFLAGS='$(LIBUPCXX_STDCXX) $(GASNET_CXXFLAGS)'
+GASNET_CONDUIT='$(GASNET_CONDUIT)'
+$(GASNET_BUILD_OR_INSTALL)
+LDFLAGS='$(GASNET_LDFLAGS)'
+LIBS='-L$(DST)/lib -lupcxx $(GASNET_LIBS)'
+PPFLAGS="$$CPPFLAGS"
+LIBFLAGS="$$LIBS"
+
+[ -n "$$1" ] && eval [ -n \"\$$$$1\" ] && eval echo \"\$$$$1\"
+endef
+export meta_body
+
+##
 ## Targets for incremental builds of libupcxx
 ##
 
@@ -323,7 +360,7 @@ $(all_libupcxx): force
 ## Note that these just cover UPCXX_CODEMODE of O3 or debug
 ##
 .PHONY: upcxx-all upcxx-install upcxx-clean upcxx-distclean
-.PHONY: do-upcxx-all do-upcxx-meta do-upcxx-install-one do-upcxx-install-all
+.PHONY: do-upcxx-all do-upcxx-install-one do-upcxx-install-all
 
 #
 # Helpers to iterate over conduits and backends
@@ -352,30 +389,6 @@ do-upcxx-all: force
 	   done;                                                               \
 	 done;                                                                 \
 	 $(MAKE) $$targets
-do-upcxx-meta: force
-	@meta="$(DST)/bin/upcxx-meta";                                 \
-	 mkdir -p "$(DST)/bin" || exit $$?;                            \
-	 rm -f $$meta || exit $$?;                                     \
-	 (                                                             \
-	   echo "#!/bin/sh";                                           \
-	   echo "CC='$(GASNET_CC)'";                                   \
-	   echo "CPPFLAGS='$(LIBUPCXX_DEFINES) -I$(DST)/include $(GASNET_CXXCPPFLAGS)'";\
-	   echo "CXX='$(GASNET_CXX)'";                                 \
-	   echo "CXXFLAGS='$(LIBUPCXX_STDCXX) $(GASNET_CXXFLAGS)'";    \
-	   echo "GASNET_CONDUIT='$(GASNET_CONDUIT)'";                  \
-	   if test -n "$(GASNET_BUILD)" ; then                         \
-	     echo "GASNET_BUILD='$(GASNET_BUILD)'";                    \
-	   else                                                        \
-	     echo "GASNET_INSTALL='$(prefix)/$(GASNETDIR)'";           \
-	   fi;                                                         \
-	   echo "LDFLAGS='$(GASNET_LDFLAGS)'";                         \
-	   echo "LIBS='-L$(DST)/lib -lupcxx $(GASNET_LIBS)'";          \
-	   echo 'PPFLAGS="$$CPPFLAGS"';                                \
-	   echo 'LIBFLAGS="$$LIBS"';                                   \
-	   echo; : 'DO NOT REMOVE THIS BLANK LINE - IT IS REQUIRED';   \
-	   echo '[ -n "$$1" ] && eval [ -n \"\$$$$1\" ] && eval echo \"\$$$$1\"'; \
-	 ) > $$meta || exit $$?;                                       \
-	 chmod 755 $$meta
 do-upcxx-install-one: force
 	@mkdir -p "$(DST)/lib" || exit $$?;                               \
 	 src="$(call UPCXXDIR)";                                          \
