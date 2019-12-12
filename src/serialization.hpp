@@ -73,10 +73,10 @@ namespace upcxx {
     template<>
     struct storage_size_base<std::size_t(-1), std::size_t(-1)> {
       static constexpr bool is_valid = false, is_static = false;
-      static constexpr std::size_t static_size = -1;
-      static constexpr std::size_t static_align = -1;
-      static constexpr std::size_t static_align_ub = -1;
-      static constexpr std::size_t size = -1, align = -1;
+      static constexpr std::size_t static_size = std::size_t(-1);
+      static constexpr std::size_t static_align = std::size_t(-1);
+      static constexpr std::size_t static_align_ub = std::size_t(-1);
+      static constexpr std::size_t size = std::size_t(-1), align = std::size_t(-1);
 
       using static_otherwise_invalid_t = invalid_storage_size_t;
       
@@ -89,8 +89,8 @@ namespace upcxx {
     template<std::size_t s_align_ub>
     struct storage_size_base<std::size_t(-2), s_align_ub> {
       static constexpr bool is_valid = true, is_static = false;
-      static constexpr std::size_t static_size = -2;
-      static constexpr std::size_t static_align = -2;
+      static constexpr std::size_t static_size = std::size_t(-2);
+      static constexpr std::size_t static_align = std::size_t(-2);
       static constexpr std::size_t static_align_ub = s_align_ub;
       
       using static_otherwise_invalid_t = invalid_storage_size_t;
@@ -238,7 +238,7 @@ namespace upcxx {
   }
 
   constexpr storage_size<0,1> empty_storage_size(0,1);
-  constexpr invalid_storage_size_t invalid_storage_size(-1,-1);
+  constexpr invalid_storage_size_t invalid_storage_size(std::size_t(-1), std::size_t(-1));
 
   namespace detail {
     template<typename Iter,
