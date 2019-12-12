@@ -191,10 +191,10 @@ gasnet-distclean: force
 
 # Body of a bottom-level upcxx-meta (build and install)
 do-upcxx-meta: force
-	@file="$(DST)/bin/upcxx-meta";             \
-	 mkdir -p "$(DST)/bin" || exit $$?;        \
-	 rm -f $$file || exit $$?;                 \
-	 echo "$$meta_body" > $$file || exit $$?;  \
+	@file="$(DST)/bin/upcxx-meta";                  \
+	 mkdir -p "$(DST)/bin" || exit $$?;             \
+	 rm -f $$file || exit $$?;                      \
+	 echo "$$upcxx_meta_body" > $$file || exit $$?;  \
 	 chmod 755 $$file
 .PHONY: do-upcxx-meta
 ifneq ($(GASNET_BUILD),)
@@ -204,7 +204,7 @@ GASNET_BUILD_OR_INSTALL = GASNET_INSTALL='$(prefix)/$(GASNETDIR)'
 endif
 # NOTE: the upcxx-meta file format below is rigid due to automated parsing
 # do NOT add or remove blank lines
-define meta_body
+define upcxx_meta_body
 #!/bin/sh
 CC='$(GASNET_CC)'
 CPPFLAGS='$(LIBUPCXX_DEFINES) -I$(DST)/include $(GASNET_CXXCPPFLAGS)'
@@ -219,12 +219,11 @@ LIBFLAGS="$$LIBS"
 
 [ -n "$$1" ] && eval [ -n \"\$$$$1\" ] && eval echo \"\$$$$1\"
 endef
-export meta_body
 
 # Body of a upcxx-run wrapper in a build dir
 do-upcxx-run: force
 	@file='$(DST)/bin/upcxx-run';                  \
-	 mkdir -p "$(DST)/bin" || exit $$?;        \
+	 mkdir -p "$(DST)/bin" || exit $$?;            \
 	 rm -f "$$file" || exit $$?;                   \
 	 echo "$$upcxx_run_body" > $$file || exit $$?; \
 	 chmod 755 $$file
@@ -234,7 +233,32 @@ define upcxx_run_body
 export GASNET_PREFIX='$(builddir)/$(GASNETDIR)'
 exec '$(top_srcdir)/utils/upcxx-run' "$$@"
 endef
+
+# Body of a upcxx wrapper in a build dir
+# TODO: remove (with warning) any conflicting network,
+# threadmode or codemode options instead of overriding
+do-upcxx-script: force
+	@file='$(DST)/bin/upcxx';                         \
+	 mkdir -p "$(DST)/bin" || exit $$?;               \
+	 rm -f "$$file" || exit $$?;                      \
+	 echo "$$upcxx_script_body" > $$file || exit $$?; \
+	 chmod 755 $$file
+.PHONY: do-upcxx-script
+define upcxx_script_body
+#!/bin/bash
+export UPCXX_META='$(builddir)/$(UPCXXDIR)/bin/upcxx-meta'
+source '$(top_srcdir)/utils/upcxx.sh' "$$@" \
+   -network=$(GASNET_CONDUIT) \
+   -codemode=$(GASNET_CODEMODE) \
+   -threadmode=$(GASNET_THREADMODE)
+endef
+
+# Don't let these templates polute the environment except when needed
+ifneq ($(DST),)
+export upcxx_meta_body
 export upcxx_run_body
+export upcxx_script_body
+endif
 
 ##
 ## Targets for incremental builds of libupcxx
@@ -321,15 +345,14 @@ libupcxx_sources = \
 
 #
 # Build upcxx library from its sources, with dependency tracking
-# Also populates a bin/ with upcxx-meta and upcxx-run suited use in build tree
+# Also populates a bin/ with scripts suited for use in build tree
 #
 VPATH = $(addprefix $(top_srcdir)/src/, $(sort $(dir $(libupcxx_sources))))
 libupcxx_objs = $(addsuffix .o,$(notdir $(basename $(libupcxx_sources))))
 libupcxx.a: $(libupcxx_objs); ar rcs $@ $?
 do-libupcxx: force
 	@$(MAKE) -C $(UPCXX_DIR)/lib -f "$(builddir)/Makefile" libupcxx.a upcxx_headers.d
-	@$(MAKE) do-upcxx-meta DST=$(UPCXX_DIR) # needed by 'make exe SRC=...'
-	@$(MAKE) do-upcxx-run DST=$(UPCXX_DIR)
+	@$(MAKE) DST=$(UPCXX_DIR) do-upcxx-meta do-upcxx-run do-upcxx-script
 
 #
 # On-demand compile of a single instance of libupcxx and required libgasnet
@@ -517,8 +540,8 @@ run: force
 ## PARAMS: ASSERT, OPTLVL, DBGSYM, UPCXX_BACKEND, GASNET_CONDUIT
 ##
 
-upcxx-meta upcxx-run: force
+upcxx-meta upcxx-run upcxx: force
 	@$(MAKE) $(UPCXXDIR)/libupcxx.a >&2
 	@echo -n '$(builddir)/$(UPCXXDIR)/bin/$@'
 
-.PHONY: upcxx-meta upcxx-run
+.PHONY: upcxx-meta upcxx-run upcxx

@@ -3,6 +3,7 @@
 #
 
 SHELL = /bin/bash
+DST =
 
 default: all ; @# empty rule
 
