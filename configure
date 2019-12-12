@@ -223,7 +223,6 @@ fi
 # followed by optional space
 #
 UPCXX_CSUMCMD=''
-set -x
 for cmd in shasum sha1sum md5sum md5; do
   if [[ -n $(type -p $cmd) &&
         $($cmd <<< '') =~ ^[a-zA-Z0-9]{32,}\ ? ]]; then
