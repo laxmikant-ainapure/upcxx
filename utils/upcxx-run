@@ -142,10 +142,8 @@ def load_args():
                          help='List of SSH servers, comma separated.')
     _parser.add_argument('-localhost', dest='localhost', default=False, action='store_true',
                          help='Run UDP-conduit program on local host only')
-    _parser.add_argument('-v', dest='verbose', default=False, action='store_true',
+    _parser.add_argument('-v', dest='verbose', default=0, action='count',
                          help='Verbose output')
-    _parser.add_argument('-vv', dest='veryverbose', default=False, action='store_true',
-                         help='Very verbose output')
     _parser.add_argument('-E', dest='env_list', default=[], action='append', metavar='VAR1[,VAR2]',
                          help='Adds provided arguments to the list of environment variables to propagate to compute processes.')
     cmd_arg_group = _parser.add_argument_group('command to execute')
@@ -278,10 +276,9 @@ def main():
         return 0
         
     spawner = None
-    if args.veryverbose:
+    if args.verbose > 1:
         os.environ['GASNET_VERBOSEENV'] = '1'
         os.environ['UPCXX_VERBOSE'] = '1'
-        args.verbose = True
 
     if args.verbose:
         print('UPCXX_RUN:', executable, 'is compiled with', conduit, 'conduit')
@@ -351,7 +348,7 @@ def main():
         if spawner_path:
             print_verbose('UPCXX_RUN: Found spawner "' + spawner_path + '"')
             spawner = [ spawner_path ]
-            if args.veryverbose:
+            if args.verbose > 1:
                 spawner += ['-v']
         else:
             print_error_and_abort('Could not find spawner "' + spawner + '"')
