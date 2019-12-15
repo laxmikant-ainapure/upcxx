@@ -14,6 +14,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <memory>
+#include <iomanip>
 
 #include <unistd.h>
 
@@ -693,7 +694,17 @@ void upcxx::init() {
   init_localheap_tables();
 
   noise.show();
-  
+
+  if(backend::verbose_noise) {
+    // output process identity information, for validating job layout matches user intent
+    ostringstream oss;
+    oss << "UPCXX: Process " 
+        << setw(to_string(backend::rank_n-1).size()) << backend::rank_me << "/" << backend::rank_n
+        << " (local_team: " << setw(to_string(peer_n-1).size()) << peer_me << "/" << peer_n << ") on "
+        << gasnett_gethostname() << " (" << gasnett_cpu_count() << " processors)" << "\n";
+    std::cerr << oss.str() << std::flush;
+  }
+
   //////////////////////////////////////////////////////////////////////////////
   // Exit barrier
   
