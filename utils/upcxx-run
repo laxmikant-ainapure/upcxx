@@ -348,7 +348,7 @@ def main():
         if spawner_path:
             print_verbose('UPCXX_RUN: Found spawner "' + spawner_path + '"')
             spawner = [ spawner_path ]
-            if args.verbose > 1:
+            if args.verbose > 2:
                 spawner += ['-v']
         else:
             print_error_and_abort('Could not find spawner "' + spawner + '"')
