@@ -513,8 +513,9 @@ all install clean distclean: force
 # The library variant is encoded in $(UPCXXDIR)
 ABSPATH = $(shell cd $(STARTDIR) && cd $(dir $(1)) && pwd)/$(notdir $(1))
 SRCPATHS = $(foreach src,$(SRC),$(call ABSPATH,$(src)))
-UPCXX_CSUM = $(firstword $(shell $(UPCXX_CSUMCMD) <<< '$(SRCPATHS) $(EXTRAFLAGS)'))
-UPCXX_EXE  = $(builddir)/$(UPCXXDIR)/exe/$(UPCXX_CSUM).x
+UPCXX_EXE_CSUM = $(firstword $(shell $(UPCXX_CSUMCMD) <<< '$(SRCPATHS) $(EXTRAFLAGS)'))
+UPCXX_EXE_STEM = $(builddir)/$(UPCXXDIR)/exe/$(UPCXX_EXE_CSUM)
+UPCXX_EXE      = $(UPCXX_EXE_STEM)$(call GASNET_VAR,EXESUFFIX)
 
 do-exe: force
 	@mkdir -p $(UPCXXDIR)/exe
