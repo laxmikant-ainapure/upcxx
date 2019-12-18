@@ -309,8 +309,8 @@ include $(wildcard *.d)
 endif
 
 # Pattern rules with dependency file as extra prerequisite
-%.o: %.c   %.d; $(LIBUPCXX_C_COMPILE)   -c $< -o $@
-%.o: %.cpp %.d; $(LIBUPCXX_CXX_COMPILE) -c $< -o $@
+%.o: %.c   %.d; $(LIBUPCXX_C_COMPILE)   $($*_EXTRA_FLAGS) -c $< -o $@
+%.o: %.cpp %.d; $(LIBUPCXX_CXX_COMPILE) $($*_EXTRA_FLAGS) -c $< -o $@
 
 # Pattern rules for first build when dependency file is missing
 # Must be the second of these two rule pairs
