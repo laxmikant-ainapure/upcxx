@@ -501,17 +501,19 @@ all install clean distclean: force
 	@$(MAKE) upcxx-$@
 
 ##
-## "make exe SRC='foo.cpp src/bar.cpp'"
+## "make exe SRC='foo.cpp src/bar.cpp' [EXTRAFLAGS=-Dfoo=bar]"
 ## Generated full path to resulting executable on stdout
 ##
 ## Correctly supports multiple source files and relative paths
 ## PARAMS: ASSERT, OPTLVL, DBGSYM, UPCXX_BACKEND, GASNET_CONDUIT
+## OPTIONAL PARAMS: EXTRAFLAGS
 ##
 
-# Hash absolute paths of all filenames in $(SRC) to form executable name
+# Hash absolute paths of filenames in $(SRC), plus any $(EXTRAFLAGS), to form executable name
 # The library variant is encoded in $(UPCXXDIR)
 ABSPATH = $(shell cd $(STARTDIR) && cd $(dir $(1)) && pwd)/$(notdir $(1))
-UPCXX_CSUM = $(firstword $(shell $(UPCXX_CSUMCMD) <<< $(foreach src,$(SRC),$(call ABSPATH,$(src)))))
+SRCPATHS = $(foreach src,$(SRC),$(call ABSPATH,$(src)))
+UPCXX_CSUM = $(firstword $(shell $(UPCXX_CSUMCMD) <<< '$(SRCPATHS) $(EXTRAFLAGS)'))
 UPCXX_EXE  = $(builddir)/$(UPCXXDIR)/exe/$(UPCXX_CSUM).x
 
 do-exe: force
@@ -519,7 +521,7 @@ do-exe: force
 	@$(MAKE) $(UPCXXDIR)/libupcxx.a
 	@cd "$(STARTDIR)" || exit $$?;                      \
 	 source $(builddir)/$(UPCXXDIR)/bin/upcxx-meta SET; \
-	 eval "$$CXX $$EXTRAFLAGS $$CXXFLAGS $$CPPFLAGS $$LDFLAGS $(SRC) $$LIBS -o $(UPCXX_EXE)"
+	 eval "$$CXX $$CXXFLAGS $$CPPFLAGS $$LDFLAGS $(SRC) $$LIBS -o $(UPCXX_EXE) $(EXTRAFLAGS)"
 
 # NOTE: only the final $(UPCXX_EXE) may go to stdout
 exe: force
@@ -533,11 +535,11 @@ exe-clean: force; @rm -Rf $(UPCXXDIR)/exe
 .PHONY: do-exe exe exe-clean
 
 ##
-## "make run SRC='bar.cpp' ARGS='arg1 arg2' RANKS=n
+## "make run SRC='bar.cpp' [EXTRAFLAGS=-Dfoo=bar] [ARGS='arg1 arg2'] [RANKS=n]
 ##
 ## Correctly supports multiple source files and relative paths
 ## PARAMS: ASSERT, OPTLVL, DBGSYM, UPCXX_BACKEND, GASNET_CONDUIT
-## OPTIONAL PARAMS: RANKS, ARGS
+## OPTIONAL PARAMS: RANKS, ARGS, EXTRAFLAGS
 ##
 RANKS ?= 4
 
