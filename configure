@@ -191,6 +191,57 @@ while [[ $# -gt 0 ]]; do
 done  
 
 #
+# Canonicalize $PREFIX
+#
+
+# Form a "textually canonical" path.
+#
+# + Result is a full path without any extraneous / or .
+#
+# + The input path can be relative or absolute
+# + White space in path is safe and is preserved
+# + The input path does not need to exist (and is not created)
+#
+# + Does NOT verify elems are dirs (so /etc/passwd/foo is acceptable)
+# + Does NOT resolve symlinks
+#
+function canon_path() {
+  local path="$1"
+
+  # Make absolute if relative
+  [[ "$path" =~ (^/) ]] || path="$PWD/$path"
+
+  # Ensure trailing '/.' and '/..' are not special cases
+  path="$path/"
+
+  # Convert '//' and '/./' to '/'
+  while true; do
+    local tmp=$(sed -e 's|//*|/|g' -e 's|/\./|/|g' <<<"$path")
+    [[ "$tmp" = "$path" ]] && break
+    path="$tmp"
+  done
+
+  # Remove all 'dir/../'
+  while true; do
+    local tmp=$(sed -e 's|[^/][^/]*/\.\./||g' <<<"$path")
+    [[ "$tmp" = "$path" ]] && break
+    path="$tmp"
+  done
+
+  # Convert any leading '/../' to '/'
+  while true; do
+    local tmp=$(sed -e 's|^/\.\./|/|g' <<<"$path")
+    [[ "$tmp" = "$path" ]] && break
+    path="$tmp"
+  done
+
+  path="${path/%\//}" # removes the trailing /
+
+  if [[ -n "$path" ]]; then echo "$path"; else echo '/'; fi
+}
+PREFIX=$(canon_path "$PREFIX")
+
+#
 # system-checks
 #
 . $UPCXX_SRC/utils/system-checks.sh
@@ -199,12 +250,6 @@ platform_sanity_checks
 platform_settings
 export CC
 export CXX
-
-#
-# Create $PREFIX
-#
-mkdir -p "$PREFIX"
-[[ "$PREFIX" != / ]] && PREFIX=$(cd "$PREFIX" && pwd)
 
 #
 # Setup URL_CAT if not set
