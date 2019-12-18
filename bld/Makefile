@@ -359,7 +359,12 @@ libupcxx_sources = \
 #
 VPATH = $(addprefix $(top_srcdir)/src/, $(sort $(dir $(libupcxx_sources))))
 libupcxx_objs = $(addsuffix .o,$(notdir $(basename $(libupcxx_sources))))
-libupcxx.a: $(libupcxx_objs); ar rcs $@ $?
+libupcxx.a: $(libupcxx_objs)
+ifneq ($(strip $(upcxx_git_version_obj)),)
+	@rm -f $(UPCXX_DIR)/lib/$(upcxx_git_version_obj); \
+	 $(MAKE) -C $(UPCXX_DIR)/lib -f "$(builddir)/Makefile" $(upcxx_git_version_obj)
+endif
+	ar rcs $@ $?
 do-libupcxx: force
 	@$(MAKE) -C $(UPCXX_DIR)/lib -f "$(builddir)/Makefile" libupcxx.a upcxx_headers.d
 	@$(MAKE) DST=$(UPCXX_DIR) do-upcxx-meta do-upcxx-run do-upcxx-script
