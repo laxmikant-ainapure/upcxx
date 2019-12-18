@@ -520,9 +520,8 @@ UPCXX_EXE      = $(UPCXX_EXE_STEM)$(call GASNET_VAR,EXESUFFIX)
 do-exe: force
 	@mkdir -p $(UPCXXDIR)/exe
 	@$(MAKE) $(UPCXXDIR)/libupcxx.a
-	@cd "$(STARTDIR)" || exit $$?;                      \
-	 source $(builddir)/$(UPCXXDIR)/bin/upcxx-meta SET; \
-	 eval "$$CXX $$CXXFLAGS $$CPPFLAGS $$LDFLAGS $(SRC) $$LIBS -o $(UPCXX_EXE) $(EXTRAFLAGS)"
+	@$(MAKE) -C "$(STARTDIR)" -f $(top_srcdir)/bld/Makefile-exe.mak \
+		UPCXX_DIR='$(builddir)/$(UPCXXDIR)' UPCXX_EXE='$(UPCXX_EXE)'
 
 # NOTE: only the final $(UPCXX_EXE) may go to stdout
 exe: force
