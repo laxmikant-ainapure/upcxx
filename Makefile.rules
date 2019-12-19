@@ -71,7 +71,7 @@ testprograms_seq = \
 	rput.cpp \
 	vis.cpp \
 	vis_stress.cpp \
-	uts/uts_ranks.cpp \
+	uts/uts_ranks.cpp
 
 testprograms_par = \
 	rput_thread.cpp \
