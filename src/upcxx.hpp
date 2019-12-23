@@ -9,6 +9,11 @@
 // YYYYMM00L = [YEAR][MONTH]
 #define UPCXX_SPEC_VERSION 20190900L
 
+namespace upcxx {
+  long release_version();
+  long spec_version();
+}
+
 #include <upcxx/allocate.hpp>
 #include <upcxx/atomic.hpp>
 #include <upcxx/backend.hpp>
