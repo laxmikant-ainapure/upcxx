@@ -176,7 +176,7 @@ atomic_domain<T>::atomic_domain(std::vector<atomic_op> const &ops, team &tm) {
   if (std::is_floating_point<T>::value) {
     int prohibited_ops = atomic_gex_ops &
       (GEX_OP_AND|GEX_OP_FAND|GEX_OP_OR|GEX_OP_FOR|GEX_OP_XOR|GEX_OP_FXOR);
-    UPCXX_ASSERT(prohibited_ops == 0,
+    UPCXX_ASSERT_ALWAYS(prohibited_ops == 0,
       "atomic_domain on floating-point types may not use " << opset_gex_to_string(prohibited_ops) << std::endl);
   }
 

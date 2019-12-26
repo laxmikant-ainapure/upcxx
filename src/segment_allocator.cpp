@@ -64,11 +64,11 @@ void* segment_allocator::allocate(size_t m_size, size_t m_align) {
     return nullptr;
   
   if(m_size >= 2*4096) {
-    m_size = (m_size + 4096-1) & -4096;
+    m_size = (m_size + 4096-1) & (size_t)-4096;
     m_align = std::max<size_t>(4096, m_align);
   }
   else if(m_size >= 2*64) {
-    m_size = (m_size + 64-1) & -64;
+    m_size = (m_size + 64-1) & (size_t)-64;
     m_align = std::max<size_t>(64, m_align);
   }
   
