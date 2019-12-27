@@ -564,13 +564,19 @@ def comp_lang_pp_cg(cxt, src, libset):
   optlev = cxt.cg_optlev(src)
   dbgsym = cxt.cg_dbgsym()
   comp = yield cxt.comp_lang_pp(src, libset)
-  
+
+  _, ext = os.path.splitext(src)
+  if ext in cxx_exts:
+    cgflags = libset_cgflags(libset)
+  elif ext in c_exts:
+    cgflags = libset_cgcflags(libset)
+
   yield (
     comp +
     (['-O%d'%optlev] if not is_nvcc(comp) else []) +
     (['-g'] if dbgsym else []) +
     (['-Wall'] if not is_pgi(comp) and not is_nvcc(comp) else []) +
-    libset_cgflags(libset)
+    cgflags
   )
 
 @rule(path_arg='src')
@@ -1419,6 +1425,7 @@ class gasnet:
     GASNET_LDFLAGS = shplit(makefile_extract(makefile, 'GASNET_LDFLAGS'))
     GASNET_CXXCPPFLAGS = shplit(makefile_extract(makefile, 'GASNET_CXXCPPFLAGS'))
     GASNET_CXXFLAGS = shplit(makefile_extract(makefile, 'GASNET_CXXFLAGS'))
+    GASNET_CFLAGS = shplit(makefile_extract(makefile, 'GASNET_CFLAGS'))
     GASNET_LIBS = shplit(makefile_extract(makefile, 'GASNET_LIBS'))
     
     # workaround for GASNet not giving us a C++ capable linker.
@@ -1516,6 +1523,7 @@ class gasnet:
         'ppflags': GASNET_CXXCPPFLAGS,
         'ppdefs': ppdefs,
         'cgflags': GASNET_CXXFLAGS,
+        'cgcflags': GASNET_CFLAGS,
         'libfiles': libfiles,
         'libflags': GASNET_LIBS,
         'libdeps': [] # all dependencies flattened into libflags by gasnet
@@ -1597,6 +1605,12 @@ def libset_cgflags(libset):
   flags = []
   for rec in libset.values():
     flags.extend(rec.get('cgflags', []))
+  return flags
+
+def libset_cgcflags(libset):
+  flags = []
+  for rec in libset.values():
+    flags.extend(rec.get('cgcflags', []))
   return flags
 
 def libset_ld(libset):
@@ -1827,6 +1841,7 @@ def install_libset(install_path, name, libset, meta_extra={}):
     for k,v in dict(
         CPPFLAGS = libset_ppflags(installed_libset),
         CXXFLAGS = libset_cgflags(installed_libset),
+        CFLAGS = libset_cgcflags(installed_libset),
         LDFLAGS = libset_ldflags(installed_libset),
         LIBS = libset_libflags(installed_libset)
       ).items():
