@@ -5,22 +5,25 @@
 
 namespace upcxx {
   void assert_failed(const char *file, int line, const char *msg=nullptr);
+  inline void assert_failed(const char *file, int line, const std::string &str) {
+    assert_failed(file, line, str.c_str());
+  }
+  inline void assert_failed(const char *file, int line, const std::stringstream &ss) {
+    assert_failed(file, line, ss.str().c_str());
+  }
+  inline void assert_failed(const char *file, int line, std::stringstream &&ss) {
+    assert_failed(file, line, ss.str().c_str());
+  }
 }
 
 #define UPCXX_ASSERT_1(ok) \
-  do { \
-    if(!(ok)) \
-      ::upcxx::assert_failed(__FILE__, __LINE__, "Failed condition: " #ok); \
-  } while(0);
+ ( (ok) ? (void)0 : \
+      ::upcxx::assert_failed(__FILE__, __LINE__, std::string("Failed condition: " #ok)) )
 
 #define UPCXX_ASSERT_2(ok, ios_msg) \
-  do { \
-    if(!(ok)) { \
-      ::std::stringstream ss; \
-      ss << ios_msg; \
-      ::upcxx::assert_failed(__FILE__, __LINE__, ss.str().c_str()); \
-    } \
-  } while(0);
+ ( (ok) ? (void)0 : \
+      ::upcxx::assert_failed(__FILE__, __LINE__, \
+                            dynamic_cast<std::stringstream&&>(std::stringstream() << ios_msg)) )
 
 #define UPCXX_ASSERT_DISPATCH(_1, _2, NAME, ...) NAME
 
@@ -39,7 +42,10 @@ namespace upcxx {
 #define UPCXX_ASSERT_ALWAYS(...) UPCXX_ASSERT_DISPATCH(__VA_ARGS__, UPCXX_ASSERT_2, UPCXX_ASSERT_1, _DUMMY)(__VA_ARGS__)
 
 // In debug mode this will abort. In non-debug this is a nop.
-#define UPCXX_INVOKE_UB() UPCXX_ASSERT(false)
+#define UPCXX_INVOKE_UB() UPCXX_ASSERT(false, "Undefined behavior!")
+
+// static assert that is permitted in expression context
+#define UPCXX_STATIC_ASSERT(cnd, msg) ([=](){static_assert(cnd, msg);})
 
 namespace upcxx {
   // ostream-like class which will print to standard error with as
