@@ -370,5 +370,33 @@ namespace std {
       return std::size_t(a);
     }
   };
-}
+} // namespace std
+
+////////////////////////////////////////////////////////////////////////////////
+// upcxx_memberof*()
+
+// upcxx_memberof_unsafe(global_ptr<T> gp, field-designator)
+// This variant assumes T is standard layout, or (C++17) is conditionally supported by the compiler for use in offsetof
+// Otherwise, the result is undefined behavior
+#define upcxx_memberof_unsafe(gp, FIELD) ( \
+  UPCXX_STATIC_ASSERT(offsetof(typename decltype(gp)::element_type, FIELD) < sizeof(typename decltype(gp)::element_type), \
+                      "offsetof returned a bogus result. This is probably due to an unsupported non-standard-layout type"), \
+  UPCXX_ASSERT(gp, "Global pointer expression to upcxx_memberof may not be null"), \
+  ::upcxx::global_ptr<decltype(::std::declval<typename decltype(gp)::element_type>().FIELD), decltype(gp)::kind>( \
+    ::upcxx::detail::internal_only(), \
+    (gp).rank_, \
+    reinterpret_cast<decltype(::std::declval<typename decltype(gp)::element_type>().FIELD)*>( \
+      reinterpret_cast<::std::uintptr_t>((gp).raw_ptr_) + offsetof(typename decltype(gp)::element_type, FIELD) \
+    ), \
+    (gp).device_) \
+  )
+    
+// upcxx_memberof_unsafe(global_ptr<T> gp, field-designator)
+// This variant asserts T is standard layout, and thus guaranteed by C++11 to produce well-defined results
+#define upcxx_memberof(gp, FIELD) ( \
+    UPCXX_STATIC_ASSERT(::std::is_standard_layout<typename decltype(gp)::element_type>::value, \
+     "upcxx_memberof() requires a global_ptr to a standard-layout type. Perhaps you want upcxx_memberof_unsafe()?"), \
+     upcxx_memberof_unsafe(gp, FIELD) \
+  )
+
 #endif
