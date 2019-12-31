@@ -65,7 +65,7 @@ struct calc { static void _(upcxx::global_ptr<T> gp_o) {
   assert(d0 == 0 && d1 == 1 && d2 == 2);
   upcxx::barrier();
 
-  #if 0
+  #if 1
   // test some non-trivial expressions
   volatile int zero = 0;
 
