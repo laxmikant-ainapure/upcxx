@@ -40,6 +40,19 @@ namespace upcxx {
       static_assert(std::is_trivially_copyable<global_ptr<T,KindSet>>::value, "Internal error.");
     }
 
+    // global_ptr offset and reinterpret in a single operation
+    template <typename U>
+    explicit global_ptr(detail::internal_only, 
+                        const global_ptr<U, KindSet> &other, std::ptrdiff_t offset):
+      #if UPCXX_MANY_KINDS
+        device_(other.device_),
+      #endif
+      rank_(other.rank_),
+      raw_ptr_(reinterpret_cast<T*>(
+                 reinterpret_cast<::std::uintptr_t>(other.raw_ptr_) + offset)) { 
+        UPCXX_ASSERT(other, "Global pointer expression may not be null");
+      }
+
     template<memory_kind KindSet1,
              typename = typename std::enable_if<((int)KindSet & (int)KindSet1) == (int)KindSet1>::type>
     global_ptr(global_ptr<T,KindSet1> const &that):
@@ -391,14 +404,11 @@ namespace std {
 #define upcxx_memberof_unsafe(gp, FIELD) ( \
   UPCXX_STATIC_ASSERT(offsetof(UPCXX_ETYPE(gp), FIELD) < sizeof(UPCXX_ETYPE(gp)), \
                       "offsetof returned a bogus result. This is probably due to an unsupported non-standard-layout type"), \
-  UPCXX_ASSERT(gp, "Global pointer expression to upcxx_memberof may not be null"), \
   ::upcxx::global_ptr<decltype(::std::declval<UPCXX_ETYPE(gp)>().FIELD), UPCXX_KTYPE(gp)>( \
     ::upcxx::detail::internal_only(), \
-    (gp).rank_, \
-    reinterpret_cast<decltype(::std::declval<UPCXX_ETYPE(gp)>().FIELD)*>( \
-      reinterpret_cast<::std::uintptr_t>((gp).raw_ptr_) + offsetof(UPCXX_ETYPE(gp), FIELD) \
-    ), \
-    (gp).device_) \
+    (gp),\
+    offsetof(UPCXX_ETYPE(gp), FIELD) \
+    ) \
   )
     
 // upcxx_memberof_unsafe(global_ptr<T> gp, field-designator)

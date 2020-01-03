@@ -88,7 +88,7 @@ struct calc { static void _(upcxx::global_ptr<T> gp_o) {
   upcxx::barrier();
   #endif
 
-  #if 0
+  #if 1
   int se = 0; // test for single-evaluation
   auto func = [&](){se++; return gp_o;};
   upcxx::global_ptr<char> se_test = upcxx_memberof(func(), f0);
