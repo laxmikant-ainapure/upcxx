@@ -10,6 +10,7 @@
 #include <upcxx/diagnostic.hpp>
 #include <upcxx/memory_kind.hpp>
 #include <upcxx/rpc.hpp>
+#include <upcxx/future.hpp>
 
 #include <cstddef> // ptrdiff_t
 #include <cstdint> // uintptr_t
@@ -44,6 +45,34 @@
     UPCXX_STATIC_ASSERT(::std::is_standard_layout<UPCXX_ETYPE(gp)>::value, \
      "upcxx_memberof() requires a global_ptr to a standard-layout type. Perhaps you want upcxx_memberof_unsafe()?"), \
      upcxx_memberof_unsafe(gp, FIELD) \
+  )
+
+namespace upcxx { namespace detail {
+  template<typename FT, typename T, typename Func>
+  inline future<global_ptr<FT>>
+  memberof_general(const global_ptr<T> &gp, Func lookup_fn) {
+    UPCXX_ASSERT(gp, "Global pointer expression may not be null");
+    if (gp.is_local()) { // can be resolved locally (possibly via PSHM-bypass)
+      global_ptr<FT> result = lookup_fn(gp);
+      return upcxx::make_future<global_ptr<FT>>(result);
+    } else { // must communicate
+      intrank_t peer = gp.where();
+      return rpc(peer, lookup_fn, gp);
+    }
+  }
+
+} }
+
+// upcxx_memberof_general(global_ptr<T> gp, field-designator)
+// this variant works for any T, although it may need to communicate for remote objects
+#define upcxx_memberof_general(gp, FIELD) ( \
+        ::upcxx::detail::memberof_general<decltype(::std::declval<UPCXX_ETYPE(gp)>().FIELD)> \
+                  ((gp), \
+                    [](const typename UPCXX_GPTYPE(gp) &gpr) { \
+                        return \
+                          UPCXX_ASSERT(gpr.is_local()), \
+                          ::upcxx::to_global_ptr(::std::addressof(gpr.local()->FIELD)); \
+                  }) \
   )
 
 #endif

@@ -5,7 +5,7 @@
 #include <upcxx/upcxx.hpp>
 
 #define T(t) if (!upcxx::rank_me()) do { \
-    std::cout << " *** " << #t << " *** " << std::endl; \
+    std::cout << "\n *** " << #t << " *** " << std::endl; \
     std::cout << "std::is_standard_layout<" #t "> = " \
               << std::is_standard_layout<t>::value << std::endl; \
     std::cout << "std::is_trivial<" #t "> = " \
@@ -46,6 +46,25 @@ struct D {  // NOT standard layout, NOT trivial, NOT POD
   char &f;
   D() : f(f0) {}
 };
+
+struct V0 { 
+  char f0; 
+  virtual void foo() = 0;
+}; 
+  
+struct V1 : public virtual V0 { 
+  char f1; 
+  void foo() {}
+}; 
+  
+struct V2 : public virtual V0 { 
+  char f2; 
+}; 
+  
+struct V : public V1, public V2 { // NOT standard layout, NOT trivial, NOT POD
+  void foo() {}
+  V() {}
+}; 
 
 template<typename T, bool stdlayout>
 struct calc { static void _(upcxx::global_ptr<T> gp_o) {
@@ -116,6 +135,39 @@ struct calc<T,false>{ static void _(upcxx::global_ptr<T> gp_o){
 } };
 
 template<typename T>
+void check_general() {
+  upcxx::global_ptr<T> gp_o;
+  if (!upcxx::rank_me()) gp_o = upcxx::new_<T>();
+  gp_o = upcxx::broadcast(gp_o, 0).wait();
+  assert(gp_o);
+  if (!upcxx::rank_me()) std::cout << "Testing memberof_general..." << std::endl;
+
+  auto fut0 = upcxx_memberof_general(gp_o, f0);
+  auto fut1 = upcxx_memberof_general(gp_o, f1);
+  auto fut2 = upcxx_memberof_general(gp_o, f2);
+  bool all_ready = fut0.ready() && fut1.ready() && fut2.ready();
+  if (gp_o.is_local()) assert(all_ready);
+  else                 assert(!all_ready);
+
+  upcxx::global_ptr<char> gp_f0 = fut0.wait();
+  upcxx::global_ptr<char> gp_f1 = fut1.wait();
+  upcxx::global_ptr<char> gp_f2 = fut2.wait();
+  assert(gp_f0 && gp_f1 && gp_f2);
+
+  upcxx::global_ptr<char> gp_base = upcxx::reinterpret_pointer_cast<char>(gp_o);
+  ssize_t d0 = gp_f0 - gp_base;
+  ssize_t d1 = gp_f1 - gp_base;
+  ssize_t d2 = gp_f2 - gp_base;
+  if (!upcxx::rank_me()) {
+    std::cout << "memberof_general offsets: d0=" << d0 << " d1=" << d1 << " d2=" << d2 << std::endl;
+  }
+  upcxx::barrier();
+  assert((size_t)d0 < sizeof(T) && (size_t)d1 < sizeof(T) && (size_t)d2 < sizeof(T));
+  assert(d0 != d1 && d0 != d2 && d1 != d2);
+  upcxx::barrier();
+}
+
+template<typename T>
 void check() {
   upcxx::barrier();
   constexpr bool stdlayout = std::is_standard_layout<T>::value;
@@ -149,6 +201,8 @@ void check() {
   assert(gp_o);
   calc<T, stdlayout>::_( gp_o );
 
+  check_general<T>();
+
   upcxx::barrier();
 }
 
@@ -163,6 +217,9 @@ int main() {
   check<C>();
   T(D); 
   check<D>();
+
+  T(V); 
+  check_general<V>();
 
   upcxx::barrier();
   if (!upcxx::rank_me()) std::cout << "SUCCESS" << std::endl;
