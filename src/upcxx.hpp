@@ -34,5 +34,6 @@ namespace upcxx {
 #include <upcxx/vis.hpp>
 //#include <upcxx/wait.hpp>
 #include <upcxx/view.hpp>
+#include <upcxx/memberof.hpp>
 
 #endif
