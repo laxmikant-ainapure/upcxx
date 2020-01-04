@@ -5,7 +5,6 @@
 # TODO:
 #  + UPCXX_CUDA/nvcc handling
 #  + UPCXX_MPSC_QUEUE_* handling
-#  + verify GNU Make ??
 #  + sanitize/filter GASNET_CONFIGURE_ARGS ??
 
 #
@@ -38,6 +37,10 @@ Usage:
         Overrides the value of $GASNET_CONFIGURE_ARGS, if any.
         The (empty) default is normally sufficient.
 
+  --with-gmake=...
+        Specify the location GNU Make 3.80 or newer.
+        Overrides the value of $GMAKE, if any.
+        Default is to search for 'gmake' or 'make' in $PATH.
   --with-python=...
         Specify the python interpreter to use.
         Overrides the value of $UPCXX_PYTHON, if any.
@@ -155,6 +158,11 @@ while [[ $# -gt 0 ]]; do
       [[ -n $CROSS ]] || missing_value $1
       ;;
 
+    --with-gmake=*)
+      export GMAKE=${1#*=}
+      [[ -n $GMAKE ]] || missing_value $1
+      ;;
+
     --with-url-cat=*)
       export URL_CAT=${1#*=}
       [[ -n $URL_CAT ]] || missing_value $1
@@ -261,6 +269,33 @@ elif [ -n "$(type -p curl)" ]; then
 elif [ -n "$(type -p wget)" ]; then
   URL_CAT='wget --tries=5 -nv -O -'
 fi
+
+# Find a usable GNU Make
+function bad_gmake {
+  echo Error: $* >&2
+  echo_and_die "Please set GMAKE (or pass --with-gmake=...) to the path to GNU Make $GMAKE_MIN_VER or newer."
+}
+if [[ -n "$GMAKE" ]]; then
+  if [[ -z $(type -p "$GMAKE") ]] ; then
+    bad_gmake "'$GMAKE' not found."
+  fi
+else
+  for x in gmake make; do
+    tmp="$(type -p $x)" || true
+    if [[ -n "$tmp" ]] ; then
+      GMAKE="$tmp"
+      break
+    fi
+  done
+  if [[ -z "$GMAKE" ]] ; then
+    bad_gmake "no 'gmake' or 'make' found in \$PATH."
+  fi
+fi
+GMAKE_VER=$(expr "$($GMAKE --version | grep ^GNU)" : '.* \([0-9]\{1,\}\(\.[0-9]\{1,\}\)\{1,2\}\)' || true)
+[[ -z "$GMAKE_VER" ]] && bad_gmake "'$GMAKE' does not appear to be GNU Make"
+echo "$GMAKE: GNU Make version $GMAKE_VER"
+IFS=' .' read maj min patch <<<$GMAKE_VER
+[[ $maj -lt 3 || ( $maj -eq 3 && $min -lt 80 ) ]] && bad_gmake "'$GMAKE' is older then 3.80"
 
 #
 # Find a usable checksum command
