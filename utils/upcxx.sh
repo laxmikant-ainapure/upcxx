@@ -165,7 +165,7 @@ elif [[ $doversion ]] ; then
     gexhash=" / $gexhash"
   fi
   echo "UPC++ version $version $githash$gexhash"
-  echo "Copyright (c) 2019, The Regents of the University of California,"
+  echo "Copyright (c) 2020, The Regents of the University of California,"
   echo "through Lawrence Berkeley National Laboratory."
   echo "https://upcxx.lbl.gov"
   echo ""
