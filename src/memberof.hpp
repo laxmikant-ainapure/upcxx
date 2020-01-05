@@ -26,6 +26,7 @@
 // UPCXX_KTYPE(global_ptr<E,kind> gp) yields kind for any expression gp
 #define UPCXX_KTYPE(gp)  (UPCXX_GPTYPE(gp)::kind)
 
+// UNSPECIFIED MACRO: This variant is not guaranteed by the spec
 // upcxx_memberof_unsafe(global_ptr<T> gp, field-designator)
 // This variant assumes T is standard layout, or (C++17) is conditionally supported by the compiler for use in offsetof
 // Otherwise, the result is undefined behavior
@@ -39,7 +40,7 @@
     ) \
   )
     
-// upcxx_memberof_unsafe(global_ptr<T> gp, field-designator)
+// upcxx_memberof(global_ptr<T> gp, field-designator)
 // This variant asserts T is standard layout, and thus guaranteed by C++11 to produce well-defined results
 #define upcxx_memberof(gp, FIELD) ( \
     UPCXX_STATIC_ASSERT(::std::is_standard_layout<UPCXX_ETYPE(gp)>::value, \
@@ -61,11 +62,23 @@ namespace upcxx { namespace detail {
     }
   }
 
+  template<typename T> // workaround issue #288 - DOB: seems like there should be a better way..
+  inline upcxx::future<T> make_real_future(T v) { return upcxx::make_future<T>(v); }
 } }
 
 // upcxx_memberof_general(global_ptr<T> gp, field-designator)
 // this variant works for any T, although it may need to communicate for remote objects
 #define upcxx_memberof_general(gp, FIELD) ( \
+     ::std::is_standard_layout<UPCXX_ETYPE(gp)>::value ? \
+        ::upcxx::detail::make_real_future( /* fast-path for standard layout (critical for remote) */ \
+           ::upcxx::global_ptr<decltype(::std::declval<UPCXX_ETYPE(gp)>().FIELD), UPCXX_KTYPE(gp)>( \
+              ::upcxx::detail::internal_only(), \
+              (gp), \
+              ([](UPCXX_ETYPE(gp) *p) { /* simulate offsetof while avoiding UB */ \
+                  return reinterpret_cast<::std::uintptr_t>(::std::addressof(p->FIELD)); \
+               })(nullptr) \
+           ) \
+        ) : \
         ::upcxx::detail::memberof_general<decltype(::std::declval<UPCXX_ETYPE(gp)>().FIELD)> \
                   ((gp), \
                     [](const typename UPCXX_GPTYPE(gp) &gpr) { \
