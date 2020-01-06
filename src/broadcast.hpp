@@ -168,7 +168,7 @@ namespace upcxx {
       Cxs
     >::return_t
   broadcast(
-      T1 &&value, intrank_t root,
+      T1 value, intrank_t root,
       team &tm = upcxx::world(),
       Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
     ) {
