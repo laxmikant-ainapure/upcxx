@@ -12,11 +12,14 @@ New features/enhancements: (see specification and programmer's guide for full de
 * Significantly improve compile latency associated with `upcxx` compiler wrapper script
 * Improve handling of `upcxx-run -v` verbose options
 * Improve GASNet polling heuristic to reduce head-of-line blocking
+* `upcxx::promise` now behaves as a CopyAssignable handle to a reference-counted hidden object,
+  meaning users no longer have to worry about promise lifetime issues.
 
 Notable bug fixes:
 
 * issue #247: unused-local-typedef warning for some compilers
 * issue #271: Use of `-pthread` in `example/prog-guide/Makefile` breaks PGI
+* issue #277: Ensure completion_cx::as_promise(p) works even when p is destroyed prior to fulfillment
 * issue #282: Improve installed CMake package files
 * issue #287: Bogus install warnings on Cray XC regarding CC/CXX
 * [spec issue #155](https://bitbucket.org/berkeleylab/upcxx-spec/issues/155): value argument type to value collectives is changed to a simple by-value T
