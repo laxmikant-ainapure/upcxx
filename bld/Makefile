@@ -47,6 +47,7 @@ GASNET_CONDUIT ?= smp
 
 # Derived
 builddir = $(top_builddir)/bld
+makefiles = $(top_builddir)/Makefile $(top_srcdir)/Makefile.rules $(top_srcdir)/bld/Makefile
 
 # libupcxx configuration space
 ALL_ASSERTS  = 0 1
@@ -126,6 +127,11 @@ configure_opt=--disable-debug
 configure_debug=--enable-debug
 do-gasnet-configure: force
 	@dir=$(GASNETDIR);                                                            \
+	 for f in $(makefiles); do                                                    \
+	   if test $$f -nt $$dir/config.status 2>/dev/null; then                      \
+	     rm -f $$dir/config.cache $$dir/gasnet_config.h;                          \
+	   fi;                                                                        \
+	 done;                                                                        \
 	 if test \! -f "$$dir/gasnet_config.h" ; then                                 \
 	   echo "Configuring $(GASNET_CODEMODE)-mode build of GASNet";                \
 	   if test -n "$(CROSS)"; then                                                \
@@ -359,6 +365,7 @@ libupcxx_sources = \
 #
 VPATH = $(addprefix $(top_srcdir)/src/, $(sort $(dir $(libupcxx_sources))))
 libupcxx_objs = $(addsuffix .o,$(notdir $(basename $(libupcxx_sources))))
+$(libupcxx_objs): $(makefiles)
 libupcxx.a: $(libupcxx_objs)
 ifneq ($(strip $(upcxx_git_version_obj)),)
 	@rm -f $(UPCXX_DIR)/lib/$(upcxx_git_version_obj); \
