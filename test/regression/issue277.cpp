@@ -10,7 +10,7 @@ future<> fetch_vals(global_ptr<int> gp, int *dst, int cnt) {
   static 
 #endif
   assert(cnt % 2 == 0);
-  promise<> p(cnt/2);
+  promise<> p(cnt/2 + 1);
   promise<> p1 = p;
   for (int i=0;i<cnt;i++) {
     if (i & 1) {

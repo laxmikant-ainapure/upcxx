@@ -156,21 +156,21 @@ namespace upcxx {
         );
       }
 
-      void require_anonymous(std::intptr_t n) {
+      void require_anonymous(std::intptr_t n) const {
         detail::promise_require_anonymous(this->header(), n);
       }
       
-      void fulfill_anonymous(std::intptr_t n) {
+      void fulfill_anonymous(std::intptr_t n) const {
         detail::promise_fulfill_anonymous(this->header(), n);
       }
       
       template<typename ...U>
-      void fulfill_result(U &&...values) {
+      void fulfill_result(U &&...values) const {
         detail::promise_fulfill_result(this->header(), std::tuple<T...>(std::forward<U>(values)...));
       }
       
       template<typename ...U>
-      void fulfill_result(std::tuple<U...> &&values) {
+      void fulfill_result(std::tuple<U...> &&values) const {
         detail::promise_fulfill_result(this->header(), std::move(values));
       }
       
@@ -178,7 +178,7 @@ namespace upcxx {
           detail::future_kind_shref<detail::future_header_ops_promise>,
           T...
         >
-      finalize() {
+      finalize() const {
         this->header()->fulfill(1);
         return static_cast<
             detail::future_impl_shref<detail::future_header_ops_promise, T...> const&
