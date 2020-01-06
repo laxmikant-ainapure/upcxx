@@ -127,11 +127,6 @@ configure_opt=--disable-debug
 configure_debug=--enable-debug
 do-gasnet-configure: force
 	@dir=$(GASNETDIR);                                                            \
-	 for f in $(makefiles); do                                                    \
-	   if test $$f -nt $$dir/config.status 2>/dev/null; then                      \
-	     rm -f $$dir/config.cache $$dir/gasnet_config.h;                          \
-	   fi;                                                                        \
-	 done;                                                                        \
 	 if test \! -f "$$dir/gasnet_config.h" ; then                                 \
 	   echo "Configuring $(GASNET_CODEMODE)-mode build of GASNet";                \
 	   if test -n "$(CROSS)"; then                                                \

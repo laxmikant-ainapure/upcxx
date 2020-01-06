@@ -419,3 +419,8 @@ export GASNET_UNPACKED = $GASNET_UNPACKED
 export GASNET_CONFIGURE_ARGS = $GASNET_CONFIGURE_ARGS
 include \$(upcxx_src)/Makefile.rules
 EOF
+
+#
+# Remove any (potentially out-of-date) GASNet builds to ensure they are reconfigured
+#
+rm -Rf bld/gasnet.{opt,debug}/
