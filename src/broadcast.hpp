@@ -129,7 +129,7 @@ namespace upcxx {
     static_assert(
       upcxx::is_definitely_trivially_serializable<T>::value,
       "Only TriviallySerializable types permitted for `upcxx::broadcast`. "
-      "Consider `upcxx::broadcast_nontrivial` instead."
+      "Consider `upcxx::broadcast_nontrivial` instead (unsupported)."
     );
     
     struct broadcast_cb final: backend::gasnet::handle_cb {
@@ -176,7 +176,7 @@ namespace upcxx {
     static_assert(
       upcxx::is_definitely_trivially_serializable<T>::value,
       "Only TriviallySerializable types permitted for `upcxx::broadcast`. "
-      "Consider `upcxx::broadcast_nontrivial` instead."
+      "Consider `upcxx::broadcast_nontrivial` instead (unsupported)."
     );
 
     struct broadcast_cb final: backend::gasnet::handle_cb {

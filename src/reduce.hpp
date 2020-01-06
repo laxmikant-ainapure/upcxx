@@ -243,7 +243,7 @@ namespace upcxx {
       static_assert(
         upcxx::is_definitely_trivially_serializable<T>::value,
         "`upcxx::reduce_[all|one]<T>` only permitted for DefinitelyTriviallySerialize T. "
-        "Consider using `upcxx::reduce_[all|one]_nontrivial<T>` instead."
+        "Consider using `upcxx::reduce_[all|one]_nontrivial<T>` instead (unsupported)."
       );
       
       UPCXX_ASSERT_ALWAYS(
