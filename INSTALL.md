@@ -76,7 +76,7 @@ The current release is known to work on the following configurations:
 
 * GNU Bash 3.2 or newer (must be installed, user's shell doesn't matter)
 
-* Make (we recommend GNU make version 3.79 or newer).
+* GNU Make 3.80 or newer
 
 * The following standard Unix tools: 'awk', 'sed', 'env', 'basename', 'dirname'
 
