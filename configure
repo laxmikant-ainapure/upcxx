@@ -4,7 +4,6 @@
 #
 # TODO:
 #  + UPCXX_CUDA/nvcc handling
-#  + UPCXX_MPSC_QUEUE_* handling
 #  + sanitize/filter GASNET_CONFIGURE_ARGS ??
 #  + UPCXX_PYTHON is set (and validated by system-checks.sh) but never used
 
@@ -28,6 +27,11 @@ Usage:
         Specifies the cross-compilation target name.
         Overrides the value if $CROSS, if any.
         The (empty) default is appropriate unless cross-compiling.
+
+  --with-mpsc-queue=...
+        Selects the multiple-producer/single-consumer queue implementation.
+        Overrides the value of $UPCXX_MPSC_QUEUE, if any.
+        The default valiue, "atomic", is normally sufficient.
 
   --with-gasnet=...
         Specifies the URL or path of GASNet sources.
@@ -156,6 +160,11 @@ while [[ $# -gt 0 ]]; do
       [[ -n $CROSS ]] || missing_value $1
       ;;
 
+    --with-mpsc-queue=*)
+      export UPCXX_MPSC_QUEUE=${1#*=}
+      [[ -n $UPCXX_MPSC_QUEUE ]] || missing_value $1
+      ;;
+
     --with-gmake=*)
       export GMAKE=${1#*=}
       [[ -n $GMAKE ]] || missing_value $1
@@ -249,6 +258,20 @@ PREFIX=$(canon_path "$PREFIX")
 
 # Default python interpreter
 [[ -z "${UPCXX_PYTHON}" ]] && export UPCXX_PYTHON=python2
+
+# Default UPCXX_MPSC_QUEUE
+if [[ -z "$UPCXX_MPSC_QUEUE" ]] ; then
+  UPCXX_MPSC_QUEUE=atomic
+else
+  case "$UPCXX_MPSC_QUEUE" in
+    atomic|biglock)
+      ;; # OK
+    *)
+      echo "ERROR: UPCXX_MPSC_QUEUE='$UPCXX_MPSC_QUEUE' is not a valid value."
+      echo_and_die 'See docs/build-devel.md for valid values and additional info.'
+      ;;
+  esac
+fi
 
 #
 # system-checks
@@ -416,6 +439,7 @@ export GASNET        = $GASNET
 export CROSS         = $CROSS
 export UPCXX_PYTHON  = $UPCXX_PYTHON
 export UPCXX_CSUMCMD = $UPCXX_CSUMCMD
+export UPCXX_MPSC_QUEUE = UPCXX_MPSC_QUEUE_$(tr '[a-z]' '[A-Z]' <<<$UPCXX_MPSC_QUEUE)
 export GASNET_UNPACKED = $GASNET_UNPACKED
 export GASNET_CONFIGURE_ARGS = $GASNET_CONFIGURE_ARGS
 include \$(upcxx_src)/Makefile.rules
