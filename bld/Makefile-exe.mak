@@ -27,4 +27,5 @@ $(depfile): $(SRC) $(library)
 
 $(target): $(SRC) $(library) $(depfile)
 	@source $(upcxx_meta) SET; \
-	 eval "$$CXX $$CXXFLAGS $$CPPFLAGS $$LDFLAGS $(SRC) $$LIBS -o $(target) $(EXTRAFLAGS)"
+	 cmd="$$CXX $$CXXFLAGS $$CPPFLAGS $$LDFLAGS $(SRC) $$LIBS -o $(target) $(EXTRAFLAGS)"; \
+	 echo "$$cmd"; eval "$$cmd"
