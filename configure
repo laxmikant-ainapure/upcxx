@@ -28,11 +28,6 @@ Usage:
         Overrides the value if $CROSS, if any.
         The (empty) default is appropriate unless cross-compiling.
 
-  --with-mpsc-queue=...
-        Selects the multiple-producer/single-consumer queue implementation.
-        Overrides the value of $UPCXX_MPSC_QUEUE, if any.
-        The default valiue, "atomic", is normally sufficient.
-
   --with-gasnet=...
         Specifies the URL or path of GASNet sources.
         Overrides the value of $GASNET, if any.
@@ -160,6 +155,7 @@ while [[ $# -gt 0 ]]; do
       [[ -n $CROSS ]] || missing_value $1
       ;;
 
+    # Intentionally undocumented
     --with-mpsc-queue=*)
       export UPCXX_MPSC_QUEUE=${1#*=}
       [[ -n $UPCXX_MPSC_QUEUE ]] || missing_value $1
