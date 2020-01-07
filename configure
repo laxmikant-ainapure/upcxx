@@ -6,6 +6,7 @@
 #  + UPCXX_CUDA/nvcc handling
 #  + UPCXX_MPSC_QUEUE_* handling
 #  + sanitize/filter GASNET_CONFIGURE_ARGS ??
+#  + UPCXX_PYTHON is set (and validated by system-checks.sh) but never used
 
 #
 # Usage
@@ -79,9 +80,6 @@ UPCXX_SRC=$(cd $(dirname $(type -p $0)) && pwd -P)
 
 # Default installation prefix
 PREFIX=/usr/local/upcxx
-
-# Default python interpreter
-UPCXX_PYTHON=python
 
 # Undocumented "--single" mode
 single=0
@@ -248,6 +246,9 @@ function canon_path() {
   if [[ -n "$path" ]]; then echo "$path"; else echo '/'; fi
 }
 PREFIX=$(canon_path "$PREFIX")
+
+# Default python interpreter
+[[ -z "${UPCXX_PYTHON}" ]] && export UPCXX_PYTHON=python2
 
 #
 # system-checks
