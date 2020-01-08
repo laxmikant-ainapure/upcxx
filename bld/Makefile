@@ -487,19 +487,18 @@ all install clean distclean: force
 	@$(MAKE) upcxx-$@
 
 ##
-## "make exe SRC='foo.cpp src/bar.cpp' [EXTRAFLAGS=-Dfoo=bar]"
+## "make exe SRC='foo.cpp' [EXTRAFLAGS=-Dfoo=bar]"
 ## Generated full path to resulting executable on stdout
 ##
-## Correctly supports multiple source files and relative paths
+## Correctly supports absolute and relative paths
 ## PARAMS: ASSERT, OPTLVL, DBGSYM, UPCXX_BACKEND, GASNET_CONDUIT
 ## OPTIONAL PARAMS: EXTRAFLAGS
 ##
 
-# Hash absolute paths of filenames in $(SRC), plus any $(EXTRAFLAGS), to form executable name
+# Hash absolute path of $(SRC), plus any $(EXTRAFLAGS), to form executable name
 # The library variant is encoded in $(UPCXXDIR)
-ABSPATH = $(shell cd $(STARTDIR) && cd $(dir $(1)) && pwd)/$(notdir $(1))
-SRCPATHS = $(foreach src,$(SRC),$(call ABSPATH,$(src)))
-UPCXX_EXE_CSUM = $(firstword $(shell $(UPCXX_CSUMCMD) <<< '$(SRCPATHS) $(EXTRAFLAGS)'))
+SRCPATH = $(shell cd $(STARTDIR) && cd $(dir $(SRC)) && pwd)/$(notdir $(SRC))
+UPCXX_EXE_CSUM = $(firstword $(shell $(UPCXX_CSUMCMD) <<< '$(SRCPATH) $(EXTRAFLAGS)'))
 UPCXX_EXE_STEM = $(builddir)/$(UPCXXDIR)/exe/$(UPCXX_EXE_CSUM)
 UPCXX_EXE      = $(UPCXX_EXE_STEM)$(call GASNET_VAR,EXESUFFIX)
 
@@ -523,7 +522,7 @@ exe-clean: force; @rm -Rf $(UPCXXDIR)/exe
 ##
 ## "make run SRC='bar.cpp' [EXTRAFLAGS=-Dfoo=bar] [ARGS='arg1 arg2'] [RANKS=n]
 ##
-## Correctly supports multiple source files and relative paths
+## Correctly supports absolute and relative paths
 ## PARAMS: ASSERT, OPTLVL, DBGSYM, UPCXX_BACKEND, GASNET_CONDUIT
 ## OPTIONAL PARAMS: RANKS, ARGS, EXTRAFLAGS
 ##
