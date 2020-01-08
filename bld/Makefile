@@ -166,22 +166,42 @@ $(all_libgasnet): force
 	 $(MAKE) gasnet-single GASNET_CODEMODE=$$codemode GASNET_CONDUIT=$$conduit GASNET_THREADMODE=$$threadmode
 
 ##
+## Indirect targets to expose parallelism
+## Pattern rules don't work as desired for the dependencies.
+##
+
+.PHONY: do-gasnet-configure-opt do-gasnet-configure-debug
+.PHONY: do-gasnet-all-opt       do-gasnet-all-debug
+.PHONY: do-gasnet-install-opt   do-gasnet-install-debug
+.PHONY: do-gasnet-clean-opt     do-gasnet-clean-debug
+
+do-gasnet-configure-opt: force
+	@$(MAKE) do-gasnet-configure GASNET_CODEMODE=opt
+do-gasnet-configure-debug: force
+	@$(MAKE) do-gasnet-configure GASNET_CODEMODE=debug
+do-gasnet-all-opt: do-gasnet-configure-opt
+	@$(MAKE) -C gasnet.opt all
+do-gasnet-all-debug: do-gasnet-configure-debug
+	@$(MAKE) -C gasnet.debug all
+do-gasnet-install-opt: do-gasnet-all-opt
+	@$(MAKE) -C gasnet.opt install prefix=$(prefix)/gasnet.opt
+do-gasnet-install-debug: do-gasnet-all-debug
+	@$(MAKE) -C gasnet.debug install prefix=$(prefix)/gasnet.debug
+do-gasnet-clean-opt: force
+	@if [[ -d gasnet.opt ]]; then $(MAKE) -C gasnet.opt clean; fi
+do-gasnet-clean-debug: force
+	@if [[ -d gasnet.debug ]]; then $(MAKE) -C gasnet.debug clean; fi
+
+##
 ## Standard (not incremental) targets for GASNet (opt and debug)
 ##
 .PHONY: gasnet-configure gasnet-all gasnet-install gasnet-clean gasnet-distclean
 
-gasnet-configure: force
-	@$(MAKE) do-gasnet-configure GASNET_CODEMODE=opt
-	@$(MAKE) do-gasnet-configure GASNET_CODEMODE=debug
-gasnet-all: gasnet-configure
-	@$(MAKE) -C gasnet.opt   all
-	@$(MAKE) -C gasnet.debug all
-gasnet-install: gasnet-all
-	@$(MAKE) -C gasnet.opt   install prefix=$(prefix)/gasnet.opt
-	@$(MAKE) -C gasnet.debug install prefix=$(prefix)/gasnet.debug
-gasnet-clean: force
-	@if test -d gasnet.opt  ; then $(MAKE) -C gasnet.opt   clean; fi
-	@if test -d gasnet.debug; then $(MAKE) -C gasnet.debug clean; fi
+gasnet-configure: do-gasnet-configure-opt do-gasnet-configure-debug
+gasnet-all:       do-gasnet-all-opt       do-gasnet-all-debug
+gasnet-install:   do-gasnet-install-opt   do-gasnet-install-debug
+gasnet-clean:     do-gasnet-clean-opt     do-gasnet-clean-debug
+
 gasnet-distclean: force
 	rm -Rf gasnet.opt gasnet.debug
 
