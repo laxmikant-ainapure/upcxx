@@ -3,8 +3,8 @@ function install_common {
   conduits_pipes="${CONDUITS// /|}"
   conduits_commas="${CONDUITS// /, }"
 
-  mkdir -p "${install_to}/bin"
-  cat <<EOF >| "${install_to}/bin/upcxx-meta"
+  mkdir -p "${DESTDIR}${install_to}/bin"
+  cat <<EOF >| "${DESTDIR}${install_to}/bin/upcxx-meta"
 #!/bin/bash
 # This file is generated during installation - do not edit
 
@@ -95,25 +95,25 @@ else
   exec "\$meta" \$*
 fi
 EOF
-  chmod 755 "${install_to}/bin/upcxx-meta"
-  cat <<EOF >| "${install_to}/bin/upcxx"
+  chmod 755 "${DESTDIR}${install_to}/bin/upcxx-meta"
+  cat <<EOF >| "${DESTDIR}${install_to}/bin/upcxx"
 #!/bin/bash
 UPCXX_META="${install_to}/bin/upcxx-meta"
 export UPCXX_META
 source "${install_to}/bin/upcxx.sh" "\$@"
 EOF
-  chmod 755 "${install_to}/bin/upcxx"
-  cp ./utils/upcxx.sh "${install_to}/bin/upcxx.sh"
-  chmod 755 "${install_to}/bin/upcxx.sh"
-  cp ./utils/upcxx-run "${install_to}/bin/upcxx-run"
-  chmod 755 "${install_to}/bin/upcxx-run"
+  chmod 755 "${DESTDIR}${install_to}/bin/upcxx"
+  cp ./utils/upcxx.sh "${DESTDIR}${install_to}/bin/upcxx.sh"
+  chmod 755 "${DESTDIR}${install_to}/bin/upcxx.sh"
+  cp ./utils/upcxx-run "${DESTDIR}${install_to}/bin/upcxx-run"
+  chmod 755 "${DESTDIR}${install_to}/bin/upcxx-run"
   # install documentation
-  docdir="${install_to}/share/doc/upcxx"
+  docdir="${DESTDIR}${install_to}/share/doc/upcxx"
   mkdir -p $docdir
   cp -f -R README.md ChangeLog.md LICENSE.txt docs $docdir
   chmod -R a+rX $docdir
   # install cmake module
-  cmakedir="${install_to}/share/cmake/UPCXX"
+  cmakedir="${DESTDIR}${install_to}/share/cmake/UPCXX"
   mkdir -p $cmakedir
   cp -f -R utils/cmake/UPCXXConfig.cmake $cmakedir
   chmod -R a+rX $cmakedir

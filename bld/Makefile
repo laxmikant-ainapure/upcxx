@@ -192,10 +192,10 @@ gasnet-distclean: force
 
 # Body of a bottom-level upcxx-meta (build and install)
 do-upcxx-meta: force
-	@file="$(DST)/bin/upcxx-meta";                  \
-	 mkdir -p "$(DST)/bin" || exit $$?;             \
+	@file="$(DESTDIR)$(DST)/bin/upcxx-meta";        \
+	 mkdir -p "$(DESTDIR)$(DST)/bin" || exit $$?;   \
 	 rm -f $$file || exit $$?;                      \
-	 echo "$$upcxx_meta_body" > $$file || exit $$?;  \
+	 echo "$$upcxx_meta_body" > $$file || exit $$?; \
 	 chmod 755 $$file
 .PHONY: do-upcxx-meta
 ifneq ($(GASNET_BUILD),)
@@ -426,14 +426,14 @@ do-upcxx-all: force
 	 done;                                                                 \
 	 $(MAKE) $$targets
 do-upcxx-install-one: force
-	@mkdir -p "$(DST)/lib" || exit $$?;                               \
+	@mkdir -p "$(DESTDIR)$(DST)/lib" || exit $$?;                     \
 	 src="$(call UPCXXDIR)";                                          \
-	 cp $$src/lib/libupcxx.a "$(DST)/lib/" || exit $$?;               \
+	 cp $$src/lib/libupcxx.a "$(DESTDIR)$(DST)/lib/" || exit $$?;     \
 	 for file in `cd $$src && find include/upcxx/ -name '*.hpp'`; do  \
            file=`echo $$file | tr -s /`;                                  \
 	   if grep "$$file" $$src/lib/upcxx_headers.d >/dev/null; then    \
-	     mkdir -p "$(DST)/`dirname $$file`" || exit $$?;              \
-	     cp $$src/$$file "$(DST)/$$file" || exit $$?;                 \
+	     mkdir -p "$(DESTDIR)$(DST)/`dirname $$file`" || exit $$?;    \
+	     cp $$src/$$file "$(DESTDIR)$(DST)/$$file" || exit $$?;       \
 	   fi;                                                            \
 	 done
 	@$(MAKE) do-upcxx-meta
@@ -456,10 +456,10 @@ upcxx-all: force
 upcxx-install: upcxx-all
 	@$(MAKE) do-upcxx-install-all \
 	         ASSERT=1 OPTLVL=0 DBGSYM=1 UPCXX_CODEMODE=debug \
-	         UPCXX_FRAGMENTS="$(prefix)/gasnet.debug/include"
+	         UPCXX_FRAGMENTS="$(DESTDIR)$(prefix)/gasnet.debug/include"
 	@$(MAKE) do-upcxx-install-all \
 	         ASSERT=0 OPTLVL=3 DBGSYM=0 UPCXX_CODEMODE=O3    \
-	         UPCXX_FRAGMENTS="$(prefix)/gasnet.opt/include"
+	         UPCXX_FRAGMENTS="$(DESTDIR)$(prefix)/gasnet.opt/include"
 upcxx-clean: force
 	rm -Rf $(dir $(all_libupcxx))
 upcxx-distclean: upcxx-clean
