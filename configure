@@ -40,9 +40,6 @@ Usage:
         Specify the location GNU Make 3.80 or newer.
         Overrides the value of $GMAKE, if any.
         Default is to search for 'gmake' or 'make' in $PATH.
-  --with-url-cat=...
-        Specify the command used to fetch URLs to stdout.
-        Default is to search for curl or wget.
 
   -h|--help|--usage
         Produces this message.
@@ -147,11 +144,6 @@ while [[ $# -gt 0 ]]; do
       [[ -n $GMAKE ]] || missing_value $1
       ;;
 
-    --with-url-cat=*)
-      export URL_CAT=${1#*=}
-      [[ -n $URL_CAT ]] || missing_value $1
-      ;;
-
     -h|--help|--usage)
       echo 'UPC++ configure script.'
       echo '======================='
@@ -237,13 +229,14 @@ PREFIX=$(canon_path "$PREFIX")
 # Default GASNet source
 # Enable offline installers with an embedded GASNet-EX tarball
 #
+GASNET_DEFAULT='https://gasnet-bugs.lbl.gov/nightly/unlisted/GASNet-stable.tar.gz'
 gex_offline=`/bin/ls "$UPCXX_SRC"/src/GASNet-{stable,2???.*}.tar.gz 2> /dev/null | sort -t. -k1,1 -k2,2n -k3n | tail -1`
 if [[ -n "$GASNET" ]]; then
   : # keep defn
 elif [[ -r "$gex_offline" ]]; then
   GASNET="$gex_offline"
 else
-  GASNET='https://gasnet-bugs.lbl.gov/nightly/unlisted/GASNet-stable.tar.gz'
+  GASNET=$GASNET_DEFAULT
 fi
 
 # Default UPCXX_MPSC_QUEUE
@@ -269,17 +262,6 @@ platform_sanity_checks
 platform_settings
 export CC
 export CXX
-
-#
-# Setup URL_CAT if not set
-#
-if [ -n "$URL_CAT" ] ; then
-  : # keep defn
-elif [ -n "$(type -p curl)" ]; then
-  URL_CAT='curl --retry 5 -LsSf'
-elif [ -n "$(type -p wget)" ]; then
-  URL_CAT='wget --tries=5 -nv -O -'
-fi
 
 # Find a usable GNU Make
 function bad_gmake {
@@ -330,6 +312,11 @@ fi
 # Unpack GASNet (if required) and verify
 #
 
+function bad_gasnet_fetch {
+  echo Error: $* >&2
+  echo_and_die "Please correct the URL or point --with-gasnet=... at a manually downloaded GASNet source .tar.gz file ($GASNET_DEFAULT is the recommended version)"
+}
+echo
 ORIG_GASNET="$GASNET"
 GASNET_UNPACKED=""
 gex_builddir=0
@@ -353,13 +340,20 @@ elif expr "$GASNET" : '.*\.tar\.gz' >/dev/null; then
     trap - ERR # suspend error handler for detailed diagnostics
     mkdir -p bld
     if expr "$GASNET" : http >/dev/null; then
+      if [[ -n "$URL_CAT" ]] ; then
+        : # keep defn
+      elif [[ -n "$(type -p curl)" ]]; then
+        URL_CAT='curl --retry 5 -LsSf'
+      elif [[ -n "$(type -p wget)" ]]; then
+        URL_CAT='wget --tries=5 -nv -O -'
+      fi
       if [ -z "$URL_CAT" ]; then
-        echo_and_die "Do not know how to fetch a URL (did not find wget or curl)"
+        bad_gasnet_fetch "Do not know how to fetch a URL (did not find wget or curl in \$PATH)"
       fi
       gex_tmp="$gex_dir.tar.gz"
       echo Fetching $GASNET
       eval "$URL_CAT '$GASNET' >'$gex_tmp'"
-      [[ $? -eq 0 && -r "$gex_tmp" ]] || echo_and_die "Failed to fetch '$GASNET'"
+      [[ $? -eq 0 && -r "$gex_tmp" ]] || bad_gasnet_fetch "Failed to fetch '$GASNET'"
       GASNET="$gex_tmp"
     else
       [ -e "$GASNET" ] || echo_and_die "File '$GASNET' does not exist"
