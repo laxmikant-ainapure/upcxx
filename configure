@@ -42,6 +42,24 @@ Usage:
   -V|--version
         Report version and copyright.
 
+Some influential environment variables:
+  CXX         C++ compiler command
+  CXXFLAGS    C++ compiler flags
+  CXXCPP      C++ preprocessor
+  CC          C compiler command
+  CFLAGS      C compiler flags
+  CPP         C preprocessor
+  CPPFLAGS    C/C++ preprocessor flags, e.g. -I<include dir> if you have
+              headers in a nonstandard directory <include dir>
+  LDFLAGS     linker flags, e.g. -L<lib dir> if you have libraries in a
+              nonstandard directory <lib dir>
+  LIBS        libraries to pass to the linker, e.g. -l<library>
+Use these variables to override the choices made by `configure' or to help
+it to find libraries and programs with nonstandard names/locations.
+
+Report bugs to upcxx@googlegroups.com or at https://upcxx-bugs.lbl.gov
+UPC++ home page: https://upcxx.lbl.gov
+
 See INSTALL.md for additional information.
 EOF
 }
