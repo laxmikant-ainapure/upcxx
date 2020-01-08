@@ -17,9 +17,11 @@ echovar: force; @echo $(VARNAME)=\"$($(VARNAME))\"
 # To prevent application of pass-through rule upon 'include':
 Makefile $(upcxx_src)/bld/Makefile.rules: ; @# empty rule
 
+BLDDIR = $(upcxx_bld)/bld
+
 # TODO: default conduit selection should be at configure time
 install-hook: force
-	@eval $$($(MAKE) -C bld/gasnet.opt echovar VARNAME=CONDUITS) && \
+	@eval $$($(MAKE) -C $(BLDDIR)/gasnet.opt echovar VARNAME=CONDUITS) && \
 	 if [[ -n "$$GASNET_CONDUIT" ]]; then                \
 	   conduit_default="$$GASNET_CONDUIT";               \
 	 elif expr "x$(CROSS)" : xcray-aries- >/dev/null; then \
@@ -32,15 +34,15 @@ install-hook: force
 	 install_to="$(prefix)" install_common
 
 install: force
-	@$(MAKE) -C bld $@
+	@$(MAKE) -C $(BLDDIR) $@
 	@$(MAKE) $@-hook
 
 distclean-hook: force
-	-[[ $(upcxx_src) = $(upcxx_bld) ]] || rm -R bld/Makefile
-	-rm -R Makefile $(GASNET_UNPACKED)
+	-[[ $(upcxx_src) = $(upcxx_bld) ]] || rm -R $(BLDDIR)/Makefile
+	-rm -R $(upcxx_bld)/Makefile $(GASNET_UNPACKED)
 
 distclean: force
-	@$(MAKE) -C bld $@
+	@$(MAKE) -C $(BLDDIR) $@
 	@$(MAKE) $@-hook
 
 exe run: force
@@ -49,11 +51,11 @@ exe run: force
 	    echo "example: 'make $@ SRC=test/hello_upcxx.cpp'" >&2; \
 	    exit 1; \
 	 fi
-	@$(MAKE) -C bld $@ STARTDIR="$(shell pwd)"
+	@$(MAKE) -C $(BLDDIR) $@ STARTDIR="$(shell pwd)"
 
 # Default is pass-through
 # TODO?: HOOK and LOCAL "magic" like UPCR's multiconf
-%: force; @$(MAKE) -C bld $@
+%: force; @$(MAKE) -C $(BLDDIR) $@
 
 .PHONY: force echovar
 .PHONY: install install-hook
