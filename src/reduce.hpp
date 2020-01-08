@@ -243,7 +243,7 @@ namespace upcxx {
       static_assert(
         upcxx::is_definitely_trivially_serializable<T>::value,
         "`upcxx::reduce_[all|one]<T>` only permitted for DefinitelyTriviallySerialize T. "
-        "Consider using `upcxx::reduce_[all|one]_nontrivial<T>` instead."
+        "Consider using `upcxx::reduce_[all|one]_nontrivial<T>` instead (unsupported)."
       );
       
       UPCXX_ASSERT_ALWAYS(
@@ -391,14 +391,14 @@ namespace upcxx {
       Cxs
     >::return_t
   reduce_one(
-      T1 &&value, BinaryOp op, intrank_t root,
+      T1 value, BinaryOp op, intrank_t root,
       team &tm = upcxx::world(),
       Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
     ) {
     UPCXX_ASSERT(0 <= root && root < tm.rank_n());
     
     return detail::reduce_one_or_all_trivial<T1,BinaryOp,Cxs,T>(
-        std::forward<T1>(value), std::move(op), root, tm, std::move(cxs)
+        std::move(value), std::move(op), root, tm, std::move(cxs)
       );
   }
   
@@ -510,12 +510,12 @@ namespace upcxx {
       Cxs
     >::return_t
   reduce_all(
-      T1 &&value, BinaryOp op,
+      T1 value, BinaryOp op,
       team &tm = upcxx::world(),
       Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
     ) {
     return detail::reduce_one_or_all_trivial<T1,BinaryOp,Cxs,T>(
-        std::forward<T1>(value), std::move(op), /*all=*/-1, tm, std::move(cxs)
+        std::move(value), std::move(op), /*all=*/-1, tm, std::move(cxs)
       );
   }
   
