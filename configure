@@ -133,12 +133,6 @@ while [[ $# -gt 0 ]]; do
       [[ -n $CROSS ]] || missing_value $1
       ;;
 
-    # Intentionally undocumented
-    --with-mpsc-queue=*)
-      export UPCXX_MPSC_QUEUE=${1#*=}
-      [[ -n $UPCXX_MPSC_QUEUE ]] || missing_value $1
-      ;;
-
     --with-gmake=*)
       export GMAKE=${1#*=}
       [[ -n $GMAKE ]] || missing_value $1
@@ -166,6 +160,10 @@ while [[ $# -gt 0 ]]; do
     # These are to remain undocumented
     -v|--verbose) set -x ;;
     --single) single=1 ;;
+    --with-mpsc-queue=*)
+      export UPCXX_MPSC_QUEUE=${1#*=}
+      [[ -n $UPCXX_MPSC_QUEUE ]] || missing_value $1
+      ;;
 
     *)
       echo_and_die "$self: unknown argument $1.  Try '$self --help'."
