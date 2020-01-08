@@ -129,3 +129,5 @@ check: force
 	   $(MAKE) failure TARGET=check;                          \
 	 fi;                                                      \
 	 [[ $$failed = 0 ]] # exit code
+
+.NOTPARALLEL:
