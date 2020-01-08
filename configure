@@ -5,7 +5,6 @@
 # TODO:
 #  + UPCXX_CUDA/nvcc handling
 #  + sanitize/filter GASNET_CONFIGURE_ARGS ??
-#  + UPCXX_PYTHON is set (and validated by system-checks.sh) but never used
 
 #
 # Usage
@@ -41,10 +40,6 @@ Usage:
         Specify the location GNU Make 3.80 or newer.
         Overrides the value of $GMAKE, if any.
         Default is to search for 'gmake' or 'make' in $PATH.
-  --with-python=...
-        Specify the python interpreter to use.
-        Overrides the value of $UPCXX_PYTHON, if any.
-        Default is to search for various interpreters in $PATH.
   --with-url-cat=...
         Specify the command used to fetch URLs to stdout.
         Default is to search for curl or wget.
@@ -123,11 +118,6 @@ while [[ $# -gt 0 ]]; do
     --prefix=*)
       PREFIX=${1#*=}
       [[ -n $PREFIX ]] || missing_value $1
-      ;;
-
-    --with-python=*)
-      UPCXX_PYTHON=${1#*=}
-      [[ -n $UPCXX_PYTHON ]] || missing_value $1
       ;;
 
     --with-gasnet=*)
@@ -251,9 +241,6 @@ function canon_path() {
   if [[ -n "$path" ]]; then echo "$path"; else echo '/'; fi
 }
 PREFIX=$(canon_path "$PREFIX")
-
-# Default python interpreter
-[[ -z "${UPCXX_PYTHON}" ]] && export UPCXX_PYTHON=python2
 
 # Default UPCXX_MPSC_QUEUE
 if [[ -z "$UPCXX_MPSC_QUEUE" ]] ; then
@@ -433,7 +420,6 @@ export CONFIG_CC     = $CC
 export CONFIG_CXX    = $CXX
 export GASNET        = $GASNET
 export CROSS         = $CROSS
-export UPCXX_PYTHON  = $UPCXX_PYTHON
 export UPCXX_CSUMCMD = $UPCXX_CSUMCMD
 export UPCXX_MPSC_QUEUE = UPCXX_MPSC_QUEUE_$(tr '[a-z]' '[A-Z]' <<<$UPCXX_MPSC_QUEUE)
 export GASNET_UNPACKED = $GASNET_UNPACKED
