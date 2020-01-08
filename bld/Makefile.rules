@@ -45,7 +45,7 @@ distclean: force
 	@$(MAKE) -C $(BLDDIR) $@
 	@$(MAKE) $@-hook
 
-EXE_VPATH = "$(upcxx_src)/test" "$(upcxx_src)/example"
+EXE_VPATH = "$(upcxx_src)/test" "$(upcxx_src)/example" "$(upcxx_src)/bench"
 exe run: force
 	@if test -z "$(SRC)"; then \
 	    echo "ERROR: target '$@' requires a SRC" >&2; \
