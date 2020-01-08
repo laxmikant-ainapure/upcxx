@@ -78,15 +78,6 @@ PREFIX=/usr/local/upcxx
 # Undocumented "--single" mode
 single=0
 
-# Default GASNet source
-# Enable offline installers with an embedded GASNet-EX tarball
-gex_offline=`/bin/ls "$UPCXX_SRC"/src/GASNet-{stable,2???.*}.tar.gz 2> /dev/null | sort -t. -k1,1 -k2,2n -k3n | tail -1`
-if [[ -r "$gex_offline" ]]; then
-  GASNET="$gex_offline"
-else
-  GASNET='https://gasnet-bugs.lbl.gov/nightly/unlisted/GASNet-stable.tar.gz'
-fi
-
 #
 # Error handling
 #
@@ -241,6 +232,19 @@ function canon_path() {
   if [[ -n "$path" ]]; then echo "$path"; else echo '/'; fi
 }
 PREFIX=$(canon_path "$PREFIX")
+
+#
+# Default GASNet source
+# Enable offline installers with an embedded GASNet-EX tarball
+#
+gex_offline=`/bin/ls "$UPCXX_SRC"/src/GASNet-{stable,2???.*}.tar.gz 2> /dev/null | sort -t. -k1,1 -k2,2n -k3n | tail -1`
+if [[ -n "$GASNET" ]]; then
+  : # keep defn
+elif [[ -r "$gex_offline" ]]; then
+  GASNET="$gex_offline"
+else
+  GASNET='https://gasnet-bugs.lbl.gov/nightly/unlisted/GASNet-stable.tar.gz'
+fi
 
 # Default UPCXX_MPSC_QUEUE
 if [[ -z "$UPCXX_MPSC_QUEUE" ]] ; then
