@@ -438,7 +438,7 @@ export UPCXX_CSUMCMD = $UPCXX_CSUMCMD
 export UPCXX_MPSC_QUEUE = UPCXX_MPSC_QUEUE_$(tr '[a-z]' '[A-Z]' <<<$UPCXX_MPSC_QUEUE)
 export GASNET_UNPACKED = $GASNET_UNPACKED
 export GASNET_CONFIGURE_ARGS = $GASNET_CONFIGURE_ARGS
-include \$(upcxx_src)/Makefile.rules
+include \$(upcxx_src)/bld/Makefile.rules
 EOF
 
 #

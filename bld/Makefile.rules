@@ -15,7 +15,7 @@ MAKEFLAGS += --no-print-directory
 echovar: force; @echo $(VARNAME)=\"$($(VARNAME))\"
 
 # To prevent application of pass-through rule upon 'include':
-Makefile $(upcxx_src)/Makefile.rules: ; @# empty rule
+Makefile $(upcxx_src)/bld/Makefile.rules: ; @# empty rule
 
 # TODO: default conduit selection should be at configure time
 install-hook: force

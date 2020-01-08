@@ -47,7 +47,7 @@ GASNET_CONDUIT ?= smp
 
 # Derived
 builddir = $(top_builddir)/bld
-makefiles = $(top_builddir)/Makefile $(top_srcdir)/Makefile.rules $(top_srcdir)/bld/Makefile
+makefiles = $(top_builddir)/Makefile $(top_srcdir)/bld/Makefile.rules $(top_srcdir)/bld/Makefile
 
 # libupcxx configuration space
 ALL_ASSERTS  = 0 1
