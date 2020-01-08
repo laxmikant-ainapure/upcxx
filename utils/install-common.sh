@@ -117,4 +117,27 @@ EOF
   mkdir -p $cmakedir
   cp -f -R utils/cmake/UPCXXConfig.cmake $cmakedir
   chmod -R a+rX $cmakedir
+  # install environment module
+  (
+    modulefiles="${DESTDIR}${install_to}/share/modulefiles/upcxx"
+    header="${upcxx_src}/src/upcxx.hpp"
+    [[ $(grep "#define UPCXX_VERSION" ${header} | head -1) =~ ([0-9]{4})([0-9]{2})([0-9]{2}) ]]
+    VERSION="${BASH_REMATCH[1]}.${BASH_REMATCH[2]#0}.${BASH_REMATCH[3]#0}" # drop any leading 0 from MONTH and PATCH
+    mkdir -p $modulefiles
+    cat <<EOF >| "$modulefiles/$VERSION"
+#%Module1.0
+conflict upcxx
+module-whatis "UPC++ version ${VERSION}"
+proc ModulesHelp { } {
+    puts stderr "UPC++ version ${VERSION}"
+    puts stderr "Configured for CC='${CONFIG_CC}' CXX='${CONFIG_CXX}'"
+    puts stderr "For documentation see https://upcxx.lbl.gov"
+}
+append-path PATH "${prefix}/bin"
+setenv UPCXX_INSTALL "${prefix}"
+#setenv UPCXX_CODEMODE "optional site-specific default"
+#setenv UPCXX_NETWORK "optional site-specific default"
+EOF
+    chmod -R a+X $modulefiles
+  )
 }
