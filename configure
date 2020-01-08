@@ -42,6 +42,8 @@ Usage:
   -V|--version
         Report version and copyright.
 
+All unrecognized arguments will be passed to GASNet's configure.
+
 Some influential environment variables:
   CXX         C++ compiler command
   CXXFLAGS    C++ compiler flags
