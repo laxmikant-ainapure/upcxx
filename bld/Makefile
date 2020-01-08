@@ -95,7 +95,7 @@ GASNETDIR = gasnet.$(GASNET_CODEMODE)
 # GASNET_VAR_VAL:  VAR="VAL"
 # GASNET_VAR:      VAL
 #
-GASNET_VAR_CMD = $(MAKE) -C $(builddir)/$(GASNETDIR) echovar VARNAME=$(1)
+GASNET_VAR_CMD = MAKEFLAGS='$(filter-out d -d --debug=%,$(MAKEFLAGS))' $(MAKE) -C $(builddir)/$(GASNETDIR) echovar VARNAME=$(1)
 GASNET_VAR_VAL = $(shell $(call GASNET_VAR_CMD,$(1)))
 GASNET_VAR     = $(shell $(call GASNET_VAR_CMD,$(1)) | cut -d\" -f2)
 

@@ -21,7 +21,7 @@ BLDDIR = $(upcxx_bld)/bld
 
 # TODO: default conduit selection should be at configure time
 install-hook: force
-	@eval $$($(MAKE) -C $(BLDDIR)/gasnet.opt echovar VARNAME=CONDUITS) && \
+	@eval $$(MAKEFLAGS='$(filter-out d -d --debug=%,$(MAKEFLAGS))' $(MAKE) -C $(BLDDIR)/gasnet.opt echovar VARNAME=CONDUITS) && \
 	 if [[ -n "$$GASNET_CONDUIT" ]]; then                \
 	   conduit_default="$$GASNET_CONDUIT";               \
 	 elif expr "x$(CROSS)" : xcray-aries- >/dev/null; then \
