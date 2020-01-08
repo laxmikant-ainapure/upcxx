@@ -31,10 +31,6 @@ Usage:
         Specifies the URL or path of GASNet sources.
         Overrides the value of $GASNET, if any.
         The default is normally sufficient.
-  --with-gasnet-configure-args=...
-        Specifies extra arguments for configuration of GASNet sources.
-        Overrides the value of $GASNET_CONFIGURE_ARGS, if any.
-        The (empty) default is normally sufficient.
 
   --with-gmake=...
         Specify the location GNU Make 3.80 or newer.
@@ -113,11 +109,6 @@ while [[ $# -gt 0 ]]; do
       [[ -n $GASNET ]] || missing_value $1
       ;;
 
-    --with-gasnet-configure-args=*)
-      GASNET_CONFIGURE_ARGS=${1#*=}
-      [[ -n $GASNET_CONFIGURE_ARGS ]] || missing_value $1
-      ;;
-
     --with-cc=*)
       export CC=${1#*=}
       [[ -n $CC ]] || missing_value $1
@@ -158,8 +149,9 @@ while [[ $# -gt 0 ]]; do
       [[ -n $UPCXX_MPSC_QUEUE ]] || missing_value $1
       ;;
 
+    # Anything we don't consume will be passed to GASNet's configure
     *)
-      echo_and_die "$self: unknown argument $1.  Try '$self --help'."
+      GASNET_CONFIGURE_ARGS+="${GASNET_CONFIGURE_ARGS+ }$1"
       ;;
   esac
   shift
