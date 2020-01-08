@@ -150,13 +150,6 @@ while [[ $# -gt 0 ]]; do
       exit 0;
       ;;
 
-    --) 
-      if [[ $# -gt 1 ]]; then
-        shift
-        echo_and_die "$self: unused trailing arguments: $*"
-      fi
-      ;;
-
     # These are to remain undocumented
     -v|--verbose) set -x ;;
     --single) single=1 ;;
