@@ -45,13 +45,26 @@ distclean: force
 	@$(MAKE) -C $(BLDDIR) $@
 	@$(MAKE) $@-hook
 
+EXE_VPATH = "$(upcxx_src)/test" "$(upcxx_src)/example"
 exe run: force
 	@if test -z "$(SRC)"; then \
-	    echo "ERROR: target '$@' requires a SRC'" >&2; \
+	    echo "ERROR: target '$@' requires a SRC" >&2; \
 	    echo "example: 'make $@ SRC=test/hello_upcxx.cpp'" >&2; \
 	    exit 1; \
 	 fi
-	@$(MAKE) -C $(BLDDIR) $@ STARTDIR="$(shell pwd)"
+	@src=$(SRC);                                                   \
+	 if [[ ! -f "$(SRC)" && "$(SRC)" != /* ]]; then                \
+	   for d in $$(find $(EXE_VPATH) -type d); do                  \
+	     if [[ -f "$$d/$(SRC)" ]]; then                            \
+	       src="$$d/$(SRC)"; break;                                \
+	     fi                                                        \
+	   done;                                                       \
+	   if [[ -z "$$src" ]]; then                                   \
+	    echo "ERROR: file SRC='$(SRC)' does not exist" >&2;        \
+	    exit 1;                                                    \
+	   fi                                                          \
+	 fi;                                                           \
+	 $(MAKE) -C $(BLDDIR) $@ SRC="$$src" STARTDIR="$(shell pwd)"
 
 # Default is pass-through
 # TODO?: HOOK and LOCAL "magic" like UPCR's multiconf
