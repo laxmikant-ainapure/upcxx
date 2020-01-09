@@ -147,9 +147,15 @@ do-gasnet-configure: force
 # On-demand compile of a single instance of libgasnet
 # PARAMS: OPTLVL, DBGSYM, UPCXX_BACKEND, GASNET_CONDUIT, GASNET, CROSS
 #
+
+# If given a GASNet build directory in --single mode, treat it as read-only
+ifeq ($(strip $(GASNET_TYPE)),build)
+gasnet-single: ; @: # empty rule
+else
 gasnet-single: do-gasnet-configure
 	@$(MAKE) -C "$(GASNETDIR)/$(GASNET_CONDUIT)-conduit" $(GASNET_THREADMODE)
 	@if test $(GASNET_CONDUIT) = udp; then $(MAKE) -C "$(GASNETDIR)/other/amudp" amudprun; fi
+endif
 
 #
 # On-demand compile of a single instance of libgasnet by full path
@@ -401,10 +407,8 @@ do-upcxx-single: force
 	 $(MAKE) do-libupcxx UPCXX_DIR="$(builddir)/$$dir"
 upcxx-single: gasnet-single
 	@$(MAKE) do-upcxx-single UPCXX_FRAGMENTS="$(builddir)/$(GASNETDIR)"
-upcxx-single-bld: force
-	@$(MAKE) do-upcxx-single UPCXX_FRAGMENTS="$(GASNET)"
 
-.PHONY: do-upcxx-single upcxx-single upcxx-single-bld
+.PHONY: do-upcxx-single upcxx-single
 
 #
 # On-demand compile of a single instance of libupcxx by fullpath
@@ -491,13 +495,8 @@ do-install-single: force
 	@$(MAKE) do-upcxx-install-one DST="$(prefix)" UPCXX_FRAGMENTS="$(GASNET_BUILD)"
 	@cd "$(GASNET_BUILD)/$(GASNET_CONDUIT)-conduit" && \
 	    cp libgasnet-$(GASNET_CONDUIT)-$(GASNET_THREADMODE).a $(prefix)/lib/
-install-single: force
-	@if [[ -r "$(GASNET)/gasnet_config.h" ]]; then \
-	   INSTALL_SINGLE_DEP=upcxx-single-bld GASNET_BUILD="$(GASNET)";                   \
-	 else                                          \
-	   INSTALL_SINGLE_DEP=upcxx-single     GASNET_BUILD="$(builddir)/$(GASNETDIR)";    \
-	 fi;                                           \
-	 $(MAKE) do-install-single INSTALL_SINGLE_DEP="$$INSTALL_SINGLE_DEP" GASNET_BUILD="$$GASNET_BUILD"
+install-single: upcxx-single
+	@$(MAKE) do-install-single GASNET_BUILD="$(builddir)/$(GASNETDIR)"
 
 .PHONY: do-install-single install-single
 

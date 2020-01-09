@@ -361,10 +361,10 @@ function bad_gasnet_fetch {
 }
 ORIG_GASNET="$GASNET"
 GASNET_UNPACKED=""
-gex_builddir=0
+GASNET_TYPE=source  # default
 if [[ "$single" -eq 1 && -r "$GASNET/gasnet_config.h" ]] ; then
   # single + GASNET=builddir (may or may not be a srcdir as well)
-  gex_builddir=1
+  GASNET_TYPE=build
   # Convert relative path of build directory to absolute if necessary
   if ! expr "$GASNET" : ^/ >/dev/null; then
     export GASNET=$(cd "$GASNET" && pwd -P)
@@ -417,7 +417,7 @@ else
   echo_and_die "GASNET must point to local tarball file, tarball url, or gasnet source tree."
 fi
 
-if [ "$gex_builddir" -eq 1 ]; then
+if [[ "$GASNET_TYPE" == 'build' ]]; then
   if [ -e "$GASNET/configure" ] ; then
     gex_header="$GASNET/gasnetex.h"
   else
@@ -460,6 +460,7 @@ export GMAKE=$GMAKE
 export CONFIG_CC=$CC
 export CONFIG_CXX=$CXX
 export GASNET=$GASNET
+export GASNET_TYPE=$GASNET_TYPE
 export CROSS=$CROSS
 export UPCXX_CSUMCMD=$UPCXX_CSUMCMD
 export UPCXX_MPSC_QUEUE=UPCXX_MPSC_QUEUE_$(tr '[a-z]' '[A-Z]' <<<$UPCXX_MPSC_QUEUE)
@@ -509,7 +510,17 @@ chmod a+rx bin/upcxx bin/upcxx-run
 #
 # Remove any (potentially out-of-date) GASNet builds to ensure they are reconfigured
 #
-rm -Rf bld/gasnet.{opt,debug}/
+[[ -d bld/gasnet.opt   ]] && rm -Rf bld/gasnet.opt
+[[ -d bld/gasnet.debug ]] && rm -Rf bld/gasnet.debug
+
+#
+# Simplify logic when using a GASNet build directory (--single only)
+# Only one of gasnet.opt or gasnet.debug is used, but we don't know/care which
+#
+if [[ "$GASNET_TYPE" == 'build' ]]; then
+  ln -s "$GASNET" bld/gasnet.opt
+  ln -s "$GASNET" bld/gasnet.debug
+fi
 
 #
 # Final instructions
