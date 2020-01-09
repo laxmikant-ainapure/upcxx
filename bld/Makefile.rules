@@ -5,7 +5,7 @@
 SHELL = /bin/bash
 DST =
 
-default: all ; @# empty rule
+default: all ; @: # empty rule
 
 force:
 
@@ -15,7 +15,7 @@ MAKEFLAGS += --no-print-directory
 echovar: force; @echo $(VARNAME)=\"$($(VARNAME))\"
 
 # To prevent application of pass-through rule upon 'include':
-Makefile $(upcxx_src)/bld/Makefile.rules: ; @# empty rule
+Makefile $(upcxx_src)/bld/Makefile.rules: ; @: # empty rule
 
 BLDDIR = $(upcxx_bld)/bld
 
