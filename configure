@@ -532,3 +532,7 @@ Recommended next steps:
   2. '$GMAKE check'
   3. '$GMAKE install'
 EOF
+
+[[ "$single" -eq 1 ]] && \
+  echo -e '\n********\nWARNING: --single mode enabled.  Many make targets will fail.\n********\n'
+exit 0
