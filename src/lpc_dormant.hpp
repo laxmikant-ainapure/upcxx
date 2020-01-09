@@ -37,7 +37,7 @@ namespace upcxx {
     template<typename ...T>
     lpc_dormant<T...>* make_lpc_dormant_quiesced_promise(
         persona &target, progress_level level,
-        promise<T...> &&pro,
+        detail::future_header_promise<T...> *pro, // takes ref
         lpc_dormant<T...> *tail
       );
     
@@ -107,11 +107,10 @@ namespace upcxx {
     template<typename ...T>
     lpc_dormant<T...>* make_lpc_dormant_quiesced_promise(
         persona &target, progress_level level,
-        promise<T...> &&pro,
+        detail::future_header_promise<T...> *pro, // takes ref
         lpc_dormant<T...> *tail
       ) {
-      auto *hdr = detail::promise_steal_header_of(std::move(pro));
-      auto *lpc = new lpc_dormant_qpromise<T...>(target, level, hdr);
+      auto *lpc = new lpc_dormant_qpromise<T...>(target, level, /*move ref*/pro);
       lpc->intruder.p.store(tail, std::memory_order_relaxed);
       return lpc;
     }
@@ -135,7 +134,7 @@ namespace upcxx {
 
           tls.enqueue_quiesced_promise(
             *p->target, p->level,
-            pro, /*result*/1 + /*anon*/0,
+            /*move ref*/pro, /*result*/1 + /*anon*/0,
             /*known_active=*/std::integral_constant<bool, !UPCXX_BACKEND_GASNET_PAR>()
           );
           

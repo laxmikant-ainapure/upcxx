@@ -20,7 +20,7 @@ namespace upcxx {
     
     // Get the promise pointer from the master map.
     template<typename T>
-    promise<T>* registered_promise(digest id, int initial_anon=0);
+    future_header_promise<T>* registered_promise(digest id, int initial_anon=0);
 
     template<typename T, typename ...U>
     T* registered_state(digest id, U &&...ctor_args);

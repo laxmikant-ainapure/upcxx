@@ -42,7 +42,10 @@ namespace gasnet {
     struct callback: handle_cb {
       promise<> pro;
       void execute_and_delete(handle_cb_successor) {
-        backend::fulfill_during<progress_level::user>(std::move(pro), std::tuple<>());
+        backend::fulfill_during<progress_level::user>(
+          detail::promise_as_shref(pro).steal_header(),
+          std::tuple<>()
+        );
       }
     };
     

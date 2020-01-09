@@ -33,7 +33,7 @@ namespace upcxx {
     }
     
     future<dist_object<T>&> when_here() const {
-      return detail::registered_promise<dist_object<T>&>(dig_)->get_future();
+      return detail::promise_get_future(detail::registered_promise<dist_object<T>&>(dig_));
     }
     
     #define UPCXX_COMPARATOR(op) \
@@ -82,7 +82,7 @@ namespace upcxx {
       id_ = tm.next_collective_id(detail::internal_only());
       
       backend::fulfill_during<progress_level::user>(
-          *detail::registered_promise<dist_object<T>&>(id_),
+          detail::registered_promise<dist_object<T>&>(id_)->incref(1),
           std::tuple<dist_object<T>&>(*this),
           backend::master
         );
@@ -95,7 +95,7 @@ namespace upcxx {
       id_ = tm.next_collective_id(detail::internal_only());
       
       backend::fulfill_during<progress_level::user>(
-          *detail::registered_promise<dist_object<T>&>(id_),
+          detail::registered_promise<dist_object<T>&>(id_)->incref(1),
           std::tuple<dist_object<T>&>(*this),
           backend::master
         );
@@ -106,28 +106,32 @@ namespace upcxx {
     }
     
     dist_object(dist_object const&) = delete;
-    
+
     dist_object(dist_object &&that) noexcept:
       tm_(that.tm_),
       id_(that.id_),
       value_(std::move(that.value_)) {
       
+      UPCXX_ASSERT(backend::master.active_with_caller());
+      UPCXX_ASSERT((that.id_ != digest{~0ull, ~0ull}));
+
       that.id_ = digest{~0ull, ~0ull}; // the tombstone id value
-      
-      promise<dist_object<T>&> *pro = new promise<dist_object<T>&>;
-      
-      pro->fulfill_result(*this);
-      
-      void *pro_void = static_cast<void*>(pro);
-      std::swap(pro_void, detail::registry[id_]);
-      
-      delete static_cast<promise<dist_object<T>&>*>(pro_void);
+
+      // Moving is painful for us because the original constructor (of that)
+      // created a promise, set its result to point to that, and then
+      // deferred its fulfillment until user progress. We hackishly overwrite
+      // the promise/future's result with our new address. Whether or not the
+      // deferred fulfillment has happened doesn't matter, but will determine
+      // whether the app observes the same future taking different values at
+      // different times (definitely not usual for futures).
+      static_cast<detail::future_header_promise<dist_object<T>&>*>(detail::registry[id_])
+        ->base_header_result.reconstruct_results(std::tuple<dist_object<T>&>(*this));
     }
     
     ~dist_object() {
       if(id_ != digest{~0ull, ~0ull}) {
         auto it = detail::registry.find(id_);
-        delete static_cast<promise<dist_object<T>&>*>(it->second);
+        static_cast<detail::future_header_promise<dist_object<T>&>*>(it->second)->dropref();
         detail::registry.erase(it);
       }
     }
