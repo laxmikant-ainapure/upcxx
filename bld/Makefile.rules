@@ -42,7 +42,7 @@ all: force
 
 distclean-hook: force
 	-[[ $(upcxx_src) = $(upcxx_bld) ]] || rm -R $(BLDDIR)/Makefile
-	-rm -R $(upcxx_bld)/Makefile $(GASNET_UNPACKED)
+	-rm -Rf $(upcxx_bld)/Makefile $(upcxx_bld)/bin/upcxx $(upcxx_bld)/bin/upcxx-run $(GASNET_UNPACKED)
 
 distclean: force
 	@$(MAKE) -C $(BLDDIR) $@
