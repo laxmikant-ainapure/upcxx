@@ -32,6 +32,11 @@ Usage:
         Overrides the value of $GASNET, if any.
         The default is normally sufficient.
 
+  --with-gmake=...
+        Specify the location GNU Make 3.80 or newer.
+        Overrides the value of $GMAKE, if any.
+        Default is to search for 'gmake' or 'make' in $PATH.
+
   -h|--help|--usage
         Produces this message.
   -V|--version
@@ -137,6 +142,11 @@ while [[ $# -gt 0 ]]; do
     --with-cross=*)
       export CROSS=${1#*=}
       [[ -n $CROSS ]] || missing_value $1
+      ;;
+
+    --with-gmake=*)
+      export GMAKE=${1#*=}
+      [[ -n $GMAKE ]] || missing_value $1
       ;;
 
     -h|--help|--usage)
@@ -256,25 +266,42 @@ platform_settings
 export CC
 export CXX
 
-# Look for a usable GNU Make
+#
+# Find a usable GNU Make
+#
 GMAKE_NEED_MAJ=3
 GMAKE_NEED_MIN=80
-GMAKE='gmake'
-gmake_good=''
-for x in gmake make; do
-  if [[ -n "$(type -p $x)" && $($x --version | grep ^GNU) =~ ([0-9]+).([0-9]+)(.[0-9]+)? ]]; then
-    maj=${BASH_REMATCH[1]}
-    min=${BASH_REMATCH[2]}
-    if [[ $maj -gt $GMAKE_NEED_MAJ ||
-        ( $maj -eq $GMAKE_NEED_MAJ && $min -ge $GMAKE_NEED_MIN ) ]] ; then
-      GMAKE=$x
-      gmake_good=1
-      echo "$GMAKE: GNU Make version ${BASH_REMATCH[0]}"
-      echo
+function bad_gmake {
+  echo Error: $* >&2
+  echo_and_die "Please set GMAKE (or pass --with-gmake=...) to the path to GNU Make $GMAKE_MIN_VER or newer."
+}
+if [[ -n "$GMAKE" ]]; then
+  if [[ -z $(type -p "$GMAKE") ]] ; then
+    bad_gmake "'$GMAKE' not found."
+  fi
+else
+  for x in gmake make; do
+    tmp="$(type -p $x)" || true
+    if [[ -n "$tmp" ]] ; then
+      GMAKE="$tmp"
       break
     fi
+  done
+  if [[ -z "$GMAKE" ]] ; then
+    bad_gmake "no 'gmake' or 'make' found in \$PATH."
   fi
-done
+fi
+if [[ $($GMAKE --version | grep ^GNU) =~ ([0-9]+).([0-9]+)(.[0-9]+)? ]]; then
+  maj=${BASH_REMATCH[1]}
+  min=${BASH_REMATCH[2]}
+  if [[ $maj -lt $GMAKE_NEED_MAJ ||
+      ( $maj -eq $GMAKE_NEED_MAJ && $min -lt $GMAKE_NEED_MIN ) ]] ; then
+    bad_gmake "'$GMAKE' is older than $GMAKE_NEED_MAJ.$GMAKE_NEED_MIN"
+  fi
+else
+  bad_gmake "'$GMAKE' does not appear to be GNU Make"
+fi
+echo -e "$GMAKE\nGNU Make version ${BASH_REMATCH[0]}\n"
 
 #
 # Find a usable checksum command
@@ -420,8 +447,3 @@ rm -Rf bld/gasnet.{opt,debug}/
 #
 echo 'UPC++ configuration complete'
 echo "Recommended next steps: '$GMAKE all', '$GMAKE check', '$GMAKE install'"
-if [[ -z "$gmake_good" ]]; then
-  echo
-  echo "WARNING: failed to find GNU Make ${GMAKE_NEED_MAJ}.${GMAKE_NEED_MIN} in \$PATH"
-  echo 'Please download and install the latest from https://ftp.gnu.org/pub/gnu/make/'
-fi
