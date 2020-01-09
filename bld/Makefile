@@ -485,18 +485,21 @@ upcxx-clean: force
 upcxx-distclean: upcxx-clean
 
 #
-# Targets for `install --single prefix`
+# Targets for `install-single.sh prefix`
 #
 do-install-single: force
 	@$(MAKE) do-upcxx-install-one DST="$(prefix)" UPCXX_FRAGMENTS="$(GASNET_BUILD)"
 	@cd "$(GASNET_BUILD)/$(GASNET_CONDUIT)-conduit" && \
 	    cp libgasnet-$(GASNET_CONDUIT)-$(GASNET_THREADMODE).a $(prefix)/lib/
-install-single-src: upcxx-single
-	@$(MAKE) do-install-single GASNET_BUILD="$(builddir)/$(GASNETDIR)"
-install-single-bld: upcxx-single-bld
-	@$(MAKE) do-install-single GASNET_BUILD="$(GASNET)"
+install-single: force
+	@if [[ -r "$(GASNET)/gasnet_config.h" ]]; then \
+	   INSTALL_SINGLE_DEP=upcxx-single-bld GASNET_BUILD="$(GASNET)";                   \
+	 else                                          \
+	   INSTALL_SINGLE_DEP=upcxx-single     GASNET_BUILD="$(builddir)/$(GASNETDIR)";    \
+	 fi;                                           \
+	 $(MAKE) do-install-single INSTALL_SINGLE_DEP="$$INSTALL_SINGLE_DEP" GASNET_BUILD="$$GASNET_BUILD"
 
-.PHONY: do-install-single install-single-src install-single-bld
+.PHONY: do-install-single install-single
 
 ##
 ## Top-level targets

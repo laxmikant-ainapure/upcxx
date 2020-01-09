@@ -456,6 +456,7 @@ cat > Makefile <<EOF
 export prefix        = $PREFIX
 export upcxx_src     = $UPCXX_SRC
 export upcxx_bld     = $PWD
+export GMAKE         = $GMAKE
 export CONFIG_CC     = $CC
 export CONFIG_CXX    = $CXX
 export GASNET        = $GASNET
