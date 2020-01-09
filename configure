@@ -27,6 +27,10 @@ Usage:
         Overrides the value if $CROSS, if any.
         The (empty) default is appropriate unless cross-compiling.
 
+  --with-default-network=...
+        Specifies the default network.
+        The default is system dependent.
+
   --with-gasnet=...
         Specifies the URL or path of GASNet sources.
         Overrides the value of $GASNET, if any.
@@ -147,6 +151,11 @@ while [[ $# -gt 0 ]]; do
     --with-gmake=*)
       export GMAKE=${1#*=}
       [[ -n $GMAKE ]] || missing_value $1
+      ;;
+
+    --with-default-network=*)
+      export GASNET_CONDUIT=${1#*=}
+      [[ -n $GASNET_CONDUIT ]] || missing_value $1
       ;;
 
     -h|--help|--usage)
@@ -322,6 +331,27 @@ if [[ -z "$UPCXX_CSUMCMD" ]]; then
 fi
 
 #
+# Default conduit
+#
+case $GASNET_CONDUIT in
+  '')
+    if [[ "$CROSS" =~ -aries- ]]; then
+      GASNET_CONDUIT=aries
+    else
+      GASNET_CONDUIT=smp
+    fi
+    ;;
+  udp|smp|ibv|aries)
+    ;;
+  mpi)
+    echo -e "WARNING: $GASNET_CONDUIT is not an officially supported network.\n"
+    ;;
+  *)
+    echo_and_die "ERROR: --with-default-network='$GASNET_CONDUIT' is not a valid network"
+    ;;
+esac
+
+#
 # Unpack GASNet (if required) and verify
 #
 
@@ -434,6 +464,7 @@ export UPCXX_CSUMCMD = $UPCXX_CSUMCMD
 export UPCXX_MPSC_QUEUE = UPCXX_MPSC_QUEUE_$(tr '[a-z]' '[A-Z]' <<<$UPCXX_MPSC_QUEUE)
 export GASNET_UNPACKED = $GASNET_UNPACKED
 export GASNET_CONFIGURE_ARGS = $GASNET_CONFIGURE_ARGS
+export GASNET_CONDUIT = $GASNET_CONDUIT
 include \$(upcxx_src)/bld/Makefile.rules
 EOF
 

@@ -19,18 +19,11 @@ Makefile $(upcxx_src)/bld/Makefile.rules: ; @: # empty rule
 
 BLDDIR = $(upcxx_bld)/bld
 
-# TODO: default conduit selection should be at configure time
 install-hook: force
 	@eval $$(MAKEFLAGS='$(filter-out d -d --debug=%,$(MAKEFLAGS))' $(MAKE) -C $(BLDDIR)/gasnet.opt echovar VARNAME=CONDUITS) && \
-	 if [[ -n "$$GASNET_CONDUIT" ]]; then                \
-	   conduit_default="$$GASNET_CONDUIT";               \
-	 elif expr "x$(CROSS)" : xcray-aries- >/dev/null; then \
-	   conduit_default='aries';                          \
-	 else                                                \
-	   conduit_default='smp';                            \
-	 fi &&                                               \
 	 cd $(upcxx_src) &&                                  \
 	 . utils/install-common.sh &&                        \
+	 conduit_default="$$GASNET_CONDUIT" &&               \
 	 install_to="$(prefix)" install_common
 
 install: force
