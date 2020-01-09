@@ -38,12 +38,14 @@ function set_upcxx_var {
   eval $var='$val'
 }
 
-if ! test -x "$UPCXX_META" ; then
-  error UPCXX_META=$UPCXX_META not found
-fi
-prefix="${UPCXX_META%/*/*}" # strip the last two components in the path
-if ! test -d "$prefix" ; then
-  error install prefix $prefix not found
+if [[ "$UPCXX_META" != 'BUILDDIR' ]]; then
+  if ! test -x "$UPCXX_META" ; then
+    error UPCXX_META=$UPCXX_META not found
+  fi
+  prefix="${UPCXX_META%/*/*}" # strip the last two components in the path
+  if ! test -d "$prefix" ; then
+    error install prefix $prefix not found
+  fi
 fi
 
 UPCXX_NETWORK=${UPCXX_NETWORK:-$UPCXX_GASNET_CONDUIT} # backwards-compat
@@ -120,6 +122,13 @@ if [[ $docxx && $docc ]] ; then
   error "please do not specify a mix of C and C++ source files on the same invocation"
 elif [[ $docc && $dolink ]] ; then
   error "please compile C language source files separately using -c"
+fi
+
+if [[ "$UPCXX_META" == 'BUILDDIR' ]]; then
+  for var in UPCXX_CODEMODE UPCXX_NETWORK UPCXX_THREADMODE ; do
+    eval "[[ -n "\$$var" ]] && echo $var=\$$var"
+  done
+  exit 0
 fi
 
 for var in UPCXX_CODEMODE UPCXX_NETWORK UPCXX_THREADMODE ; do
