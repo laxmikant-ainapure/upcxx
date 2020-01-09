@@ -482,5 +482,10 @@ rm -Rf bld/gasnet.{opt,debug}/
 #
 # Final instructions
 #
-echo 'UPC++ configuration complete'
-echo "Recommended next steps: '$GMAKE all', '$GMAKE check', '$GMAKE install'"
+cat << EOF
+UPC++ configuration complete.
+Recommended next steps:
+  1. '$GMAKE all'
+  2. '$GMAKE check'
+  3. '$GMAKE install'
+EOF
