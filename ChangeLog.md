@@ -11,6 +11,7 @@ New features/enhancements: (see specification and programmer's guide for full de
 
 * Significantly improve compile latency associated with `upcxx` compiler wrapper script
 * Improve handling of `upcxx-run -v` verbose options
+* Improve GASNet polling heuristic to reduce head-of-line blocking
 
 Notable bug fixes:
 
