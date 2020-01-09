@@ -11,7 +11,7 @@ fi
 ./configure --prefix="${prefix}" --single || exit $?
 
 # Extract:
-GMAKE=$(grep '^export GMAKE ' Makefile | tr -s ' ' | cut -d' ' -f4) || exit $?
+GMAKE=$(grep '^export GMAKE=' Makefile | cut -d= -f2) || exit $?
 
 # Install:
 ${UPCXX_MAKE:-$GMAKE -j8} install-single
