@@ -316,6 +316,12 @@ export CXX
 #
 # Find a usable GNU Make
 #
+# NOTES:
+# 1. The current regexp captures the patch level, but it is not yet used.
+# 2. The GMAKE_NEED_{MAJ,MIN} values are also used in the generated Makefile
+#    where the "logic" is more fragile than the shell logic here.
+#    If the minimum is raised don't forget to update that logic too.
+#
 GMAKE_NEED_MAJ=3
 GMAKE_NEED_MIN=80
 function bad_gmake {
