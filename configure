@@ -23,7 +23,7 @@ Usage:
         The (platform dependent) default is usually appropriate.
   --with-cross=...
         Specifies the cross-compilation target name.
-        Overrides the value if $CROSS, if any.
+        Overrides the value of $CROSS, if any.
         The (empty) default is appropriate unless cross-compiling.
 
   --enable-cuda
@@ -363,7 +363,6 @@ for cmd in shasum sha1sum md5sum md5; do
     break
   fi
 done
-set +x
 if [[ -z "$UPCXX_CSUMCMD" ]]; then
   echo_and_die Unable to find a usable checksum utility
 fi
