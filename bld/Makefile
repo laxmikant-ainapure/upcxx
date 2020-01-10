@@ -47,7 +47,11 @@ GASNET_CONDUIT ?= smp
 
 # Derived
 builddir = $(top_builddir)/bld
-makefiles = $(top_builddir)/Makefile $(top_srcdir)/bld/Makefile.rules $(top_srcdir)/bld/Makefile
+makefiles = \
+	$(top_srcdir)/bld/Makefile.rules     \
+	$(top_srcdir)/bld/Makefile           \
+	$(top_srcdir)/bld/compiler.mak       \
+	$(top_builddir)/Makefile
 
 # libupcxx configuration space
 ALL_ASSERTS  = 0 1
@@ -300,6 +304,8 @@ ifneq ($(UPCXX_FRAGMENTS),)
 include $(UPCXX_FRAGMENTS)/$(GASNET_CONDUIT)-conduit/$(GASNET_CONDUIT)-$(GASNET_THREADMODE).mak
 endif
 
+include $(top_srcdir)/bld/compiler.mak
+
 LIBUPCXX_DEFINES := -DUPCXX_ASSERT_ENABLED=$(ASSERT) -DUPCXX_BACKEND=1 -D$(UPCXX_MPSC_QUEUE)=1
 ifeq ($(strip $(UPCXX_BACKEND)),gasnet_seq)
 LIBUPCXX_DEFINES += -DUPCXX_BACKEND_GASNET_SEQ=1
@@ -308,18 +314,6 @@ LIBUPCXX_DEFINES += -DUPCXX_BACKEND_GASNET_PAR=1
 endif
 ifeq ($(UPCXX_CUDA),1)
 LIBUPCXX_DEFINES += -DUPCXX_CUDA_ENABLED=1 $(UPCXX_CUDA_CPPFLAGS)
-endif
-
-
-# NOTE: sufficiently old GNU Make lacks 'else if*'
-ifneq ($(findstring -std=c++,$(GASNET_CXX)),)
-LIBUPCXX_STDCXX :=
-else
-ifeq ($(GASNET_CXX_FAMILY),Intel)
-LIBUPCXX_STDCXX := -std=c++14
-else
-LIBUPCXX_STDCXX := -std=c++11
-endif
 endif
 
 # In developer builds, embed git-describe output in runtime.o
@@ -333,9 +327,9 @@ endif
 endif
 
 LIBUPCXX_C_COMPILE   := $(GASNET_CC)  $(GASNET_CPPFLAGS)    $(GASNET_CFLAGS) \
-                        $(LIBUPCXX_DEFINES) -I$(UPCXX_DIR)/include
+                        $(LIBUPCXX_CFLAGS)   $(LIBUPCXX_DEFINES) -I$(UPCXX_DIR)/include
 LIBUPCXX_CXX_COMPILE := $(GASNET_CXX) $(GASNET_CXXCPPFLAGS) $(GASNET_CXXFLAGS) $(LIBUPCXX_STDCXX) \
-                        $(LIBUPCXX_DEFINES) -I$(UPCXX_DIR)/include
+                        $(LIBUPCXX_CXXFLAGS) $(LIBUPCXX_DEFINES) -I$(UPCXX_DIR)/include
 
 #
 # Dependency tracking:
