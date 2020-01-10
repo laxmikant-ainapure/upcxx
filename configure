@@ -3,7 +3,6 @@
 # This file is NOT generated (e.g. don't look for configure.ac).
 #
 # TODO:
-#  + UPCXX_CUDA/nvcc handling
 #  + sanitize/filter GASNET_CONFIGURE_ARGS ??
 
 #
@@ -26,6 +25,22 @@ Usage:
         Specifies the cross-compilation target name.
         Overrides the value if $CROSS, if any.
         The (empty) default is appropriate unless cross-compiling.
+
+  --enable-cuda
+  --disable-cuda
+        Enabled or disable UPC++ Memory Kinds over NVIDIA CUDA.
+        Overrides the value of $UPCXX_CUDA, if any.
+  --with-nvcc=...
+        Overrides the value of $UPCXX_CUDA_NVCC, if any.
+        The default is to search for 'nvcc' in $PATH.
+  --with-cuda-cppflags=...
+        Sets the pre-processor flags needed to find CUDA runtime headers.
+        Overrides the value of $UPCXX_CUDA_CPPFLAGS, if any.
+        The default is to search probe 'nvcc'.
+  --with-cuda-libflags=...
+        Sets the linker flags needed to link CUDA runtime libraries.
+        Overrides the value of $UPCXX_CUDA_LIBFLAGS, if any.
+        The default is to search probe 'nvcc'.
 
   --with-default-network=...
         Specifies the default network.
@@ -156,6 +171,29 @@ while [[ $# -gt 0 ]]; do
     --with-default-network=*)
       export GASNET_CONDUIT=${1#*=}
       [[ -n $GASNET_CONDUIT ]] || missing_value $1
+      ;;
+
+    --enable-cuda)
+      export UPCXX_CUDA=1
+      ;;
+
+    --disable-cuda)
+      export UPCXX_CUDA=0
+      ;;
+
+    --with-nvcc=*)
+      export UPCXX_CUDA_NVCC=${1#*=}
+      [[ -n $UPCXX_CUDA_NVCC ]] || missing_value $1
+      ;;
+
+    --with-cuda-cppflags=*)
+      export UPCXX_CUDA_CPPFLAGS=${1#*=}
+      [[ -n $UPCXX_CUDA_CPPFLAGS ]] || missing_value $1
+      ;;
+
+    --with-cuda-libflags=*)
+      export UPCXX_CUDA_LIBFLAGS=${1#*=}
+      [[ -n $UPCXX_CUDA_LIBFLAGS ]] || missing_value $1
       ;;
 
     -h|--help|--usage)
@@ -331,6 +369,112 @@ if [[ -z "$UPCXX_CSUMCMD" ]]; then
 fi
 
 #
+# CUDA/nvcc setup
+# TODO: error reporting could be improved substantially.
+# In particular, we discard (nearly?) all failure output from nvcc
+#
+if [[ $UPCXX_CUDA -eq 1 ]]; then
+  trap - ERR # suspend error handler
+  # UPCXX_CUDA_NVCC: the nvcc utility
+  nvcc=${UPCXX_CUDA_NVCC:-$(type -p nvcc)}
+  if [[ -z "$nvcc" ]]; then
+    echo_and_die '$UPCXX_CUDA_NVCC unset and 'nvcc' not found in $PATH'
+  fi
+  echo "${nvcc}:"
+  $nvcc --version
+  if [[ $? -ne 0 ]]; then
+    echo_and_die "failed to run '$nvcc --version'"
+  fi
+  echo
+  UPCXX_CUDA_NVCC="$nvcc"
+
+  # UPCXX_CUDA_CPPFLAGS: pre-processor flags
+  if [[ ${UPCXX_CUDA_CPPFLAGS-unset} ]]; then
+    # We run a subprocess w/ output to fd 3, and append $? (w/o trailing newline) to this fd
+    # Bash "read" will yield non-zero due to lack of newline, which we use to capture $rc
+    # Inspired by
+    #    https://stackoverflow.com/questions/16854280
+    #    https://stackoverflow.com/questions/43736021
+    cppflags=''
+    exec 3< <( $nvcc --dryrun -c foo.cpp -o foo.o 2>&1 ; echo -n $?)
+    while IFS= read -u 3 -r line || { rc=$line && break; }; do
+      if [[ "$line" =~ (^#\$ INCLUDES=(.*)) ]]; then
+        set -- ${BASH_REMATCH[2]}
+        for flag in "$@"; do
+          [[ "$flag" =~ ^\" ]] && flag="${flag:1:${#flag}-2}"
+          if [[ "$flag" =~ ^-[ID] ]]; then
+            cppflags+=" $flag"
+          fi
+        done
+      fi
+    done
+    [[ $rc -ne 0 ]] && echo_and_die "failed to run $nvcc (error code $rc) to extract pre-process flags"
+    UPCXX_CUDA_CPPFLAGS=${cppflags# } # strip leading ' ' resulting from simple x+=" $y"
+  fi
+
+  # UPCXX_CUDA_LIBFLAGS: linker flags
+  if [[ ${UPCXX_CUDA_LIBFLAGS-unset} ]]; then
+    libflags=''
+    # Use incantation similar to one above to yield rc and last line output
+    exec 3< <( $nvcc --dryrun foo.o 2>&1 ; echo -n $?)
+    while IFS= read -u 3 -r line || { rc=$line && break; }; do last=$line; done
+    [[ $rc -ne 0 ]] && echo_and_die "failed to run $nvcc (error code $rc) to extract link flags"
+    set -- $last
+    # Make a pass to remove object files and strip quotes
+    for ((i = 1 ; i <= $# ; i++)); do
+      flag="${@:i:1}"
+      if [[ "$flag" =~ .*\.o\"?$ ]]; then
+        # drop object files
+        set -- "${@:1:i-1}" "${@:i+1}"
+        i=$((i-1))
+      elif [[ "$flag" =~ ^\"(.*)\"$ ]]; then
+        # strip quotes
+        set -- "${@:1:i-1}" "${BASH_REMATCH[1]}" "${@:i+1}"
+      fi
+    done
+    # Second pass actually parses
+    for ((i = 1 ; i <= $# ; i++)); do
+      flag="${@:i:1}"
+      case $flag in
+        -L*|-l*|-Wl,*|-pthread)
+          # Capture this flag
+          libflags+=" $flag"
+          ;;
+        -Xlinker|-rpath)
+          # Capture this flag and its argument
+          i=$((i+1))
+          libflags+=" $flag ${@:i:1}"
+          ;;
+        -Wl,--start-group)
+          # Capture the entire group including its delimiters
+          for ((j = i ; j <= $# ; j++)); do
+            flag="${@:j:1}"
+            libflags+=" $flag"
+            [[ "$flag" == '-Wl,--end-group' ]] && break
+          done
+          ;;
+      esac
+    done
+    UPCXX_CUDA_LIBFLAGS=${libflags# } # strip leading ' ' resulting from simple x+=" $y"
+  fi
+
+  # check that the CUDA Driver API is linkable, adding explicit link flags if needed
+  echo -e "#include <cuda.h>\n#include <cuda_runtime_api.h>\nint main() { cuInit(0); return 0; }" >| conftest.cpp
+  for ldextra in '' '-lcuda' '-framework CUDA' 'FAIL'; do
+    eval $CXX $UPCXX_CUDA_CPPFLAGS conftest.cpp -o conftest.exe $UPCXX_CUDA_LIBFLAGS $ldextra &> /dev/null
+    if [[ $? -eq 0 ]] && ( ./conftest.exe 2>/dev/null ); then
+      [[ -n "$ldextra" ]] && UPCXX_CUDA_LIBFLAGS+=" $ldextra"
+      break
+    fi
+  done
+  rm -f conftest.cpp conftest.exe
+  if [[ "$ldextra" == 'FAIL' ]]; then
+    echo_and_die 'failed to link against CUDA Driver API'
+  fi
+  trap failure_and_die ERR  # restore error handler
+fi
+
+#
 # Default conduit
 #
 case $GASNET_CONDUIT in
@@ -467,6 +611,10 @@ export UPCXX_MPSC_QUEUE=UPCXX_MPSC_QUEUE_$(tr '[a-z]' '[A-Z]' <<<$UPCXX_MPSC_QUE
 export GASNET_UNPACKED=$GASNET_UNPACKED
 export GASNET_CONFIGURE_ARGS=$GASNET_CONFIGURE_ARGS
 export GASNET_CONDUIT=$GASNET_CONDUIT
+export UPCXX_CUDA=$UPCXX_CUDA
+export UPCXX_CUDA_NVCC=$UPCXX_CUDA_NVCC
+export UPCXX_CUDA_CPPFLAGS=$UPCXX_CUDA_CPPFLAGS
+export UPCXX_CUDA_LIBFLAGS=$UPCXX_CUDA_LIBFLAGS
 include \$(upcxx_src)/bld/Makefile.rules
 EOF
 
