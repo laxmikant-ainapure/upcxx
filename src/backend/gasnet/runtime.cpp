@@ -232,12 +232,15 @@ namespace {
     return reinterpret_cast<T*>(i);
   }
 
+  GASNETT_USED // avoid an unused warning from (at least) PGI
   gex_AM_Arg_t am_arg_encode_i64_lo(int64_t i) {
     return gex_AM_Arg_t(i & 0xffffffffu);
   }
+  GASNETT_USED // avoid an unused warning from (at least) PGI
   gex_AM_Arg_t am_arg_encode_i64_hi(int64_t i) {
     return gex_AM_Arg_t(i >> 31 >> 1);
   }
+  GASNETT_USED // avoid an unused warning from (at least) PGI
   int64_t am_arg_decode_i64(gex_AM_Arg_t lo, gex_AM_Arg_t hi) {
     return (int64_t(hi)<<31<<1) | (int64_t(lo) & 0xffffffffu);
   }
@@ -504,7 +507,7 @@ void upcxx::init() {
     segment_size = szval;
   }
   // page align: page size should always be a power of 2
-  segment_size = (segment_size + GASNET_PAGESIZE-1) & -GASNET_PAGESIZE;
+  segment_size = (segment_size + GASNET_PAGESIZE-1) & (size_t)-GASNET_PAGESIZE;
 
   // now adjust the segment size if it's less than the GASNET_MAX_SEGSIZE
   if (segment_size > gasnet_max_segsize) {
@@ -1167,9 +1170,6 @@ void gasnet::send_am_eager_persona(
     std::size_t buf_size,
     std::size_t buf_align
   ) {
-
-  gex_AM_Arg_t per_lo = reinterpret_cast<intptr_t>(recipient_persona) & 0xffffffffu;
-  gex_AM_Arg_t per_hi = reinterpret_cast<intptr_t>(recipient_persona) >> 31 >> 1;
 
   gex_AM_RequestMedium3(
     handle_of(tm), recipient_rank,

@@ -120,7 +120,6 @@ int main() {
 
     constexpr int round_n = 3;
     for(int round=0; round < round_n;) {
-      int r1 = round + 1;
 
       for(int peer=0; peer < peer_n; peer++) {
         while(my_slot_recv[round%2][peer] < round || peer_slot_sent[round%2][peer] < round)

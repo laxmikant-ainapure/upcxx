@@ -128,7 +128,7 @@ done
 
 source $UPCXX_META SET
 [[ -z "$CC" ]] && error "failure in UPCXX_META=$UPCXX_META"
-for var in CC CXX CXXFLAGS CPPFLAGS LDFLAGS LIBS ; do 
+for var in CC CFLAGS CXX CXXFLAGS CPPFLAGS LDFLAGS LIBS ; do 
   eval verbose "$var: \$$var"
 done
 
@@ -178,7 +178,7 @@ function doit {
   exec "$@"
 }
 if [[ $docc ]] ; then # C language compilation, for convenience
-  doit $CC $CPPFLAGS "$@"
+  doit $CC $CFLAGS $CPPFLAGS "$@"
 elif [[ ! $dolink ]] ; then
   doit $CXX $EXTRAFLAGS $CXXFLAGS $CPPFLAGS "$@"
 else
