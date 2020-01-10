@@ -34,6 +34,14 @@
 # Numerous GNU Make extensions are used.
 ##
 
+# Paranoia
+ifeq ($(upcxx_src),)
+$(error This Makefile is not intended to be used directly)
+endif
+ifeq ($(upcxx_bld),)
+$(error This Makefile is not intended to be used directly)
+endif
+
 # From configure:
 top_srcdir   = $(upcxx_src)
 top_builddir = $(upcxx_bld)
