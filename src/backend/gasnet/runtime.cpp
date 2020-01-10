@@ -232,12 +232,15 @@ namespace {
     return reinterpret_cast<T*>(i);
   }
 
+  GASNETT_USED // avoid an unused warning from (at least) PGI
   gex_AM_Arg_t am_arg_encode_i64_lo(int64_t i) {
     return gex_AM_Arg_t(i & 0xffffffffu);
   }
+  GASNETT_USED // avoid an unused warning from (at least) PGI
   gex_AM_Arg_t am_arg_encode_i64_hi(int64_t i) {
     return gex_AM_Arg_t(i >> 31 >> 1);
   }
+  GASNETT_USED // avoid an unused warning from (at least) PGI
   int64_t am_arg_decode_i64(gex_AM_Arg_t lo, gex_AM_Arg_t hi) {
     return (int64_t(hi)<<31<<1) | (int64_t(lo) & 0xffffffffu);
   }
