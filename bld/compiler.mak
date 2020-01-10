@@ -34,3 +34,15 @@ LIBUPCXX_CFLAGS :=
 # Any CXXFLAGS specific to compilation of objects in libupcxx
 #
 LIBUPCXX_CXXFLAGS := 
+
+# Address issue #286 with PGI compiler
+ifeq ($(GASNET_CXX_FAMILY),PGI)
+LIBUPCXX_CXXFLAGS := --diag_suppress1427
+endif
+
+# Address issue #286 with Intel compiler (for -Wextra only)
+ifeq ($(GASNET_CXX_FAMILY),Intel)
+ifneq ($(findstring -Wextra,$(GASNET_CXX) $(GASNET_CXXFLAGS)),)
+LIBUPCXX_CXXFLAGS := -Wno-invalid-offsetof
+endif
+endif
