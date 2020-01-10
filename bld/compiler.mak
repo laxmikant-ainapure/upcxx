@@ -19,7 +19,7 @@ ifeq ($(GASNET_CXX_FAMILY),Intel)
 UPCXX_STDCXX := -std=c++14
 endif
 # Then throw it all away if $CXX already specifies a language level:
-ifneq ($(findstring -std=c++,$(GASNET_CXX)),)
+ifneq ($(findstring -std=c++,$(GASNET_CXX))$(findstring -std=gnu++,$(GASNET_CXX)),)
 UPCXX_STDCXX :=
 endif
 
