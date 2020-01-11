@@ -36,7 +36,7 @@ fi
 UPCXX_HASH=$(zcat ${RELEASE_TGZ} | git get-tar-commit-id)
 
 # Extract GASNet-EX URL:
-GASNET_URL=$(tar xOfz ${RELEASE_TGZ} ${RELEASE}/install | grep -m1 'http.*GASNet-.*\.tar\.gz' | cut -d\' -f2)
+GASNET_URL=$(tar xOfz ${RELEASE_TGZ} ${RELEASE}/configure | grep -m1 'http.*GASNet-.*\.tar\.gz' | cut -d\' -f2)
 GASNET=$(basename "${GASNET_URL}" .tar.gz)
 
 # Downoad GEX and extract info
