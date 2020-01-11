@@ -29,9 +29,17 @@ install-hook: force
 install install-opt install-debug: force
 	@$(MAKE) -C $(BLDDIR) $@ || $(MAKE) failure TARGET=installation
 	@$(MAKE) install-hook || $(MAKE) failure TARGET=installation
+	@echo; \
+	 echo 'UPC++ installation complete.'; \
+	 echo 'Recommended next steps: [ref docs TBD]'
 
 all all-opt all-debug: force
 	@$(MAKE) -C $(BLDDIR) $@ || $(MAKE) failure TARGET=build
+	@echo; \
+	 echo 'UPC++ build complete.';    \
+	 echo 'Recommended next steps:';  \
+	 echo "  1. '$(GMAKE) check'";    \
+	 echo "  2. '$(GMAKE) install'"
 
 distclean-hook: force
 	-[[ $(upcxx_src) = $(upcxx_bld) ]] || rm -R $(BLDDIR)/Makefile
@@ -117,6 +125,7 @@ check: force
 	 rm -f $$tmpfile;                                         \
 	 if [[ $$failed = 0 ]]; then                              \
 	   echo "PASSED $$run tests";                             \
+	   echo "If you have not already, you may now '$(GMAKE) install'"; \
 	 else                                                     \
 	   echo "FAILED $$failed of $$run tests";                 \
 	   $(MAKE) failure TARGET=check;                          \

@@ -107,8 +107,8 @@ UPCXX_SRC=$(cd $(dirname $(type -p $0)) && pwd -P)
 # Default installation prefix
 PREFIX=/usr/local/upcxx
 
-# Undocumented "--single" mode
-single=0
+# Undocumented "--enable-single" mode
+single=''
 
 #
 # Error handling
@@ -210,7 +210,10 @@ while [[ $# -gt 0 ]]; do
 
     # These are to remain undocumented
     -v|--verbose) set -x ;;
-    --single) single=1 ;;
+    --enable-single=*)
+      single=${1#*=}
+      [[ -n $single ]] || missing_value $1
+      ;;
     --with-mpsc-queue=*)
       export UPCXX_MPSC_QUEUE=${1#*=}
       [[ -n $UPCXX_MPSC_QUEUE ]] || missing_value $1
@@ -288,6 +291,19 @@ elif [[ -r "$gex_offline" ]]; then
 else
   GASNET=$GASNET_DEFAULT
 fi
+
+# --enable-single={opt,debug}
+case $single in
+  '')
+    UPCXX_OPTDBG='opt debug'
+    ;;
+  opt|debug)
+    UPCXX_OPTDBG=$single
+    ;;
+  *)
+    echo_and_die "ERROR: --enable-single='$single' is not a valid option"
+    ;;
+esac
 
 # Default UPCXX_MPSC_QUEUE
 if [[ -z "$UPCXX_MPSC_QUEUE" ]] ; then
@@ -511,7 +527,7 @@ function bad_gasnet_fetch {
 ORIG_GASNET="$GASNET"
 GASNET_UNPACKED=""
 GASNET_TYPE=source  # default
-if [[ "$single" -eq 1 && -r "$GASNET/gasnet_config.h" ]] ; then
+if [[ -n "$single" && -r "$GASNET/gasnet_config.h" ]] ; then
   # single + GASNET=builddir (may or may not be a srcdir as well)
   GASNET_TYPE=build
   # Convert relative path of build directory to absolute if necessary
@@ -622,6 +638,7 @@ export GASNET_TYPE=$GASNET_TYPE
 export CROSS=$CROSS
 export UPCXX_CSUMCMD=$UPCXX_CSUMCMD
 export UPCXX_MPSC_QUEUE=UPCXX_MPSC_QUEUE_$(tr '[a-z]' '[A-Z]' <<<$UPCXX_MPSC_QUEUE)
+export UPCXX_OPTDBG=$UPCXX_OPTDBG
 export GASNET_UNPACKED=$GASNET_UNPACKED
 export GASNET_CONFIGURE_ARGS=$GASNET_CONFIGURE_ARGS
 export GASNET_CONDUIT=$GASNET_CONDUIT
@@ -670,7 +687,7 @@ chmod a+rx bin/upcxx bin/upcxx-run
 [[ -d bld/gasnet.debug ]] && rm -Rf bld/gasnet.debug
 
 #
-# Simplify logic when using a GASNet build directory (--single only)
+# Simplify logic when using a GASNet build directory (--enable-single only)
 # Only one of gasnet.opt or gasnet.debug is used, but we don't know/care which
 #
 if [[ "$GASNET_TYPE" == 'build' ]]; then
@@ -689,6 +706,12 @@ Recommended next steps:
   3. '$GMAKE install'
 EOF
 
-[[ "$single" -eq 1 ]] && \
-  echo -e '\n********\nWARNING: --single mode enabled.  Many make targets will fail.\n********\n'
+if [[ -n "$single" ]]; then
+  echo -e '\n********'
+  echo "WARNING: --enable-single=$single mode enabled."
+  echo 'WARNING: This mode is intended for maintainers only.'
+  echo 'WARNING: Many make targets will fail and components will be missing.'
+  echo -e '********\n'
+fi
+
 exit 0
