@@ -103,6 +103,10 @@ UPCXXDIR = $(call UPCXXDIR_FN,$(ASSERT),$(OPTLVL),$(DBGSYM),$(UPCXX_BACKEND),$(G
 # Similar for GASNet build directory
 GASNETDIR = gasnet.$(GASNET_CODEMODE)
 
+## Support for --enable-single=...{opt,debug}
+UPCXX_OPTDBG ?= opt debug
+FOREACH_OPTDBG = $(addprefix $(1)-,$(UPCXX_OPTDBG))
+
 #
 # Extraction of GASNet Makefile variables (ones not present in .mak fragment)
 # GASNET_VAR_VAL:  VAR="VAL"
@@ -216,10 +220,10 @@ do-gasnet-clean-debug: force
 ##
 .PHONY: gasnet-configure gasnet-all gasnet-install gasnet-clean gasnet-distclean
 
-gasnet-configure: do-gasnet-configure-opt do-gasnet-configure-debug
-gasnet-all:       do-gasnet-all-opt       do-gasnet-all-debug
-gasnet-install:   do-gasnet-install-opt   do-gasnet-install-debug
-gasnet-clean:     do-gasnet-clean-opt     do-gasnet-clean-debug
+gasnet-configure: $(call FOREACH_OPTDBG,do-gasnet-configure)
+gasnet-all:       $(call FOREACH_OPTDBG,do-gasnet-all)
+gasnet-install:   $(call FOREACH_OPTDBG,do-gasnet-install)
+gasnet-clean:     $(call FOREACH_OPTDBG,do-gasnet-clean)
 
 gasnet-distclean: force
 	rm -Rf gasnet.opt gasnet.debug
@@ -486,11 +490,11 @@ do-upcxx-clean-debug: force
 # Standard all, install, clean and distclean
 # There is no configure
 #
-upcxx-all:     do-upcxx-all-opt     do-upcxx-all-debug
-upcxx-install: do-upcxx-install-opt do-upcxx-install-debug
-upcxx-clean: force
-	rm -Rf $(dir $(all_libupcxx))
-upcxx-distclean: upcxx-clean
+
+upcxx-all:     $(call FOREACH_OPTDBG,do-upcxx-all)
+upcxx-install: $(call FOREACH_OPTDBG,do-upcxx-install)
+upcxx-clean:   $(call FOREACH_OPTDBG,do-upcxx-clean)
+upcxx-distclean: do-upcxx-clean-opt do-upcxx-clean-debug # Always both
 
 #
 # Targets for `install-single.sh prefix`
