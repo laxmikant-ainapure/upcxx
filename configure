@@ -26,8 +26,8 @@ Usage:
         Overrides the value of $CROSS, if any.
         The (empty) default is appropriate unless cross-compiling.
 
-  --enable-cuda
-  --disable-cuda
+  --with-cuda
+  --without-cuda
         Enabled or disable UPC++ Memory Kinds over NVIDIA CUDA.
         Overrides the value of $UPCXX_CUDA, if any.
   --with-nvcc=...
@@ -173,11 +173,11 @@ while [[ $# -gt 0 ]]; do
       [[ -n $GASNET_CONDUIT ]] || missing_value $1
       ;;
 
-    --enable-cuda)
+    --with-cuda)
       export UPCXX_CUDA=1
       ;;
 
-    --disable-cuda)
+    --without-cuda)
       export UPCXX_CUDA=0
       ;;
 
