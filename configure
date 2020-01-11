@@ -124,77 +124,40 @@ function failure_and_die {
   exit 1
 }
 
-function missing_value {
-  echo "ERROR: option '$1' is missing its required value." >&2
-  usage >&2
-  exit 1
+function get_arg_val {
+  if [[ "$1" =~ (^[^=]*=(.+)) ]]; then
+    echo "${BASH_REMATCH[2]}"
+  else
+    echo "ERROR: option '${1%=}' is missing its required value." >&2
+    echo "Run '$0 --help' for complete usage information." >&2
+    exit 1
+  fi
 }
-
-trap failure_and_die ERR  # errors are fatal
 
 #
 # Argument parsing
 #
 
+shopt -s extglob
+trap exit ERR  # so exit in get_arg_val exits from top-level
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --prefix=*)
-      PREFIX=${1#*=}
-      [[ -n $PREFIX ]] || missing_value $1
-      ;;
+    --prefix?(=*))               PREFIX="$(get_arg_val $1)";;
 
-    --with-gasnet=*)
-      GASNET=${1#*=}
-      [[ -n $GASNET ]] || missing_value $1
-      ;;
+    --with-gasnet?(=*))          export GASNET="$(get_arg_val $1)";;
+    --with-default-network?(=*)) export GASNET_CONDUIT="$(get_arg_val $1)";;
 
-    --with-cc=*)
-      export CC=${1#*=}
-      [[ -n $CC ]] || missing_value $1
-      ;;
+    --with-cc?(=*))              export CC="$(get_arg_val $1)";;
+    --with-cxx?(=*))             export CXX="$(get_arg_val $1)";;
+    --with-cross?(=*))           export CROSS="$(get_arg_val $1)";;
 
-    --with-cxx=*)
-      export CXX=${1#*=}
-      [[ -n $CXX ]] || missing_value $1
-      ;;
+    --with-gmake?(=*))           export GMAKE="$(get_arg_val $1)";;
 
-    --with-cross=*)
-      export CROSS=${1#*=}
-      [[ -n $CROSS ]] || missing_value $1
-      ;;
-
-    --with-gmake=*)
-      export GMAKE=${1#*=}
-      [[ -n $GMAKE ]] || missing_value $1
-      ;;
-
-    --with-default-network=*)
-      export GASNET_CONDUIT=${1#*=}
-      [[ -n $GASNET_CONDUIT ]] || missing_value $1
-      ;;
-
-    --with-cuda)
-      export UPCXX_CUDA=1
-      ;;
-
-    --without-cuda)
-      export UPCXX_CUDA=0
-      ;;
-
-    --with-nvcc=*)
-      export UPCXX_CUDA_NVCC=${1#*=}
-      [[ -n $UPCXX_CUDA_NVCC ]] || missing_value $1
-      ;;
-
-    --with-cuda-cppflags=*)
-      export UPCXX_CUDA_CPPFLAGS=${1#*=}
-      [[ -n $UPCXX_CUDA_CPPFLAGS ]] || missing_value $1
-      ;;
-
-    --with-cuda-libflags=*)
-      export UPCXX_CUDA_LIBFLAGS=${1#*=}
-      [[ -n $UPCXX_CUDA_LIBFLAGS ]] || missing_value $1
-      ;;
+    --with-cuda)                 export UPCXX_CUDA=1;;
+    --without-cuda)              export UPCXX_CUDA=0;;
+    --with-nvcc?(=*))            export UPCXX_CUDA_NVCC="$(get_arg_val $1)";;
+    --with-cuda-cppflags?(=*))   export UPCXX_CUDA_CPPFLAGS="$(get_arg_val $1)";;
+    --with-cuda-libflags?(=*))   export UPCXX_CUDA_LIBFLAGS="$(get_arg_val $1)";;
 
     -h|--help|--usage)
       echo 'UPC++ configure script.'
@@ -210,13 +173,11 @@ while [[ $# -gt 0 ]]; do
 
     # These are to remain undocumented
     -v|--verbose) set -x ;;
-    --enable-single=*)
-      single=${1#*=}
-      [[ -n $single ]] || missing_value $1
+    --enable-single?(=*))
+      single="$(get_arg_val $1)"
       ;;
     --with-mpsc-queue=*)
-      export UPCXX_MPSC_QUEUE=${1#*=}
-      [[ -n $UPCXX_MPSC_QUEUE ]] || missing_value $1
+      export UPCXX_MPSC_QUEUE="$(get_arg_val $1)"
       ;;
 
     # Anything we don't consume will be passed to GASNet's configure
@@ -226,6 +187,8 @@ while [[ $# -gt 0 ]]; do
   esac
   shift
 done  
+
+trap failure_and_die ERR  # errors after arg parsing are fatal
 
 #
 # Canonicalize $PREFIX
