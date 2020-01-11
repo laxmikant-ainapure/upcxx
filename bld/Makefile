@@ -454,19 +454,40 @@ do-upcxx-install-all: force
 	 done
 
 #
-# Standard all, install, clean and distclean
-# There is no configure
+# Opt and debug targets for upcxx
 #
-upcxx-all: force
-	@$(MAKE) do-upcxx-all ASSERT=1 OPTLVL=0 DBGSYM=1
+
+.PHONY: do-upcxx-all-opt       do-upcxx-all-debug
+.PHONY: do-upcxx-install-opt   do-upcxx-install-debug
+.PHONY: do-upcxx-clean-opt     do-upcxx-clean-debug
+
+do-upcxx-all-opt: force
 	@$(MAKE) do-upcxx-all ASSERT=0 OPTLVL=3 DBGSYM=0
-upcxx-install: upcxx-all
-	@$(MAKE) do-upcxx-install-all \
-	         ASSERT=1 OPTLVL=0 DBGSYM=1 UPCXX_CODEMODE=debug \
-	         UPCXX_FRAGMENTS="$(DESTDIR)$(prefix)/gasnet.debug/include"
+do-upcxx-all-debug: force
+	@$(MAKE) do-upcxx-all ASSERT=1 OPTLVL=0 DBGSYM=1
+do-upcxx-install-opt: do-upcxx-all-opt
 	@$(MAKE) do-upcxx-install-all \
 	         ASSERT=0 OPTLVL=3 DBGSYM=0 UPCXX_CODEMODE=O3    \
 	         UPCXX_FRAGMENTS="$(DESTDIR)$(prefix)/gasnet.opt/include"
+do-upcxx-install-debug: do-upcxx-all-debug
+	@$(MAKE) do-upcxx-install-all \
+	         ASSERT=1 OPTLVL=0 DBGSYM=1 UPCXX_CODEMODE=debug \
+	         UPCXX_FRAGMENTS="$(DESTDIR)$(prefix)/gasnet.debug/include"
+do-upcxx-clean-opt: force
+	rm -Rf $(foreach backend, $(ALL_BACKENDS),       \
+               $(foreach conduit, $(ALL_CONDUITS),       \
+	         $(call UPCXXDIR_FN,0,3,0,$(backend),$(conduit))))
+do-upcxx-clean-debug: force
+	rm -Rf $(foreach backend, $(ALL_BACKENDS),       \
+               $(foreach conduit, $(ALL_CONDUITS),       \
+	         $(call UPCXXDIR_FN,1,0,1,$(backend),$(conduit))))
+
+#
+# Standard all, install, clean and distclean
+# There is no configure
+#
+upcxx-all:     do-upcxx-all-opt     do-upcxx-all-debug
+upcxx-install: do-upcxx-install-opt do-upcxx-install-debug
 upcxx-clean: force
 	rm -Rf $(dir $(all_libupcxx))
 upcxx-distclean: upcxx-clean
@@ -484,7 +505,15 @@ install-single: upcxx-single
 .PHONY: do-install-single install-single
 
 ##
-## Top-level targets
+## Secondary (opt and debug) top-level targets
+##
+
+all-opt all-debug install-opt install-debug clean-opt clean-debug: force
+	@$(MAKE) do-gasnet-$@
+	@$(MAKE) do-upcxx-$@
+
+##
+## Primary top-level targets
 ##
 
 all install clean distclean: force

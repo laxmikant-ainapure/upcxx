@@ -26,11 +26,11 @@ install-hook: force
 	 conduit_default="$$GASNET_CONDUIT" &&               \
 	 install_to="$(prefix)" install_common
 
-install: force
+install install-opt install-debug: force
 	@$(MAKE) -C $(BLDDIR) $@ || $(MAKE) failure TARGET=installation
-	@$(MAKE) $@-hook || $(MAKE) failure TARGET=installation
+	@$(MAKE) install-hook || $(MAKE) failure TARGET=installation
 
-all: force
+all all-opt all-debug: force
 	@$(MAKE) -C $(BLDDIR) $@ || $(MAKE) failure TARGET=build
 
 distclean-hook: force
