@@ -16,6 +16,7 @@ echovar: force; @echo $(VARNAME)=\"$($(VARNAME))\"
 
 # To prevent application of pass-through rule upon 'include':
 Makefile $(upcxx_src)/bld/Makefile.rules: ; @: # empty rule
+$(upcxx_src)/bld/%.mak: ; @: # empty rule
 
 BLDDIR = $(upcxx_bld)/bld
 GASNET_BLDDIR = $(BLDDIR)/gasnet.$(firstword $(UPCXX_OPTDBG))
@@ -88,23 +89,8 @@ failure: force
 .PHONY: distclean distclean-hook
 .PHONY: exe run
 
-testprograms_seq = \
-	atomics.cpp \
-	collectives.cpp \
-	dist_object.cpp \
-	local_team.cpp \
-	barrier.cpp \
-	rpc_barrier.cpp \
-	rpc_ff_ring.cpp \
-	rput.cpp \
-	vis.cpp \
-	vis_stress.cpp \
-	uts/uts_ranks.cpp
-
-testprograms_par = \
-	rput_thread.cpp \
-	uts/uts_hybrid.cpp \
-	view.cpp
+## Tests ##
+include $(upcxx_src)/bld/tests.mak
 
 check: force
 	@tmpfile=.testtmp_$$$$; rm -f $$tmpfile;                  \
