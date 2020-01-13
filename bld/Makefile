@@ -241,6 +241,13 @@ do-upcxx-meta: force
 	 echo "$$upcxx_meta_body" > $$file || exit $$?; \
 	 chmod 755 $$file
 .PHONY: do-upcxx-meta
+# In --enable-single mode we favor CONFIG_{CC,CXX} over the GASNET_ values:
+ifeq ($(strip $(UPCXX_OPTDBG)),$(firstword $(UPCXX_OPTDBG)))
+UPCXX_META_COMPILERS := CONFIG
+else
+UPCXX_META_COMPILERS := GASNET
+endif
+# upcxx-meta uses distinct variable names in the build vs install tree
 ifneq ($(GASNET_BUILD),)
 GASNET_BUILD_OR_INSTALL = GASNET_BUILD='$(GASNET_BUILD)'
 else
@@ -254,10 +261,10 @@ endif
 # do NOT add or remove blank lines
 define upcxx_meta_body
 #!/bin/sh
-CC='$(GASNET_CC)'
+CC='$($(UPCXX_META_COMPILERS)_CC)'
 CFLAGS='$(GASNET_CFLAGS)'
 CPPFLAGS='$(UPCXX_DEFINES) -I$(DST)/include $(GASNET_CXXCPPFLAGS)'
-CXX='$(GASNET_CXX)'
+CXX='$($(UPCXX_META_COMPILERS)_CXX)'
 CXXFLAGS='$(UPCXX_STDCXX) $(GASNET_CXXFLAGS)'
 GASNET_CONDUIT='$(GASNET_CONDUIT)'
 $(GASNET_BUILD_OR_INSTALL)
