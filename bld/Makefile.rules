@@ -21,9 +21,8 @@ $(upcxx_src)/bld/%.mak: ; @: # empty rule
 BLDDIR = $(upcxx_bld)/bld
 GASNET_BLDDIR = $(BLDDIR)/gasnet.$(firstword $(UPCXX_OPTDBG))
 
-GASNET_VAR = $(shell MAKEFLAGS='$(filter-out d -d --debug=%,$(MAKEFLAGS))' \
-	             $(MAKE) -C $(GASNET_BLDDIR) echovar VARNAME=$(1) | cut -d\" -f2)
-CONDUITS  = $(call GASNET_VAR,CONDUITS)
+include $(upcxx_src)/bld/gasnet.mak
+CONDUITS  = $(call GASNET_VAR,$(GASNET_BLDDIR),CONDUITS)
 
 install-hook: force
 	@CONDUITS='$(CONDUITS)';                             \

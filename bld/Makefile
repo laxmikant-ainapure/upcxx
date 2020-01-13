@@ -67,28 +67,9 @@ ALL_ASSERTS  = 0 1
 ALL_OPTLVLS  = 0 3   # GASNet's DEBUG and NDEBUG, respectively.  Other values reserved for future use.
 ALL_DBGSYMS  = 0 1
 ALL_BACKENDS = gasnet_seq gasnet_par
-ALL_CONDUITS = smp udp mpi ibv aries
 
-#
-# Determine the GASNET_CODEMODE
-# Currently debug *only* for OPTLVL=0 DBGSYM=1
-# PARAMS: OPTLVL, DBGSYM
-#
-ifeq ($(OPTLVL)$(DBGSYM),01)
-GASNET_CODEMODE ?= debug
-else
-GASNET_CODEMODE ?= opt
-endif
-
-#
-# Determine the GASNET_THREADMODE
-# PARAMS: UPCXX_BACKEND
-#
-ifeq ($(strip $(UPCXX_BACKEND)),gasnet_seq)
-GASNET_THREADMODE = seq
-else
-GASNET_THREADMODE = par
-endif
+# GASNet configuration space
+include $(top_srcdir)/bld/gasnet.mak
 
 #
 # Encode upcxx build directory name.  Used via
@@ -107,20 +88,11 @@ GASNETDIR = gasnet.$(GASNET_CODEMODE)
 UPCXX_OPTDBG ?= opt debug
 FOREACH_OPTDBG = $(addprefix $(1)-,$(UPCXX_OPTDBG))
 
-#
-# Extraction of GASNet Makefile variables (ones not present in .mak fragment)
-# GASNET_VAR_VAL:  VAR="VAL"
-# GASNET_VAR:      VAL
-#
-GASNET_VAR_CMD = MAKEFLAGS='$(filter-out d -d --debug=%,$(MAKEFLAGS))' $(MAKE) -C $(builddir)/$(GASNETDIR) echovar VARNAME=$(1)
-GASNET_VAR_VAL = $(shell $(call GASNET_VAR_CMD,$(1)))
-GASNET_VAR     = $(shell $(call GASNET_VAR_CMD,$(1)) | cut -d\" -f2)
-
 # Some useful GASNet variables
 ifneq ($(wildcard $(builddir)/$(GASNETDIR)),)
-GASNET_CONDUITS   := $(call GASNET_VAR,CONDUITS)
-GASNET_CC_FAMILY  := $(call GASNET_VAR,CC_FAMILY)
-GASNET_CXX_FAMILY := $(call GASNET_VAR,CXX_FAMILY)
+GASNET_CONDUITS   := $(call GASNET_VAR,$(builddir)/$(GASNETDIR),CONDUITS)
+GASNET_CC_FAMILY  := $(call GASNET_VAR,$(builddir)/$(GASNETDIR),CC_FAMILY)
+GASNET_CXX_FAMILY := $(call GASNET_VAR,$(builddir)/$(GASNETDIR),CXX_FAMILY)
 endif
 
 
@@ -545,7 +517,7 @@ all install clean distclean: force
 SRCPATH = $(shell cd $(STARTDIR) && cd $(dir $(SRC)) && pwd)/$(notdir $(SRC))
 UPCXX_EXE_CSUM = $(firstword $(shell $(UPCXX_CSUMCMD) <<< '$(SRCPATH) $(EXTRAFLAGS)'))
 UPCXX_EXE_STEM = $(builddir)/$(UPCXXDIR)/exe/$(UPCXX_EXE_CSUM)
-UPCXX_EXE      = $(UPCXX_EXE_STEM)$(call GASNET_VAR,EXESUFFIX)
+UPCXX_EXE      = $(UPCXX_EXE_STEM)$(call GASNET_VAR,$(builddir)/$(GASNETDIR),EXESUFFIX)
 
 do-exe: force
 	@mkdir -p $(UPCXXDIR)/exe
