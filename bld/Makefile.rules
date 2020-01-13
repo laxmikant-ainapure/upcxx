@@ -20,8 +20,12 @@ Makefile $(upcxx_src)/bld/Makefile.rules: ; @: # empty rule
 BLDDIR = $(upcxx_bld)/bld
 GASNET_BLDDIR = $(BLDDIR)/gasnet.$(firstword $(UPCXX_OPTDBG))
 
+GASNET_VAR = $(shell MAKEFLAGS='$(filter-out d -d --debug=%,$(MAKEFLAGS))' \
+	             $(MAKE) -C $(GASNET_BLDDIR) echovar VARNAME=$(1) | cut -d\" -f2)
+CONDUITS  = $(call GASNET_VAR,CONDUITS)
+
 install-hook: force
-	@eval $$(MAKEFLAGS='$(filter-out d -d --debug=%,$(MAKEFLAGS))' $(MAKE) -C $(GASNET_BLDDIR) echovar VARNAME=CONDUITS) && \
+	@CONDUITS='$(CONDUITS)';                             \
 	 cd $(upcxx_src) &&                                  \
 	 . utils/install-common.sh &&                        \
 	 conduit_default="$$GASNET_CONDUIT" &&               \
