@@ -23,6 +23,7 @@ GASNET_BLDDIR = $(BLDDIR)/gasnet.$(firstword $(UPCXX_OPTDBG))
 
 include $(upcxx_src)/bld/gasnet.mak
 CONDUITS  = $(call GASNET_VAR,$(GASNET_BLDDIR),CONDUITS)
+EXESUFFIX = $(call GASNET_VAR,$(GASNET_BLDDIR),EXESUFFIX)
 
 install-hook: force
 	@CONDUITS='$(CONDUITS)';                             \
@@ -91,35 +92,133 @@ failure: force
 ## Tests ##
 include $(upcxx_src)/bld/tests.mak
 
+# public-facing targets don't use GASNet "conduit" terminology
+NETWORKS ?= $(CONDUITS)
+
+# Compile and run tests for default conduit
 check: force
-	@tmpfile=.testtmp_$$$$; rm -f $$tmpfile;                  \
-	 run=0; failed=0;                                         \
-	 export UPCXX_BACKEND=gasnet_seq;                         \
-	 for t in $(testprograms_seq); do                         \
-	    echo Running $$t; : $$((++run));                      \
-	    $(MAKE) run SRC=$(upcxx_src)/test/$$t &> $$tmpfile;   \
-	    if [[ $$? != 0 ]] || grep -q ERROR $$tmpfile; then    \
-	      echo FAILED; : $$((++failed));                      \
-	    fi;                                                   \
-	    grep "Test result: " $$tmpfile | sort -u;             \
-	 done;                                                    \
-	 export UPCXX_BACKEND=gasnet_par;                         \
-	 for t in $(testprograms_par); do                         \
-	    echo Running $$t; : $$((++run));                      \
-	    $(MAKE) run SRC=$(upcxx_src)/test/$$t &> $$tmpfile;   \
-	    if [[ $$? != 0 ]] || grep -q ERROR $$tmpfile; then    \
-	      echo FAILED; : $$((++failed));                      \
-	    fi;                                                   \
-	    grep "Test result: " $$tmpfile | sort -u;             \
-	 done;                                                    \
-	 rm -f $$tmpfile;                                         \
-	 if [[ $$failed = 0 ]]; then                              \
-	   echo "PASSED $$run tests";                             \
-	   echo "If you have not already, you may now '$(GMAKE) install'"; \
-	 else                                                     \
-	   echo "FAILED $$failed of $$run tests";                 \
-	   $(MAKE) failure TARGET=check;                          \
-	 fi;                                                      \
+	@$(MAKE) -C $(BLDDIR) all || $(MAKE) failure TARGET=build # "all" w/o completion message
+	@echo; \
+	 echo '************'; \
+	 echo 'Compiling and running tests for the default network ($(GASNET_CONDUIT)).'; \
+	 echo 'Please, ensure you are in a proper environment for launching parallel jobs'; \
+	 echo '(eg batch system session, if necessary) or the run step may fail.'; \
+	 echo '************'; \
+	 echo ; sleep 5
+	@$(MAKE) do-tests do-run-tests UPCXX_QUIET=-q UPCXX_BINDIR=$(upcxx_bld)/bin NETWORKS=$(GASNET_CONDUIT)
+	@echo 'Recommended next steps:';  \
+	 echo "  If you have not already, you may now '$(GMAKE) install'"
+
+.PHONY: check
+
+# Build UPCXX_TESTS (default all)
+# UPCXX_CODEMODE is 'debug' if supported
+# Default network (if included in NETWORKS) is built last to keep it on user's screen
+do-tests: force
+	@total=0; failed=0;                                  \
+	 if [[ '$(UPCXX_OPTDBG)' == 'opt' ]]; then           \
+	   export UPCXX_CODEMODE=O3;                         \
+	 else                                                \
+	   export UPCXX_CODEMODE=debug;                      \
+	 fi;                                                 \
+	 if [[ -n '$(UPCXX_TESTS)' ]]; then                  \
+	   testlist='$(UPCXX_TESTS)';                        \
+	 else                                                \
+	   testlist='$(addsuffix -seq,$(testprograms_seq)) $(addsuffix -par,$(testprograms_par))' ; \
+	 fi;                                                 \
+	 for network in $(filter-out $(GASNET_CONDUIT),$(NETWORKS)) \
+                        $(filter $(GASNET_CONDUIT),$(NETWORKS)); do \
+	   export UPCXX_NETWORK=$$network;                   \
+	   for test in $$testlist; do                        \
+	     export UPCXX_THREADMODE=$${test/*-/};           \
+	     file=$${test%-*};                               \
+	     target="test-$$(basename $$file .cpp)-$$network";\
+	     printf 'Compiling %-30s ' "$$target...";        \
+	     $(UPCXX_BINDIR)/upcxx $(UPCXX_QUIET)            \
+	                           $(upcxx_src)/test/$$file  \
+	                           -o $$target$(EXESUFFIX);  \
+	     if [[ $$? != 0 ]]; then                         \
+	       echo FAILED; : $$((++failed));                \
+	     else                                            \
+	       echo SUCCESS;                                 \
+	     fi;                                             \
+	     : $$((++total));                                \
+	   done;                                             \
+	 done;                                               \
+	 if [[ $$failed = 0 ]]; then                         \
+	   echo "PASSED compiling $$total tests";            \
+	 else                                                \
+	   echo "FAILED to compile $$failed of $$total tests";\
+	 fi;                                                 \
 	 [[ $$failed = 0 ]] # exit code
+
+do-test-msg = \
+	@echo ' '; \
+	 echo '       ==== UPC++ TESTS SUCCESSFULLY COMPILED ===='; \
+	 echo ' '; \
+	 echo 'Your UPC++ $(1) appears to be working for the following networks:'; \
+	 echo ' '; \
+	 echo '  $(NETWORKS)'; \
+	 echo ' '; \
+	 echo 'You may now test UPC++ runtime operation for each network of interest.'; \
+	 echo 'First, ensure you are in a proper environment for launching parallel jobs'; \
+	 echo '(eg batch system session, if necessary) and then issue a command like:'; \
+	 echo ' '; \
+	 echo '  $(2)/upcxx-run -n 2 ./test-hello_upcxx-$(GASNET_CONDUIT)'; \
+	 echo ' '; \
+	 echo -e 'And similarly for any other of the tests compiled above.'
+
+test_install: force
+	@if [[ ! -x $(prefix)/bin/upcxx-run ]]; then \
+	   echo 'ERROR: No UPC++ installation found at $(prefix)'; \
+	   echo "ERROR: Please build the 'install' target before 'test_install'."; \
+	   exit 1; \
+	 fi
+	@$(MAKE) do-tests UPCXX_QUIET='' UPCXX_BINDIR=$(prefix)/bin UPCXX_TESTS=hello_upcxx.cpp-seq
+	@$(call do-test-msg,install,$(prefix)/bin)
+
+tests: force
+	@$(MAKE) -C $(BLDDIR) all || $(MAKE) failure TARGET=build
+	@$(MAKE) do-tests UPCXX_QUIET=-q UPCXX_BINDIR=$(upcxx_bld)/bin
+	@$(call do-test-msg,build,$(upcxx_bld)/bin)
+
+ALL_TESTS = $(foreach test, $(notdir $(testprograms_seq) $(testprograms_par)), \
+            $(foreach network, $(1), test-$(basename $(test))-$(network)))
+
+tests-clean: force
+	rm -f $(call ALL_TESTS,$(ALL_CONDUITS))
+
+.PHONY: do-tests do-test-msg test_install tests tests-clean
+
+do-run-tests: force
+	@tmpfile=.testtmp_$$$$; rm -f $$tmpfile;                        \
+	 if [[ -z "$(RANKS)" ]]; then ranks=4; else ranks=$(RANKS); fi; \
+	 total=0; failed=0;                                             \
+	 echo "Running tests with $$ranks ranks";                       \
+	 for test in $(call ALL_TESTS,$(NETWORKS)); do                  \
+	   [[ -x $$test ]] || continue;                                 \
+	   echo "Running $$test"; : $$((++total));                      \
+	   $(UPCXX_BINDIR)/upcxx-run $(UPCXX_QUIET) -np $$ranks ./$$test &> $$tmpfile; \
+	   if [[ $$? != 0 ]] || grep -q ERROR $$tmpfile; then           \
+	     echo FAILED; : $$((++failed));                             \
+	   fi;                                                          \
+	   grep "Test result: " $$tmpfile | sort -u;                    \
+	 done;                                                          \
+	 rm -f $$tmpfile;                                               \
+	 if [[ $$failed = 0 ]]; then                                    \
+	   echo "PASSED running $$total tests";                         \
+	 else                                                           \
+	   echo "FAILED running $$failed of $$total tests";             \
+	   $(MAKE) failure TARGET=tests;                                \
+	 fi;                                                            \
+	 [[ $$failed = 0 ]] # exit code
+
+run-tests: force
+	@$(MAKE) do-run-tests UPCXX_QUIET='-q' UPCXX_BINDIR=$(upcxx_bld)/bin
+
+run-tests-installed: force
+	@$(MAKE) do-run-tests UPCXX_QUIET='' UPCXX_BINDIR=$(prefix)/bin
+
+.PHONY: do-run-tests run-tests run-tests-installed
 
 .NOTPARALLEL:

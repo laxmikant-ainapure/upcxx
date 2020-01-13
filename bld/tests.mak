@@ -3,6 +3,7 @@
 #
 
 testprograms_seq = \
+	hello_upcxx.cpp \
 	atomics.cpp \
 	collectives.cpp \
 	dist_object.cpp \
