@@ -105,7 +105,7 @@ check: force
 	 echo '(eg batch system session, if necessary) or the run step may fail.'; \
 	 echo '************'; \
 	 echo ; sleep 5
-	@$(MAKE) do-tests do-run-tests UPCXX_QUIET=-q UPCXX_BINDIR=$(upcxx_bld)/bin NETWORKS=$(GASNET_CONDUIT)
+	@$(MAKE) do-tests do-run-tests UPCXX_BINDIR=$(upcxx_bld)/bin UPCXX_QUIET=1 NETWORKS=$(GASNET_CONDUIT)
 	@echo 'Recommended next steps:';  \
 	 echo "  If you have not already, you may now '$(GMAKE) install'"
 
@@ -134,8 +134,7 @@ do-tests: force
 	     file=$${test%-*};                               \
 	     target="test-$$(basename $$file .cpp)-$$network";\
 	     printf 'Compiling %-30s ' "$$target...";        \
-	     $(UPCXX_BINDIR)/upcxx $(UPCXX_QUIET)            \
-	                           $(upcxx_src)/test/$$file  \
+	     $(UPCXX_BINDIR)/upcxx $(upcxx_src)/test/$$file  \
 	                           -o $$target$(EXESUFFIX);  \
 	     if [[ $$? != 0 ]]; then                         \
 	       echo FAILED; : $$((++failed));                \
@@ -174,12 +173,12 @@ test_install: force
 	   echo "ERROR: Please build the 'install' target before 'test_install'."; \
 	   exit 1; \
 	 fi
-	@$(MAKE) do-tests UPCXX_QUIET='' UPCXX_BINDIR=$(prefix)/bin UPCXX_TESTS=hello_upcxx.cpp-seq
+	@$(MAKE) do-tests UPCXX_BINDIR=$(prefix)/bin UPCXX_TESTS=hello_upcxx.cpp-seq
 	@$(call do-test-msg,install,$(prefix)/bin)
 
 tests: force
 	@$(MAKE) -C $(BLDDIR) all || $(MAKE) failure TARGET=build
-	@$(MAKE) do-tests UPCXX_QUIET=-q UPCXX_BINDIR=$(upcxx_bld)/bin
+	@$(MAKE) do-tests UPCXX_BINDIR=$(upcxx_bld)/bin UPCXX_QUIET=1
 	@$(call do-test-msg,build,$(upcxx_bld)/bin)
 
 ALL_TESTS = $(foreach test, $(notdir $(testprograms_seq) $(testprograms_par)), \
@@ -198,7 +197,7 @@ do-run-tests: force
 	 for test in $(call ALL_TESTS,$(NETWORKS)); do                  \
 	   [[ -x $$test ]] || continue;                                 \
 	   echo "Running $$test"; : $$((++total));                      \
-	   $(UPCXX_BINDIR)/upcxx-run $(UPCXX_QUIET) -np $$ranks ./$$test &> $$tmpfile; \
+	   $(UPCXX_BINDIR)/upcxx-run -np $$ranks ./$$test &> $$tmpfile; \
 	   if [[ $$? != 0 ]] || grep -q ERROR $$tmpfile; then           \
 	     echo FAILED; : $$((++failed));                             \
 	   fi;                                                          \
@@ -214,10 +213,10 @@ do-run-tests: force
 	 [[ $$failed = 0 ]] # exit code
 
 run-tests: force
-	@$(MAKE) do-run-tests UPCXX_QUIET='-q' UPCXX_BINDIR=$(upcxx_bld)/bin
+	@$(MAKE) do-run-tests UPCXX_BINDIR=$(upcxx_bld)/bin UPCXX_QUIET=1
 
 run-tests-installed: force
-	@$(MAKE) do-run-tests UPCXX_QUIET='' UPCXX_BINDIR=$(prefix)/bin
+	@$(MAKE) do-run-tests UPCXX_BINDIR=$(prefix)/bin
 
 .PHONY: do-run-tests run-tests run-tests-installed
 
