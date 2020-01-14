@@ -110,6 +110,10 @@ PREFIX=/usr/local/upcxx
 # Undocumented "--enable-single" mode
 single=''
 
+# Text to emit at end
+# Each distinct warning added should start with a newline
+warnings=''
+
 #
 # Error handling
 #
@@ -175,6 +179,9 @@ while [[ $# -gt 0 ]]; do
     -v|--verbose) set -x ;;
     --enable-single?(=*))
       single="$(get_arg_val $1)"
+      warnings+="\nWARNING: --enable-single=$single mode enabled.\n"
+      warnings+='WARNING: This mode is intended for maintainers only.\n'
+      warnings+='WARNING: Many make targets will fail and components will be missing.\n'
       ;;
     --with-mpsc-queue=*)
       export UPCXX_MPSC_QUEUE="$(get_arg_val $1)"
@@ -671,12 +678,8 @@ Recommended next steps:
   3. '$GMAKE install'
 EOF
 
-if [[ -n "$single" ]]; then
-  echo -e '\n********'
-  echo "WARNING: --enable-single=$single mode enabled."
-  echo 'WARNING: This mode is intended for maintainers only.'
-  echo 'WARNING: Many make targets will fail and components will be missing.'
-  echo -e '********\n'
+if [[ -n "$warnings" ]] ; then
+  echo -e "\n********\n${warnings}\n********\n"
 fi
 
 exit 0
