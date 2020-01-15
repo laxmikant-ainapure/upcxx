@@ -22,6 +22,7 @@ Notable bug fixes:
 * issue #277: Ensure completion_cx::as_promise(p) works even when p is destroyed prior to fulfillment
 * issue #282: Improve installed CMake package files
 * issue #287: Bogus install warnings on Cray XC regarding CC/CXX
+* issue #289: link failure for PGI with -std=c++17
 * [spec issue #155](https://bitbucket.org/berkeleylab/upcxx-spec/issues/155): value argument type to value collectives is changed to a simple by-value T
 
 Breaking changes:
