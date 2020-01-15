@@ -5,7 +5,7 @@ This is the ChangeLog for public releases of [UPC++](https://upcxx.lbl.gov).
 For information on using UPC++, see: [README.md](README.md)    
 For information on installing UPC++, see: [INSTALL.md](INSTALL.md)
 
-### 2020.01.15: Snapshot 2019.9.4
+### 20XX.YY.ZZ: PENDING
 
 New features/enhancements: (see specification and programmer's guide for full details)
 
@@ -23,6 +23,10 @@ Notable bug fixes:
 * issue #282: Improve installed CMake package files
 * issue #287: Bogus install warnings on Cray XC regarding CC/CXX
 * [spec issue #155](https://bitbucket.org/berkeleylab/upcxx-spec/issues/155): value argument type to value collectives is changed to a simple by-value T
+
+Breaking changes:
+
+* ...
 
 ### 2019.09.14: Release 2019.9.0
 
