@@ -287,7 +287,7 @@ def gasnet_user(cxt):
   value = env('GASNET', None)
   
   if not value:
-    value = 'https://gasnet-bugs.lbl.gov/nightly/unlisted/GASNet-stable.tar.gz'
+    value = 'https://gasnet.lbl.gov/EX/GASNet-2019.9.0.tar.gz'
   
   from urlparse import urlparse
   isurl = urlparse(value).netloc != ''
