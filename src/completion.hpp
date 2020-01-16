@@ -129,7 +129,7 @@ namespace upcxx {
   constexpr completions<B...> operator|(
       completions<> a, completions<B...> b
     ) {
-    return std::move(b);
+    return b;
   }
   template<typename Ah, typename ...At, typename ...B>
   constexpr completions<Ah,At...,B...> operator|(
