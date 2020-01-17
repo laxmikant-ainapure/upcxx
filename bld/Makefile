@@ -1,37 +1,6 @@
 ##
-# THIS IS A WORK-IN-PROGRESS
-#
-# Proof-of-concept for deferred/incremental building of libraries.
-# To build a single libupcxx and its gasnet conduit from the top-level
-# upcxx source directory:
-#   $ make -C bld upcxx-single
-#
-# Additionally, targets "all", "install", "clean" and "distclean" are
-# provided.  The "install" is still lacking `bin` and `share/doc`.
-#
-# All of the following env vars are considered at each invocation:
-#   ASSERT, OPTLVL, DBGSYM, UPCXX_BACKEND, GASNET_CONDUIT
-# The minimum required work is done, not configuring or compiling
-# more than requested.  Normal use of make dependencies ensure things
-# are not rebuilt unless there have been source changes.
-#
-# The following env vars are considered only at first use:
-#   GASNET, CROSS
-# and thus these should NOT change over the live of a given build.
-# Additionally, the only supported value for GASNET is a source tree.
-# However, these restrictions would be natural if these two are specified
-# to configure or CMake (where a URL-valued GASNET would result in fetch
-# and unpack).
-#
-# Currently there is no handling of CC or CXX.
-# Again the assumption is that these are fixed for the given build directory.
-#
-# The assumptions that GASNET, CROSS, CC, and CXX are fixed when one runs
-# configure or cmake seem reasonable, since both tools support VPATH builds
-# such that multiple build dirs can be used per (clean) source dir.  However,
-# that is not implemented yet.
-#
-# Numerous GNU Make extensions are used.
+# Work-horse Makefile
+# Intended only to be invoked indirectly by Makefle.rules
 ##
 
 # Paranoia
