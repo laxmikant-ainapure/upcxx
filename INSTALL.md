@@ -11,7 +11,7 @@ a modern C++11/14 compiler and corresponding STL implementation.
 
 The current release is known to work on the following configurations:
 
-* macOS 10.11-10.14 (El Capitan, Sierra, High Sierra, or Mojave)
+* macOS 10.11-10.15 (El Capitan, Sierra, High Sierra, Mojave or Catalina)
   with the most recent Xcode releases for each, though it is
   suspected that any Xcode (ie Apple clang) release 8.0 or newer will work. 
   Free Software Foundation GCC (e.g., as installed by Homebrew or Fink)
@@ -137,13 +137,6 @@ xcode-select --install
 
 Alternatively, the `CC` and `CXX` environment variables can be set to an alternative
 compiler installation for a supported compiler before running `./install`.
-
-At the time of writing, UPC++ has beed tested with Developer Beta 8 of macOS 10.15
-"Catalina", and there are no known platform-specific issues.
-
-At the time of writing, UPC++ has been tested with Apple's "GM Seed" of Xcode-11
-(the final pre-release), and there are no known compiler-specific issues on
-either macOS 10.14 "Mojave" or on Developer Beta 8 of macOS 10.15 "Catalina".
 
 ### Installation: Cray XC
 
