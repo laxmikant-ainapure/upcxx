@@ -78,6 +78,11 @@ The make targets utilizing the variables above:
 * `make run SRC=foo.cpp [EXTRAFLAGS=-Dfoo=bar] [ARGS='arg1 arg2'] [RANKS=n]`  
   Builds and runs the given test with the optional arguments.  
   Executables are cached just as with `exe`.
+* `make exe-clean` and `make exe-clean-all`  
+  If you believe caching of executables used by the `exe` and `run` targets is
+  is malfunctioning, then `make exe-clean` will clear the cache for the library
+  variant selected by the current environment, while `make exe-clean-all` clears
+  all executable caches.
 
 * `make upcxx`, `make upcxx-run` and `make upcxx-meta`  
   Ensures the required libraries are built (and up-to-date) and prints to stdout

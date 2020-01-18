@@ -503,7 +503,16 @@ exe: force
 ## PARAMS: ASSERT, OPTLVL, DBGSYM, UPCXX_BACKEND, GASNET_CONDUIT
 exe-clean: force; @rm -Rf $(UPCXXDIR)/exe
 
-.PHONY: do-exe exe exe-clean
+# Clean exe files for all library variants
+exe-clean-all: force
+	rm -Rf $(foreach assert,  $(ALL_ASSERTS),        \
+               $(foreach optlvl,  $(ALL_OPTLVLS),        \
+               $(foreach dbgsym,  $(ALL_DBGSYMS),        \
+               $(foreach backend, $(ALL_BACKENDS),       \
+               $(foreach conduit, $(ALL_CONDUITS),       \
+	         $(call UPCXXDIR_FN,$(assert),$(optlvl),$(dbgsym),$(backend),$(conduit))/exe)))))
+
+.PHONY: do-exe exe exe-clean exe-clean-all
 
 ##
 ## "make run SRC='bar.cpp' [EXTRAFLAGS=-Dfoo=bar] [ARGS='arg1 arg2'] [RANKS=n]
