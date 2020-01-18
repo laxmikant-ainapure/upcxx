@@ -97,9 +97,26 @@ include $(upcxx_src)/bld/tests.mak
 # public-facing targets don't use GASNet "conduit" terminology
 NETWORKS ?= $(CONDUITS)
 
+# Pick 'debug' for building tests, unless --enable-single=opt
+ifeq ($(strip $(UPCXX_DBGOPT)),opt)
+UPCXX_TESTS_CODEMODE = O3
+UPCXX_TESTS_GASNET   = opt
+else
+UPCXX_TESTS_CODEMODE = debug
+UPCXX_TESTS_GASNET   = debug
+endif
+
+# Compile prerequisites for 'check' or 'tests'
+# Build is restricted to single codemode and the networks in $(NETWORKS)
+do-test-prereqs: force
+	@$(MAKE) -C $(BLDDIR) GASNET_CONDUITS="$(NETWORKS)" do-upcxx-all-$(UPCXX_TESTS_GASNET) || \
+         $(MAKE) failure TARGET=build
+
+.PHONY: do-test-prereqs
+
 # Compile and run tests for default conduit
 check: force
-	@$(MAKE) -C $(BLDDIR) all || $(MAKE) failure TARGET=build # "all" w/o completion message
+	@$(MAKE) do-test-prereqs NETWORKS=$(GASNET_CONDUIT)
 	@echo; \
 	 echo '************'; \
 	 echo 'Compiling and running tests for the default network ($(GASNET_CONDUIT)).'; \
@@ -118,11 +135,7 @@ check: force
 # Default network (if included in NETWORKS) is built last to keep it on user's screen
 do-tests: force
 	@total=0; failed=0;                                  \
-	 if [[ '$(UPCXX_DBGOPT)' == 'opt' ]]; then           \
-	   export UPCXX_CODEMODE=O3;                         \
-	 else                                                \
-	   export UPCXX_CODEMODE=debug;                      \
-	 fi;                                                 \
+	 export UPCXX_CODEMODE=$(UPCXX_TESTS_CODEMODE);      \
 	 if [[ -n '$(UPCXX_TESTS)' ]]; then                  \
 	   testlist='$(UPCXX_TESTS)';                        \
 	 else                                                \
@@ -179,7 +192,7 @@ test_install: force
 	@$(call do-test-msg,install,$(prefix)/bin)
 
 tests: force
-	@$(MAKE) -C $(BLDDIR) all || $(MAKE) failure TARGET=build
+	@$(MAKE) do-test-prereqs
 	@$(MAKE) do-tests UPCXX_BINDIR=$(upcxx_bld)/bin UPCXX_QUIET=1 UPCXX_SKIP_REBUILD=1
 	@$(call do-test-msg,build,$(upcxx_bld)/bin)
 
