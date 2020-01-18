@@ -538,12 +538,12 @@ run: force
 ##
 
 upcxx-meta upcxx: force
-	@$(MAKE) $(UPCXXDIR)/libupcxx.a >&2
+	@[[ -n "$(UPCXX_SKIP_REBUILD)" ]] || $(MAKE) $(UPCXXDIR)/libupcxx.a >&2
 	@echo -n '$(builddir)/$(UPCXXDIR)/bin/$@'
 
 upcxx-run: force
-	@$(MAKE) gasnet-single >&2
-	@$(MAKE) DST='$(builddir)/$(UPCXXDIR)' do-upcxx-run >&2
+	@[[ -n "$(UPCXX_SKIP_REBUILD)" ]] || $(MAKE) gasnet-single >&2
+	@[[ -n "$(UPCXX_SKIP_REBUILD)" ]] || $(MAKE) DST='$(builddir)/$(UPCXXDIR)' do-upcxx-run >&2
 	@echo -n '$(builddir)/$(UPCXXDIR)/bin/$@'
 
 .PHONY: upcxx-meta upcxx-run upcxx

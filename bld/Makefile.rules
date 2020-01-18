@@ -107,7 +107,7 @@ check: force
 	 echo '(eg batch system session, if necessary) or the run step may fail.'; \
 	 echo '************'; \
 	 echo ; sleep 5
-	@$(MAKE) do-tests do-run-tests UPCXX_BINDIR=$(upcxx_bld)/bin UPCXX_QUIET=1 NETWORKS=$(GASNET_CONDUIT)
+	@$(MAKE) do-tests do-run-tests UPCXX_BINDIR=$(upcxx_bld)/bin UPCXX_QUIET=1 NETWORKS=$(GASNET_CONDUIT) UPCXX_SKIP_REBUILD=1
 	@echo 'Recommended next steps:';  \
 	 echo "  If you have not already, you may now '$(GMAKE_SHORT) install'"
 
@@ -180,7 +180,7 @@ test_install: force
 
 tests: force
 	@$(MAKE) -C $(BLDDIR) all || $(MAKE) failure TARGET=build
-	@$(MAKE) do-tests UPCXX_BINDIR=$(upcxx_bld)/bin UPCXX_QUIET=1
+	@$(MAKE) do-tests UPCXX_BINDIR=$(upcxx_bld)/bin UPCXX_QUIET=1 UPCXX_SKIP_REBUILD=1
 	@$(call do-test-msg,build,$(upcxx_bld)/bin)
 
 ALL_TESTS = $(foreach test, $(notdir $(testprograms_seq) $(testprograms_par)), \
