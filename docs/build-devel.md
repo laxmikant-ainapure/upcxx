@@ -1,190 +1,180 @@
-# Building UPC\+\+ #
+# Developing and Maintaining UPC\+\+
 
-These instructions are for UPC++ runtime developers only.
+These instructions are for UPC\+\+ runtime developers only.
 
 THIS INTERNAL DOCUMENTATION IS NOT CAREFULLY MAINTAINED AND MAY BE OUT OF DATE.
 
-Requirements:
+Software requirements are detailed in [README.md](../README.md).  
+Because we do not employ autoconf, automake or CMake, the requirements for
+developers of UPC\+\+ are no different than for the end-users.  However, the
+manner in which the tools might be used does differ.
 
-  - Bash
-  - Python 2.x >= 2.7.5
-  - C++11 compiler: (gcc >= 4.9) or (clang >= ???) or (icc >= ???)
+## Workflow
 
-## Workflow ##
-
-The first thing to do when beginning a session of upcxx hacking is to source the
-`sourceme` bash script. This will populate your current bash environment with
-the needed commands for developing and building upcxx.
-
-```
-cd <upcxx>
-. sourceme
-```
-
-The buildsystem "nobs" is now availabe under the `nobs` bash function, but only
-for this bash instance. First useful thing to try:
+The first thing to do when beginning a session of upcxx hacking is to
+configure your build tree.  This can be done as many times as needed, for
+instance using distinct build trees for distinct compilers (and sharing the
+source tree).  Just run `<upcxx-src-path>/configure ...` in your build
+directory (which *is* permitted to be the same as `<upcxx-src-path>`).
+This will "capture" the options `--with-cc=...`, `--with-cxx=...`,
+`--with-cross=...` and `--with-gasnet=...`.  Unless you re-run `configure`
+those four parameters cannot be changed for a given build directory (but
+you can have as many build directories as you want/need).
 
 ```
-nobs exe test/hello_gasnet.cpp
+mkdir <upcxx-build-path>
+cd <upcxx-build-path>
+<upcxx-source-path>/configure --with-cc=... --with-cxx=... [--with-cross=...]
 ```
 
-This should download gasnet, build it, then build and link
-"test/hello_gasnet.cpp" and eventually write some cryptic hash encrusted
-filename to stdout. That is the path to our just built executable. At the moment
-gasnet defaults to building in the SMP conduit, so to test out a parallel run do
-this:
+The legacy environment variables `CC`, `CXX`, `CROSS` and `GASNET` are still
+available, but their use is deprecated.  Additionally, the legacy variable
+`GASNET_CONFIGURE_ARGS` is still honored, but all unrecognized options to
+the UPC\+\+ configure script are appended to it (giving them precedence).
 
-```
-GASNET_PSHM_NODES=2 $(nobs exe test/hello_gasnet.cpp)
-```
+[INSTALL.md](../INSTALL.md) has more information on the `configure` options
+supported for end-users while "Internal-Only Configuration Options", below,
+documents some unsupported ones.
 
-Or equivalently this convenience command which implicitly runs the executable
-after building (comes in handy when you want nice paging of error messages in
-the case of build failure, which nobs does really well):
+As soon as `configure` is complete, `<upcxx-build-dir>/bin` is populated with
+a `upcxx` and `upcxx-run` which dynamically build the required UPC\+\+ and
+GASNet-EX libraries only the first time they are required.  This is based on
+the flags (and env vars) passed to `upcxx` and on the conduit encoded in an
+executable passed to `upcxx-run`.  These tools are expected to be sufficient
+for most simple development tasks, including working with user's bug
+reproducers, without the need to complete an install.
 
-```
-RANKS=2 nobs run test/hello_gasnet.cpp
-```
+By default, these two scripts remind you that you are using the build-dir
+versions with the following message:  
+      `INFO: may need to build the required runtime.  Please be patient.`  
+This can be suppressed by setting `UPCXX_QUIET=1` in your environment.
 
-All object files and executables and all other artifacts of the build process
-are stored internally in "upcxx/.nobs/art". Their names are cryptic hashes so
-don't bother looking around. To get the name of something you care about just
-use bash code like `mything=$(nobs ...)`. The big benefit to managing our
-artifacts this way is that we can keep our source tree totally clean 100% of the
-time.  Absolutely all intermediate things needed during the build process will
-go in the hashed junkyard. Another benefit is that nobs can use part of the
-current state of the OS environment in naming the artifact (reflected in the
-hash). For instance, you can already use the $OPTLEV and $DBGSYM environment
-variables to control the `-O<level>` and `-g` compiler options and produce
-different artifacts. Also, whatever you have in $CC and $CXX are used as the
-compilers (defaulting to gcc/g++ otherwise).
+In addition to the scripts in `<upcxx-build-dir>/bin`, there are a series
+of make targets which honor the following nobs-inspired environment variables
+(which can also be specified on the make command line):  
 
-```
-export DBGSYM=1
-export ASSERT=1
-export OPTLEV=0
-echo $(nobs exe test/hello_gasnet.cpp)
-# prints: <upcxx>/.nobs/art/6c2d0a503e095800dfac643fd169e5f95a1260de.x
+* `DBGSYM={0,1}`
+* `ASSERT={0,1}`
+* `OPTLEV={0,3}`
+* `UPCXX_BACKEND=gasnet_{seq,par}`
+* `GASNET_CONDUIT=...`
 
-export DBGSYM=0
-export ASSERT=0
-export OPTLEV=2
-echo $(nobs exe test/hello_gasnet.cpp)
-# prints: <upcxx>/.nobs/art/833cfeddce3c6fa1b266ff9429f1202933639346.x
+Note that unlike with `nobs`, the variables `CC`, `CXX`, `CROSS` and `GASNET`
+are *not* honored by `make` because their values were "frozen" when
+`configure` was run.
 
-export DBGSYM=0
-export ASSERT=0
-export OPTLEV=3
-echo $(nobs exe test/hello_gasnet.cpp)
-# prints: <upcxx>/.nobs/art/58af363d4b6bcfa05e4768bf4c1f1e64d4e1e2ba.x
+The make targets utilizing the variables above:
 
-# Equivalently, thanks to succinct bash syntax:
+* `make exe SRC=foo.cpp [EXTRAFLAGS=-Dfoo=bar]`  
+  Builds the given test printing the full path of the executable on stdout.  
+  Executables are cached, including sensitivity to `EXTRAFLAGS` and to changes
+  made to the `SRC` file, its crawled dependencies, and to UPC\+\+ source files.
+* `make run SRC=foo.cpp [EXTRAFLAGS=-Dfoo=bar] [ARGS='arg1 arg2'] [RANKS=n]`  
+  Builds and runs the given test with the optional arguments.  
+  Executables are cached just as with `exe`.
 
-DBGSYM=1 ASSERT=1 OPTLEV=0 echo $(nobs test/hello_gasnet.cpp)
-DBGSYM=0 ASSERT=0 OPTLEV=2 echo $(nobs test/hello_gasnet.cpp)
-DBGSYM=0 ASSERT=0 OPTLEV=3 echo $(nobs test/hello_gasnet.cpp)
-```
+* `make upcxx`, `make upcxx-run` and `make upcxx-meta`  
+  Ensures the required libraries are built (and up-to-date) and prints to stdout
+  the full path to an appropriate script specific to the current environment.
 
-Each of these will rebuild GASNet and the source file the first time they are
-executed. After that, all three versions are in the cache and print
-immediately. This allows you to switch between code-gen options as easily as
-updating your environment. The output of `<c++> --version` is also used as a
-caching dependency so if you switch programming environments (say using NERSC
-`module swap`) nobs will automatically return the *right* artifact built against
-the current toolchain. Oh, and obviously nobs watches the contents of the source
-files being built, so if those change you'll also get a recompile. Artifacts
-corresponding to previous versions of source files are implicitly removed from
-the database. This is to prevent endless growth of the database when in a
-development phase consisting of hack-compile-hack-compile-etc. The new artifacts
-will have different hashes and the old files will be gone.
+* `make upcxx-single`  
+  Builds a single instance of `libupcxx.a` along with its required GASNet-EX
+  conduit and an associated bottom-level `upcxx-meta`.  Use of this target
+  with `-j<N>` can be useful to "bootstrap" the utilities in `bin`, which
+  might otherwise build their prerequisites on-demand *without* parallelism.
+* `make gasnet-single`  
+  Builds a single GASNet-EX conduit.
 
-For whatever reason, if you ever think nobs got its hashes confused or is
-missing some environmental dependency that ought to incur recompile, just `rm -r
-.nobs` to nuke the database. That will ensure your next build will be
-fresh. Then tell me!
+The `exe` and `run` targets accept both absolute and relative paths for `SRC`.
+Additionally, if the `SRC` value appears to be a relative path, but does not
+exist, a search is conducted in the `test`, `example` and `bench` directories
+within `<upcxx-src-path>`.  So, `make run SRC=hello_upcxx.cpp` and `make run
+SRC=issue138.cpp` both "just work" without the need to type anything so
+cumbersome as `<upcxx-src-path>/test/regression/issue138.cpp`.
 
-If you want to dig in to how the build rules in nobs are specified, checkout
-"nobsrule.py". I don't envision much reason to go hacking in there beyond
-enhancing it w.r.t to its obvious deficiencies stated previously.
+Note that while bash syntax allows the following sort of incantation:  
+    `X=$(DBGSYM=1 ASSERT=1 OPTLEV=0 echo $(make exe SRC=hello_gasnet.cpp))`  
+passing of the environment variables on the make command line can simplify this
+slightly to:  
+    `X=$(make exe DBGSYM=1 ASSERT=1 OPTLEV=0 SRC=hello_gasnet.cpp)`
 
-Enjoy.
+All make targets described here (as well as those documented for the end-user
+in [INSTALL.md](../INSTALL.md)) are intented to be parallel-make-safe (Eg `make
+-j<N> ...`).  Should you experience a failure with a parallel make, please
+report it as a bug.
+  
+## Internal-Only Configuration Options
 
-## Compilers ##
+This serves as the place to document configure options that aren't hardened
+enough to be part of the user-facing docs.
 
-The compiler choice in `nobs` is dictated by the following list in order of
-decreasing precedence:
-
-  1. Cross-compilation setting.
-  2. User specified `CC` and `CXX` environment variables.
-  3. `cc` and `CC` when running on NERSC's Cori or Edison.
-  4. `gcc` and `g++` otherwise.
-
-## External GASNet ##
-
-Setting the `GASNET` environment variable to point to the absolute path of a
-configured and built, or installed, GASNet-EX directory will cause `nobs` to skip
-building its own. It is your responsibility that the compilers found by the
-compiler selection mechanism above are compatible with those used by the given
-gasnet. It is an error to have both the `GASNET` and `CROSS` variables set
-simultaneously.
-
-## GASNet Conduit ##
-
-The gasnet conduit will be pulled from this precedence list:
-
-  1. `GASNET_CONDUIT` enviornment variable.
-  2. Cross-compilation setting (`cray-aries-*` maps to `aries`).
-  3. `smp` otherwise.
-
-## Cross-Compilation at NERSC ##
-
-Cross compilation is currently supported for Cori and Edison. Have the
-`CROSS=cray-aries-slurm` environment variable set while invoking `nobs` to use
-the configuration settings found in gasnet's `other/contrib` directory. This
-will use the current module's compilers and set gasnet to the `aries`
-conduit. Without the `CROSS` variable, things default to the usual compiler
-defaults and the `smp` conduit.
-
-The following should be sufficient to run `test/hello_upcxx.cpp` on the
-Cori/Edison compute nodes:
-
-```
-export CROSS=cray-aries-slurm
-srun -n 10 $(nobs exe test/hello_upcxx.cpp)
-```
-
-## Errors ##
-
-Build errors will happen. `nobs` will present them in a `less` instance, since,
-when dealing with really long C++ errors you'll likely just want to see the
-first few (`less` will not be invoked if either stdout or stderr are being
-captured) . Make sure to report the stderr output of nobs to the appropriate
-developer (if its all C++ errors) or to jdbachan in the case of gasnet
-configure/build errors or uncaught Python exceptions. For gasnet errors, gasnet
-might tell you to refer to some generated temporary file (likely in `/tmp/...`)
-which won't exist since `nobs` cleans up all of its temporaries before exiting.
-To prevent `/tmp` cleanup, run `nobs` with `NOBS_DEBUG=1` set.
-
-
-## Internal-Only Configuration Notes ##
-
-This serves as the place to document all the build-time and run-time tunables
-that aren't hardened enough to be part of the user-facing docs.
-
-### Compile Time Environment Variables ###
-
-These are honored by `./install --single` but not the regular (non-single)
-installation (which overwrites them in a parameter sweep loop).
-
-* `OPTLEV=[0|1|2|3]`: Sets this optimization level for code generation. This
-  value is passed as `-O${OPTLEV}` to the compiler.
-
-* `DBGSYM=[0|1]`: Enables debugging symbols in executable (`-g` flag presence).
-
-* `ASSERT=[0|1]`: Enables function of `UPCXX_ASSERT`.
-
-* `UPCXX_MPSC_QUEUE=[atomic|biglock]`: The implementation to use for multi-
+* `--with-mpsc-queue={atomic,biglock}`: The implementation to use for multi-
   producer single-consumer queues in the runtime (`upcxx::detail::intru_queue`).
     * `atomic`: (default) Highest performance: one atomic exchange per enqueue.
     * `biglock`: Naive global-mutex protected linked list. Low performance, but
       least risk with respect to potential bugs in implementation.
+  The legacy environment variable `UPCXX_MPSC_QUEUE` is still honored at
+  configure-time, but this behavior is deprecated.
+
+* `--enable-single={debug,opt}`:  This limits the scope of make targets to only
+  a single GASNet-EX build tree.  This has the side-effect of permitting (but not
+  requiring) `--with-gasnet=...` to name an existing external GASNet-EX *build*
+  tree (it must otherwise name a *source* tree or tarball).  
+  This option is really only intended for use by our CI infrastructure, which
+  operates on/with GASNet-EX build trees.  Since attempts to do anything outside
+  the "scope" of the single-mode will likely fail in unexpected ways, this mode
+  is likely to be more of an annoyance than an advantage to developers, other
+  than when it is necessary to reproduce the CI environment.
+
+* `-v` or `--verbose`:  This option is intended to support debugging of
+  `configure` itself.  This should be the first command line option if one
+  desires to debug option parsing, since it invokes `set -x` when this option is
+  processed.
+
+## Guide to Maintenance Tasks
+
+#### To add a UPC\+\+ runtime source file
+
+A list of sources to be compiled into `libupcxx.a` is maintained in
+`bld/sources.mak`.  Simply add new library sources to `libupcxx_sources`.
+
+#### To add a UPC\+\+ header file
+
+Header files are "crawled" for dependency information, and at installation a
+crawl rooted at `src/upcxx_headers.cpp` is used.  So, in general it is not
+necessary to add new header files to any manually-maintained list.  If there are
+headers missing from an install, then it is appropriate to update
+`src/upcxx_headers.cpp` to ensure then are reached in the crawl.
+
+#### To add tests to `make check` and `make tests`
+
+Keep in mind that these targets are the ones we advise end-users (including
+auditors) to run.  Tests that are not stable/reliable should not be added.
+If/when it is appropriate to add a new test, it should be added to either
+`testprograms_seq` or `testprograms_par` (depending on the backend it should be
+built with) in `bld/tests.mak`.
+
+#### Add a new GASNet-EX conduit
+
+UPC\+\+ maintains its own list of supported conduits, allowing this to remain
+a subset of GASNet-EX's full list as well as ensuring some targets (like
+`tests-clean`) operate even when a build of GASNet-EX is not complete.  To add
+to (or remove from) this list, edit `ALL_CONDUITS` in `bld/gasnet.mak`.
+
+#### Testing GASNet-EX changes
+
+Because all make targets include GASNet source files in their dependency
+tracking, use of the Workflow described above can also be applied when
+developing GASNet-level fixes to problems with UPC\+\+ reproducers.  If
+necessary `make echovar VARNAME=GASNET` can be used to determine the GASNet
+source directory in use (potentially created by `configure`).
+
+#### To add a new supported compiler family
+
+Currently, logic to check for supported compiler (family and version checks)
+still lives in `utils/system-checks.sh`.
+
+However, build-related configuration specific to the compiler family is kept in
+`bld/compiler.mak`.  Current configuration variables in that file provide
+documentation of their purpose, as well as some good examples of how they can
+be set conditionally.
