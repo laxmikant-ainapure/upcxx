@@ -37,7 +37,9 @@ install install-opt install-debug: force
 	@$(MAKE) install-hook || $(MAKE) failure TARGET=installation
 	@echo; \
 	 echo 'UPC++ installation complete.'; \
-	 echo 'Recommended next steps: [ref docs TBD]'
+	 echo 'Recommended next steps:'; \
+	 echo '  See "Post-install recommendations" in'; \
+	 echo '  $(upcxx_src)/INSTALL.md'
 
 all all-opt all-debug: force
 	@$(MAKE) -C $(BLDDIR) $@ || $(MAKE) failure TARGET=build
