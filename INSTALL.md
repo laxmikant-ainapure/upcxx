@@ -70,7 +70,7 @@ The current release is known to work on the following configurations:
 
 ### Miscellaneous software requirements:
 
-* Python2 version 2.7.5 or newer
+* Python3 or Python2 version 2.7.5 or newer
 
 * Perl version 5.005 or newer
 
@@ -82,70 +82,198 @@ The current release is known to work on the following configurations:
 
 ## Installation Instructions
 
-The general recipe for building and installing UPC\+\+ is to run the `install`
-script found in the top-level (upcxx) source directory:
+The recipe for building and installing UPC\+\+ is the same as many packages
+using the GNU Autoconf and Automake infrastructure (though UPC\+\+ does not
+use either).  The high-level steps are as follows:
+
+1. `configure`  
+     Configures UPC\+\+ with key settings such as the installation location
+2. `make all`  
+     Compiles the UPC\+\+ package
+3. `make check` (optional, but recommended)  
+     Verifies the correctness of the UPC\+\+ build prior to its installation
+4. `make install`  
+     Installs the UPC\+\+ package to the user-specified location
+5. `make test_install` (optionally, but highly recommended)  
+     Verifies the installed package
+6. Post-install recommendations
+
+The following numbered sections provide detailed descriptions of each step above.
+Following those are sections with platform-specific instructions.
+
+#### 1. Configuring UPC\+\+
 
 ```bash
-cd <upcxx-source-path>
-./install <upcxx-install-path>
+cd <upcxx-source-dir>
+./configure  --prefix=<upcxx-install-path>
 ```
 
-This will build the UPC\+\+ library and install it to the `<upcxx-install-path>`
-directory. Users are recommended to use paths to non-existent or empty
-directories as the installation path so that uninstallation is as trivial as
-`rm -rf <upcxx-install-path>`.  Depending on the platform, additional
-configuration may be necessary before invoking `install`. See below.
+Or, to have distinct source and build trees (for instance to compile multiple
+confgurations from a common source directory):
+```bash
+mkdir <upcxx-build-path>
+cd <upcxx-build-path>
+<upcxx-source-path>/configure  --prefix=<upcxx-install-path>
+```
+
+This will configure the UPC\+\+ library to be installed to the given
+`<upcxx-install-path>` directory. Users are recommended to use paths to
+non-existent or empty directories as the installation path so that
+uninstallation is as trivial as `rm -rf <upcxx-install-path>`.
+
+Depending on the platform, additional command-line arguments may be necessary
+when invoking `configure`. See the platform-specific instructions below for
+guidance.  Running `<upcxx-source-path>/configure --help` will provide general
+information on the available configuration options, and similar information is
+provided in the "Advanced Configuration" section below.
 
 If you are using a source tarball release downloaded from the website, it
-should include an embedded copy of GASNet-EX and `install` will default to
+should include an embedded copy of GASNet-EX and `configure` will default to
 using that.  However if you are using a git clone or other repo snapshot of
-UPC++, then `install` may default to downloading the GASNet-EX communication
-library, in which case an Internet connection is needed at install time.
+UPC++, then `configure` may default to downloading the GASNet-EX communication
+library, in which case an Internet connection is needed at configuration time.
 
-Note: The install script requires Python 2.7 and does its best to automatically
-invoke that version even if it isn't the current default on the system. If
-installation fails and you suspect it has to do with the Python version, try
-setting the `UPCXX_PYTHON` environment variable to refer to your system's name
-for Python 2.7 (e.g. `python2.7`, or `python2`).
+GNU Make 3.80 or newer is required to build UPC\+\+.  If neither `make` nor
+`gmake` in your `$PATH` meets this requirement, you may use `--with-gmake=...`
+to specify the full path to an appropriate version.  You may need to
+substitute `gmake`, or your configured value, for `make` where it appears in
+the following steps.  The final output from `configure` will provide the
+appropriate commands.
+
+#### 2. Compiling UPC\+\+
+
+```bash
+make all
+```
+
+This will compile the UPC\+\+ runtime libraries, including the GASNet-EX
+communications runtime.  One may run, for instance, `make -j8 all` to build
+with eight concurrent processes.  This may significantly reduce the time
+required.
+
+#### 3. Testing the UPC\+\+ build (optional)
+
+Though it is not required, we recommend testing the completeness and correctness
+of the UPC\+\+ build before proceeding to the installation step.  In general
+the environment used to compile UPC\+\+ tests and run them may not be the
+same.  The following command must be run in an environment suitable for both,
+if such is available.
+
+```bash
+make check
+```
+
+This compiles all available tests for the default network and then runs them.
+
+If it is not possible to both compile and run parallel applications in the
+same environment, then one may apply the following two-steps in place of
+`make check`:
+
+First, in an environment suited to compilation, run `make tests-clean tests`.
+This will remove any test executables left over from previous attempts, and
+then compiles all tests for all available networks.  One may restrict this to
+a subset of the available networks by appending something like
+`NETWORKS='<net1> <net2>'` to this command, where network names (such as
+`smp`, `udp`, `ibv` or `aries`) should be substituted for the placeholders.
+
+Second, in an environment suited to execution of parallel applications, run
+`make run-tests`.  As in the first step, one may set `NETWORKS` on the `make`
+command line to limit the tests run to some subset of the detected networks.
+
+Setting of `NETWORKS` to restrict what is tested may be necessary, for
+instance, if GASNet-EX detected libraries for a network not actually present
+in your system.  This will often occur for InfiniBand (which GASNet-EX
+identifies as `ibv`) due to presence of the associated libraries on many Linux
+distributions.  One may, if desired, return to the configure step and pass
+`--disable-ibv` (or other undesired network) to remove support for a given
+network from the build of UPC\+\+.
+
+#### 4. Installing the compiled UPC\+\+ package
+
+```bash
+make install
+```
+
+This will install the UPC\+\+ runtime libraries and accompanying utilities to
+the location specified via `--prefix=...` at configuration time.  If that
+value is not the desired installation location, then `make install
+prefix=<desired-install-directory>` may be used to override the value given at
+configure time.
+
+#### 5. Testing the install UPC\+\+ package (optional)
+
+```bash
+make tests-clean test_install
+```
+
+This optional command removes any test executables left over from previous
+attempts, and then builds a simple "Hello, World" test for each supported
+network using the *installed* UPC\+\+ libraries and compiler wrapper.
+
+At the end of the output will be instructions for running these tests if
+desired.
+
+#### 6. Post-install recommendations
+
+After step 5 (or step 4, if skipping step 5) one may safely remove the
+directory `<upcxx-source-path>` (and `<upcxx-build-path>`, if used) since they
+are not needed by the installed package.
+
+One may use the utilities `upcxx` (compiler wrapper), `upcxx-run` (launch
+wrapper) and `upcxx-meta` (UPC\+\+ metadata utility) by their full path in
+`<upcxx-install-path>/bin`.  However, it is common to append that directory to
+one's `$PATH` environment variable (the best means to do so are beyond this
+scope of this document).
+
+Additionally, one may wish to set the environment variable `$UPCXX_INSTALL`
+equal to `<upcxx-install-path>`, as this is assumed by several UPC\+\+
+examples.
+
+For systems using "environment modules" an example modulefile is provided
+as `<upcxx-install-path>/share/modulefiles/upcxx/<upcxx-version>`.  This
+sets both `$PATH` and `$UPCXX_INSTALL` as recommended above.  Consult
+the documentation for the environment modules package on how to use this file.
+
+For users of CMake 3.6 or newer, `<upcxx-install-path>/share/cmake/UPCXX`
+contains a `UPCXXConfig.cmake`.  Consult CMake documentation for instructions
+on use of this file.
 
 ### Installation: Linux
 
-The installation command above will work as is. The default compilers used will
-be gcc/g++. The `CC` and `CXX` environment variables can be set to alternatives
-to override this behavior. Additional environment variables allowing finer
-control over how UPC\+\+ is configured can be found in the
-"Advanced Installer Configuration" section below.
+The `configure` command above will work as-is. The default compilers used will
+be gcc/g++. The `--with-cc=...` and `--with-cxx=...` options may specify
+alternatives to override this behavior.  Additional options providing finer
+control over how UPC\+\+ is configured can be found in the "Advanced
+Configuration" section below.
 
 By default ibv-conduit (InfiniBand support) will use MPI for job spawning if a
-working `mpicc` is found at installation time.  When this occurs, `CXX=mpicxx`
-(or similar) is required at install time to ensure correct linkage of
-ibv-conduit executables.  Alternatively, one may include `--disable-mpi-compat`
-in the value of `GASNET_CONFIGURE_ARGS` to exclude support for MPI as a job
-spawner.
+working `mpicc` is found when UPC\+\+ is built.  When this occurs, one must pass
+`--with-cxx=mpicxx` (or similar) to `configure` to ensure correct linkage of
+ibv-conduit executables.  Alternatively, one may pass `--disable-mpi-compat` to
+exclude support for MPI as a job spawner.
 
 ### Installation: Apple macOS
 
 On macOS, UPC++ defaults to using the Apple LLVM clang compiler that is part
 of the Xcode Command Line Tools.
 
-The Xcode Command Line Tools need to be installed *before* invoking `install`,
+The Xcode Command Line Tools need to be installed *before* invoking `configure`,
 i.e.:
 
 ```bash
 xcode-select --install
 ```
 
-Alternatively, the `CC` and `CXX` environment variables can be set to an alternative
-compiler installation for a supported compiler before running `./install`.
+Alternatively, the `--with-cc=...` and `--with-cxx=...` options to `configure`
+may be used to specify different compilers.
 
 ### Installation: Cray XC
 
-To run on the compute nodes of a Cray XC, the `CROSS` environment variable needs
-to be set before the install command is invoked. Use the appropriate value for
-your supercomputer installation:
+To run on the compute nodes of a Cray XC, the `--with-cross=...` option must be
+passed to the `configure` script.  Use the appropriate value for your system:
 
-* `CROSS=cray-aries-slurm`: Cray XC systems using the SLURM job scheduler (srun)
-* `CROSS=cray-aries-alps`: Cray XC systems using the Cray ALPS job scheduler (aprun)
+* `--with-cross=cray-aries-slurm`: Cray XC systems using the SLURM job scheduler (srun)
+* `--with-cross=cray-aries-alps`: Cray XC systems using the Cray ALPS job scheduler (aprun)
 
 When Intel compilers are being used (usually the default for these systems), 
 a gcc environment module (6.4.0 or newer) is also required, and may need to be
@@ -154,7 +282,7 @@ explicitly loaded, e.g.:
 ```bash
 module load gcc/7.1.0
 cd <upcxx-source-path>
-env CROSS=cray-aries-slurm ./install <upcxx-install-path>
+./configure --prefix=<upcxx-install-path> --with-cross=cray-aries-slurm
 ```
 
 If using PrgEnv-cray, then version 9.0 or newer of the Cray compilers is
@@ -162,8 +290,9 @@ required.  This means the cce/9.0.0 or later environment module must be
 loaded, and not "cce/9.0.0-classic" (the "-classic" Cray compilers are not
 supported).
 
-The installer will use the `cc` and `CC` compiler aliases of the Cray
-programming environment loaded.
+The `configure` script will use the `cc` and `CC` compiler aliases of the Cray
+programming environment loaded.  It is *not* necessary to specify these
+explicitly using `--with-cc` or `--with-cxx`.
 
 Currently only Intel-based Cray XC systems have been tested, including Xeon
 and Xeon Phi (aka "KNL").  Note that UPC++ has not yet been tested on an
@@ -184,34 +313,34 @@ System Requirements:
 * NVIDIA-branded [CUDA-compatible GPU hardware](https://developer.nvidia.com/cuda-gpus)
 * NVIDIA CUDA toolkit v9.0 or later. Available for [download here](https://developer.nvidia.com/cuda-downloads).
 
-To activate the UPC++ support for CUDA, set environment variable `UPCXX_CUDA=1`
-when running the install script:
+To activate the UPC++ support for CUDA, pass `--with-cuda` to the `configure`
+script:
 
 ```bash
 cd <upcxx-source-path>
-env UPCXX_CUDA=1 ./install <upcxx-install-path>
+./configure --prefix=<upcxx-install-path> --with-cuda
 ```
 
 This expects to find the NVIDIA `nvcc` compiler wrapper in your `$PATH` and
 will attempt to extract the correct build settings for your system.  If this
 automatic extraction fails (resulting in preprocessor or linker errors
 mentioning CUDA), then you may need to manually override the following
-settings:
+options to `configure`:
 
-* `UPCXX_CUDA_NVCC`: the full path to the `nvcc` compiler wrapper from the CUDA toolkit. 
-   Eg `UPCXX_CUDA_NVCC=/Developer/NVIDIA/CUDA-10.0/bin/nvcc`
-* `UPCXX_CUDA_CPPFLAGS`: preprocessor flags to add for locating the CUDA toolkit headers.
-   Eg `UPCXX_CUDA_CPPFLAGS='-I/Developer/NVIDIA/CUDA-10.0/include'`
-* `UPCXX_CUDA_LIBFLAGS`: linker flags to use for linking CUDA executables.
-   Eg `UPCXX_CUDA_LIBFLAGS='-Xlinker -force_load -Xlinker /Developer/NVIDIA/CUDA-10.0/lib/libcudart_static.a -L/Developer/NVIDIA/CUDA-10.0/lib -lcudadevrt -Xlinker -rpath -Xlinker /usr/local/cuda/lib -Xlinker -framework -Xlinker CoreFoundation -framework CUDA'`
+* `--with-nvcc=...`: the full path to the `nvcc` compiler wrapper from the CUDA toolkit. 
+   Eg `--with-nvcc=/Developer/NVIDIA/CUDA-10.0/bin/nvcc`
+* `--with-cuda-cppflags=...`: preprocessor flags to add for locating the CUDA toolkit headers.
+   Eg `--with-cuda-cppflags='-I/Developer/NVIDIA/CUDA-10.0/include'`
+* `--with-cuda-libflags=...`: linker flags to use for linking CUDA executables.
+   Eg `--with-cuda-libflags='-Xlinker -force_load -Xlinker /Developer/NVIDIA/CUDA-10.0/lib/libcudart_static.a -L/Developer/NVIDIA/CUDA-10.0/lib -lcudadevrt -Xlinker -rpath -Xlinker /usr/local/cuda/lib -Xlinker -framework -Xlinker CoreFoundation -framework CUDA'`
 
 Note that you must build UPC++ with the same host compiler toolchain as is used
-by nvcc when compiling any UPC++ CUDA programs. That is, both UPC++ and your UPC++
-application must be compiled using the same host compiler toolchain.
-You can ensure this is the case by either (1) compiling UPC++ with the same
+by `nvcc` when compiling any UPC++ CUDA programs. That is, both UPC++ and your
+UPC++ application must be compiled using the same host compiler toolchain.
+You can ensure this is the case by either (1) configuring UPC++ with the same
 compiler as your system nvcc uses, or (2) using the `-ccbin` command line
-argument to nvcc during application compilation to ensure it uses the same host
-compiler as was used during UPC++ installation.
+argument to `nvcc` during application compilation to ensure it uses the same host
+compiler as was passed to the UPC++ `configure` script.
    
 UPC++ CUDA operation can be validated using the following programs in the source tree:
 
@@ -223,26 +352,40 @@ UPC++ CUDA operation can be validated using the following programs in the source
 See the "Memory Kinds" section in the _UPC++ Programmer's Guide_ for more details on 
 using the CUDA support.
 
-## Advanced Installer Configuration
+## Advanced Configuration
 
-The installer script tries to pick a sensible default behavior for the platform
-it is running on, but the install can be customized using the following
-environment variables:
+The `configure` script tries to pick sensible defaults for the platform it is
+running on, but its behavior can be controlled using the following command line
+options:
 
-* `CC`, `CXX`: The C and C\+\+ compilers to use.
-* `CROSS`: The cross-configure settings script to pull from the GASNet source
-  tree (computed as `<gasnet>/other/contrib/cross-configure-${CROSS}`).
-* `GASNET`: Provides the GASNet-EX source tree from which the UPC\+\+ install
-  script will build its own version of GASNet-EX. This can be a path to a tarball,
-  URL to a tarball, or path to a full source tree. If provided, this must correspond 
-  to a recent and compatible version of GASNet-EX (NOT GASNet-1).
+* `--prefix=...`: The location at which UPC\+\+ is to be installed.  The
+  default is `/usr/local/upcxx`.
+* `--with-cc=...` and `--with-cxx=...`: The C and C\+\+ compilers to use.
+* `--with-cross=...`: The cross-configure settings script to pull from the
+  GASNet-EX source tree (`<gasnet>/other/contrib/cross-configure-${VALUE}`).
+* `--with-default-network=...`: Sets the default network to be used by the
+  `upcxx` compiler wrapper.  Valid values are listed under "UPC\+\+ Backends" in
+  [README.md](README.md).  The default is `aries` when cross-compiling for a
+  Cray CX, and (currently) `smp` for all other systems.  Users with high-speed
+  networks, such as InfiniBand (`ibv`), are encouraged to set this parameter
+  to a value appropriate for their system.
+* `--with-gasnet=...`: Provides the GASNet-EX source tree from which UPC\+\+
+  will configure and build its own copies of GASNet-EX. This can be a path to a
+  tarball, URL to a tarball, or path to a full source tree. If provided, this
+  must correspond to a recent and compatible version of GASNet-EX (NOT GASNet-1).
   Defaults to an embedded copy of GASNet-EX, or the GASNet-EX download URL.
-* `GASNET_CONFIGURE_ARGS`: List of additional command line arguments passed to
-  GASNet's configure phase.
-* `UPCXX_PYTHON`: Python2 interpreter to use.
-* `UPCXX_MAKE`: Make command for make steps in the installation (e.g. building
-  the GASNet-EX library). Defaults to `make -j 8` for parallel make.  To disable
-  parallel make, set `UPCXX_MAKE=make`.
-* `UPCXX_NOBS_THREADS`: Number of tasks to used for non-make installation steps.
-  Defaults to autodetected CPU count, set `UPCXX_NOBS_THREADS=1` for serial compilation.
+* `--with-gmake=...`: GNU Make command to use; must be 3.80 or newer.  The
+  default behavior is to search `$PATH` for a `make` or `gmake` which meets this
+  minimum version requirement.
+* Options for control of (optional) CUDA support are documented above, in the
+  section "Installation: CUDA GPU support".
+* Options not recognized by the UPC\+\+ `configure` script will be passed to
+  the GASNet-EX `configure`.  For instance, `--with-mpirun-cmd=...` might be
+  required to setup MPI-based launch of ibv-conduit applications.  Please read
+  the GASNet-EX documentation for more information on this and many other
+  options available to configure GASNet-EX.
+
+In addition to these explicit configure options, there are several environment
+variables which can implicitly effect the configuration of GASNet-EX.  The most
+common of these are listed at the end of the output of `configure --help`.
 
