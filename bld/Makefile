@@ -54,8 +54,8 @@ UPCXXDIR = $(call UPCXXDIR_FN,$(ASSERT),$(OPTLVL),$(DBGSYM),$(UPCXX_BACKEND),$(G
 GASNETDIR = gasnet.$(GASNET_CODEMODE)
 
 ## Support for --enable-single=...{opt,debug}
-UPCXX_OPTDBG ?= opt debug
-FOREACH_OPTDBG = $(addprefix $(1)-,$(UPCXX_OPTDBG))
+UPCXX_DBGOPT ?= debug opt
+FOREACH_DBGOPT = $(addprefix $(1)-,$(UPCXX_DBGOPT))
 
 # Some useful GASNet variables
 ifneq ($(wildcard $(builddir)/$(GASNETDIR)),)
@@ -161,10 +161,10 @@ do-gasnet-clean-debug: force
 ##
 .PHONY: gasnet-configure gasnet-all gasnet-install gasnet-clean gasnet-distclean
 
-gasnet-configure: $(call FOREACH_OPTDBG,do-gasnet-configure)
-gasnet-all:       $(call FOREACH_OPTDBG,do-gasnet-all)
-gasnet-install:   $(call FOREACH_OPTDBG,do-gasnet-install)
-gasnet-clean:     $(call FOREACH_OPTDBG,do-gasnet-clean)
+gasnet-configure: $(call FOREACH_DBGOPT,do-gasnet-configure)
+gasnet-all:       $(call FOREACH_DBGOPT,do-gasnet-all)
+gasnet-install:   $(call FOREACH_DBGOPT,do-gasnet-install)
+gasnet-clean:     $(call FOREACH_DBGOPT,do-gasnet-clean)
 
 gasnet-distclean: force
 	rm -Rf gasnet.opt gasnet.debug
@@ -183,7 +183,7 @@ do-upcxx-meta: force
 	 chmod 755 $$file
 .PHONY: do-upcxx-meta
 # In --enable-single mode we favor CONFIG_{CC,CXX} over the GASNET_ values:
-ifeq ($(strip $(UPCXX_OPTDBG)),$(firstword $(UPCXX_OPTDBG)))
+ifeq ($(strip $(UPCXX_DBGOPT)),$(firstword $(UPCXX_DBGOPT)))
 UPCXX_META_COMPILERS := CONFIG
 else
 UPCXX_META_COMPILERS := GASNET
@@ -439,9 +439,9 @@ do-upcxx-clean-debug: force
 # There is no configure
 #
 
-upcxx-all:     $(call FOREACH_OPTDBG,do-upcxx-all)
-upcxx-install: $(call FOREACH_OPTDBG,do-upcxx-install)
-upcxx-clean:   $(call FOREACH_OPTDBG,do-upcxx-clean)
+upcxx-all:     $(call FOREACH_DBGOPT,do-upcxx-all)
+upcxx-install: $(call FOREACH_DBGOPT,do-upcxx-install)
+upcxx-clean:   $(call FOREACH_DBGOPT,do-upcxx-clean)
 upcxx-distclean: do-upcxx-clean-opt do-upcxx-clean-debug # Always both
 
 #

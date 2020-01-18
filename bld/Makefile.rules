@@ -19,7 +19,7 @@ Makefile $(upcxx_src)/bld/Makefile.rules: ; @: # empty rule
 $(upcxx_src)/bld/%.mak: ; @: # empty rule
 
 BLDDIR = $(upcxx_bld)/bld
-GASNET_BLDDIR = $(BLDDIR)/gasnet.$(firstword $(UPCXX_OPTDBG))
+GASNET_BLDDIR = $(BLDDIR)/gasnet.$(firstword $(UPCXX_DBGOPT))
 
 include $(upcxx_src)/bld/gasnet.mak
 CONDUITS  = $(call GASNET_VAR,$(GASNET_BLDDIR),CONDUITS)
@@ -118,7 +118,7 @@ check: force
 # Default network (if included in NETWORKS) is built last to keep it on user's screen
 do-tests: force
 	@total=0; failed=0;                                  \
-	 if [[ '$(UPCXX_OPTDBG)' == 'opt' ]]; then           \
+	 if [[ '$(UPCXX_DBGOPT)' == 'opt' ]]; then           \
 	   export UPCXX_CODEMODE=O3;                         \
 	 else                                                \
 	   export UPCXX_CODEMODE=debug;                      \
