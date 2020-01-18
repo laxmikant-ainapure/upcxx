@@ -44,8 +44,8 @@ all all-opt all-debug: force
 	@echo; \
 	 echo 'UPC++ build complete.';    \
 	 echo 'Recommended next steps:';  \
-	 echo "  1. '$(GMAKE) check'";    \
-	 echo "  2. '$(GMAKE) install'"
+	 echo "  1. '$(GMAKE_SHORT) check'";    \
+	 echo "  2. '$(GMAKE_SHORT) install'"
 
 distclean-hook: force
 	-[[ $(upcxx_src) = $(upcxx_bld) ]] || rm -R $(BLDDIR)/Makefile
@@ -107,7 +107,7 @@ check: force
 	 echo ; sleep 5
 	@$(MAKE) do-tests do-run-tests UPCXX_BINDIR=$(upcxx_bld)/bin UPCXX_QUIET=1 NETWORKS=$(GASNET_CONDUIT)
 	@echo 'Recommended next steps:';  \
-	 echo "  If you have not already, you may now '$(GMAKE) install'"
+	 echo "  If you have not already, you may now '$(GMAKE_SHORT) install'"
 
 .PHONY: check
 
