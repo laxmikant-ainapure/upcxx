@@ -36,16 +36,22 @@ the UPC\+\+ configure script are appended to it (giving them precedence).
 supported for end-users while "Internal-Only Configuration Options", below,
 documents some unsupported ones.
 
-As soon as `configure` is complete, `<upcxx-build-dir>/bin` is populated with
-a `upcxx` and `upcxx-run` which dynamically build the required UPC\+\+ and
-GASNet-EX libraries only the first time they are required.  This is based on
-the flags (and env vars) passed to `upcxx` and on the conduit encoded in an
-executable passed to `upcxx-run`.  These tools are expected to be sufficient
-for most simple development tasks, including working with user's bug
-reproducers, without the need to complete an install.
+The `configure` script populates `<upcxx-build-dir>/bin` with special `upcxx`,
+`upcxx-meta` and `upcxx-run` scripts specific to use in the build-dir.  These
+scripts dynamically build any necessary UPC\+\+ and GASNet-EX libraries the
+first time they are required, and updates them if any UPC\+\+ or GASNet-EX
+source files change.  For `upcxx` the necessary libraries are determined from
+the environment as overridden by any flags passed to it.  For `upcxx-run`, the
+conduit is extracted from the executable passed to it.  For `upcxx-meta` only
+the environment is used.
 
-By default, these two scripts remind you that you are using the build-dir
-versions with the following message:  
+These tools are expected to be sufficient for most simple development tasks,
+including working with a user's bug reproducer (even one with its own Makefile),
+without the need to complete an install with two versions of GASNet-EX and
+`libupcxx.a` for every detected conduit.
+
+By default, these three scripts remind you that you are using their build-dir
+versions with the following message on stderr:  
       `INFO: may need to build the required runtime.  Please be patient.`  
 This can be suppressed by setting `UPCXX_QUIET=1` in your environment.
 

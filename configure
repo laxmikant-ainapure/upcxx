@@ -635,7 +635,7 @@ vars=\${vars/UPCXX_NETWORK/GASNET_CONDUIT}
 vars=\${vars/UPCXX_THREADMODE=/UPCXX_BACKEND=gasnet_}
 vars=\${vars/UPCXX_CODEMODE=O3/ASSERT=0 OPTLVL=3 DBGSYM=0}
 vars=\${vars/UPCXX_CODEMODE=debug/ASSERT=1 OPTLVL=0 DBGSYM=1}
-[[ -z "\$UPCXX_QUIET" ]] && echo 'INFO: may need to build the required runtime.  Please be patient.'
+[[ -z "\$UPCXX_QUIET" ]] && echo 'INFO: may need to build the required runtime.  Please be patient.' >&2
 cmd=\$($GMAKE -s -f '$PWD/Makefile' upcxx \$vars 2> /dev/null)
 [[ \$? -ne 0 ]] && die 'build of the required runtime failed.'
 exec \$cmd "\$@"
@@ -646,12 +646,31 @@ function die { echo "ERROR: \$*" >&2; exit 1; }
 conduit=\$($UPCXX_SRC/utils/upcxx-run -info "\$@" | grep ^GASNetConduitName: | cut -d' ' -f2 | tr '[A-Z]' '[a-z]')
 [[ \$? -ne 0 ]] && die 'pre-parse of command line failed'
 codemode="${UPCXX_OPTDBG#* }" # debug unless only opt configured in
-[[ -z "\$UPCXX_QUIET" ]] && echo 'INFO: may need to build the required runtime.  Please be patient.'
+[[ -z "\$UPCXX_QUIET" ]] && echo 'INFO: may need to build the required runtime.  Please be patient.' >&2
 cmd=\$($GMAKE -s -f '$PWD/Makefile' upcxx-run GASNET_CODEMODE=\$codemode GASNET_CONDUIT=\$conduit 2>/dev/null)
 [[ \$? -ne 0 ]] && die 'build of the required GASNet runtime failed.'
 exec \$cmd "\$@"
 EOF
-chmod a+rx bin/upcxx bin/upcxx-run
+cat >| bin/upcxx-meta <<EOF
+#!/bin/bash
+function die { echo "ERROR: \$*" >&2; exit 1; }
+[[ -z "\$UPCXX_QUIET" ]] && echo 'INFO: may need to build the required runtime.  Please be patient.' >&2
+meta=\$($GMAKE -s -f '$PWD/Makefile' upcxx-meta 2>/dev/null)
+[[ \$? -ne 0 ]] && die 'build of the required runtime failed.'
+if [[ "\$1" == "SET" ]] ; then
+  source "\$meta" ""
+elif [[ "\$1" == "DUMP" ]] ; then
+  i=0
+  while read line; do
+    [ \$((i++)) == 0 ] && continue # omit she-bang
+    [ "\$line" == "" ] && break    # empty line signals end
+    echo "\$line"
+  done < "\$meta"
+else
+  exec "\$meta" \$*
+fi
+EOF
+chmod a+rx bin/upcxx bin/upcxx-run bin/upcxx-meta
 
 #
 # Remove any (potentially out-of-date) GASNet builds to ensure they are reconfigured
