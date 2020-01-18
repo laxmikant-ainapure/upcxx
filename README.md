@@ -26,7 +26,6 @@ Other topics are covered in the following documents:
 * Installing the UPC++ software, see: [INSTALL.md](INSTALL.md)
 * Tutorial on programming with UPC++, see: [UPC++ Programmer's Guide](docs/guide.pdf)
 * Formal details on UPC++ semantics, see: [UPC++ Specification](docs/spec.pdf)
-* Running basic UPC++ correctness tests, see: [docs/testing.md](docs/testing.md)
 * Software change history of UPC++, see: [ChangeLog.md](ChangeLog.md)
 * Debugging UPC++ programs, see: [docs/debugging.md](docs/debugging.md)
 * Using UPC++ and MPI in the same program, see: [docs/mpi-hybrid.md](docs/mpi-hybrid.md).
