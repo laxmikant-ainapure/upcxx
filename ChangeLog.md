@@ -7,6 +7,17 @@ For information on installing UPC++, see: [INSTALL.md](INSTALL.md)
 
 ### 20XX.YY.ZZ: PENDING
 
+Infrastructure and requirements changes:
+
+* The `install` and `run-tests` scripts have been replaced with a `configure`
+  script (with GNU autoconf-compatible options) and corresponding `make all`,
+  `make check` and `make install` steps.
+  See [INSTALL.md](INSTALL.md) for step-by-step instructions.
+* The minimum required GNU Make has risen from 3.79 to 3.80 (released in 2002).
+* There is no longer a requirement for Python2.7.  While `upcxx-run` still
+  requires a Python interpreter, both Python3 and Python2 (>= 2.7.5) are
+  acceptable.
+
 New features/enhancements: (see specification and programmer's guide for full details)
 
 * Significantly improve compile latency associated with `upcxx` compiler wrapper script
