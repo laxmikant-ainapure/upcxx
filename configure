@@ -58,6 +58,8 @@ Usage:
 
   -h|--help|--usage
         Produces this message.
+  --help=recursive
+        Produces this message and GASNet's `configure --help` message.
   -V|--version
         Report version and copyright.
 
@@ -114,6 +116,8 @@ single=''
 # Each distinct warning added should start with a newline
 warnings=''
 
+unset gasnet_help
+
 #
 # Error handling
 #
@@ -168,6 +172,16 @@ while [[ $# -gt 0 ]]; do
       echo '======================='
       usage;
       exit 0;
+      ;;
+
+    --help=recursive)
+      echo 'UPC++ configure script.'
+      echo '======================='
+      usage;
+      echo
+      echo 'GASNet-EX configure script.'
+      echo '==========================='
+      gasnet_help=1
       ;;
 
     -V|--version)
@@ -306,6 +320,14 @@ WANT_MIN=${BASH_REMATCH[2]}
 [[ ($HAVE_MAJ -gt $WANT_MAJ) || (($HAVE_MAJ -eq $WANT_MAJ) && ($HAVE_MIN -ge $WANT_MIN)) ]] || \
     echo_and_die "GASNET='$ORIG_GASNET' does not contain GASNet-EX implementing specification version $WANT_MAJ.$WANT_MIN or newer"
 
+#
+# GASNet's help message if requested
+#
+if [[ -n "$gasnet_help" ]]; then
+  exec $GASNET/configure --help
+  echo "Failed to run GASNet's configure --help"
+  exit 1
+fi
 
 #
 # Canonicalize $PREFIX
