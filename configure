@@ -198,6 +198,116 @@ done
 trap failure_and_die ERR  # errors after arg parsing are fatal
 
 #
+# Default GASNet source
+# Enable offline installers with an embedded GASNet-EX tarball
+#
+GASNET_DEFAULT='https://gasnet-bugs.lbl.gov/nightly/unlisted/GASNet-stable.tar.gz'
+gex_offline=`/bin/ls "$UPCXX_SRC"/src/GASNet-{stable,2???.*}.tar.gz 2> /dev/null | sort -t. -k1,1 -k2,2n -k3n | tail -1`
+if [[ -n "$GASNET" ]]; then
+  : # keep defn
+elif [[ -r "$gex_offline" ]]; then
+  GASNET="$gex_offline"
+else
+  GASNET=$GASNET_DEFAULT
+fi
+
+#
+# Fetch and unpack GASNet (as required) and verify
+#
+
+function bad_gasnet_fetch {
+  echo Error: $* >&2
+  echo_and_die "Please correct the URL or point --with-gasnet=... at a manually downloaded GASNet source .tar.gz file ($GASNET_DEFAULT is the recommended version)"
+}
+ORIG_GASNET="$GASNET"
+GASNET_UNPACKED=""
+GASNET_TYPE=source  # default
+if [[ -n "$single" && -r "$GASNET/gasnet_config.h" ]] ; then
+  # single + GASNET=builddir (may or may not be a srcdir as well)
+  GASNET_TYPE=build
+  # Convert relative path of build directory to absolute if necessary
+  if ! expr "$GASNET" : ^/ >/dev/null; then
+    export GASNET=$(cd "$GASNET" && pwd -P)
+  fi
+elif [ -r "$GASNET/gasnet_config.h.in" ]; then
+  # Convert relative path of souce directory to absolute if necessary
+  if ! expr "$GASNET" : ^/ >/dev/null; then
+    export GASNET=$(cd "$GASNET" && pwd -P)
+  fi
+elif expr "$GASNET" : '.*\.tar\.gz' >/dev/null; then
+  # Unpack tarball into bld/ unless already present
+  gex_dir="$PWD/bld/`basename $GASNET .tar.gz`"
+  gex_tmp=''
+  if [ ! -r "$gex_dir/gasnet_config.h.in" ]; then
+    trap - ERR # suspend error handler for detailed diagnostics
+    mkdir -p bld
+    if expr "$GASNET" : http >/dev/null; then
+      if [[ -n "$URL_CAT" ]] ; then
+        : # keep defn
+      elif [[ -n "$(type -p curl)" ]]; then
+        URL_CAT='curl --retry 5 -LsSf'
+      elif [[ -n "$(type -p wget)" ]]; then
+        URL_CAT='wget --tries=5 -nv -O -'
+      fi
+      if [ -z "$URL_CAT" ]; then
+        bad_gasnet_fetch "Do not know how to fetch a URL (did not find wget or curl in \$PATH)"
+      fi
+      gex_tmp="$gex_dir.tar.gz"
+      echo Fetching $GASNET
+      eval "$URL_CAT '$GASNET' >'$gex_tmp'"
+      [[ $? -eq 0 && -r "$gex_tmp" ]] || bad_gasnet_fetch "Failed to fetch '$GASNET'"
+      GASNET="$gex_tmp"
+    else
+      [ -e "$GASNET" ] || echo_and_die "File '$GASNET' does not exist"
+      [ -r "$GASNET" ] || echo_and_die "Cannot read file '$GASNET'"
+    fi
+    echo Unpacking $GASNET
+    gzip -cd "$GASNET" | ( cd bld && tar xf - )
+    rc1=${PIPESTATUS[0]} rc2=${PIPESTATUS[1]}
+    [ $rc1 -eq 0 ] || echo_and_die "Failed to gunzip '$GASNET' (corrupted or truncated?)"
+    [ $rc2 -eq 0 ] || echo_and_die "Failed to untar '$GASNET' (corrupted or truncated?)"
+    [ -r "$gex_dir/gasnet_config.h.in" ] || echo_and_die "GASNET='$ORIG_GASNET' does not appear to contain GASNet"
+    trap failure_and_die ERR  # restore error handler
+    [ -n "$gex_tmp" ] && rm -f "$gex_tmp"
+    GASNET_UNPACKED=$gex_dir
+    echo
+  fi
+  export GASNET="$gex_dir"
+else
+  echo_and_die "GASNET must point to local tarball file, tarball url, or gasnet source tree."
+fi
+
+if [[ "$GASNET_TYPE" == 'build' ]]; then
+  if [ -e "$GASNET/configure" ] ; then
+    gex_header="$GASNET/gasnetex.h"
+  else
+    gex_header=''  # TODO: any non G-1 file to check in a VPATH build directory?
+  fi
+  gex_spec_file="$GASNET/gasnet_config.h"
+else
+  gex_header="$GASNET/gasnetex.h"
+  gex_spec_file="$GASNET/docs/GASNet-EX.txt"
+fi
+
+# verify distinguishing file (if any)
+[[ -z "$gex_header" || -r "$gex_header" ]] || \
+    echo_and_die "GASNET='$ORIG_GASNET' does not contain GASNet-EX (GASNet-1 or GASNet_Tools?)"
+
+# verify minimum version
+[[ $(grep 'EX_SPEC_VERSION_MAJOR' "$gex_spec_file" | head -1 | tr '\t' ' ') =~ ( ([0-9]+)) ]]
+HAVE_MAJ=${BASH_REMATCH[2]}
+[[ $(grep 'EX_SPEC_VERSION_MINOR' "$gex_spec_file" | head -1 | tr '\t' ' ') =~ ( ([0-9]+)) ]]
+HAVE_MIN=${BASH_REMATCH[2]}
+upcxx_header="$UPCXX_SRC/src/backend/gasnet/runtime_internal.hpp"
+[[ $(grep 'UPCXX_REQUIRES_GEX_SPEC_VERSION_MAJOR.*' "$upcxx_header" | head -1 | tr '\t' ' ') =~ ( ([0-9]+)) ]]
+WANT_MAJ=${BASH_REMATCH[2]}
+[[ $(grep 'UPCXX_REQUIRES_GEX_SPEC_VERSION_MINOR.*' "$upcxx_header" | head -1 | tr '\t' ' ') =~ ( ([0-9]+)) ]]
+WANT_MIN=${BASH_REMATCH[2]}
+[[ ($HAVE_MAJ -gt $WANT_MAJ) || (($HAVE_MAJ -eq $WANT_MAJ) && ($HAVE_MIN -ge $WANT_MIN)) ]] || \
+    echo_and_die "GASNET='$ORIG_GASNET' does not contain GASNet-EX implementing specification version $WANT_MAJ.$WANT_MIN or newer"
+
+
+#
 # Canonicalize $PREFIX
 #
 
@@ -249,20 +359,8 @@ function canon_path() {
 PREFIX=$(canon_path "$PREFIX")
 
 #
-# Default GASNet source
-# Enable offline installers with an embedded GASNet-EX tarball
-#
-GASNET_DEFAULT='https://gasnet-bugs.lbl.gov/nightly/unlisted/GASNet-stable.tar.gz'
-gex_offline=`/bin/ls "$UPCXX_SRC"/src/GASNet-{stable,2???.*}.tar.gz 2> /dev/null | sort -t. -k1,1 -k2,2n -k3n | tail -1`
-if [[ -n "$GASNET" ]]; then
-  : # keep defn
-elif [[ -r "$gex_offline" ]]; then
-  GASNET="$gex_offline"
-else
-  GASNET=$GASNET_DEFAULT
-fi
-
 # --enable-single={opt,debug}
+#
 case $single in
   '')
     UPCXX_DBGOPT='debug opt'
@@ -275,7 +373,9 @@ case $single in
     ;;
 esac
 
+#
 # Default UPCXX_MPSC_QUEUE
+#
 if [[ -z "$UPCXX_MPSC_QUEUE" ]] ; then
   UPCXX_MPSC_QUEUE=atomic
 else
@@ -487,101 +587,6 @@ case $GASNET_CONDUIT in
     echo_and_die "ERROR: --with-default-network='$GASNET_CONDUIT' is not a valid network"
     ;;
 esac
-
-#
-# Unpack GASNet (if required) and verify
-#
-
-function bad_gasnet_fetch {
-  echo Error: $* >&2
-  echo_and_die "Please correct the URL or point --with-gasnet=... at a manually downloaded GASNet source .tar.gz file ($GASNET_DEFAULT is the recommended version)"
-}
-ORIG_GASNET="$GASNET"
-GASNET_UNPACKED=""
-GASNET_TYPE=source  # default
-if [[ -n "$single" && -r "$GASNET/gasnet_config.h" ]] ; then
-  # single + GASNET=builddir (may or may not be a srcdir as well)
-  GASNET_TYPE=build
-  # Convert relative path of build directory to absolute if necessary
-  if ! expr "$GASNET" : ^/ >/dev/null; then
-    export GASNET=$(cd "$GASNET" && pwd -P)
-  fi
-elif [ -r "$GASNET/gasnet_config.h.in" ]; then
-  # Convert relative path of souce directory to absolute if necessary
-  if ! expr "$GASNET" : ^/ >/dev/null; then
-    export GASNET=$(cd "$GASNET" && pwd -P)
-  fi
-elif expr "$GASNET" : '.*\.tar\.gz' >/dev/null; then
-  # Unpack tarball into bld/ unless already present
-  gex_dir="$PWD/bld/`basename $GASNET .tar.gz`"
-  gex_tmp=''
-  if [ ! -r "$gex_dir/gasnet_config.h.in" ]; then
-    trap - ERR # suspend error handler for detailed diagnostics
-    mkdir -p bld
-    if expr "$GASNET" : http >/dev/null; then
-      if [[ -n "$URL_CAT" ]] ; then
-        : # keep defn
-      elif [[ -n "$(type -p curl)" ]]; then
-        URL_CAT='curl --retry 5 -LsSf'
-      elif [[ -n "$(type -p wget)" ]]; then
-        URL_CAT='wget --tries=5 -nv -O -'
-      fi
-      if [ -z "$URL_CAT" ]; then
-        bad_gasnet_fetch "Do not know how to fetch a URL (did not find wget or curl in \$PATH)"
-      fi
-      gex_tmp="$gex_dir.tar.gz"
-      echo Fetching $GASNET
-      eval "$URL_CAT '$GASNET' >'$gex_tmp'"
-      [[ $? -eq 0 && -r "$gex_tmp" ]] || bad_gasnet_fetch "Failed to fetch '$GASNET'"
-      GASNET="$gex_tmp"
-    else
-      [ -e "$GASNET" ] || echo_and_die "File '$GASNET' does not exist"
-      [ -r "$GASNET" ] || echo_and_die "Cannot read file '$GASNET'"
-    fi
-    echo Unpacking $GASNET
-    gzip -cd "$GASNET" | ( cd bld && tar xf - )
-    rc1=${PIPESTATUS[0]} rc2=${PIPESTATUS[1]}
-    [ $rc1 -eq 0 ] || echo_and_die "Failed to gunzip '$GASNET' (corrupted or truncated?)"
-    [ $rc2 -eq 0 ] || echo_and_die "Failed to untar '$GASNET' (corrupted or truncated?)"
-    [ -r "$gex_dir/gasnet_config.h.in" ] || echo_and_die "GASNET='$ORIG_GASNET' does not appear to contain GASNet"
-    trap failure_and_die ERR  # restore error handler
-    [ -n "$gex_tmp" ] && rm -f "$gex_tmp"
-    GASNET_UNPACKED=$gex_dir
-    echo
-  fi
-  export GASNET="$gex_dir"
-else
-  echo_and_die "GASNET must point to local tarball file, tarball url, or gasnet source tree."
-fi
-
-if [[ "$GASNET_TYPE" == 'build' ]]; then
-  if [ -e "$GASNET/configure" ] ; then
-    gex_header="$GASNET/gasnetex.h"
-  else
-    gex_header=''  # TODO: any non G-1 file to check in a VPATH build directory?
-  fi
-  gex_spec_file="$GASNET/gasnet_config.h"
-else
-  gex_header="$GASNET/gasnetex.h"
-  gex_spec_file="$GASNET/docs/GASNet-EX.txt"
-fi
-
-# verify distinguishing file (if any)
-[[ -z "$gex_header" || -r "$gex_header" ]] || \
-    echo_and_die "GASNET='$ORIG_GASNET' does not contain GASNet-EX (GASNet-1 or GASNet_Tools?)"
-
-# verify minimum version
-[[ $(grep 'EX_SPEC_VERSION_MAJOR' "$gex_spec_file" | head -1 | tr '\t' ' ') =~ ( ([0-9]+)) ]]
-HAVE_MAJ=${BASH_REMATCH[2]}
-[[ $(grep 'EX_SPEC_VERSION_MINOR' "$gex_spec_file" | head -1 | tr '\t' ' ') =~ ( ([0-9]+)) ]]
-HAVE_MIN=${BASH_REMATCH[2]}
-upcxx_header="$UPCXX_SRC/src/backend/gasnet/runtime_internal.hpp"
-[[ $(grep 'UPCXX_REQUIRES_GEX_SPEC_VERSION_MAJOR.*' "$upcxx_header" | head -1 | tr '\t' ' ') =~ ( ([0-9]+)) ]]
-WANT_MAJ=${BASH_REMATCH[2]}
-[[ $(grep 'UPCXX_REQUIRES_GEX_SPEC_VERSION_MINOR.*' "$upcxx_header" | head -1 | tr '\t' ' ') =~ ( ([0-9]+)) ]]
-WANT_MIN=${BASH_REMATCH[2]}
-[[ ($HAVE_MAJ -gt $WANT_MAJ) || (($HAVE_MAJ -eq $WANT_MAJ) && ($HAVE_MIN -ge $WANT_MIN)) ]] || \
-    echo_and_die "GASNET='$ORIG_GASNET' does not contain GASNet-EX implementing specification version $WANT_MAJ.$WANT_MIN or newer"
 
 #
 # Generate bld/Makefile if needed
