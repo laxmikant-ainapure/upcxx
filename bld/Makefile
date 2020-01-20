@@ -481,10 +481,12 @@ all install clean distclean: force
 ## OPTIONAL PARAMS: EXTRAFLAGS
 ##
 
-# Hash absolute path of $(SRC), plus any $(EXTRAFLAGS), to form executable name
+# Hash absolute path of $(SRC), plus any "influential" variables to form the executable name
 # The library variant is encoded in $(UPCXXDIR)
+UPCXX_EXE_CSUM_VARS = EXTRAFLAGS MANUAL_DEFINES MANUAL_CFLAGS MANUAL_CXXFLAGS MANUAL_LDFLAGS MANUAL_LIBS
+UPCXX_EXE_CSUM_VALS = $(foreach var,$(UPCXX_EXE_CSUM_VARS),$($(var)))
 SRCPATH = $(shell cd $(STARTDIR) && cd $(dir $(SRC)) && pwd)/$(notdir $(SRC))
-UPCXX_EXE_CSUM = $(firstword $(shell $(UPCXX_CSUMCMD) <<< '$(SRCPATH) $(EXTRAFLAGS)'))
+UPCXX_EXE_CSUM = $(firstword $(shell $(UPCXX_CSUMCMD) <<< '$(SRCPATH) $(UPCXX_EXE_CSUM_VALS)'))
 UPCXX_EXE_STEM = $(builddir)/$(UPCXXDIR)/exe/$(UPCXX_EXE_CSUM)
 UPCXX_EXE      = $(UPCXX_EXE_STEM)$(call GASNET_VAR,$(builddir)/$(GASNETDIR),EXESUFFIX)
 
