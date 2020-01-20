@@ -4,7 +4,7 @@ These instructions are for UPC\+\+ runtime developers only.
 
 THIS INTERNAL DOCUMENTATION IS NOT CAREFULLY MAINTAINED AND MAY BE OUT OF DATE.
 
-Software requirements are detailed in [README.md](../README.md).  
+Software requirements are detailed in [INSTALL.md](../INSTALL.md).  
 Because we do not employ autoconf, automake or CMake, the requirements for
 developers of UPC\+\+ are no different than for the end-users.  However, the
 manner in which the tools might be used does differ.
@@ -80,7 +80,7 @@ The make targets utilizing the variables above:
   Executables are cached just as with `exe`.
 * `make exe-clean` and `make exe-clean-all`  
   If you believe caching of executables used by the `exe` and `run` targets is
-  is malfunctioning, then `make exe-clean` will clear the cache for the library
+  malfunctioning, then `make exe-clean` will clear the cache for the library
   variant selected by the current environment, while `make exe-clean-all` clears
   all executable caches.
 
@@ -110,7 +110,7 @@ slightly to:
     `X=$(make exe DBGSYM=1 ASSERT=1 OPTLEV=0 SRC=hello_gasnet.cpp)`
 
 All make targets described here (as well as those documented for the end-user
-in [INSTALL.md](../INSTALL.md)) are intented to be parallel-make-safe (Eg `make
+in [INSTALL.md](../INSTALL.md)) are intended to be parallel-make-safe (Eg `make
 -j<N> ...`).  Should you experience a failure with a parallel make, please
 report it as a bug.
   

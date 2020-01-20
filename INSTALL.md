@@ -109,7 +109,7 @@ cd <upcxx-source-dir>
 ```
 
 Or, to have distinct source and build trees (for instance to compile multiple
-confgurations from a common source directory):
+configurations from a common source directory):
 ```bash
 mkdir <upcxx-build-path>
 cd <upcxx-build-path>
@@ -156,8 +156,9 @@ required.
 Though it is not required, we recommend testing the completeness and correctness
 of the UPC\+\+ build before proceeding to the installation step.  In general
 the environment used to compile UPC\+\+ tests and run them may not be the
-same.  The following command must be run in an environment suitable for both,
-if such is available.
+same (most notably, on batch-scheduled and/or cross-compiled platforms).
+The following command assumes it is invoked in an environment suitable for *both*,
+if such is available:
 
 ```bash
 make check
@@ -166,22 +167,22 @@ make check
 This compiles all available tests for the default network and then runs them.
 
 If it is not possible to both compile and run parallel applications in the
-same environment, then one may apply the following two-steps in place of
+same environment, then one may apply the following two steps in place of
 `make check`:
 
-First, in an environment suited to compilation, run `make tests-clean tests`.
+1. In an environment suited to compilation, run `make tests-clean tests`.
 This will remove any test executables left over from previous attempts, and
 then compiles all tests for all available networks.  One may restrict this to
 a subset of the available networks by appending something like
 `NETWORKS='<net1> <net2>'` to this command, where network names (such as
 `smp`, `udp`, `ibv` or `aries`) should be substituted for the placeholders.
 
-Second, in an environment suited to execution of parallel applications, run
+2. In an environment suited to execution of parallel applications, run
 `make run-tests`.  As in the first step, one may set `NETWORKS` on the `make`
 command line to limit the tests run to some subset of the detected networks.
 
 Setting of `NETWORKS` to restrict what is tested may be necessary, for
-instance, if GASNet-EX detected libraries for a network not actually present
+instance, if GASNet-EX detected libraries for a network not physically present
 in your system.  This will often occur for InfiniBand (which GASNet-EX
 identifies as `ibv`) due to presence of the associated libraries on many Linux
 distributions.  One may, if desired, return to the configure step and pass
@@ -226,8 +227,7 @@ one's `$PATH` environment variable (the best means to do so are beyond this
 scope of this document).
 
 Additionally, one may wish to set the environment variable `$UPCXX_INSTALL`
-equal to `<upcxx-install-path>`, as this is assumed by several UPC\+\+
-examples.
+to `<upcxx-install-path>`, as this is assumed by several UPC\+\+ examples.
 
 For systems using "environment modules" an example modulefile is provided
 as `<upcxx-install-path>/share/modulefiles/upcxx/<upcxx-version>`.  This
@@ -366,7 +366,7 @@ options:
 * `--with-default-network=...`: Sets the default network to be used by the
   `upcxx` compiler wrapper.  Valid values are listed under "UPC\+\+ Backends" in
   [README.md](README.md).  The default is `aries` when cross-compiling for a
-  Cray CX, and (currently) `smp` for all other systems.  Users with high-speed
+  Cray XC, and (currently) `smp` for all other systems.  Users with high-speed
   networks, such as InfiniBand (`ibv`), are encouraged to set this parameter
   to a value appropriate for their system.
 * `--with-gasnet=...`: Provides the GASNet-EX source tree from which UPC\+\+
@@ -386,6 +386,6 @@ options:
   options available to configure GASNet-EX.
 
 In addition to these explicit configure options, there are several environment
-variables which can implicitly effect the configuration of GASNet-EX.  The most
+variables which can implicitly affect the configuration of GASNet-EX.  The most
 common of these are listed at the end of the output of `configure --help`.
 
