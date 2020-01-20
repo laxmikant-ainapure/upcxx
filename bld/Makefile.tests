@@ -30,7 +30,7 @@ EXESUFFIX = $(call GASNET_VAR,$(GASNET_BLDDIR),EXESUFFIX)
 include $(upcxx_src)/bld/tests.mak
 
 # public-facing targets don't use GASNet "conduit" terminology
-NETWORKS ?= $(CONDUITS)
+NETWORKS ?= $(filter-out $(UNOFFICIAL_CONDUITS),$(CONDUITS))
 
 # Pick 'debug' for building tests, unless --enable-single=opt
 ifeq ($(strip $(UPCXX_DBGOPT)),opt)
