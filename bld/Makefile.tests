@@ -71,10 +71,12 @@ do-build-%: force
 	@IFS=- read name threadmode network <<<$*;       \
 	 src=$${name/..//};                              \
 	 exe="test-$$(basename $$src .cpp)-$$network";   \
-	 UPCXX_THREADMODE=$$threadmode                   \
-	 UPCXX_NETWORK=$$network                         \
-	 $(UPCXX_BINDIR)/upcxx $(upcxx_src)/test/$$src   \
-                               -o $$exe$(EXESUFFIX);     \
+	 ( if [[ '$(UPCXX_TESTS_VERBOSE)' == 1 ]]; then set -x; fi;  \
+	   UPCXX_CODEMODE=$(UPCXX_TESTS_CODEMODE)        \
+	   UPCXX_THREADMODE=$$threadmode                 \
+	   UPCXX_NETWORK=$$network                       \
+	   $(UPCXX_BINDIR)/upcxx $(upcxx_src)/test/$$src \
+	                         -o $$exe$(EXESUFFIX) ); \
 	 if [[ $$? == 0 ]]; then                         \
 	   printf 'Compiling %-30s SUCCESS\n' "$$exe";   \
 	 else                                            \
@@ -88,8 +90,7 @@ do-build-%: force
 #
 # Summary is provided if NOT building in parallel
 do-tests: force
-	@export UPCXX_CODEMODE=$(UPCXX_TESTS_CODEMODE);      \
-	 if [[ -n '$(UPCXX_TESTS)' ]]; then                  \
+	@if [[ -n '$(UPCXX_TESTS)' ]]; then                  \
 	   tests='$(UPCXX_TESTS)';                           \
 	 else                                                \
 	   tests='$(addsuffix -seq,$(testprograms_seq)) $(addsuffix -par,$(testprograms_par))' ; \
