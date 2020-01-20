@@ -15,6 +15,8 @@ default: force
 
 force:
 
+include $(upcxx_src)/bld/compiler.mak
+
 .PHONY: default force
 
 ifneq ($(wildcard $(depfile)),)
@@ -24,8 +26,8 @@ endif
 $(depfile): $(SRC) $(library)
 	@source $(upcxx_meta) SET; \
 	 case '$(SRC)' in \
-	 *.c) eval "$$CC  $$CFLAGS   $$CPPFLAGS -E -M -MT '$(target) $(depfile)' $(SRC) -o $(depfile) $(EXTRAFLAGS)";; \
-	 * )  eval "$$CXX $$CXXFLAGS $$CPPFLAGS -E -M -MT '$(target) $(depfile)' $(SRC) -o $(depfile) $(EXTRAFLAGS)";; \
+	 *.c) eval "$$CC  $$CFLAGS   $$CPPFLAGS $(call UPCXX_DEP_FLAGS,$(target),$(depfile)) $(SRC) > $(depfile) $(EXTRAFLAGS)";; \
+	 * )  eval "$$CXX $$CXXFLAGS $$CPPFLAGS $(call UPCXX_DEP_FLAGS,$(target),$(depfile)) $(SRC) > $(depfile) $(EXTRAFLAGS)";; \
 	 esac
 
 $(target): $(SRC) $(library) $(depfile)

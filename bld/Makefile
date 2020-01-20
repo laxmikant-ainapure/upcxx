@@ -298,8 +298,8 @@ LIBUPCXX_CXX_COMPILE := $(GASNET_CXX) $(GASNET_CXXCPPFLAGS) $(GASNET_CXXFLAGS) $
 # Use of a temporary file fixes race between include and partial generation
 #
 
-%.d: %.c   ; tmp=tmp$$$$; $(LIBUPCXX_C_COMPILE)   -E -M -MT '$*.o $@' $< > $$tmp && mv $$tmp $@
-%.d: %.cpp ; tmp=tmp$$$$; $(LIBUPCXX_CXX_COMPILE) -E -M -MT '$*.o $@' $< > $$tmp && mv $$tmp $@
+%.d: %.c   ; tmp=tmp$$$$; $(LIBUPCXX_C_COMPILE)   $(call UPCXX_DEP_FLAGS,$*.o,$@) $< > $$tmp && mv $$tmp $@
+%.d: %.cpp ; tmp=tmp$$$$; $(LIBUPCXX_CXX_COMPILE) $(call UPCXX_DEP_FLAGS,$*.o,$@) $< > $$tmp && mv $$tmp $@
 ifneq ($(wildcard *.d),)
 include $(wildcard *.d)
 endif
@@ -494,6 +494,7 @@ do-exe: force
 	@mkdir -p $(UPCXXDIR)/exe
 	@$(MAKE) $(UPCXXDIR)/libupcxx.a
 	@$(MAKE) -C "$(STARTDIR)" -f $(top_srcdir)/bld/Makefile-exe.mak \
+		GASNET_CC_FAMILY='$(GASNET_CC_FAMILY)' GASNET_CXX_FAMILY='$(GASNET_CXX_FAMILY)' \
 		UPCXX_DIR='$(builddir)/$(UPCXXDIR)' UPCXX_EXE='$(UPCXX_EXE)'
 
 # NOTE: only the final $(UPCXX_EXE) may go to stdout
