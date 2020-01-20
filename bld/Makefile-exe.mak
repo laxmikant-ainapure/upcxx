@@ -23,9 +23,15 @@ endif
 
 $(depfile): $(SRC) $(library)
 	@source $(upcxx_meta) SET; \
-	 eval "$$CXX $$CXXFLAGS $$CPPFLAGS -E -M -MT '$(target) $(depfile)' $(SRC) -o $(depfile) $(EXTRAFLAGS)"
+	 case '$(SRC)' in \
+	 *.c) eval "$$CC  $$CFLAGS   $$CPPFLAGS -E -M -MT '$(target) $(depfile)' $(SRC) -o $(depfile) $(EXTRAFLAGS)";; \
+	 * )  eval "$$CXX $$CXXFLAGS $$CPPFLAGS -E -M -MT '$(target) $(depfile)' $(SRC) -o $(depfile) $(EXTRAFLAGS)";; \
+	 esac
 
 $(target): $(SRC) $(library) $(depfile)
 	@source $(upcxx_meta) SET; \
-	 cmd="$$CXX $$CXXFLAGS $$CPPFLAGS $$LDFLAGS $(SRC) $$LIBS -o $(target) $(EXTRAFLAGS)"; \
+	 case '$(SRC)' in \
+	 *.c) cmd="$$CC  $$CCFLAGS  $$CPPFLAGS $$LDFLAGS $(SRC) $$LIBS -o $(target) $(EXTRAFLAGS)";; \
+	 *)   cmd="$$CXX $$CXXFLAGS $$CPPFLAGS $$LDFLAGS $(SRC) $$LIBS -o $(target) $(EXTRAFLAGS)";; \
+	 esac; \
 	 echo "$$cmd"; eval "$$cmd"
