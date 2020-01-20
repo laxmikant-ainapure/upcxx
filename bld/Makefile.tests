@@ -84,21 +84,18 @@ do-build-%: force
 	   exit 1;                                       \
 	 fi
 
+# UPCXX_TESTS defaults to all, but test_install (for instance) may override
+UPCXX_TESTS ?= $(addsuffix -seq,$(testprograms_seq)) $(addsuffix -par,$(testprograms_par))
+
 # Build UPCXX_TESTS (default all)
 # UPCXX_CODEMODE is 'debug' if supported
 # Default network (if included in NETWORKS) is built last to keep it on user's screen
 #
 # Summary is provided if NOT building in parallel
 do-tests: force
-	@if [[ -n '$(UPCXX_TESTS)' ]]; then                  \
-	   tests='$(UPCXX_TESTS)';                           \
-	 else                                                \
-	   tests='$(addsuffix -seq,$(testprograms_seq)) $(addsuffix -par,$(testprograms_par))' ; \
-	 fi;                                                 \
-	 targets='';                                          \
-	 for network in $(filter-out $(GASNET_CONDUIT),$(NETWORKS)) \
+	@for network in $(filter-out $(GASNET_CONDUIT),$(NETWORKS)) \
 	                $(filter $(GASNET_CONDUIT),$(NETWORKS)); do \
-	   for test in $$tests; do                           \
+	   for test in $(UPCXX_TESTS); do                    \
 	     targets+=" do-build-$${test/\//..}-$$network";  \
 	   done;                                             \
 	 done;                                               \
