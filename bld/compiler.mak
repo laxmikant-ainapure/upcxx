@@ -48,18 +48,21 @@ endif
 endif
 
 #
-# UPCXX_DEP_FLAGS
-# Incantation to generate compiler flags for creating a dependency file on stdout.
+# UPCXX_DEP_GEN
+# Incantation to generate a dependency file on stdout.
 # The resulting output should name both arguments as "targets", dependent on all
 # files visited in preprocess.  This ensures both the object (or executable) and
 # dependency file are kept up-to-date.
 #
-# Example:
-#   $(CXX) $(call UPCXX_DEP_FLAGS,$(target).o,$(target).d) $(src_file) [more flags]
+# Abstract "prototype":
+#   $(call UPCXX_DEP_GEN,COMPILER_AND_FLAGS,TARGET1,TARGET2,SRC,EXTRA_FLAGS)
+# Simple example (though general case lacks the common `basename`):
+#   $(call UPCXX_DEP_GEN,$(CXX) $(CXXFLAGS),$(basename).o,$(basename).d,$(basename).cpp,$(EXTRA_FLAGS))
 #
 # Note 1: Generation to stdout is used because PGI compilers ignore `-o foo` in
 # the presence `-E` and lack support for `-MF`.  Meanwhile all supported
-# compilers send `-E` output to stdout by default.
+# compilers send `-E` output to stdout by default.  Furthermore, PGI's handling
+# of `-MT target` differs such that we must post-process.
 #
 # TODO: Options like `-MM` can save time (omitting numerous system headers from
 # the list of files to stat when building).  However, it is not currently used
@@ -72,4 +75,10 @@ endif
 #       suitable for make describing the dependencies [...]
 #   -MT target
 #       Change the target of the rule emitted by dependency generation. [...]
-UPCXX_DEP_FLAGS = -E -M -MT '$(1) $(2)'
+#
+UPCXX_DEP_GEN = $(1) -E -M -MT '$(2) $(3)' $(4) $(5)
+ifeq ($(GASNET_CXX_FAMILY),PGI)
+# PGI doesn't handle `-MT 'foo.o foo.d'` the way other compiler families do
+# NOTE: we've assumed '@' does not appear in the target paths
+UPCXX_DEP_GEN = $(1) -E -M -MT UPCXX_DEP_TARGET $(4) $(5) | sed -e 's@^UPCXX_DEP_TARGET@$(2) $(3)@'
+endif

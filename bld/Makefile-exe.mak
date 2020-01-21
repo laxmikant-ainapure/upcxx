@@ -26,8 +26,8 @@ endif
 $(depfile): $(SRC) $(library)
 	@source $(upcxx_meta) SET; \
 	 case '$(SRC)' in \
-	 *.c) eval "$$CC  $$CFLAGS   $$CPPFLAGS $(call UPCXX_DEP_FLAGS,$(target),$(depfile)) $(SRC) > $(depfile) $(EXTRAFLAGS)";; \
-	 * )  eval "$$CXX $$CXXFLAGS $$CPPFLAGS $(call UPCXX_DEP_FLAGS,$(target),$(depfile)) $(SRC) > $(depfile) $(EXTRAFLAGS)";; \
+	 *.c) eval "$(call UPCXX_DEP_GEN,$$CC  $$CFLAGS   $$CPPFLAGS,$(target),$(depfile),$(SRC),$(EXTRAFLAGS)) > $(depfile)";; \
+	 *)   eval "$(call UPCXX_DEP_GEN,$$CXX $$CXXFLAGS $$CPPFLAGS,$(target),$(depfile),$(SRC),$(EXTRAFLAGS)) > $(depfile)";; \
 	 esac
 
 $(target): $(SRC) $(library) $(depfile)
