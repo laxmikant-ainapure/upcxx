@@ -298,8 +298,8 @@ LIBUPCXX_CXX_COMPILE := $(GASNET_CXX) $(GASNET_CXXCPPFLAGS) $(GASNET_CXXFLAGS) $
 # Use of a temporary file fixes race between include and partial generation
 #
 
-%.d: %.c   ; tmp=tmp$$$$; $(call UPCXX_DEP_GEN,$(LIBUPCXX_C_COMPILE),  $*.o,$@,$<,) > $$tmp && mv $$tmp $@
-%.d: %.cpp ; tmp=tmp$$$$; $(call UPCXX_DEP_GEN,$(LIBUPCXX_CXX_COMPILE),$*.o,$@,$<,) > $$tmp && mv $$tmp $@
+%.d: %.c   ; tmp=tmp$$$$; $(call UPCXX_DEP_GEN,$(LIBUPCXX_C_COMPILE),  $*.o,$@,$<,$($*_EXTRA_FLAGS)) > $$tmp && mv $$tmp $@
+%.d: %.cpp ; tmp=tmp$$$$; $(call UPCXX_DEP_GEN,$(LIBUPCXX_CXX_COMPILE),$*.o,$@,$<,$($*_EXTRA_FLAGS)) > $$tmp && mv $$tmp $@
 ifneq ($(wildcard *.d),)
 include $(wildcard *.d)
 endif
