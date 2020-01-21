@@ -5,6 +5,48 @@
 # TODO:
 #  + sanitize/filter GASNET_CONFIGURE_ARGS ??
 
+##
+## Begin portable (no bash-isms) logic to check for correct shell.
+## We try to reexec with /bin/bash if present and executable.
+##
+
+# Note tcsh graciously yields 'BASH_VERSION: Undefined variable' before giving up here.
+if test -z "$BASH_VERSION"; then
+  if test -z "$UPCXX_REEXEC"; then
+    UPCXX_REEXEC=1
+    export UPCXX_REEXEC
+    if test -x /bin/bash; then
+      exec /bin/bash "$0" "$@"
+    fi
+  fi
+fi
+
+# Minimum we claim to support is 3.2
+UPCXX_BASH_MAJ=3
+UPCXX_BASH_MIN=2
+
+bad_shell() {
+  echo "ERROR: UPC++ requires /bin/bash, which must be version $UPCXX_BASH_MAJ.$UPCXX_BASH_MIN or newer." >&2
+  echo "ERROR: $*" >&2
+  exit 1
+}
+
+# Either could not exec /bin/bash or we did and it is not bash
+if test -z "$BASH_VERSION"; then
+  bad_shell '/bin/bash is not available or does not appear to be bash.'
+fi
+
+##
+## End portable (no bash-isms) logic.
+## We may now assume we are running bash
+##
+
+if test ${BASH_VERSINFO[0]} -lt $UPCXX_BASH_MAJ ||
+ ( test ${BASH_VERSINFO[0]} -eq $UPCXX_BASH_MAJ && test ${BASH_VERSINFO[1]} -lt $UPCXX_BASH_MIN ); then
+  bad_shell "This bash reports a version of '$BASH_VERSION'."
+fi
+set +o posix
+
 # Record the full command line (with shell quoting, suitable for reexecution).
 # The value has ": " prefixed, but rather than trim that off, we encorporate
 # it into the final output.
