@@ -142,7 +142,8 @@ test_install: force
 	@$(call do-test-msg,install,$(prefix)/bin)
 
 tests: force
-	@$(MAKE) $(MAKE_HERE) -s do-test-prereqs
+	@echo 'Building dependencies...'; \
+	 $(MAKE) $(MAKE_HERE) do-test-prereqs
 	@$(MAKE) $(MAKE_HERE) do-tests UPCXX_BINDIR=$(upcxx_bld)/bin UPCXX_QUIET=1 UPCXX_SKIP_REBUILD=1
 	@$(call do-test-msg,build,$(upcxx_bld)/bin)
 
