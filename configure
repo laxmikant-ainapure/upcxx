@@ -202,8 +202,9 @@ while [[ $# -gt 0 ]]; do
       ;;
 
     # Anything we don't consume will be passed to GASNet's configure
+    # Quoting is believed sufficient for space, tab, single-quote and double-quote.
     *)
-      GASNET_CONFIGURE_ARGS+="${GASNET_CONFIGURE_ARGS+ }$1"
+      GASNET_CONFIGURE_ARGS+="${GASNET_CONFIGURE_ARGS+ }\"${1//\"/\\\"}\""
       ;;
   esac
   shift
