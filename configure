@@ -5,6 +5,18 @@
 # TODO:
 #  + sanitize/filter GASNET_CONFIGURE_ARGS ??
 
+# Record the full command line (with shell quoting, suitable for reexecution).
+# The value has ": " prefixed, but rather than trim that off, we encorporate
+# it into the final output.
+fullcmd=$(set -- "$0" "$@"; PS4=; exec 2>&1; set -x; : "$@")
+
+# Preserve command and all output for post mortem
+if [[ -z "$UPCXX_CONFIGURE_TEED" ]]; then
+  echo "UPC++ configure$fullcmd" >| config.log
+  exec &> >(tee -a config.log)
+  UPCXX_CONFIGURE_TEED=y exec $0 "$@"
+fi
+
 #
 # Usage
 #
@@ -141,11 +153,6 @@ function get_arg_val {
     exit 1
   fi
 }
-
-# Record the full command line (with shell quoting, suitable for reexecution).
-# The value has ": " prefixed, but rather than trim that off, we encorporate
-# it into the final output.
-fullcmd=$(set -- "$0" "$@"; PS4=; exec 2>&1; set -x; : "$@")
 
 #
 # Argument parsing
