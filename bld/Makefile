@@ -445,18 +445,6 @@ upcxx-install: $(call FOREACH_DBGOPT,do-upcxx-install)
 upcxx-clean:   $(call FOREACH_DBGOPT,do-upcxx-clean)
 upcxx-distclean: do-upcxx-clean-opt do-upcxx-clean-debug # Always both
 
-#
-# Targets for `install-single.sh prefix`
-#
-do-install-single: force
-	@$(MAKE) do-upcxx-install-one DST="$(prefix)" UPCXX_FRAGMENTS="$(GASNET_BUILD)"
-	@cd "$(GASNET_BUILD)/$(GASNET_CONDUIT)-conduit" && \
-	    cp libgasnet-$(GASNET_CONDUIT)-$(GASNET_THREADMODE).a $(prefix)/lib/
-install-single: upcxx-single
-	@$(MAKE) do-install-single GASNET_BUILD="$(builddir)/$(GASNETDIR)"
-
-.PHONY: do-install-single install-single
-
 ##
 ## Secondary (opt and debug) top-level targets
 ##
