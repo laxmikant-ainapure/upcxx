@@ -114,6 +114,17 @@ in [INSTALL.md](../INSTALL.md)) are intended to be parallel-make-safe (Eg `make
 -j<N> ...`).  Should you experience a failure with a parallel make, please
 report it as a bug.
   
+## Internal-Only Make Options
+
+* `UPCXX_TESTS_CODEMODE={debug,O3}`:  
+  The default behavior of `make check` and `make tests` is to only build for
+  the 'debug' codemode.  One may `make check UPCXX_TESTS_CODEMODE=O3` to
+  build for `UPCXX_CODEMODE=O3`.
+
+* `UPCXX_TESTS_VERBOSE` {unset or `1`}:  
+  Adding `UPCXX_TESTS_VERBOSE=1` to `make {check,tests,test_install}` will
+  echo compilation commands as they are executed.
+
 ## Internal-Only Configuration Options
 
 This serves as the place to document configure options that aren't hardened
