@@ -116,14 +116,13 @@ report it as a bug.
   
 ## Internal-Only Make Options
 
-* `UPCXX_TESTS_CODEMODE={debug,O3}`:  
+* `UPCXX_CODEMODE={debug,O3}`:  
   The default behavior of `make check` and `make tests` is to only build for
-  the 'debug' codemode.  One may `make check UPCXX_TESTS_CODEMODE=O3` to
-  build for `UPCXX_CODEMODE=O3`.
+  the 'debug' codemode.  One may `make check UPCXX_CODEMODE=O3` to override.
 
-* `UPCXX_TESTS_VERBOSE` {unset or `1`}:  
-  Adding `UPCXX_TESTS_VERBOSE=1` to `make {check,tests,test_install}` will
-  echo compilation commands as they are executed.
+* `UPCXX_VERBOSE` {unset or `1`}:  
+  Adding `UPCXX_VERBOSE=1` to `make {check,tests,test_install}` will echo
+  compilation commands as they are executed.
 
 ## Internal-Only Configuration Options
 
