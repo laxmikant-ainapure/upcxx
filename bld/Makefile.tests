@@ -30,7 +30,10 @@ EXESUFFIX = $(call GASNET_VAR,$(GASNET_BLDDIR),EXESUFFIX)
 include $(upcxx_src)/bld/tests.mak
 
 # public-facing targets don't use GASNet "conduit" terminology
-NETWORKS ?= $(filter-out $(UNOFFICIAL_CONDUITS),$(CONDUITS))
+# using "target-specific variable values" for the defaults
+tests test_install : NETWORKS ?= $(filter-out $(UNOFFICIAL_CONDUITS),$(CONDUITS))
+check              : NETWORKS ?= $(GASNET_CONDUIT)
+export NETWORKS
 
 # Pick 'debug' for building tests, unless --enable-single=opt
 ifeq ($(strip $(UPCXX_DBGOPT)),opt)
@@ -44,23 +47,27 @@ endif
 # Compile prerequisites for 'check' or 'tests'
 # Build is restricted to single codemode and the networks in $(NETWORKS)
 do-test-prereqs: force
-	@$(MAKE) -C $(BLDDIR) GASNET_CONDUITS="$(NETWORKS)" do-upcxx-all-$(UPCXX_TESTS_GASNET) || \
+	@echo 'Building dependencies...'; \
+	 $(MAKE) -C $(BLDDIR) GASNET_CONDUITS="$(NETWORKS)" do-upcxx-all-$(UPCXX_TESTS_GASNET) || \
          $(MAKE) failure TARGET=build
 
 .PHONY: do-test-prereqs
 
 # Compile and run tests for default conduit
 check: force
-	@$(MAKE) $(MAKE_HERE) -s do-test-prereqs NETWORKS=$(GASNET_CONDUIT)
-	@echo; \
+	@$(MAKE) $(MAKE_HERE) -s do-test-prereqs
+	@if [[ '$(strip $(NETWORKS))' = '$(strip $(GASNET_CONDUIT))' ]]; \
+	   then scope='default network:';                                \
+	   else scope='following network(s):';                           \
+	 fi;                                                             \
 	 echo '************'; \
-	 echo 'Compiling and running tests for the default network ($(GASNET_CONDUIT)).'; \
+	 echo "Compiling and running tests for the $$scope $(strip $(NETWORKS))."; \
 	 echo 'Please, ensure you are in a proper environment for launching parallel jobs'; \
 	 echo '(eg batch system session, if necessary) or the run step may fail.'; \
 	 echo '************'; \
 	 echo ; sleep 5
-	@$(MAKE) $(MAKE_HERE) do-tests UPCXX_BINDIR=$(upcxx_bld)/bin UPCXX_QUIET=1 NETWORKS=$(GASNET_CONDUIT) UPCXX_SKIP_REBUILD=1
-	@$(MAKE) $(MAKE_HERE) do-run-tests UPCXX_BINDIR=$(upcxx_bld)/bin UPCXX_QUIET=1 NETWORKS=$(GASNET_CONDUIT) UPCXX_SKIP_REBUILD=1
+	@$(MAKE) $(MAKE_HERE) do-tests UPCXX_BINDIR=$(upcxx_bld)/bin UPCXX_QUIET=1 UPCXX_SKIP_REBUILD=1
+	@$(MAKE) $(MAKE_HERE) do-run-tests UPCXX_BINDIR=$(upcxx_bld)/bin UPCXX_QUIET=1 UPCXX_SKIP_REBUILD=1
 	@echo 'Recommended next steps:';  \
 	 echo "  If you have not already, you may now '$(GMAKE_SHORT) install'"
 
@@ -142,8 +149,7 @@ test_install: force
 	@$(call do-test-msg,install,$(prefix)/bin)
 
 tests: force
-	@echo 'Building dependencies...'; \
-	 $(MAKE) $(MAKE_HERE) do-test-prereqs
+	@$(MAKE) $(MAKE_HERE) do-test-prereqs
 	@$(MAKE) $(MAKE_HERE) do-tests UPCXX_BINDIR=$(upcxx_bld)/bin UPCXX_QUIET=1 UPCXX_SKIP_REBUILD=1
 	@$(call do-test-msg,build,$(upcxx_bld)/bin)
 

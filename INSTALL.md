@@ -165,21 +165,9 @@ make check
 ```
 
 This compiles all available tests for the default network and then runs them.
-
-If it is not possible to both compile and run parallel applications in the
-same environment, then one may apply the following two steps in place of
-`make check`:
-
-1. In an environment suited to compilation, run `make tests-clean tests`.
-This will remove any test executables left over from previous attempts, and
-then compiles all tests for all available networks.  One may restrict this to
-a subset of the available networks by appending something like
-`NETWORKS='<net1> <net2>'` to this command, where network names (such as
-`smp`, `udp`, `ibv` or `aries`) should be substituted for the placeholders.
-
-2. In an environment suited to execution of parallel applications, run
-`make run-tests`.  As in the first step, one may set `NETWORKS` on the `make`
-command line to limit the tests run to some subset of the detected networks.
+One can override the default network by appending `NETWORKS='net1 net2'`
+to this command, with network names (such as `smp`, `udp`, `ibv` or `aries`)
+substituted for the `netN` placeholders.
 
 Setting of `NETWORKS` to restrict what is tested may be necessary, for
 instance, if GASNet-EX detected libraries for a network not physically present
@@ -188,6 +176,20 @@ identifies as `ibv`) due to presence of the associated libraries on many Linux
 distributions.  One may, if desired, return to the configure step and pass
 `--disable-ibv` (or other undesired network) to remove support for a given
 network from the build of UPC\+\+.
+
+If it is not possible to both compile and run parallel applications in the
+same environment, then one may apply the following two steps in place of
+`make check`:
+
+1. In an environment suited to compilation, run `make tests-clean tests`.
+This will remove any test executables left over from previous attempts, and
+then compiles all tests for all available networks.  One may restrict this to
+a subset of the available networks by appending a setting for `NETWORKS`,
+as described above for `make check`.
+
+2. In an environment suited to execution of parallel applications, run
+`make run-tests`.  As in the first step, one may set `NETWORKS` on the `make`
+command line to limit the tests run to some subset of the tests built above.
 
 #### 4. Installing the compiled UPC\+\+ package
 
