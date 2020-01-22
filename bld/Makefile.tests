@@ -123,11 +123,47 @@ do-tests: force
 	   fi;                                               \
 	 fi
 
-do-test-msg = \
+# All networks, codemodes and seq/par
+# No test-* executables left on disk upon success
+test_install: force
+	@echo 'Testing UPC++ installation at $(prefix)...'; \
+	 if [[ ! -x $(prefix)/bin/upcxx-run ]]; then \
+	   echo 'ERROR: No UPC++ installation found at $(prefix)'; \
+	   echo "ERROR: Please build the 'install' target before 'test_install'."; \
+	   exit 1; \
+	 fi
+	@for codemode in $(UPCXX_DBGOPT); do                    \
+	   for threadmode in seq par; do                        \
+	     echo "========";                                   \
+	     echo "Compiling for UPCXX_CODEMODE=$$codemode UPCXX_THREADMODE=$$threadmode"; \
+	     echo "========";                                   \
+	     $(MAKE) $(MAKE_HERE) do-tests                      \
+	             UPCXX_BINDIR=$(prefix)/bin                 \
+	             UPCXX_TESTS=hello_upcxx.cpp-$$threadmode   \
+	             UPCXX_TEST_CODEMODE=$$codemode;            \
+	     if [[ $$? != 0 ]]; then                            \
+	       $(MAKE) failure TARGET=test_install;             \
+	       exit 1;                                          \
+	     fi;                                                \
+	   done;                                                \
+	 done
+	@rm -f $(call ALL_TESTS,$(NETWORKS))
 	@echo ' '; \
 	 echo '       ==== UPC++ TESTS SUCCESSFULLY COMPILED ===='; \
 	 echo ' '; \
-	 echo 'Your UPC++ $(1) appears to be working for the following networks:'; \
+	 echo 'The UPC++ installation at $(prefix)'; \
+	 echo 'appears to be working for the following networks:'; \
+	 echo ' '; \
+	 echo '  $(NETWORKS)'; \
+	 echo ' '
+
+tests: force
+	@$(MAKE) $(MAKE_HERE) do-test-prereqs
+	@$(MAKE) $(MAKE_HERE) do-tests UPCXX_BINDIR=$(upcxx_bld)/bin UPCXX_QUIET=1 UPCXX_SKIP_REBUILD=1
+	@echo ' '; \
+	 echo '       ==== UPC++ TESTS SUCCESSFULLY COMPILED ===='; \
+	 echo ' '; \
+	 echo 'Your UPC++ build appears to be working for the following networks:'; \
 	 echo ' '; \
 	 echo '  $(NETWORKS)'; \
 	 echo ' '; \
@@ -135,23 +171,9 @@ do-test-msg = \
 	 echo 'First, ensure you are in a proper environment for launching parallel jobs'; \
 	 echo '(eg batch system session, if necessary) and then issue a command like:'; \
 	 echo ' '; \
-	 echo '  $(2)/upcxx-run -n 2 ./test-hello_upcxx-$(GASNET_CONDUIT)'; \
+	 echo '  $(upcxx_bld)/bin)/upcxx-run -n 2 ./test-hello_upcxx-$(firstword $(NETWORKS))'; \
 	 echo ' '; \
-	 echo -e 'And similarly for any other of the tests compiled above.'
-
-test_install: force
-	@if [[ ! -x $(prefix)/bin/upcxx-run ]]; then \
-	   echo 'ERROR: No UPC++ installation found at $(prefix)'; \
-	   echo "ERROR: Please build the 'install' target before 'test_install'."; \
-	   exit 1; \
-	 fi
-	@$(MAKE) $(MAKE_HERE) do-tests UPCXX_BINDIR=$(prefix)/bin UPCXX_TESTS=hello_upcxx.cpp-seq
-	@$(call do-test-msg,install,$(prefix)/bin)
-
-tests: force
-	@$(MAKE) $(MAKE_HERE) do-test-prereqs
-	@$(MAKE) $(MAKE_HERE) do-tests UPCXX_BINDIR=$(upcxx_bld)/bin UPCXX_QUIET=1 UPCXX_SKIP_REBUILD=1
-	@$(call do-test-msg,build,$(upcxx_bld)/bin)
+	 echo 'And similarly for any other of the tests compiled above.'
 
 ALL_TESTS = $(foreach test, $(notdir $(testprograms_seq) $(testprograms_par)), \
             $(foreach network, $(1), test-$(basename $(test))-$(network)))
@@ -159,7 +181,7 @@ ALL_TESTS = $(foreach test, $(notdir $(testprograms_seq) $(testprograms_par)), \
 tests-clean: force
 	rm -f $(call ALL_TESTS,$(ALL_CONDUITS))
 
-.PHONY: do-tests do-test-msg test_install tests tests-clean
+.PHONY: do-tests test_install tests tests-clean
 
 do-run-tests: force
 	@tmpfile=.testtmp_$$$$; rm -f $$tmpfile;                        \
