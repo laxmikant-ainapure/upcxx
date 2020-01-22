@@ -189,12 +189,6 @@ UPCXX_META_COMPILERS := CONFIG
 else
 UPCXX_META_COMPILERS := GASNET
 endif
-# upcxx-meta uses distinct variable names in the build vs install tree
-ifneq ($(GASNET_BUILD),)
-GASNET_BUILD_OR_INSTALL = GASNET_BUILD='$(GASNET_BUILD)'
-else
-GASNET_BUILD_OR_INSTALL = GASNET_INSTALL='$(prefix)/$(GASNETDIR)'
-endif
 RUNTIME_LIBS = $(GASNET_LIBS)
 ifeq ($(UPCXX_CUDA),1)
 RUNTIME_LIBS += $(UPCXX_CUDA_LIBFLAGS)
@@ -209,11 +203,12 @@ CPPFLAGS='$(UPCXX_DEFINES) -I$(DST)/include $(GASNET_CXXCPPFLAGS)'
 CXX='$($(UPCXX_META_COMPILERS)_CXX)'
 CXXFLAGS='$(UPCXX_STDCXX) $(GASNET_CXXFLAGS)'
 GASNET_CONDUIT='$(GASNET_CONDUIT)'
-$(GASNET_BUILD_OR_INSTALL)
+GASNET_PREFIX='$(UPCXX_META_GASNET)'
 LDFLAGS='$(GASNET_LDFLAGS)'
 LIBS='-L$(DST)/lib -lupcxx $(RUNTIME_LIBS)'
 PPFLAGS="$$CPPFLAGS"
 LIBFLAGS="$$LIBS"
+GASNET_INSTALL="$$GASNET_PREFIX"
 
 [ -n "$$1" ] && eval [ -n \"\$$$$1\" ] && eval echo \"\$$$$1\"
 endef
@@ -329,7 +324,8 @@ endif
 	ar rcs $@ $?
 do-libupcxx: force
 	@$(MAKE) -C $(UPCXX_DIR)/lib -f "$(builddir)/Makefile" libupcxx.a upcxx_headers.d
-	@$(MAKE) DST=$(UPCXX_DIR) do-upcxx-meta do-upcxx-run do-upcxx-script
+	@$(MAKE) DST=$(UPCXX_DIR) UPCXX_META_GASNET='$(builddir)/$(GASNETDIR)' \
+	         do-upcxx-meta do-upcxx-run do-upcxx-script
 
 #
 # On-demand compile of a single instance of libupcxx and required libgasnet
@@ -396,11 +392,11 @@ do-upcxx-install-one: force
 	     cp $$src/$$file "$(DESTDIR)$(DST)/$$file" || exit $$?;       \
 	   fi;                                                            \
 	 done
-	@$(MAKE) do-upcxx-meta
+	@$(MAKE) do-upcxx-meta UPCXX_META_GASNET='$(prefix)/$(GASNETDIR)'
 do-upcxx-install-all: force
 	@for conduit in $(GASNET_CONDUITS); do                               \
 	   for backend in $(ALL_BACKENDS); do                                \
-	     $(MAKE) do-upcxx-install-one GASNET_BUILD=''                    \
+	     $(MAKE) do-upcxx-install-one                                    \
 	       DST="$(prefix)/upcxx.$(UPCXX_CODEMODE).$$backend.$$conduit"   \
 	       UPCXX_BACKEND=$$backend GASNET_CONDUIT=$$conduit || exit $$?; \
 	   done; \
