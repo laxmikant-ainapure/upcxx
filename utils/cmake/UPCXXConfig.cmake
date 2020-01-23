@@ -28,9 +28,11 @@ endfunction()
 
 
 # Set up some auxillary vars if hints have been set
-if(DEFINED ENV{UPCXX_INSTALL} )
+if(DEFINED ENV{UPCXX_INSTALL} ) # recommended best-practice for UPC++ installs
   find_program( UPCXX_META_EXECUTABLE upcxx-meta HINTS "$ENV{UPCXX_INSTALL}/bin" NO_DEFAULT_PATH )
-else()
+elseif(DEFINED ENV{UPCXX_DIR} ) # CMake's find_package auto variable
+  find_program( UPCXX_META_EXECUTABLE upcxx-meta HINTS "$ENV{UPCXX_DIR}/bin" NO_DEFAULT_PATH )
+else() # Use PATH
   find_program( UPCXX_META_EXECUTABLE upcxx-meta )
 endif()
 if (NOT EXISTS "${UPCXX_META_EXECUTABLE}")
