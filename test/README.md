@@ -1,3 +1,5 @@
+# THIS DOCUMENT RELATES TO THE LEGACY "nobs" BUILD SYSTEM AND IS NOT MAINTAINED
+
 ## Creating Tests ##
 
 So far, properly creating a test only makes it compilable into an 

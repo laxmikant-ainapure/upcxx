@@ -1,4 +1,4 @@
-#include <upcxx/backend.hpp>
+#include <upcxx/upcxx.hpp>
 #include <iostream>
 #include <sstream>
 

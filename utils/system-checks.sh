@@ -13,7 +13,7 @@ sys_info() {
         echo " "
         echo Date: `date 2>&1`
         echo Current directory: `pwd 2>&1`
-        echo Install directory: $INSTALL_DIR
+        echo Install directory: $install_to
         local SETTINGS=
         for var in CC CXX GASNET GASNET_CONFIGURE_ARGS CROSS OPTLEV DBGSYM \
 	           UPCXX_BACKEND GASNET_INSTALL_TO \
