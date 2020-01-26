@@ -382,12 +382,15 @@ do-upcxx-all: force
 	 done;                                                                 \
 	 $(MAKE) $$targets
 do-upcxx-install-headers: force
-	@cd "$(call UPCXXDIR)" &&                                         \
-	 for file in `find include/upcxx/ -name '*.hpp'`; do              \
-           file=`echo $$file | tr -s /`;                                  \
-	   if grep "$$file" lib/upcxx_headers.d >/dev/null; then          \
-	     mkdir -p "$(DESTDIR)$(DST)/`dirname $$file`" || exit $$?;    \
-	     cp $$file "$(DESTDIR)$(DST)/$$file" || exit $$?;             \
+	@cd "$(call UPCXXDIR)/include/upcxx/" &&                          \
+	 depfile="$(builddir)/$(call UPCXXDIR)/lib/upcxx_headers.d"       \
+	 dst="$(DESTDIR)$(DST)/include/upcxx" src="$$(pwd -P)" &&         \
+	 for file in $$(find . -name '*.hpp'); do                         \
+	   file="$${file##./}";                                           \
+	   if fgrep -e "/bld/$(call UPCXXDIR)/include/upcxx/$$file"       \
+		    -e "$$src/$$file" "$$depfile" >/dev/null; then        \
+	     mkdir -p "$$dst/$$(dirname $$file)" || exit $$?;             \
+	     cp $$file "$$dst/$$file" || exit $$?;                        \
 	   fi;                                                            \
 	 done
 do-upcxx-install-lib: force
