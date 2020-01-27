@@ -187,7 +187,7 @@ function failure_and_die {
 }
 
 function get_arg_val {
-  if [[ "$1" =~ (^[^=]*=(.+)) ]]; then
+  if [[ "$*" =~ (^[^=]*=(.+)) ]]; then
     echo "${BASH_REMATCH[2]}"
   else
     echo "ERROR: option '${1%=}' is missing its required value." >&2
