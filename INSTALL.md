@@ -122,8 +122,15 @@ non-existent or empty directories as the installation path so that
 uninstallation is as trivial as `rm -rf <upcxx-install-path>`.
 
 Depending on the platform, additional command-line arguments may be necessary
-when invoking `configure`. See the platform-specific instructions below for
-guidance.  Running `<upcxx-source-path>/configure --help` will provide general
+when invoking `configure`. For guidance, see the platform-specific instructions
+in the following sections, below:
+
+* [Installation: Cray XC](#markdown-header-installation-cray-xc)
+* [Installation: Linux](#markdown-header-installation-linux)
+* [Installation: Apple macOS](#markdown-header-installation-apple-macos)
+* [Installation: CUDA GPU support](#markdown-header-installation-cuda-gpu-support)
+
+Running `<upcxx-source-path>/configure --help` will provide general
 information on the available configuration options, and similar information is
 provided in the "Advanced Configuration" section below.
 
