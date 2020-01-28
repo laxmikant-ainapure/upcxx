@@ -125,10 +125,10 @@ Depending on the platform, additional command-line arguments may be necessary
 when invoking `configure`. For guidance, see the platform-specific instructions
 in the following sections, below:
 
-* [Installation: Cray XC](#markdown-header-installation-cray-xc)
-* [Installation: Linux](#markdown-header-installation-linux)
-* [Installation: Apple macOS](#markdown-header-installation-apple-macos)
-* [Installation: CUDA GPU support](#markdown-header-installation-cuda-gpu-support)
+* [Configuration: Cray XC](#markdown-header-configuration-cray-xc)
+* [Configuration: Linux](#markdown-header-configuration-linux)
+* [Configuration: Apple macOS](#markdown-header-configuration-apple-macos)
+* [Configuration: CUDA GPU support](#markdown-header-configuration-cuda-gpu-support)
 
 Running `<upcxx-source-path>/configure --help` will provide general
 information on the available configuration options, and similar information is
@@ -247,7 +247,7 @@ For users of CMake 3.6 or newer, `<upcxx-install-path>/share/cmake/UPCXX`
 contains a `UPCXXConfig.cmake`.  Consult CMake documentation for instructions
 on use of this file.
 
-### Installation: Cray XC
+### Configuration: Cray XC
 
 To run on the compute nodes of a Cray XC, the `--with-cross=...` option must be
 passed to the `configure` script.  Use the appropriate value for your system:
@@ -278,7 +278,9 @@ Currently only Intel-based Cray XC systems have been tested, including Xeon
 and Xeon Phi (aka "KNL").  Note that UPC++ has not yet been tested on an
 ARM-based Cray XC.
 
-### Installation: Linux
+After running `configure`, return to step 2: Compiling UPC\+\+, above.
+
+### Configuration: Linux
 
 The `configure` command above will work as-is. The default compilers used will
 be gcc/g++. The `--with-cc=...` and `--with-cxx=...` options may specify
@@ -292,7 +294,9 @@ working `mpicc` is found when UPC\+\+ is built.  When this occurs, one must pass
 ibv-conduit executables.  Alternatively, one may pass `--disable-mpi-compat` to
 exclude support for MPI as a job spawner.
 
-### Installation: Apple macOS
+After running `configure`, return to step 2: Compiling UPC\+\+, above.
+
+### Configuration: Apple macOS
 
 On macOS, UPC++ defaults to using the Apple LLVM clang compiler that is part
 of the Xcode Command Line Tools.
@@ -307,7 +311,9 @@ xcode-select --install
 Alternatively, the `--with-cc=...` and `--with-cxx=...` options to `configure`
 may be used to specify different compilers.
 
-### Installation: CUDA GPU support
+After running `configure`, return to step 2: Compiling UPC\+\+, above.
+
+### Configuration: CUDA GPU support
 
 UPC++ now includes *prototype* support for communication operations on memory buffers
 resident in a CUDA-compatible NVIDIA GPU. 
@@ -361,6 +367,8 @@ UPC++ CUDA operation can be validated using the following programs in the source
 See the "Memory Kinds" section in the _UPC++ Programmer's Guide_ for more details on 
 using the CUDA support.
 
+After running `configure`, return to step 2: Compiling UPC\+\+, above.
+
 ## Advanced Configuration
 
 The `configure` script tries to pick sensible defaults for the platform it is
@@ -387,7 +395,7 @@ options:
   default behavior is to search `$PATH` for a `make` or `gmake` which meets this
   minimum version requirement.
 * Options for control of (optional) CUDA support are documented above, in the
-  section "Installation: CUDA GPU support".
+  section "Configuration: CUDA GPU support".
 * Options not recognized by the UPC\+\+ `configure` script will be passed to
   the GASNet-EX `configure`.  For instance, `--with-mpirun-cmd=...` might be
   required to setup MPI-based launch of ibv-conduit applications.  Please read
