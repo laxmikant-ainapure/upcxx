@@ -10,9 +10,11 @@ efficiently with MPI, OpenMP, CUDA and AMTs. It leverages GASNet-EX to
 deliver low-overhead, fine-grained communication, including Remote Memory
 Access (RMA) and Remote Procedure Call (RPC).
 
-This module checks if either the upcxx-meta utility can be found in the path
-or in the bin sub-directory located inside the path pointed by the 
-``UPCXX_INSTALL`` environment variable if it is defined.
+This module tries to find the upcxx-meta utility in the following locations:
+ * $ENV{UPCXX_INSTALL}/bin, if set
+ * $ENV{UPCXX_DIR}/bin, if set
+ * The bin directory for the prefix where this CMake package file is located
+ * Anywhere in $ENV{PATH}
 
 #]=======================================================================]
 
@@ -27,11 +29,13 @@ function(UPCXX_VERB MESSAGE)
 endfunction()
 
 
-# Set up some auxillary vars if hints have been set
+# Find upcxx-meta, taking hints into account
 if(DEFINED ENV{UPCXX_INSTALL} ) # recommended best-practice for UPC++ installs
   find_program( UPCXX_META_EXECUTABLE upcxx-meta HINTS "$ENV{UPCXX_INSTALL}/bin" NO_DEFAULT_PATH )
 elseif(DEFINED ENV{UPCXX_DIR} ) # CMake's find_package auto variable
   find_program( UPCXX_META_EXECUTABLE upcxx-meta HINTS "$ENV{UPCXX_DIR}/bin" NO_DEFAULT_PATH )
+elseif(DEFINED CMAKE_CURRENT_LIST_DIR AND EXISTS "${CMAKE_CURRENT_LIST_DIR}/../../../bin/upcxx-meta" )
+  find_program( UPCXX_META_EXECUTABLE upcxx-meta HINTS "${CMAKE_CURRENT_LIST_DIR}/../../../bin" NO_DEFAULT_PATH )
 else() # Use PATH
   find_program( UPCXX_META_EXECUTABLE upcxx-meta )
 endif()
@@ -198,10 +202,10 @@ foreach( dir ${UPCXX_INCLUDE_DIRS} )
     set( version_pattern 
       "#[\t ]*define[\t ]+UPCXX_VERSION[\t ]+([0-9]+)"
       )
-    #message(STATUS "checking ${dir}/upcxx/upcxx.hpp for ${version_pattern}" )
+    #UPCXX_VERB("checking ${dir}/upcxx/upcxx.hpp for ${version_pattern}" )
     file( STRINGS ${dir}/upcxx/upcxx.hpp upcxx_version
       REGEX ${version_pattern} )
-    #message(STATUS "upcxx_version ${upcxx_version}" )
+    #UPCXX_VERB("upcxx_version ${upcxx_version}" )
 
     if( ${upcxx_version} MATCHES ${version_pattern} )
       set(UPCXX_VERSION_STRING ${CMAKE_MATCH_1})
@@ -213,7 +217,17 @@ foreach( dir ${UPCXX_INCLUDE_DIRS} )
 endforeach()
 
 if(UPCXX_VERSION_STRING)
-  message( STATUS "UPCXX VERSION: " ${UPCXX_VERSION_STRING} )
+  UPCXX_VERB("UPCXX_VERSION_STRING: ${UPCXX_VERSION_STRING}")
+  if( ${UPCXX_VERSION_STRING} MATCHES "([0-9][0-9][0-9][0-9])([0-9][0-9])([0-9][0-9])" )
+      set(UPCXX_VERSION_MAJOR ${CMAKE_MATCH_1})
+      set(UPCXX_VERSION_MINOR ${CMAKE_MATCH_2})
+      set(UPCXX_VERSION_PATCH ${CMAKE_MATCH_3})
+      string(REGEX REPLACE "^0([0-9])" "\\1" UPCXX_VERSION_MINOR "${UPCXX_VERSION_MINOR}")
+      string(REGEX REPLACE "^0([0-9])" "\\1" UPCXX_VERSION_PATCH "${UPCXX_VERSION_PATCH}")
+      set(UPCXX_VERSION "${UPCXX_VERSION_MAJOR}.${UPCXX_VERSION_MINOR}.${UPCXX_VERSION_PATCH}")
+      set(UPCXX_VERSION_COUNT 3)
+      UPCXX_VERB("UPCXX_VERSION: ${UPCXX_VERSION}")
+  endif()
 endif()
 
 # CMake bug #15826: CMake's ill-advised deduplication mis-feature breaks certain types
@@ -248,7 +262,7 @@ find_package_handle_standard_args( UPCXX
   REQUIRED_VARS UPCXX_META_EXECUTABLE UPCXX_LIBRARIES UPCXX_INCLUDE_DIRS
                 UPCXX_DEFINITIONS 
                 UPCXX_COMPATIBLE_COMPILER
-  VERSION_VAR UPCXX_VERSION_STRING
+  VERSION_VAR UPCXX_VERSION
   HANDLE_COMPONENTS)
 
 message(STATUS "This UPC++ install requires the c++${UPCXX_CXX_STANDARD} standard.")

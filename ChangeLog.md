@@ -25,6 +25,7 @@ New features/enhancements: (see specification and programmer's guide for full de
 * Improve GASNet polling heuristic to reduce head-of-line blocking
 * `upcxx::promise` now behaves as a CopyAssignable handle to a reference-counted hidden object,
   meaning users no longer have to worry about promise lifetime issues.
+* Installed CMake package file is now more robust, and supports versioning.
 
 Notable bug fixes:
 
