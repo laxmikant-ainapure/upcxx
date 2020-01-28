@@ -132,7 +132,8 @@ in the following sections, below:
 
 Running `<upcxx-source-path>/configure --help` will provide general
 information on the available configuration options, and similar information is
-provided in the "Advanced Configuration" section below.
+provided in the [Advanced Configuration](#markdown-header-advanced-configuration)
+section below.
 
 If you are using a source tarball release downloaded from the website, it
 should include an embedded copy of GASNet-EX and `configure` will default to
@@ -278,15 +279,16 @@ Currently only Intel-based Cray XC systems have been tested, including Xeon
 and Xeon Phi (aka "KNL").  Note that UPC++ has not yet been tested on an
 ARM-based Cray XC.
 
-After running `configure`, return to step 2: Compiling UPC\+\+, above.
+After running `configure`, return to
+[Step 2: Compiling UPC\+\+](#markdown-header-2-compiling-upc4343), above.
 
 ### Configuration: Linux
 
 The `configure` command above will work as-is. The default compilers used will
 be gcc/g++. The `--with-cc=...` and `--with-cxx=...` options may specify
 alternatives to override this behavior.  Additional options providing finer
-control over how UPC\+\+ is configured can be found in the "Advanced
-Configuration" section below.
+control over how UPC\+\+ is configured can be found in the
+[Advanced Configuration](#markdown-header-advanced-configuration) section below.
 
 By default ibv-conduit (InfiniBand support) will use MPI for job spawning if a
 working `mpicc` is found when UPC\+\+ is built.  When this occurs, one must pass
@@ -294,7 +296,8 @@ working `mpicc` is found when UPC\+\+ is built.  When this occurs, one must pass
 ibv-conduit executables.  Alternatively, one may pass `--disable-mpi-compat` to
 exclude support for MPI as a job spawner.
 
-After running `configure`, return to step 2: Compiling UPC\+\+, above.
+After running `configure`, return to
+[Step 2: Compiling UPC\+\+](#markdown-header-2-compiling-upc4343), above.
 
 ### Configuration: Apple macOS
 
@@ -311,7 +314,8 @@ xcode-select --install
 Alternatively, the `--with-cc=...` and `--with-cxx=...` options to `configure`
 may be used to specify different compilers.
 
-After running `configure`, return to step 2: Compiling UPC\+\+, above.
+After running `configure`, return to
+[Step 2: Compiling UPC\+\+](#markdown-header-2-compiling-upc4343), above.
 
 ### Configuration: CUDA GPU support
 
@@ -367,7 +371,8 @@ UPC++ CUDA operation can be validated using the following programs in the source
 See the "Memory Kinds" section in the _UPC++ Programmer's Guide_ for more details on 
 using the CUDA support.
 
-After running `configure`, return to step 2: Compiling UPC\+\+, above.
+After running `configure`, return to
+[Step 2: Compiling UPC\+\+](#markdown-header-2-compiling-upc4343), above.
 
 ## Advanced Configuration
 
@@ -394,8 +399,8 @@ options:
 * `--with-gmake=...`: GNU Make command to use; must be 3.80 or newer.  The
   default behavior is to search `$PATH` for a `make` or `gmake` which meets this
   minimum version requirement.
-* Options for control of (optional) CUDA support are documented above, in the
-  section "Configuration: CUDA GPU support".
+* Options for control of (optional) CUDA support are documented in the section
+  [Configuration: CUDA GPU support](#markdown-header-configuration-cuda-gpu-support)
 * Options not recognized by the UPC\+\+ `configure` script will be passed to
   the GASNet-EX `configure`.  For instance, `--with-mpirun-cmd=...` might be
   required to setup MPI-based launch of ibv-conduit applications.  Please read
