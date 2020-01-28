@@ -392,7 +392,9 @@ options:
   the GASNet-EX `configure`.  For instance, `--with-mpirun-cmd=...` might be
   required to setup MPI-based launch of ibv-conduit applications.  Please read
   the GASNet-EX documentation for more information on this and many other
-  options available to configure GASNet-EX.
+  options available to configure GASNet-EX.  Additionally, passing the option
+  `--help=recursive` to the UPC\+\+ configure script will produce GASNet-EX's
+  configure help message.
 
 In addition to these explicit configure options, there are several environment
 variables which can implicitly affect the configuration of GASNet-EX.  The most
