@@ -240,35 +240,6 @@ For users of CMake 3.6 or newer, `<upcxx-install-path>/share/cmake/UPCXX`
 contains a `UPCXXConfig.cmake`.  Consult CMake documentation for instructions
 on use of this file.
 
-### Installation: Linux
-
-The `configure` command above will work as-is. The default compilers used will
-be gcc/g++. The `--with-cc=...` and `--with-cxx=...` options may specify
-alternatives to override this behavior.  Additional options providing finer
-control over how UPC\+\+ is configured can be found in the "Advanced
-Configuration" section below.
-
-By default ibv-conduit (InfiniBand support) will use MPI for job spawning if a
-working `mpicc` is found when UPC\+\+ is built.  When this occurs, one must pass
-`--with-cxx=mpicxx` (or similar) to `configure` to ensure correct linkage of
-ibv-conduit executables.  Alternatively, one may pass `--disable-mpi-compat` to
-exclude support for MPI as a job spawner.
-
-### Installation: Apple macOS
-
-On macOS, UPC++ defaults to using the Apple LLVM clang compiler that is part
-of the Xcode Command Line Tools.
-
-The Xcode Command Line Tools need to be installed *before* invoking `configure`,
-i.e.:
-
-```bash
-xcode-select --install
-```
-
-Alternatively, the `--with-cc=...` and `--with-cxx=...` options to `configure`
-may be used to specify different compilers.
-
 ### Installation: Cray XC
 
 To run on the compute nodes of a Cray XC, the `--with-cross=...` option must be
@@ -299,6 +270,35 @@ explicitly using `--with-cc` or `--with-cxx`.
 Currently only Intel-based Cray XC systems have been tested, including Xeon
 and Xeon Phi (aka "KNL").  Note that UPC++ has not yet been tested on an
 ARM-based Cray XC.
+
+### Installation: Linux
+
+The `configure` command above will work as-is. The default compilers used will
+be gcc/g++. The `--with-cc=...` and `--with-cxx=...` options may specify
+alternatives to override this behavior.  Additional options providing finer
+control over how UPC\+\+ is configured can be found in the "Advanced
+Configuration" section below.
+
+By default ibv-conduit (InfiniBand support) will use MPI for job spawning if a
+working `mpicc` is found when UPC\+\+ is built.  When this occurs, one must pass
+`--with-cxx=mpicxx` (or similar) to `configure` to ensure correct linkage of
+ibv-conduit executables.  Alternatively, one may pass `--disable-mpi-compat` to
+exclude support for MPI as a job spawner.
+
+### Installation: Apple macOS
+
+On macOS, UPC++ defaults to using the Apple LLVM clang compiler that is part
+of the Xcode Command Line Tools.
+
+The Xcode Command Line Tools need to be installed *before* invoking `configure`,
+i.e.:
+
+```bash
+xcode-select --install
+```
+
+Alternatively, the `--with-cc=...` and `--with-cxx=...` options to `configure`
+may be used to specify different compilers.
 
 ### Installation: CUDA GPU support
 
