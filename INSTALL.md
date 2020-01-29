@@ -17,6 +17,16 @@ The current release is known to work on the following configurations:
   Free Software Foundation GCC (e.g., as installed by Homebrew or Fink)
   version 6.4.0 or newer should also work (smp and udp conduits)
 
+    In order to use a debugger on macOS, we advise you to enable "Developer
+    Mode".  This is a system setting, not directly related to UPC\+\+.
+    Developer Mode may already be enabled, for instance if one granted Xcode
+    permission when it asked to enable it.  If not, then an Administrator must
+    run `DevToolsSecurity -enable` in Terminal.  This mode allows *all* users to
+    use development tools, including the `lldb` debugger.  If that is not
+    desirable, then use of debuggers will be limited to members of the
+    `_developer` group.  An internet search for `macos _developer group` will
+    provide additional information.
+
 * Linux/x86\_64 with one of the following compilers:
     - Gnu g++ 6.4.0 or newer    
     - clang 4.0.0 or newer (with libstdc++ from gcc-6.4.0 or newer)    
