@@ -244,6 +244,10 @@ while [[ $# -gt 0 ]]; do
       exit 0;
       ;;
 
+    # These are not in the usage message, but autoconf-familiar users may expect these to work:
+    CC?(=*))   CC="$(get_arg_val $1)";    export CC;;
+    CXX?(=*))  CXX="$(get_arg_val $1)";   export CXX;;
+
     # These are to remain undocumented
     -v|--verbose) set -x ;;
     --enable-single?(=*))
