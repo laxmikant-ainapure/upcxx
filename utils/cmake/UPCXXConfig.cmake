@@ -290,6 +290,7 @@ if( UPCXX_FOUND AND NOT TARGET UPCXX::upcxx )
      # INTERFACE_LINK_OPTIONS ignored prior to cmake 3.13.0, so smuggle it here
      # For 3.12, must also undo SHELL: which is not correctly handled by INTERFACE_LINK_LIBRARIES
      string(REGEX REPLACE "SHELL:" "" UPCXX_LINK_OPTIONS_cleaned "${UPCXX_LINK_OPTIONS}")
+     # Would like these options to be conditional on COMPILE_LANGUAGE:CXX, but that is sadly prohibited by cmake
      set(UPCXX_LIBRARIES "${UPCXX_LINK_OPTIONS_cleaned} ${UPCXX_LIBRARIES}")
      string(STRIP "${UPCXX_LIBRARIES}" UPCXX_LIBRARIES)
      unset(UPCXX_LINK_OPTIONS_cleaned)
@@ -297,9 +298,10 @@ if( UPCXX_FOUND AND NOT TARGET UPCXX::upcxx )
   set_target_properties( UPCXX::upcxx PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES "${UPCXX_INCLUDE_DIRS}"
     INTERFACE_LINK_LIBRARIES      "${UPCXX_LIBRARIES}"
-    INTERFACE_LINK_OPTIONS        "${UPCXX_LINK_OPTIONS}"
     INTERFACE_COMPILE_DEFINITIONS "${UPCXX_DEFINITIONS}"
-    # ensures that UPCXX_OPTIONS is only added for CXX compilation:
+    # generators ensure that potentially proprietary compiler options 
+    # are only added when invoking the CXX compiler frontend:
+    INTERFACE_LINK_OPTIONS        "$<$<COMPILE_LANGUAGE:CXX>:${UPCXX_LINK_OPTIONS}>"
     INTERFACE_COMPILE_OPTIONS     "$<$<COMPILE_LANGUAGE:CXX>:${UPCXX_OPTIONS}>"
     )
   UPCXX_VERB( "UPCXX_INCLUDE_DIRS: ${UPCXX_INCLUDE_DIRS}" )
