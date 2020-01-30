@@ -202,24 +202,25 @@ function get_arg_val {
 
 shopt -s extglob
 trap exit ERR  # so exit in get_arg_val exits from top-level
+# DO NOT simplify 'FOO="$(get_arg_val $1)"; export FOO;' to a single command, or get_arg_val can't fatal-exit
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --prefix?(=*))               PREFIX="$(get_arg_val $1)";;
 
-    --with-gasnet?(=*))          export GASNET="$(get_arg_val $1)";;
-    --with-default-network?(=*)) export GASNET_CONDUIT="$(get_arg_val $1)";;
+    --with-gasnet?(=*))          GASNET="$(get_arg_val $1)";         export GASNET;;
+    --with-default-network?(=*)) GASNET_CONDUIT="$(get_arg_val $1)"; export GASNET_CONDUIT;;
 
-    --with-cc?(=*))              export CC="$(get_arg_val $1)";;
-    --with-cxx?(=*))             export CXX="$(get_arg_val $1)";;
-    --with-cross?(=*))           export CROSS="$(get_arg_val $1)";;
+    --with-cc?(=*))              CC="$(get_arg_val $1)";    export CC;;
+    --with-cxx?(=*))             CXX="$(get_arg_val $1)";   export CXX;;
+    --with-cross?(=*))           CROSS="$(get_arg_val $1)"; export CROSS;;
 
-    --with-gmake?(=*))           export GMAKE="$(get_arg_val $1)";;
+    --with-gmake?(=*))           GMAKE="$(get_arg_val $1)"; export GMAKE;;
 
-    --with-cuda)                 export UPCXX_CUDA=1;;
-    --without-cuda)              export UPCXX_CUDA=0;;
-    --with-nvcc?(=*))            export UPCXX_CUDA_NVCC="$(get_arg_val $1)";;
-    --with-cuda-cppflags?(=*))   export UPCXX_CUDA_CPPFLAGS="$(get_arg_val $1)";;
-    --with-cuda-libflags?(=*))   export UPCXX_CUDA_LIBFLAGS="$(get_arg_val $1)";;
+    --with-cuda)                 UPCXX_CUDA=1; export UPCXX_CUDA;;
+    --without-cuda)              UPCXX_CUDA=0; export UPCXX_CUDA;;
+    --with-nvcc?(=*))            UPCXX_CUDA_NVCC="$(get_arg_val $1)";     export UPCXX_CUDA_NVCC;;
+    --with-cuda-cppflags?(=*))   UPCXX_CUDA_CPPFLAGS="$(get_arg_val $1)"; export UPCXX_CUDA_CPPFLAGS;;
+    --with-cuda-libflags?(=*))   UPCXX_CUDA_LIBFLAGS="$(get_arg_val $1)"; export UPCXX_CUDA_LIBFLAGS;;
 
     -h|--help|--usage)
       echo 'UPC++ configure script.'
@@ -252,7 +253,7 @@ while [[ $# -gt 0 ]]; do
       warnings+='WARNING: Many make targets will fail and components will be missing.\n'
       ;;
     --with-mpsc-queue=*)
-      export UPCXX_MPSC_QUEUE="$(get_arg_val $1)"
+      UPCXX_MPSC_QUEUE="$(get_arg_val $1)"; export UPCXX_MPSC_QUEUE
       ;;
 
     # Anything we don't consume will be passed to GASNet's configure
