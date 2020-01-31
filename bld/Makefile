@@ -11,6 +11,8 @@ ifeq ($(upcxx_bld),)
 $(error This Makefile is not intended to be used directly)
 endif
 
+export SHELL = /bin/bash
+
 # From configure:
 top_srcdir   = $(upcxx_src)
 top_builddir = $(upcxx_bld)

@@ -9,6 +9,7 @@ default: force; @echo ERROR: no default target; exit 1
 force:
 
 MAKEFLAGS += --no-print-directory
+export SHELL = /bin/bash
 
 # For making a target in *this* Makefile
 # Folding in $(MAKE) here runs afoul of special (parallel)
