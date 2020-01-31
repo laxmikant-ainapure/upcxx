@@ -6,7 +6,8 @@
 #
 
 # Scripts (in $(upcxx_src)/utils/config) to be run IN ORDER
-UPCXX_CONFIG_SCRIPTS =
+UPCXX_CONFIG_SCRIPTS = \
+	hidden_am_concurrency_level.sh
 
 # Environment (UPCXX_* prefixed) to export to configure probe scripts
 UPCXX_CONFIG_VARS = \
