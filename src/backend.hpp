@@ -208,7 +208,7 @@ namespace backend {
 
 #if UPCXX_BACKEND_GASNET_SEQ || UPCXX_BACKEND_GASNET_PAR
   #include <upcxx/backend/gasnet/runtime.hpp>
-#elif !defined(NOBS_DISCOVERY)
+#else
   #error "Invalid UPCXX_BACKEND."
 #endif
 

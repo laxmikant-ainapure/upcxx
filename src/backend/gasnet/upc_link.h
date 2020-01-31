@@ -3,9 +3,7 @@
 
 #ifndef __UPC_LINK_H
 
-#if !NOBS_DISCOVERY
 #include <gasnet.h>
-#endif
 
 #ifdef __cplusplus
 extern "C" {

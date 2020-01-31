@@ -216,9 +216,7 @@ std::size_t exchange_via_rdzv(mesh_t &m) {
 
 #include <upcxx/upcxx_internal.hpp>
 
-#if !NOBS_DISCOVERY
-  #include <gasnet.h>
-#endif
+#include <gasnet.h>
 
 unordered_map<unsigned,int> amlong_acks_in;
 unsigned amlong_epoch = 0;

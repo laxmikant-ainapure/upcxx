@@ -433,7 +433,7 @@ namespace upcxx {
       template<typename T, intru_queue_intruder<T> T::*next>
       std::mutex intru_queue<T, intru_queue_safety::mpsc, next>::the_lock_;
     
-    #elif !NOBS_DISCOVERY
+    #else
       #error "Invalid UPCXX_MPSC_QUEUE_xxx."
     #endif
   }
