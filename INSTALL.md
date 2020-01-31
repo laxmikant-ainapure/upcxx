@@ -17,6 +17,16 @@ The current release is known to work on the following configurations:
   Free Software Foundation GCC (e.g., as installed by Homebrew or Fink)
   version 6.4.0 or newer should also work (smp and udp conduits)
 
+    In order to use a debugger on macOS, we advise you to enable "Developer
+    Mode".  This is a system setting, not directly related to UPC\+\+.
+    Developer Mode may already be enabled, for instance if one granted Xcode
+    permission when it asked to enable it.  If not, then an Administrator must
+    run `DevToolsSecurity -enable` in Terminal.  This mode allows *all* users to
+    use development tools, including the `lldb` debugger.  If that is not
+    desirable, then use of debuggers will be limited to members of the
+    `_developer` group.  An internet search for `macos _developer group` will
+    provide additional information.
+
 * Linux/x86\_64 with one of the following compilers:
     - Gnu g++ 6.4.0 or newer    
     - clang 4.0.0 or newer (with libstdc++ from gcc-6.4.0 or newer)    
@@ -122,10 +132,18 @@ non-existent or empty directories as the installation path so that
 uninstallation is as trivial as `rm -rf <upcxx-install-path>`.
 
 Depending on the platform, additional command-line arguments may be necessary
-when invoking `configure`. See the platform-specific instructions below for
-guidance.  Running `<upcxx-source-path>/configure --help` will provide general
+when invoking `configure`. For guidance, see the platform-specific instructions
+in the following sections, below:
+
+* [Configuration: Cray XC](#markdown-header-configuration-cray-xc)
+* [Configuration: Linux](#markdown-header-configuration-linux)
+* [Configuration: Apple macOS](#markdown-header-configuration-apple-macos)
+* [Configuration: CUDA GPU support](#markdown-header-configuration-cuda-gpu-support)
+
+Running `<upcxx-source-path>/configure --help` will provide general
 information on the available configuration options, and similar information is
-provided in the "Advanced Configuration" section below.
+provided in the [Advanced Configuration](#markdown-header-advanced-configuration)
+section below.
 
 If you are using a source tarball release downloaded from the website, it
 should include an embedded copy of GASNet-EX and `configure` will default to
@@ -240,36 +258,7 @@ For users of CMake 3.6 or newer, `<upcxx-install-path>/share/cmake/UPCXX`
 contains a `UPCXXConfig.cmake`.  Consult CMake documentation for instructions
 on use of this file.
 
-### Installation: Linux
-
-The `configure` command above will work as-is. The default compilers used will
-be gcc/g++. The `--with-cc=...` and `--with-cxx=...` options may specify
-alternatives to override this behavior.  Additional options providing finer
-control over how UPC\+\+ is configured can be found in the "Advanced
-Configuration" section below.
-
-By default ibv-conduit (InfiniBand support) will use MPI for job spawning if a
-working `mpicc` is found when UPC\+\+ is built.  When this occurs, one must pass
-`--with-cxx=mpicxx` (or similar) to `configure` to ensure correct linkage of
-ibv-conduit executables.  Alternatively, one may pass `--disable-mpi-compat` to
-exclude support for MPI as a job spawner.
-
-### Installation: Apple macOS
-
-On macOS, UPC++ defaults to using the Apple LLVM clang compiler that is part
-of the Xcode Command Line Tools.
-
-The Xcode Command Line Tools need to be installed *before* invoking `configure`,
-i.e.:
-
-```bash
-xcode-select --install
-```
-
-Alternatively, the `--with-cc=...` and `--with-cxx=...` options to `configure`
-may be used to specify different compilers.
-
-### Installation: Cray XC
+### Configuration: Cray XC
 
 To run on the compute nodes of a Cray XC, the `--with-cross=...` option must be
 passed to the `configure` script.  Use the appropriate value for your system:
@@ -300,7 +289,45 @@ Currently only Intel-based Cray XC systems have been tested, including Xeon
 and Xeon Phi (aka "KNL").  Note that UPC++ has not yet been tested on an
 ARM-based Cray XC.
 
-### Installation: CUDA GPU support
+After running `configure`, return to
+[Step 2: Compiling UPC\+\+](#markdown-header-2-compiling-upc4343), above.
+
+### Configuration: Linux
+
+The `configure` command above will work as-is. The default compilers used will
+be gcc/g++. The `--with-cc=...` and `--with-cxx=...` options may specify
+alternatives to override this behavior.  Additional options providing finer
+control over how UPC\+\+ is configured can be found in the
+[Advanced Configuration](#markdown-header-advanced-configuration) section below.
+
+By default ibv-conduit (InfiniBand support) will use MPI for job spawning if a
+working `mpicc` is found when UPC\+\+ is built.  When this occurs, one must pass
+`--with-cxx=mpicxx` (or similar) to `configure` to ensure correct linkage of
+ibv-conduit executables.  Alternatively, one may pass `--disable-mpi-compat` to
+exclude support for MPI as a job spawner.
+
+After running `configure`, return to
+[Step 2: Compiling UPC\+\+](#markdown-header-2-compiling-upc4343), above.
+
+### Configuration: Apple macOS
+
+On macOS, UPC++ defaults to using the Apple LLVM clang compiler that is part
+of the Xcode Command Line Tools.
+
+The Xcode Command Line Tools need to be installed *before* invoking `configure`,
+i.e.:
+
+```bash
+xcode-select --install
+```
+
+Alternatively, the `--with-cc=...` and `--with-cxx=...` options to `configure`
+may be used to specify different compilers.
+
+After running `configure`, return to
+[Step 2: Compiling UPC\+\+](#markdown-header-2-compiling-upc4343), above.
+
+### Configuration: CUDA GPU support
 
 UPC++ now includes *prototype* support for communication operations on memory buffers
 resident in a CUDA-compatible NVIDIA GPU. 
@@ -354,6 +381,9 @@ UPC++ CUDA operation can be validated using the following programs in the source
 See the "Memory Kinds" section in the _UPC++ Programmer's Guide_ for more details on 
 using the CUDA support.
 
+After running `configure`, return to
+[Step 2: Compiling UPC\+\+](#markdown-header-2-compiling-upc4343), above.
+
 ## Advanced Configuration
 
 The `configure` script tries to pick sensible defaults for the platform it is
@@ -379,13 +409,15 @@ options:
 * `--with-gmake=...`: GNU Make command to use; must be 3.80 or newer.  The
   default behavior is to search `$PATH` for a `make` or `gmake` which meets this
   minimum version requirement.
-* Options for control of (optional) CUDA support are documented above, in the
-  section "Installation: CUDA GPU support".
+* Options for control of (optional) CUDA support are documented in the section
+  [Configuration: CUDA GPU support](#markdown-header-configuration-cuda-gpu-support)
 * Options not recognized by the UPC\+\+ `configure` script will be passed to
   the GASNet-EX `configure`.  For instance, `--with-mpirun-cmd=...` might be
   required to setup MPI-based launch of ibv-conduit applications.  Please read
   the GASNet-EX documentation for more information on this and many other
-  options available to configure GASNet-EX.
+  options available to configure GASNet-EX.  Additionally, passing the option
+  `--help=recursive` to the UPC\+\+ configure script will produce GASNet-EX's
+  configure help message.
 
 In addition to these explicit configure options, there are several environment
 variables which can implicitly affect the configuration of GASNet-EX.  The most
