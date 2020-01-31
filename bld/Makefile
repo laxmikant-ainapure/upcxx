@@ -382,12 +382,12 @@ do-upcxx-all: force
 	 done;                                                                 \
 	 $(MAKE) $$targets
 do-upcxx-install-headers: force
-	@cd "$(call UPCXXDIR)/include/upcxx/" &&                          \
-	 depfile="$(builddir)/$(call UPCXXDIR)/lib/upcxx_headers.d"       \
+	@cd "$(UPCXXDIR)/include/upcxx/" &&                               \
+	 depfile="$(builddir)/$(UPCXXDIR)/lib/upcxx_headers.d"            \
 	 dst="$(DESTDIR)$(DST)/include/upcxx" src="$$(pwd -P)" &&         \
 	 for file in $$(find . -name '*.hpp'); do                         \
 	   file="$${file##./}";                                           \
-	   if fgrep -e "/bld/$(call UPCXXDIR)/include/upcxx/$$file"       \
+	   if fgrep -e "/bld/$(UPCXXDIR)/include/upcxx/$$file"            \
 		    -e "$$src/$$file" "$$depfile" >/dev/null; then        \
 	     mkdir -p "$$dst/$$(dirname $$file)" || exit $$?;             \
 	     cp $$file "$$dst/$$file" || exit $$?;                        \
@@ -395,7 +395,7 @@ do-upcxx-install-headers: force
 	 done
 do-upcxx-install-lib: force
 	@mkdir -p "$(DESTDIR)$(DST)/lib" || exit $$?;                     \
-	 cp "$(call UPCXXDIR)/lib/libupcxx.a" "$(DESTDIR)$(DST)/lib/"
+	 cp "$(UPCXXDIR)/lib/libupcxx.a" "$(DESTDIR)$(DST)/lib/"
 do-upcxx-install-one: force
 	@$(MAKE) do-upcxx-install-headers do-upcxx-install-lib \
 	         do-upcxx-meta UPCXX_META_GASNET='$(prefix)/$(GASNETDIR)'
