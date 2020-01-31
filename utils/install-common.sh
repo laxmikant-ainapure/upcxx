@@ -116,6 +116,7 @@ EOF
   cmakedir="${DESTDIR}${install_to}/share/cmake/UPCXX"
   mkdir -p $cmakedir
   cp -f -R utils/cmake/UPCXXConfig.cmake $cmakedir
+  cp -f -R utils/cmake/UPCXXConfigVersion.cmake $cmakedir
   chmod -R a+rX $cmakedir
   # install environment module
   (

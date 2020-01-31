@@ -7,7 +7,8 @@ if(DEFINED ENV{UPCXX_INSTALL})
   list(APPEND CMAKE_PREFIX_PATH $ENV{UPCXX_INSTALL} )
 endif()
 
-find_package( UPCXX REQUIRED )
+find_package( UPCXX 2019.9.1 REQUIRED )
+message("FOUND UPCXX_VERSION=${UPCXX_VERSION}" )
 
 add_executable( upcxx_test upcxx_test.cxx )
 target_link_libraries(upcxx_test PUBLIC UPCXX::upcxx)
