@@ -39,6 +39,8 @@ ALL_OPTLEVS  = 0 3   # GASNet's DEBUG and NDEBUG, respectively.  Other values re
 ALL_DBGSYMS  = 0 1
 ALL_BACKENDS = gasnet_seq gasnet_par
 
+$(upcxx_src)/bld/%.mak: ; @: # empty rule
+
 # GASNet configuration space
 include $(top_srcdir)/bld/gasnet.mak
 
@@ -206,7 +208,7 @@ define upcxx_meta_body
 #!/bin/sh
 CC='$($(UPCXX_META_COMPILERS)_CC)'
 CFLAGS='$(GASNET_CFLAGS)'
-CPPFLAGS='$(UPCXX_DEFINES) -I$(DST)/include $(GASNET_CXXCPPFLAGS)'
+CPPFLAGS='$(UPCXX_DEFINES) -I$(DST)/include $(addprefix -I, $(wildcard $(DST)/gen_include)) $(GASNET_CXXCPPFLAGS)'
 CXX='$($(UPCXX_META_COMPILERS)_CXX)'
 CXXFLAGS='$(UPCXX_STDCXX) $(GASNET_CXXFLAGS)'
 GASNET_CONDUIT='$(GASNET_CONDUIT)'
@@ -292,9 +294,11 @@ endif
 endif
 
 LIBUPCXX_C_COMPILE   := $(GASNET_CC)  $(GASNET_CPPFLAGS)    $(GASNET_CFLAGS) \
-                        $(LIBUPCXX_CFLAGS)   $(UPCXX_DEFINES) -I$(UPCXX_DIR)/include
+                        $(LIBUPCXX_CFLAGS)   $(UPCXX_DEFINES) \
+                        -I$(UPCXX_DIR)/include -I$(UPCXX_DIR)/gen_include
 LIBUPCXX_CXX_COMPILE := $(GASNET_CXX) $(GASNET_CXXCPPFLAGS) $(GASNET_CXXFLAGS) $(UPCXX_STDCXX) \
-                        $(LIBUPCXX_CXXFLAGS) $(UPCXX_DEFINES) -I$(UPCXX_DIR)/include
+                        $(LIBUPCXX_CXXFLAGS) $(UPCXX_DEFINES) \
+                        -I$(UPCXX_DIR)/include -I$(UPCXX_DIR)/gen_include
 
 #
 # Dependency tracking:
@@ -317,6 +321,48 @@ endif
 %.o: %.cpp; $(MAKE) -f $(builddir)/Makefile $*.d $@
 
 #
+# Generated configuration header
+# TODO: dependencies to rebuild when something (what?) changes in GASNet
+#
+
+include $(top_srcdir)/bld/config.mak
+
+UPCXX_CONFIG_HEADER = gen_include/upcxx/upcxx_config.hpp
+
+UPCXX_CONFIG_SCRIPTS_FULL = \
+	$(addprefix $(top_srcdir)/utils/config/, $(UPCXX_CONFIG_SCRIPTS))
+
+$(UPCXX_CONFIG_HEADER): $(UPCXX_CONFIG_SCRIPTS_FULL)
+	@mkdir -p $(dir $@)
+	@export $(UPCXX_CONFIG_VARS)                          \
+	        $(foreach var,$(UPCXX_CONFIG_FRAG_VARS),GASNET_$(var)='$(GASNET_$(var))'); \
+	 ( echo '#ifndef _UPCXX_CONFIG_HPP';                  \
+	   echo '#define _UPCXX_CONFIG_HPP 1';                \
+	   echo ;                                             \
+	   for script in $(UPCXX_CONFIG_SCRIPTS_FULL); do     \
+	     $(SHELL) $$script;                               \
+	     if [[ $$? != 0 ]]; then                          \
+	       echo "Error running $$script" >& 2;            \
+	       rm -f $@;                                      \
+	       exit 1;                                        \
+	     fi;                                              \
+	   done;                                              \
+	   echo ;                                             \
+	   echo '#endif // _UPCXX_CONFIG_HPP';                \
+	 ) >| $@
+
+# Panic button to zap generated upcxx_config.hpp files
+.PHONY: upcxx-unconfig
+upcxx-unconfig: force
+	rm -f $(addsuffix /$(UPCXX_CONFIG_HEADER),        \
+	        $(foreach assert,  $(ALL_ASSERTS),        \
+	        $(foreach optlev,  $(ALL_OPTLEVS),        \
+	        $(foreach dbgsym,  $(ALL_DBGSYMS),        \
+	        $(foreach backend, $(ALL_BACKENDS),       \
+	        $(foreach conduit, $(ALL_CONDUITS),       \
+	          $(call UPCXXDIR_FN,$(assert),$(optlev),$(dbgsym),$(backend),$(conduit))))))))
+
+#
 # Build upcxx library from its sources, with dependency tracking
 # Also populates a bin/ with scripts suited for use in build tree
 #
@@ -330,6 +376,7 @@ ifneq ($(strip $(upcxx_git_version_obj)),)
 endif
 	ar rcs $@ $?
 do-libupcxx: force
+	@$(MAKE) -C $(UPCXX_DIR)/ -f "$(builddir)/Makefile" $(UPCXX_CONFIG_HEADER)
 	@$(MAKE) -C $(UPCXX_DIR)/lib -f "$(builddir)/Makefile" libupcxx.a upcxx_headers.d
 	@$(MAKE) DST=$(UPCXX_DIR) UPCXX_META_GASNET='$(builddir)/$(GASNETDIR)' \
 	         do-upcxx-meta do-upcxx-run do-upcxx-script
@@ -399,7 +446,8 @@ do-upcxx-install-headers: force
 	     mkdir -p "$$dst/$$(dirname $$file)" || exit $$?;             \
 	     cp $$file "$$dst/$$file" || exit $$?;                        \
 	   fi;                                                            \
-	 done
+	 done;                                                            \
+	 cp "$(builddir)/$(UPCXXDIR)/gen_include/upcxx/"*.hpp "$$dst/"
 do-upcxx-install-lib: force
 	@mkdir -p "$(DESTDIR)$(DST)/lib" || exit $$?;                     \
 	 cp "$(UPCXXDIR)/lib/libupcxx.a" "$(DESTDIR)$(DST)/lib/"
