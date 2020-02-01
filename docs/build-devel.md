@@ -180,7 +180,8 @@ built with) in `bld/tests.mak`.
 UPC\+\+ maintains its own list of supported conduits, allowing this to remain
 a subset of GASNet-EX's full list as well as ensuring some targets (like
 `tests-clean`) operate even when a build of GASNet-EX is not complete.  To add
-to (or remove from) this list, edit `ALL_CONDUITS` in `bld/gasnet.mak`.
+to (or remove from) this list, edit `ALL_CONDUITS` in `bld/gasnet.mak` and
+the `case $GASNET_CONDUIT` in `configure`.
 
 For conduits we rather not support officially (including MPI and possibly ones
 with "experimental" status in GASNet-EX), there is an `UNOFFICIAL_CONDUITS`
