@@ -91,9 +91,19 @@ platform_sanity_checks() {
             ARCH_BAD=1
         fi
 
-        # absify compilers
-        CXX=`type -p ${CXX%% *}`${CXX/${CXX%% *}/}
-        CC=`type -p ${CC%% *}`${CC/${CC%% *}/}
+        # absify compilers, checking they exist
+        cxx_exec=$(type -p ${CXX%% *})
+        if [[ -z "$cxx_exec" ]]; then
+            echo "ERROR: could not find CXX='${CXX%% *}' in \$PATH"
+            exit 1
+        fi
+        CXX=$cxx_exec${CXX/${CXX%% *}/}
+        cc_exec=$(type -p ${CC%% *})
+        if [[ -z "$cc_exec" ]]; then
+            echo "ERROR: could not find CC='${CC%% *}' in \$PATH"
+            exit 1
+        fi
+        CC=$cc_exec${CC${CC%% *}/}
         if test -z "$UPCXX_INSTALL_QUIET" ; then
             echo $CXX
             $CXX --version 2>&1 | grep -v 'warning #10315'
