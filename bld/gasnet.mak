@@ -3,10 +3,10 @@
 #
 
 # All conduits supported (officially or not) by UPC++
-ALL_CONDUITS = smp udp mpi ibv aries
+ALL_CONDUITS = smp udp mpi ibv aries ucx
 
 # Conduits for which testing should be skipped by default
-UNOFFICIAL_CONDUITS = mpi
+UNOFFICIAL_CONDUITS = mpi ucx
 
 # Map UPCXX configuration variables to GASNET_CODEMODE
 # PARAMS: OPTLVL, DBGSYM

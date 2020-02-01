@@ -662,7 +662,7 @@ case $GASNET_CONDUIT in
     ;;
   udp|smp|ibv|aries)
     ;;
-  mpi)
+  mpi|ucx)
     echo -e "WARNING: $GASNET_CONDUIT is not an officially supported network.\n"
     ;;
   *)
