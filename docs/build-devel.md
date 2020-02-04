@@ -96,6 +96,12 @@ The make targets utilizing the variables above:
 * `make gasnet-single`  
   Builds a single GASNet-EX conduit.
 
+* `make upcxx-unconfig`  
+  This gives a mechanism to remove all generated `upcxx_config.hpp` files.
+  This may be necessary when modifying the GASNet sources or anything that
+  could invalidate the generated header (including the probes themselves).
+  However, `make clean` is also sufficient.
+
 The `exe` and `run` targets accept both absolute and relative paths for `SRC`.
 Additionally, if the `SRC` value appears to be a relative path, but does not
 exist, a search is conducted in the `test`, `example` and `bench` directories
@@ -166,6 +172,13 @@ crawl rooted at `src/upcxx_headers.cpp` is used.  So, in general it is not
 necessary to add new header files to any manually-maintained list.  If there are
 headers missing from an install, then it is appropriate to update
 `src/upcxx_headers.cpp` to ensure then are reached in the crawl.
+
+#### To add probes which generate content in `upcxx_config.h`
+
+Adding a configure probe only requires writing a bash script taking a set of
+pre-defined environment variables as input, and generating content on `stdout`
+to be included in the generated `upcxx_config.hpp` files.  More details are
+provided in [utils/config/README.md](../utils/config/README.md).
 
 #### To add tests to `make check` and `make tests`
 

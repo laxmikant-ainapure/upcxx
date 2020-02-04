@@ -1,6 +1,7 @@
 #ifndef _3dad9bb9_dc96_4a7a_ae33_13d58d0d974f
 #define _3dad9bb9_dc96_4a7a_ae33_13d58d0d974f
 
+#include <upcxx/upcxx_config.hpp>
 #include <upcxx/backend_fwd.hpp>
 
 #include <atomic>
@@ -8,7 +9,7 @@
 
 namespace upcxx {
   namespace detail {
-  #if UPCXX_BACKEND_GASNET_PAR || !defined(GASNET_HIDDEN_AM_CONCURRENCY_LEVEL) || GASNET_HIDDEN_AM_CONCURRENCY_LEVEL
+  #if UPCXX_BACKEND_GASNET_PAR || !defined(UPCXX_HIDDEN_AM_CONCURRENCY_LEVEL) || UPCXX_HIDDEN_AM_CONCURRENCY_LEVEL
     using par_mutex = std::mutex;
   #else
     struct par_mutex {
@@ -17,7 +18,7 @@ namespace upcxx {
     };
   #endif
 
-  #if UPCXX_BACKEND_GASNET_PAR || !defined(GASNET_HIDDEN_AM_CONCURRENCY_LEVEL) || GASNET_HIDDEN_AM_CONCURRENCY_LEVEL
+  #if UPCXX_BACKEND_GASNET_PAR || !defined(UPCXX_HIDDEN_AM_CONCURRENCY_LEVEL) || UPCXX_HIDDEN_AM_CONCURRENCY_LEVEL
     template<typename T>
     using par_atomic = std::atomic<T>;
   #else
