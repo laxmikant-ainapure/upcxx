@@ -498,7 +498,7 @@ if [[ -n "$GMAKE" ]]; then
     bad_gmake "'$GMAKE' not found."
   fi
 else
-  for x in make gmake; do
+  for x in gmake make; do
     tmp="$(type -p $x)" || true
     if [[ -n "$tmp" ]] ; then
       GMAKE_SHORT="$x"
