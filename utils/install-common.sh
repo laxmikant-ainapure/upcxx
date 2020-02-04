@@ -5,7 +5,7 @@ function install_common {
 
   mkdir -p "${DESTDIR}${install_to}/bin"
   cat <<EOF >| "${DESTDIR}${install_to}/bin/upcxx-meta"
-#!/bin/bash
+#!${BASH}
 # This file is generated during installation - do not edit
 
 function echo_and_die {
@@ -97,13 +97,13 @@ fi
 EOF
   chmod 755 "${DESTDIR}${install_to}/bin/upcxx-meta"
   cat <<EOF >| "${DESTDIR}${install_to}/bin/upcxx"
-#!/bin/bash
+#!${BASH}
 UPCXX_META="${install_to}/bin/upcxx-meta"
 export UPCXX_META
 source "${install_to}/bin/upcxx.sh" "\$@"
 EOF
   chmod 755 "${DESTDIR}${install_to}/bin/upcxx"
-  cp ./utils/upcxx.sh "${DESTDIR}${install_to}/bin/upcxx.sh"
+  sed -e "s,/bin/bash,${BASH}," < ./utils/upcxx.sh > "${DESTDIR}${install_to}/bin/upcxx.sh"
   chmod 755 "${DESTDIR}${install_to}/bin/upcxx.sh"
   cp ./utils/upcxx-run "${DESTDIR}${install_to}/bin/upcxx-run"
   chmod 755 "${DESTDIR}${install_to}/bin/upcxx-run"

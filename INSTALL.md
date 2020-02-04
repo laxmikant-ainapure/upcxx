@@ -158,6 +158,16 @@ substitute `gmake`, or your configured value, for `make` where it appears in
 the following steps.  The final output from `configure` will provide the
 appropriate commands.
 
+Bash 3.2 or newer is required by UPC\+\+ scripts, including `configure`.  By
+default, `configure` will try `/bin/sh` and then the first instance of `bash`
+found in `$PATH`.  If neither of these is bash 3.2 (or newer), or if the one
+found is not appropriate to use (for instance not accessible on compute
+nodes), one can override the automated selection by invoking `configure` _via_
+the desired instance of `bash`:
+```bash
+/usr/gnu/bin/bash <upcxx-source-path>/configure ...
+```
+
 #### 2. Compiling UPC\+\+
 
 ```bash

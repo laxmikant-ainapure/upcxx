@@ -11,7 +11,7 @@ ifeq ($(upcxx_bld),)
 $(error This Makefile is not intended to be used directly)
 endif
 
-export SHELL = /bin/bash
+export SHELL = $(UPCXX_BASH)
 
 # From configure:
 top_srcdir   = $(upcxx_src)
@@ -231,7 +231,7 @@ do-upcxx-run: force
 	 chmod 755 $$file
 .PHONY: do-upcxx-run
 define upcxx_run_body
-#!/bin/bash
+#!$(UPCXX_BASH)
 export GASNET_PREFIX='$(builddir)/$(GASNETDIR)'
 exec '$(top_srcdir)/utils/upcxx-run' "$$@"
 endef
@@ -247,7 +247,7 @@ do-upcxx-script: force
 	 chmod 755 $$file
 .PHONY: do-upcxx-script
 define upcxx_script_body
-#!/bin/bash
+#!$(UPCXX_BASH)
 export UPCXX_META='$(builddir)/$(UPCXXDIR)/bin/upcxx-meta'
 source '$(top_srcdir)/utils/upcxx.sh' "$$@" \
    -network=$(GASNET_CONDUIT) \
