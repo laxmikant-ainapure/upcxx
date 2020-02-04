@@ -9,8 +9,8 @@ ALL_CONDUITS = smp udp mpi ibv aries ucx
 UNOFFICIAL_CONDUITS = mpi ucx
 
 # Map UPCXX configuration variables to GASNET_CODEMODE
-# PARAMS: OPTLVL, DBGSYM
-ifeq ($(OPTLVL)$(DBGSYM),01)
+# PARAMS: OPTLEV, DBGSYM
+ifeq ($(OPTLEV)$(DBGSYM),01)
 GASNET_CODEMODE ?= debug
 else
 GASNET_CODEMODE ?= opt

@@ -19,7 +19,7 @@ top_builddir = $(upcxx_bld)
 
 #defaults:
 ASSERT ?= 1
-OPTLVL ?= 0
+OPTLEV ?= 0
 DBGSYM ?= 1
 UPCXX_BACKEND ?= gasnet_seq
 GASNET_CONDUIT ?= smp
@@ -35,7 +35,7 @@ makefiles = \
 
 # libupcxx configuration space
 ALL_ASSERTS  = 0 1
-ALL_OPTLVLS  = 0 3   # GASNet's DEBUG and NDEBUG, respectively.  Other values reserved for future use.
+ALL_OPTLEVS  = 0 3   # GASNet's DEBUG and NDEBUG, respectively.  Other values reserved for future use.
 ALL_DBGSYMS  = 0 1
 ALL_BACKENDS = gasnet_seq gasnet_par
 
@@ -44,13 +44,13 @@ include $(top_srcdir)/bld/gasnet.mak
 
 #
 # Encode upcxx build directory name.  Used via
-#   $(call UPCXXDIR_FN,$(ASSERT),$(OPTLVL),$(DBGSYM),$(UPCXX_BACKEND),$(GASNET_CONDUIT))
+#   $(call UPCXXDIR_FN,$(ASSERT),$(OPTLEV),$(DBGSYM),$(UPCXX_BACKEND),$(GASNET_CONDUIT))
 # or similar.
 #
-UPCXXDIR_FN = upcxx.assert$(1).optlvl$(2).dbgsym$(3).$(4).$(5)
+UPCXXDIR_FN = upcxx.assert$(1).optlev$(2).dbgsym$(3).$(4).$(5)
 
 # UPCXXDIR_FN for current values of all params
-UPCXXDIR = $(call UPCXXDIR_FN,$(ASSERT),$(OPTLVL),$(DBGSYM),$(UPCXX_BACKEND),$(GASNET_CONDUIT))
+UPCXXDIR = $(call UPCXXDIR_FN,$(ASSERT),$(OPTLEV),$(DBGSYM),$(UPCXX_BACKEND),$(GASNET_CONDUIT))
 
 # Similar for GASNet build directory
 GASNETDIR = gasnet.$(GASNET_CODEMODE)
@@ -81,7 +81,7 @@ force:
 
 #
 # On-demand configure of a GASNet build directory (opt or debug)
-# PARAMS: OPTLVL, DBGSYM, GASNET, CROSS
+# PARAMS: OPTLEV, DBGSYM, GASNET, CROSS
 #
 configure_opt=--disable-debug
 configure_debug=--enable-debug
@@ -106,7 +106,7 @@ do-gasnet-configure: force
 
 #
 # On-demand compile of a single instance of libgasnet
-# PARAMS: OPTLVL, DBGSYM, UPCXX_BACKEND, GASNET_CONDUIT, GASNET, CROSS
+# PARAMS: OPTLEV, DBGSYM, UPCXX_BACKEND, GASNET_CONDUIT, GASNET, CROSS
 #
 
 # If given a GASNet build directory in --single mode, treat it as read-only
@@ -336,7 +336,7 @@ do-libupcxx: force
 
 #
 # On-demand compile of a single instance of libupcxx and required libgasnet
-# PARAMS: ASSERT, OPTLVL, DBGSYM, UPCXX_BACKEND, GASNET_CONDUIT, GASNET, CROSS
+# PARAMS: ASSERT, OPTLEV, DBGSYM, UPCXX_BACKEND, GASNET_CONDUIT, GASNET, CROSS
 #
 do-upcxx-single: force
 	@dir=$(UPCXXDIR);                                     \
@@ -353,19 +353,19 @@ upcxx-single: gasnet-single
 # On-demand compile of a single instance of libupcxx by fullpath
 #
 all_libupcxx = $(foreach assert,  $(ALL_ASSERTS),        \
-               $(foreach optlvl,  $(ALL_OPTLVLS),        \
+               $(foreach optlev,  $(ALL_OPTLEVS),        \
                $(foreach dbgsym,  $(ALL_DBGSYMS),        \
                $(foreach backend, $(ALL_BACKENDS),       \
                $(foreach conduit, $(ALL_CONDUITS),       \
-	         $(call UPCXXDIR_FN,$(assert),$(optlvl),$(dbgsym),$(backend),$(conduit))/libupcxx.a)))))
+	         $(call UPCXXDIR_FN,$(assert),$(optlev),$(dbgsym),$(backend),$(conduit))/libupcxx.a)))))
 $(all_libupcxx): force
 	@tmp=`echo $@ | tr . /`; \
 	 assert=`expr "$$tmp" : '.*/assert\([0-1]\)/'`; \
-	 optlvl=`expr "$$tmp" : '.*/optlvl\([0-3]\)/'`; \
+	 optlev=`expr "$$tmp" : '.*/optlev\([0-3]\)/'`; \
 	 dbgsym=`expr "$$tmp" : '.*/dbgsym\([0-1]\)/'`; \
 	 backend=`echo $$tmp | cut -d/ -f5`; \
 	 conduit=`echo $$tmp | cut -d/ -f6`; \
-	 $(MAKE) upcxx-single ASSERT=$$assert OPTLVL=$$optlvl DBGSYM=$$dbgsym \
+	 $(MAKE) upcxx-single ASSERT=$$assert OPTLEV=$$optlev DBGSYM=$$dbgsym \
                               UPCXX_BACKEND=$$backend GASNET_CONDUIT=$$conduit
 
 ##
@@ -384,7 +384,7 @@ do-upcxx-all: force
 	@targets='';                                                           \
 	 for conduit in $(GASNET_CONDUITS); do                                 \
 	   for backend in $(ALL_BACKENDS); do                                  \
-	     targets="$$targets $(call UPCXXDIR_FN,$(ASSERT),$(OPTLVL),$(DBGSYM),$$backend,$$conduit)/libupcxx.a";\
+	     targets="$$targets $(call UPCXXDIR_FN,$(ASSERT),$(OPTLEV),$(DBGSYM),$$backend,$$conduit)/libupcxx.a";\
 	   done;                                                               \
 	 done;                                                                 \
 	 $(MAKE) $$targets
@@ -424,16 +424,16 @@ do-upcxx-install-all: force
 .PHONY: do-upcxx-clean-opt     do-upcxx-clean-debug
 
 do-upcxx-all-opt: force
-	@$(MAKE) do-upcxx-all ASSERT=0 OPTLVL=3 DBGSYM=0
+	@$(MAKE) do-upcxx-all ASSERT=0 OPTLEV=3 DBGSYM=0
 do-upcxx-all-debug: force
-	@$(MAKE) do-upcxx-all ASSERT=1 OPTLVL=0 DBGSYM=1
+	@$(MAKE) do-upcxx-all ASSERT=1 OPTLEV=0 DBGSYM=1
 do-upcxx-install-opt: do-upcxx-all-opt
 	@$(MAKE) do-upcxx-install-all \
-	         ASSERT=0 OPTLVL=3 DBGSYM=0 UPCXX_CODEMODE=O3    \
+	         ASSERT=0 OPTLEV=3 DBGSYM=0 UPCXX_CODEMODE=O3    \
 	         UPCXX_FRAGMENTS="$(DESTDIR)$(prefix)/gasnet.opt/include"
 do-upcxx-install-debug: do-upcxx-all-debug
 	@$(MAKE) do-upcxx-install-all \
-	         ASSERT=1 OPTLVL=0 DBGSYM=1 UPCXX_CODEMODE=debug \
+	         ASSERT=1 OPTLEV=0 DBGSYM=1 UPCXX_CODEMODE=debug \
 	         UPCXX_FRAGMENTS="$(DESTDIR)$(prefix)/gasnet.debug/include"
 do-upcxx-clean-opt: force
 	rm -Rf $(foreach backend, $(ALL_BACKENDS),       \
@@ -475,7 +475,7 @@ all install clean distclean: force
 ## Generated full path to resulting executable on stdout
 ##
 ## Correctly supports absolute and relative paths
-## PARAMS: ASSERT, OPTLVL, DBGSYM, UPCXX_BACKEND, GASNET_CONDUIT
+## PARAMS: ASSERT, OPTLEV, DBGSYM, UPCXX_BACKEND, GASNET_CONDUIT
 ## OPTIONAL PARAMS: EXTRAFLAGS
 ##
 
@@ -501,17 +501,17 @@ exe: force
 	@echo -n '$(UPCXX_EXE)'
 
 # Clean exe files for current library variant
-## PARAMS: ASSERT, OPTLVL, DBGSYM, UPCXX_BACKEND, GASNET_CONDUIT
+## PARAMS: ASSERT, OPTLEV, DBGSYM, UPCXX_BACKEND, GASNET_CONDUIT
 exe-clean: force; @rm -Rf $(UPCXXDIR)/exe
 
 # Clean exe files for all library variants
 exe-clean-all: force
 	rm -Rf $(foreach assert,  $(ALL_ASSERTS),        \
-               $(foreach optlvl,  $(ALL_OPTLVLS),        \
+               $(foreach optlev,  $(ALL_OPTLEVS),        \
                $(foreach dbgsym,  $(ALL_DBGSYMS),        \
                $(foreach backend, $(ALL_BACKENDS),       \
                $(foreach conduit, $(ALL_CONDUITS),       \
-	         $(call UPCXXDIR_FN,$(assert),$(optlvl),$(dbgsym),$(backend),$(conduit))/exe)))))
+	         $(call UPCXXDIR_FN,$(assert),$(optlev),$(dbgsym),$(backend),$(conduit))/exe)))))
 
 .PHONY: do-exe exe exe-clean exe-clean-all
 
@@ -519,7 +519,7 @@ exe-clean-all: force
 ## "make run SRC='bar.cpp' [EXTRAFLAGS=-Dfoo=bar] [ARGS='arg1 arg2'] [RANKS=n]
 ##
 ## Correctly supports absolute and relative paths
-## PARAMS: ASSERT, OPTLVL, DBGSYM, UPCXX_BACKEND, GASNET_CONDUIT
+## PARAMS: ASSERT, OPTLEV, DBGSYM, UPCXX_BACKEND, GASNET_CONDUIT
 ## OPTIONAL PARAMS: RANKS, ARGS, EXTRAFLAGS
 ##
 RANKS ?= 4
@@ -535,7 +535,7 @@ run: force
 ## Wrappers
 ## Generates full path to requested wrapper on stdout
 ##
-## PARAMS: ASSERT, OPTLVL, DBGSYM, UPCXX_BACKEND, GASNET_CONDUIT
+## PARAMS: ASSERT, OPTLEV, DBGSYM, UPCXX_BACKEND, GASNET_CONDUIT
 ##
 
 upcxx-meta upcxx: force
