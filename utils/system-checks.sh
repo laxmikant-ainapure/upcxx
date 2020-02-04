@@ -103,7 +103,7 @@ platform_sanity_checks() {
             echo "ERROR: could not find CC='${CC%% *}' in \$PATH"
             exit 1
         fi
-        CC=$cc_exec${CC${CC%% *}/}
+        CC=$cc_exec${CC/${CC%% *}/}
         if test -z "$UPCXX_INSTALL_QUIET" ; then
             echo $CXX
             $CXX --version 2>&1 | grep -v 'warning #10315'
