@@ -31,7 +31,11 @@ using namespace std;
 } while(0)
 
 #if __cplusplus > 201700L 
-using byte = std::byte;
+  #if __PGI // workaround issue #307
+    #define byte unsigned char
+  #else
+    using byte = std::byte;
+  #endif
 #else
 typedef unsigned char byte;
 #endif
