@@ -3,10 +3,6 @@
 
 /* This header pulls in <gasnet.h> and should not be included from
  * upcxx headers that are exposed to the user.
- *
- * Including this header is the only sanctioned way to pull in the
- * gasnet API since including it is how nobs knows that it has to go
- * build gasnet before compiling the current source file.
  */
 
 #include <upcxx/backend.hpp>

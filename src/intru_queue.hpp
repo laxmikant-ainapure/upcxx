@@ -14,7 +14,6 @@
 #include <limits>
 
 #if UPCXX_MPSC_QUEUE_BIGLOCK
-  // And in the local nobsrule.py we make sure to put a dependency on pthreads
   #include <mutex>
 #endif
 
