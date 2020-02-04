@@ -770,11 +770,11 @@ chmod a+rx bin/upcxx bin/upcxx-run bin/upcxx-meta
 
 #
 # Simplify logic when using a GASNet build directory (--enable-single only)
-# Only one of gasnet.opt or gasnet.debug is used, but we don't know/care which
+# Only one of gasnet.opt or gasnet.debug is used
 #
 if [[ "$GASNET_TYPE" == 'build' ]]; then
-  ln -s "$GASNET" bld/gasnet.opt
-  ln -s "$GASNET" bld/gasnet.debug
+  rm -f bld/gasnet.$single
+  ln -s "$GASNET" bld/gasnet.$single
 fi
 
 #

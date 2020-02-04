@@ -169,8 +169,13 @@ gasnet-all:       $(call FOREACH_DBGOPT,do-gasnet-all)
 gasnet-install:   $(call FOREACH_DBGOPT,do-gasnet-install)
 gasnet-clean:     $(call FOREACH_DBGOPT,do-gasnet-clean)
 
+ifeq ($(strip $(GASNET_TYPE)),build)
+gasnet-distclean: force
+	rm -f gasnet.$(UPCXX_DBGOPT)  # symlink to an external build tree
+else
 gasnet-distclean: force
 	rm -Rf gasnet.opt gasnet.debug
+endif
 
 ##
 ## Targets for generated scripts
