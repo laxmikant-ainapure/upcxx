@@ -157,8 +157,8 @@ def load_args():
 
 def print_error_and_abort(err):
     _parser.print_usage()
-    print('\nError: ' + err)
-    sys.exit(0)
+    print('\nError: ' + err, file=sys.stderr)
+    sys.exit(1)
     
 
 def is_printable(text, printables=""):
