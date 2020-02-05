@@ -690,7 +690,7 @@ ifneq (\$(firstword \$(sort \$(MAKE_VERSION) $GMAKE_NEED_MAJ.$GMAKE_NEED_MIN)), 
 endif
 export prefix=$PREFIX
 export upcxx_src=$UPCXX_SRC
-export upcxx_bld=$PWD
+export upcxx_bld=$(pwd -P)
 export GMAKE=$GMAKE
 export GMAKE_SHORT=$GMAKE_SHORT
 export CONFIG_CC=$CC
