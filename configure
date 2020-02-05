@@ -268,6 +268,23 @@ done
 trap failure_and_die ERR  # errors after arg parsing are fatal
 
 #
+# Helper functions
+#
+
+# Warn if a prog was found outside a whitelist of paths
+function check_known_path {
+  case $(dirname "$1") in
+    /bin|/usr/bin|/usr/local/bin|/usr/pkg/bin|/opt/csw/bin)
+      # OK
+      ;;
+    *)
+      warnings+="${2+\nWARNING: $2\n}"
+      warnings+='WARNING: This full path will be encoded in installed scripts.\n'
+      warnings+='WARNING: Please ensure it is valid for all users and on all nodes.\n'
+  esac
+}
+
+#
 # Default GASNet source
 # Enable offline installers with an embedded GASNet-EX tarball
 #
@@ -791,15 +808,7 @@ EOF
 if test -n "$UPCXX_REEXEC"; then
   warnings+="\nWARNING: The initial shell was not bash version $UPCXX_BASH_MAJ.$UPCXX_BASH_MIN or newer.\n"
   warnings+="WARNING: Using '$BASH', found in \$PATH.\n"
-  case $(dirname $BASH) in
-    /bin|/usr/bin|/usr/local/bin|/usr/pkg/bin|/opt/csw/bin)
-      # OK
-      ;;
-    *)
-      warnings+='WARNING: This full path will be encoded in installed scripts.\n'
-      warnings+='WARNING: Please ensure it is valid for all users and on all nodes.\n'
-      ;;
-  esac
+  check_known_path "$BASH"
   warnings+="NOTE: Run 'full_path_to_bash $0 [args]' to override the automatic detection.\n"
 fi
 
