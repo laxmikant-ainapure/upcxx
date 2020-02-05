@@ -158,6 +158,16 @@ substitute `gmake`, or your configured value, for `make` where it appears in
 the following steps.  The final output from `configure` will provide the
 appropriate commands.
 
+Python3 or Python2 (version 2.7.5 or later) is required by UPC\+\+.  By
+default, a Python interpreter is located when needed by searching for `python`
+in `$PATH`.  If that does not produce a suitable interpreter, you may override
+this using `--with-python=...` to specify a python interpreter.  If you
+provide a full path, the value is used as given.  Otherwise, the `$PATH` at
+configure-time is searched to produce a full path.  Either way, the resulting
+full path to the python interpreter will be used in the installed `upcxx-run`
+script, rather than a runtime search of `$PATH`.  Therefore, the interpreter
+specified must be available in a batch-job environment where applicable.
+
 Bash 3.2 or newer is required by UPC\+\+ scripts, including `configure`.  By
 default, `configure` will try `/bin/sh` and then the first instance of `bash`
 found in `$PATH`.  If neither of these is bash 3.2 (or newer), or if the one
@@ -419,6 +429,10 @@ options:
 * `--with-gmake=...`: GNU Make command to use; must be 3.80 or newer.  The
   default behavior is to search `$PATH` for a `make` or `gmake` which meets this
   minimum version requirement.
+* `--with-python=...`: Python interpreter to use; must be Python3 or Python2
+  version 2.7.5 or newer.  The default behavior is to search `$PATH` for
+  `python` when `upcxx-run` is executed.  Use of this option results in the
+  use of a full path to the Python interpreter in `upcxx-run`.
 * Options for control of (optional) CUDA support are documented in the section
   [Configuration: CUDA GPU support](#markdown-header-configuration-cuda-gpu-support)
 * Options not recognized by the UPC\+\+ `configure` script will be passed to

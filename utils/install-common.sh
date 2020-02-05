@@ -105,7 +105,11 @@ EOF
   chmod 755 "${DESTDIR}${install_to}/bin/upcxx"
   sed -e "s,/bin/bash,${BASH}," < ./utils/upcxx.sh > "${DESTDIR}${install_to}/bin/upcxx.sh"
   chmod 755 "${DESTDIR}${install_to}/bin/upcxx.sh"
-  cp ./utils/upcxx-run "${DESTDIR}${install_to}/bin/upcxx-run"
+  if [[ -n "$UPCXX_PYTHON" ]]; then
+    sed -e "s,/usr/bin/env python,$UPCXX_PYTHON," < ./utils/upcxx-run > "${DESTDIR}${install_to}/bin/upcxx-run"
+  else
+    cp ./utils/upcxx-run "${DESTDIR}${install_to}/bin/upcxx-run"
+  fi
   chmod 755 "${DESTDIR}${install_to}/bin/upcxx-run"
   # install documentation
   docdir="${DESTDIR}${install_to}/share/doc/upcxx"

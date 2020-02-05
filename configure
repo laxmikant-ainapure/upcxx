@@ -105,6 +105,10 @@ Usage:
         Specify the location of GNU Make 3.80 or newer.
         Overrides the value of $GMAKE, if any.
         Default is to search for 'gmake' or 'make' in $PATH.
+  --with-python=...
+        Specify the location of Python3 or Python2 version 2.7.5 or newer.
+        Overrides the value of $UPCXX_PYTHON, if any.
+        Default is search for 'python' in $PATH dynamically at runtime.
 
   -h|--help|--usage
         Produces this message.
@@ -211,6 +215,7 @@ while [[ $# -gt 0 ]]; do
     --with-cross?(=*))           CROSS="$(get_arg_val $1)"; export CROSS;;
 
     --with-gmake?(=*))           GMAKE="$(get_arg_val $1)"; export GMAKE;;
+    --with-python?(=*))          UPCXX_PYTHON="$(get_arg_val $1)"; export UPCXX_PYTHON;;
 
     --with-cuda)                 UPCXX_CUDA=1; export UPCXX_CUDA;;
     --without-cuda)              UPCXX_CUDA=0; export UPCXX_CUDA;;
@@ -485,6 +490,43 @@ else
 fi
 
 #
+# UPCXX_PYTHON
+# First expand full path or validating existence
+# Second check version
+#
+UPCXX_PYTHON_MIN=2.7.5
+if [[ "$UPCXX_PYTHON" =~ ^/ ]]; then
+  # Verify user-provided full path exists and is executable
+  if [[ ! -x "$UPCXX_PYTHON" ]]; then
+    echo_and_die "ERROR: Python interpreter '$UPCXX_PYTHON' not found."
+  fi
+  fpy="$UPCXX_PYTHON"
+  python_whence="specified by full path"
+elif [[ -n "$UPCXX_PYTHON" ]]; then
+  # Verify user-provided value exists in $PATH and is executable
+  fpy=$(type -p $UPCXX_PYTHON || true)
+  if [[ -x "$fpy" ]]; then
+    UPCXX_PYTHON="$fpy"
+  else
+    echo_and_die "ERROR: Python interpreter '$UPCXX_PYTHON' not found in \$PATH."
+  fi
+  python_whence="found in \$PATH"
+else
+  # Confirm presence of 'python' in $PATH
+  # We leave UPCXX_PYTHON unset to prevent rewrite of upcxx-run at install
+  fpy=$(type -p python || true)
+  if [[ ! -x "$fpy" ]]; then
+    echo "ERROR: No 'python' found in \$PATH."
+    echo_and_die "ERROR: Use '--with-python=...' to specify a Python interpreter."
+  fi
+  python_whence="found in \$PATH"
+fi
+if ! $fpy -c "import sys; sys.exit(sys.version_info < (${UPCXX_PYTHON_MIN//./,}));" &> /dev/null; then
+  echo_and_die "ERROR: Python intrepeter '$fpy' is older than the minumum of $UPCXX_PYTHON_MIN."
+fi
+check_known_path "$fpy" "Python interpreter '$fpy' $python_whence."
+
+#
 # system-checks
 #
 . $UPCXX_SRC/utils/system-checks.sh
@@ -705,6 +747,7 @@ export prefix=$PREFIX
 export upcxx_src=$UPCXX_SRC
 export upcxx_bld=$(pwd -P)
 export UPCXX_BASH=$BASH
+export UPCXX_PYTHON=$UPCXX_PYTHON
 export GMAKE=$GMAKE
 export GMAKE_SHORT=$GMAKE_SHORT
 export CONFIG_CC=$CC
@@ -746,7 +789,7 @@ EOF
 cat >| bin/upcxx-run <<EOF
 #!$BASH
 function die { echo "upcxx-run: ERROR: \$*" >&2; exit 1; }
-conduit=\$($UPCXX_SRC/utils/upcxx-run -info "\$@" | grep ^GASNetConduitName: | cut -d' ' -f2 | tr '[A-Z]' '[a-z]'; exit \${PIPESTATUS[0]})
+conduit=\$($UPCXX_PYTHON $UPCXX_SRC/utils/upcxx-run -info "\$@" | grep ^GASNetConduitName: | cut -d' ' -f2 | tr '[A-Z]' '[a-z]'; exit \${PIPESTATUS[0]})
 [[ \$? -ne 0 ]] && die 'pre-parse of command line failed'
 codemode="${UPCXX_DBGOPT% *}" # debug unless only opt configured in
 [[ -z "\$UPCXX_QUIET" ]] && echo 'INFO: may need to build the required runtime.  Please be patient.' >&2

@@ -26,14 +26,8 @@ sys_info() {
         done
         echo "Settings:$SETTINGS"
         echo " "
-	if test -n "$UPCXX_PYTHON" ; then
-            fpy=`type -p $UPCXX_PYTHON`
-            if test -x "$fpy" ; then
-              echo "$fpy: " `$fpy --version 2>&1`
-            else
-              echo "UPCXX_PYTHON=$UPCXX_PYTHON not found!"
-            fi
-	fi
+        fpy=${UPCXX_PYTHON:-$(type -p python)}
+        echo "$fpy: " $($fpy --version 2>&1)
         echo " "
     ) fi
 }
