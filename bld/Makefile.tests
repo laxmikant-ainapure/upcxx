@@ -32,7 +32,7 @@ include $(upcxx_src)/bld/tests.mak
 
 # public-facing targets don't use GASNet "conduit" terminology
 # using "target-specific variable values" for the defaults
-tests test_install : NETWORKS ?= $(filter-out $(UNOFFICIAL_CONDUITS),$(CONDUITS))
+tests test_install run-tests : NETWORKS ?= $(filter-out $(UNOFFICIAL_CONDUITS),$(CONDUITS))
 check              : NETWORKS ?= $(GASNET_CONDUIT)
 export NETWORKS
 
