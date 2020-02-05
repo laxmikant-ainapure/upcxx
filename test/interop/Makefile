@@ -6,7 +6,7 @@
 SHELL = /bin/bash
 
 UPCXX_NETWORK ?= smp
-OPTLEV ?= -g
+OPTLVL ?= -g
 
 UPC_FLAGS=
 UPCXX_FLAGS=
@@ -21,8 +21,8 @@ else
   UPC_THREAD_FLAGS = -nopthreads -uses-threads
 endif
 
-UPCC_CMD  = $(shell echo $(UPCC))  $(OPTLEV) -network $(UPCXX_NETWORK) $(UPC_THREAD_FLAGS) $(UPC_FLAGS)
-UPCXX_CMD = $(shell echo $(UPCXX)) $(OPTLEV) $(UPCXX_FLAGS)
+UPCC_CMD  = $(shell echo $(UPCC))  $(OPTLVL) -network $(UPCXX_NETWORK) $(UPC_THREAD_FLAGS) $(UPC_FLAGS)
+UPCXX_CMD = $(shell echo $(UPCXX)) $(OPTLVL) $(UPCXX_FLAGS)
 
 # ===========================================
 
