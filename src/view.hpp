@@ -10,8 +10,8 @@
 
 namespace upcxx {
   //////////////////////////////////////////////////////////////////////////////
-  // deserializing_iterator: Wraps a parcel_reader whose head is pointing to
-  // a consecutive sequence of packed T's.
+  // deserializing_iterator: Wraps a serialization_reader whose head is pointing
+  // to a consecutive sequence of packed T's.
   namespace detail {
     template<typename T,
              bool skip_is_fast = serialization_traits<T>::skip_is_fast>
@@ -303,22 +303,22 @@ namespace upcxx {
       static void serialize(Writer &w, T const &x) noexcept {
         void *delta = w.place(storage_size_of<std::size_t>());
         std::size_t sz0 = w.size();
-        w.template push<T>(x);
+        w.template write<T>(x);
         std::size_t sz1 = w.size();
         ::new(delta) std::size_t(sz1 - sz0);
       }
 
       template<typename Reader>
       static T* deserialize(Reader &r, void *spot) noexcept {
-        r.template pop_trivial<std::size_t>();
-        return r.template pop_into<T>(spot);
+        r.template read_trivial<std::size_t>();
+        return r.template read_into<T>(spot);
       }
 
       static constexpr bool skip_is_fast = true;
       
       template<typename Reader>
       static void skip(Reader &r) noexcept {
-        std::size_t delta = r.template pop_trivial<std::size_t>();
+        std::size_t delta = r.template read_trivial<std::size_t>();
         r.jump(delta);
       }
     };
@@ -335,7 +335,7 @@ namespace upcxx {
         std::size_t size0 = w.size();
 
         std::size_t n = x.n_;
-        w.template push_trivial<std::size_t>(n);
+        w.template write_trivial<std::size_t>(n);
 
         for(auto elt = x.beg_; n != 0; n--, ++elt)
           serialization_view_element<T>::serialize(w, *elt);
@@ -348,10 +348,10 @@ namespace upcxx {
       
       template<typename Reader>
       static deserialized_type* deserialize(Reader &r, void *spot) noexcept {
-        std::size_t delta = r.template pop_trivial<std::size_t>();
+        std::size_t delta = r.template read_trivial<std::size_t>();
         
         Reader r1(r);
-        std::size_t n = r1.template pop_trivial<std::size_t>();
+        std::size_t n = r1.template read_trivial<std::size_t>();
 
         using Iter1 = typename deserialized_type::iterator;
         
@@ -368,7 +368,7 @@ namespace upcxx {
 
       template<typename Reader>
       static void skip(Reader &r) noexcept {
-        std::size_t delta = r.template pop_trivial<std::size_t>();
+        std::size_t delta = r.template read_trivial<std::size_t>();
         r.jump(delta);
       }
     };
@@ -387,21 +387,21 @@ namespace upcxx {
 
       template<typename Writer>
       static void serialize(Writer &w, view<T,Iter> const &x) noexcept {
-        w.template push_trivial<std::size_t>(x.n_);
-        w.push_sequence(x.beg_, x.end_, x.n_);
+        w.template write_trivial<std::size_t>(x.n_);
+        w.write_sequence(x.beg_, x.end_, x.n_);
       }
 
       using deserialized_type = view<T/*, default iterator*/>;
       
       template<typename Reader>
       static void skip(Reader &r) noexcept {
-        std::size_t n = r.template pop_trivial<std::size_t>();
+        std::size_t n = r.template read_trivial<std::size_t>();
         r.unplace(storage_size_of<T>().arrayed(n));
       }
       
       template<typename Reader>
       static deserialized_type* deserialize(Reader &r, void *spot) noexcept {
-        std::size_t n = r.template pop_trivial<std::size_t>();
+        std::size_t n = r.template read_trivial<std::size_t>();
         void *elts_mem = r.unplace(storage_size_of<T>().arrayed(n));
         T *elts = detail::launder_unconstructed((T*)elts_mem);
         return ::new(spot) view<T>(elts, elts + n, n);

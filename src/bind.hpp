@@ -244,8 +244,8 @@ namespace upcxx {
     
     template<typename Writer>
     static void serialize(Writer &w, const bound_function<Fn,B...> &fn) {
-      w.template push<typename binding<Fn>::on_wire_type>(fn.fn_);
-      w.template push<std::tuple<typename binding<B>::on_wire_type...>>(fn.b_);
+      w.template write<typename binding<Fn>::on_wire_type>(fn.fn_);
+      w.template write<std::tuple<typename binding<B>::on_wire_type...>>(fn.b_);
     }
 
     using deserialized_type = bound_function<
@@ -270,11 +270,11 @@ namespace upcxx {
     template<typename Reader>
     static deserialized_type* deserialize(Reader &r, void *spot) {
       detail::raw_storage<deserialized_type_of_t<typename binding<Fn>::on_wire_type>> fn;
-      r.template pop_into<typename binding<Fn>::on_wire_type>(&fn);
+      r.template read_into<typename binding<Fn>::on_wire_type>(&fn);
 
       detail::raw_storage<deserialized_type_of_t<std::tuple<typename binding<B>::on_wire_type...>>> b;
       //#warning "uncomment"
-      r.template pop_into<std::tuple<typename binding<B>::on_wire_type...>>(&b);
+      r.template read_into<std::tuple<typename binding<B>::on_wire_type...>>(&b);
       
       return ::new(spot) deserialized_type(
         fn.value_and_destruct(),

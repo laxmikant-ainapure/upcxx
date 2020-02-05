@@ -35,6 +35,8 @@ namespace upcxx {
     template<typename T, typename=std::false_type>
     struct serialization_is_specialized;
   }
+
+  #warning "TODO: rename *definitely*"
   
   template<typename T>
   struct is_definitely_trivially_serializable {
@@ -260,12 +262,45 @@ namespace upcxx {
         #endif
       > {
     };
+
+    template<typename Writer>
+    struct serialization_writer_base {
+      void* place(storage_size<> obj) {
+        return static_cast<Writer*>(this)->place(obj.size, obj.align);
+      }
+
+      template<typename T>
+      using reserve_handle = T*;
+
+      template<typename T>
+      T* reserve() {
+        return (T*)this->place(storage_size_of<T>());
+      }
+
+      template<typename T>
+      void commit(T *handle, T const &val) {
+        ::new((void*)handle) T(val);
+      }
+      
+      template<typename T>
+      void write(T const &x) {
+        upcxx::template serialization_traits<T>::serialize(*static_cast<Writer*>(this), x);
+      }
+
+      template<typename T>
+      void write_trivial(T const &x) {
+        void *spot = this->place(storage_size_of<T>());
+        detail::template memcpy_aligned<alignof(T)>(spot, &x, sizeof(T));
+      }
+    };
     
     template<bool bounded>
     class serialization_writer;
 
     template<>
-    class serialization_writer</*bounded=*/true> {
+    class serialization_writer</*bounded=*/true>:
+      public serialization_writer_base<serialization_writer</*bounded=*/true>> {
+      
       friend class serialization_writer<false>;
       
       char *buf_;
@@ -298,35 +333,12 @@ namespace upcxx {
         align_ = obj_align > align_ ? obj_align : align_;
         return spot;
       }
-      void* place(storage_size<> obj) {
-        return this->place(obj.size, obj.align);
-      }
 
-      template<typename T>
-      T* place_new() {
-        static_assert(std::is_trivially_copyable<T>::value, "T must be TriviallyCopyable");
-        return ::new(this->place(sizeof(T), alignof(T))) T;
-      }
-      template<typename T>
-      T* place_new(T val) {
-        static_assert(std::is_trivially_copyable<T>::value, "T must be TriviallyCopyable");
-        return ::new(this->place(sizeof(T), alignof(T))) T(val);
-      }
-
-      template<typename T>
-      void push(T const &x) {
-        upcxx::template serialization_traits<T>::serialize(*this, x);
-      }
-
-      template<typename T>
-      void push_trivial(T const &x) {
-        void *spot = this->place(storage_size_of<T>());
-        detail::template memcpy_aligned<alignof(T)>(spot, &x, sizeof(T));
-      }
-
+      using serialization_writer_base<serialization_writer</*bounded=*/true>>::place;
+      
     private:
       template<typename T, typename Iter>
-      std::size_t push_sequence_(Iter beg, Iter end, std::true_type trivial_and_contiguous) {
+      std::size_t write_sequence_(Iter beg, Iter end, std::true_type trivial_and_contiguous) {
         std::size_t n = std::distance(beg, end);
         void *spot = this->place(storage_size_of<T>().arrayed(n));
         detail::template memcpy_aligned<alignof(T)>(spot, &*beg, n*sizeof(T));
@@ -334,7 +346,7 @@ namespace upcxx {
       }
       
       template<typename T, typename Iter>
-      std::size_t push_sequence_(Iter beg, Iter end, std::false_type trivial_and_contiguous) {
+      std::size_t write_sequence_(Iter beg, Iter end, std::false_type trivial_and_contiguous) {
         std::size_t n = 0;
         for(Iter x=beg; x != end; ++x, ++n)
           upcxx::template serialization_traits<T>::serialize(*this, *x);
@@ -343,12 +355,12 @@ namespace upcxx {
 
     public:
       template<typename Iter>
-      std::size_t push_sequence(Iter beg, Iter end, std::size_t n=-1) {
+      std::size_t write_sequence(Iter beg, Iter end, std::size_t n=-1) {
         using T = typename std::remove_cv<
             typename std::iterator_traits<Iter>::value_type
           >::type;
         
-        return this->template push_sequence_<T,Iter>(beg, end,
+        return this->template write_sequence_<T,Iter>(beg, end,
           /*trivial_and_contiguous=*/std::integral_constant<bool,
               serialization_traits<T>::is_actually_trivially_serializable &&
               is_iterator_contiguous<Iter>::value
@@ -358,7 +370,9 @@ namespace upcxx {
     };
 
     template<>
-    class serialization_writer</*bounded=*/false> {
+    class serialization_writer</*bounded=*/false>:
+      public serialization_writer_base<serialization_writer</*bounded=*/false>> {
+      
       std::uintptr_t base_;
       std::size_t edge_;
       std::size_t size_, align_;
@@ -440,35 +454,11 @@ namespace upcxx {
         return reinterpret_cast<void*>(base_ + size0);
       }
 
-      void* place(storage_size<> obj) {
-        return this->place(obj.size, obj.align);
-      }
-
-      template<typename T>
-      T* place_new() {
-        static_assert(std::is_trivially_copyable<T>::value, "T must be TriviallyCopyable");
-        return ::new(this->place(sizeof(T), alignof(T))) T;
-      }
-      template<typename T>
-      T* place_new(T val) {
-        static_assert(std::is_trivially_copyable<T>::value, "T must be TriviallyCopyable");
-        return ::new(this->place(sizeof(T), alignof(T))) T(val);
-      }
+      using serialization_writer_base<serialization_writer</*bounded=*/false>>::place;
       
-      template<typename T>
-      void push(T const &x) {
-        upcxx::template serialization_traits<T>::serialize(*this, x);
-      }
-
-      template<typename T>
-      void push_trivial(T const &x) {
-        void *spot = this->place(storage_size_of<T>());
-        detail::template memcpy_aligned<alignof(T)>(spot, &x, sizeof(T));
-      }
-
     private:
       template<typename T, typename Iter>
-      Iter push_elts_bounded_(Iter xs, std::size_t n, std::true_type trivial_and_contiguous) {
+      Iter write_elts_bounded_(Iter xs, std::size_t n, std::true_type trivial_and_contiguous) {
         const std::size_t alignof_T = n == 0 ? 1 : alignof(T);
 
         std::size_t size0 = size_;
@@ -484,7 +474,7 @@ namespace upcxx {
       }
       
       template<typename T, typename Iter>
-      Iter push_elts_bounded_(Iter xs, std::size_t n, std::false_type trivial_and_contiguous) {
+      Iter write_elts_bounded_(Iter xs, std::size_t n, std::false_type trivial_and_contiguous) {
         detail::template serialization_writer</*bounded=*/true> w1(reinterpret_cast<void*>(base_));
         w1.size_ = size_;
         w1.align_ = align_;
@@ -498,7 +488,7 @@ namespace upcxx {
       }
       
       template<typename T, typename Iter, bool n_is_valid, typename Size>
-      std::size_t push_sequence_(Iter beg, Iter end, std::integral_constant<bool,n_is_valid>, std::size_t n, Size elt_ub) {
+      std::size_t write_sequence_(Iter beg, Iter end, std::integral_constant<bool,n_is_valid>, std::size_t n, Size elt_ub) {
         constexpr auto trivial_and_contiguous = std::integral_constant<bool,
             serialization_traits<T>::is_actually_trivially_serializable &&
             is_iterator_contiguous<Iter>::value
@@ -514,7 +504,7 @@ namespace upcxx {
           std::size_t n0 = (edge_ - size0)/elt_ub.size;
           n0 = n < n0 ? n : n0;
           
-          beg = this->template push_elts_bounded_<T,Iter>(beg, n0, trivial_and_contiguous);
+          beg = this->template write_elts_bounded_<T,Iter>(beg, n0, trivial_and_contiguous);
           n -= n0;
           
           if(n != 0) {
@@ -522,7 +512,7 @@ namespace upcxx {
             std::size_t size1 = size0 + n*elt_ub.size;
             this->grow(size0, size1);
             
-            this->template push_elts_bounded_<T,Iter>(beg, n, trivial_and_contiguous);
+            this->template write_elts_bounded_<T,Iter>(beg, n, trivial_and_contiguous);
           }
         }
         else {
@@ -538,7 +528,7 @@ namespace upcxx {
       }
 
       template<typename T, typename Iter, bool n_is_valid>
-      std::size_t push_sequence_(Iter beg, Iter end, std::integral_constant<bool,n_is_valid>, std::size_t n, invalid_storage_size_t elt_ub) {
+      std::size_t write_sequence_(Iter beg, Iter end, std::integral_constant<bool,n_is_valid>, std::size_t n, invalid_storage_size_t elt_ub) {
         if(n_is_valid) {
           std::size_t n1 = n;
           while(n1-- != 0) {
@@ -559,21 +549,21 @@ namespace upcxx {
       
     public:
       template<typename Iter>
-      std::size_t push_sequence(Iter beg, Iter end) {
+      std::size_t write_sequence(Iter beg, Iter end) {
         using T = typename std::remove_cv<
             typename std::iterator_traits<Iter>::value_type
           >::type;
         
-        return this->template push_sequence_<T,Iter>(beg, end, std::false_type(), 0, serialization_traits<T>::static_ubound);
+        return this->template write_sequence_<T,Iter>(beg, end, std::false_type(), 0, serialization_traits<T>::static_ubound);
       }
       
       template<typename Iter>
-      std::size_t push_sequence(Iter beg, Iter end, std::size_t n) {
+      std::size_t write_sequence(Iter beg, Iter end, std::size_t n) {
         using T = typename std::remove_cv<
             typename std::iterator_traits<Iter>::value_type
           >::type;
         
-        return this->template push_sequence_<T,Iter>(beg, end, std::true_type(), n, serialization_traits<T>::static_ubound);
+        return this->template write_sequence_<T,Iter>(beg, end, std::true_type(), n, serialization_traits<T>::static_ubound);
       }
     };
 
@@ -590,14 +580,14 @@ namespace upcxx {
       void jump(std::uintptr_t delta) { head_ += delta; }
       
       template<typename T, typename T1 = typename serialization_traits<T>::deserialized_type>
-      T1 pop() {
+      T1 read() {
         detail::raw_storage<T1> raw;
         upcxx::template serialization_traits<T>::deserialize(*this, &raw);
         return raw.value_and_destruct();
       }
 
       template<typename T, typename T1 = typename serialization_traits<T>::deserialized_type>
-      T1* pop_into(void *raw) {
+      T1* read_into(void *raw) {
         return upcxx::template serialization_traits<T>::deserialize(*this, raw);
       }
 
@@ -617,30 +607,30 @@ namespace upcxx {
       }
 
       template<typename T>
-      T* pop_trivial_into(void *raw) {
+      T* read_trivial_into(void *raw) {
         return detail::template construct_trivial<T>(raw, this->unplace(storage_size_of<T>()));
       }
 
       template<typename T>
-      T pop_trivial() {
+      T read_trivial() {
         detail::raw_storage<T> raw;
-        T ans = std::move(*this->template pop_trivial_into<T>(&raw));
+        T ans = std::move(*this->template read_trivial_into<T>(&raw));
         raw.destruct();
         return ans;
       }
 
     private:
       template<typename T, typename T1>
-      T1* pop_sequence_into_(void *raw, std::size_t n, std::true_type trivial_serz) {
+      T1* read_sequence_into_(void *raw, std::size_t n, std::true_type trivial_serz) {
         auto ss = storage_size_of<T1>().arrayed(n);
         return detail::template construct_trivial<T1>(raw, this->unplace(ss), n);
       }
 
       template<typename T, typename T1>
-      T1* pop_sequence_into_(void *raw, std::size_t n, std::false_type trivial_serz) {
+      T1* read_sequence_into_(void *raw, std::size_t n, std::false_type trivial_serz) {
         T1 *ans = reinterpret_cast<T1*>(raw);
         for(std::size_t i=0; i != n; i++) {
-          T1 *elt = this->template pop_into<T>(reinterpret_cast<T1*>(raw) + i);
+          T1 *elt = this->template read_into<T>(reinterpret_cast<T1*>(raw) + i);
           if(i == 0) ans = elt;
         }
         return ans;
@@ -649,16 +639,16 @@ namespace upcxx {
     public:
       template<typename T,
                typename T1 = typename serialization_traits<T>::deserialized_type>
-      T1* pop_sequence_into(void *raw, std::size_t n) {
-        return this->template pop_sequence_into_<T,T1>(raw, n,
+      T1* read_sequence_into(void *raw, std::size_t n) {
+        return this->template read_sequence_into_<T,T1>(raw, n,
             std::integral_constant<bool, serialization_traits<T>::is_actually_trivially_serializable>()
           );
       }
       
       template<typename T, typename OutIter>
-      void pop_sequence_into(OutIter into, std::size_t n) {
+      void read_sequence_into(OutIter into, std::size_t n) {
         while(n--) {
-          *into = this->template pop<T>();
+          *into = this->template read<T>();
           ++into;
         }
       }
@@ -702,7 +692,7 @@ namespace upcxx {
 
       template<typename Writer>
       static void serialize(Writer &w, T const &x) {
-        w.template push_trivial<T>(x);
+        w.template write_trivial<T>(x);
       }
 
       static constexpr bool references_buffer = false;
@@ -710,7 +700,7 @@ namespace upcxx {
       
       template<typename Reader>
       static T* deserialize(Reader &r, void *raw) {
-        return r.template pop_trivial_into<T>(raw);
+        return r.template read_trivial_into<T>(raw);
       }
 
       static constexpr bool skip_is_fast = true;
@@ -786,7 +776,7 @@ namespace upcxx {
 
       template<typename Writer>
       static void serialize(Writer &w, TupRefs refs) {
-        w.push(std::template get<i>(refs));
+        w.write(std::template get<i>(refs));
         serialization_fields_each<TupRefs, i+1, n>::serialize(w, refs);
       }
 
@@ -797,7 +787,7 @@ namespace upcxx {
       static void deserialize(Reader &r, TupRefs refs) {
         Ti *spot = &std::template get<i>(refs);
         detail::template destruct<Ti>(*spot);
-        r.template pop_into<Ti>(spot);
+        r.template read_into<Ti>(spot);
         
         serialization_fields_each<TupRefs, i+1, n>::deserialize(r, refs);
       }
@@ -872,7 +862,7 @@ namespace upcxx {
 
     ////////////////////////////////////////////////////////////////////////////
 
-    // ...otherwise checks if has nested subclass T::serialization
+    // ...otherwise checks if has nested subclass T::upcxx_serialization
     template<typename T, typename=void>
     struct serialization_dispatch1;
 
@@ -885,8 +875,8 @@ namespace upcxx {
 
     template<typename T>
     struct serialization_dispatch1<T,
-        typename std::conditional<true, void, typename T::serialization>::type
-      >: T::serialization {
+        typename std::conditional<true, void, typename T::upcxx_serialization>::type
+      >: T::upcxx_serialization {
     };
 
     template<typename T, typename>
@@ -1079,12 +1069,12 @@ namespace upcxx {
 
     template<typename Writer>
     static void serialize(Writer &w, R(&fn)(A...)) {
-      w.push_trivial(deserialized_type(fn));
+      w.write_trivial(deserialized_type(fn));
     }
 
     template<typename Reader>
     static deserialized_type* deserialize(Reader &r, void *raw) {
-      return r.template pop_trivial_into<deserialized_type>(raw);
+      return r.template read_trivial_into<deserialized_type>(raw);
     }
 
     static constexpr bool skip_is_fast = true;
@@ -1140,13 +1130,13 @@ namespace upcxx {
 
       template<typename Writer>
       static void serialize(Writer &w, std::tuple<T...> const &x) {
-        w.template push<Ti>(std::template get<i>(x));
+        w.template write<Ti>(std::template get<i>(x));
         recurse_tail::serialize(w, x);
       }
 
       template<typename Reader, typename Storage, typename Pointers>
       static void deserialize_each(Reader &r, Storage &raws, Pointers &ptrs) {
-        std::template get<i>(ptrs) = r.template pop_into<Ti>(&std::template get<i>(raws));
+        std::template get<i>(ptrs) = r.template read_into<Ti>(&std::template get<i>(raws));
         recurse_tail::deserialize_each(r, raws, ptrs);
       }
 
@@ -1251,8 +1241,8 @@ namespace upcxx {
     
     template<typename Writer>
     static void serialize(Writer &w, std::pair<A,B> const &x) {
-      w.template push<A>(x.first);
-      w.template push<B>(x.second);
+      w.template write<A>(x.first);
+      w.template write<B>(x.second);
     }
 
     static constexpr bool references_buffer =
@@ -1266,8 +1256,8 @@ namespace upcxx {
     
     template<typename Reader>
     static deserialized_type* deserialize(Reader &r, void *raw) {
-      A1 a = r.template pop<A>();
-      B1 b = r.template pop<B>();
+      A1 a = r.template read<A>();
+      B1 b = r.template read<B>();
       return ::new(raw) std::pair<A1,B1>{std::move(a), std::move(b)};
     }
 
@@ -1305,7 +1295,7 @@ namespace upcxx {
     
     template<typename Writer>
     static void serialize(Writer &w, std::array<T,n> const &x) {
-      w.push_sequence(&x[0], &x[0] + n, n);
+      w.write_sequence(&x[0], &x[0] + n, n);
     }
 
     static constexpr bool references_buffer = serialization_traits<T>::references_buffer;
@@ -1316,7 +1306,7 @@ namespace upcxx {
     
     template<typename Reader>
     static deserialized_type* deserialize(Reader &r, void *raw) {
-      return reinterpret_cast<std::array<T1,n>*>(r.template pop_sequence_into<T>(raw, n));
+      return reinterpret_cast<std::array<T1,n>*>(r.template read_sequence_into<T>(raw, n));
     }
 
     static constexpr bool skip_is_fast = detail::serialization_reader::template skip_sequence_is_fast<T>();
@@ -1350,7 +1340,7 @@ namespace upcxx {
     
     template<typename Writer>
     static void serialize(Writer &w, T const(&x)[n]) {
-      w.push_sequence(&x[0], &x[0] + n, n);
+      w.write_sequence(&x[0], &x[0] + n, n);
     }
 
     static constexpr bool references_buffer = serialization_traits<T>::references_buffer;
@@ -1361,7 +1351,7 @@ namespace upcxx {
     
     template<typename Reader>
     static deserialized_type* deserialize(Reader &r, void *raw) {
-      return reinterpret_cast<T1(*)[n]>(r.template pop_sequence_into<T>(raw, n));
+      return reinterpret_cast<T1(*)[n]>(r.template read_sequence_into<T>(raw, n));
     }
 
     static constexpr bool skip_is_fast = detail::serialization_reader::template skip_sequence_is_fast<T>();
@@ -1397,15 +1387,15 @@ namespace upcxx {
     template<typename Writer>
     static void serialize(Writer &w, Str const &s) {
       std::size_t n = s.size();
-      w.template push<std::size_t>(n);
-      w.push_sequence(&s[0], &s[0] + n, n);
+      w.template write<std::size_t>(n);
+      w.write_sequence(&s[0], &s[0] + n, n);
     }
 
     static constexpr bool references_buffer = false;
     
     template<typename Reader>
     static Str* deserialize(Reader &r, void *raw) {
-      std::size_t n = r.template pop<std::size_t>();
+      std::size_t n = r.template read<std::size_t>();
       CharT const *p = (CharT const*)r.unplace(storage_size_of<CharT>().arrayed(n));
       return ::new(raw) Str(p, n);
     }
@@ -1414,7 +1404,7 @@ namespace upcxx {
 
     template<typename Reader>
     static void skip(Reader &r) {
-      std::size_t n = r.template pop<std::size_t>();
+      std::size_t n = r.template read<std::size_t>();
       r.unplace(storage_size_of<CharT>().arrayed(n));
     }
   };
@@ -1468,8 +1458,8 @@ namespace upcxx {
       template<typename Writer>
       static void serialize(Writer &w, BagIn const &bag) {
         std::size_t n = bag.size();
-        w.push_trivial(n);
-        w.push_sequence(bag.begin(), bag.end(), n);
+        w.write_trivial(n);
+        w.write_sequence(bag.begin(), bag.end(), n);
       }
 
       static constexpr bool references_buffer = serialization_traits<T0>::references_buffer;
@@ -1478,16 +1468,16 @@ namespace upcxx {
 
       template<typename Reader>
       static BagOut* deserialize(Reader &r, void *raw) {
-        std::size_t n = r.template pop_trivial<std::size_t>();
+        std::size_t n = r.template read_trivial<std::size_t>();
         BagOut *bag = ::new(raw) BagOut;
         detail::template reserve_if_supported<BagOut>()(*bag, n);
-        r.template pop_sequence_into<T0>(detail::template inserter<BagOut>()(*bag), n);
+        r.template read_sequence_into<T0>(detail::template inserter<BagOut>()(*bag), n);
         return bag;
       }
 
       template<typename Reader>
       static void skip(Reader &r) {
-        std::size_t n = r.template pop_trivial<std::size_t>();
+        std::size_t n = r.template read_trivial<std::size_t>();
         r.template skip_sequence<T0>(n);
       }
 
@@ -1597,7 +1587,7 @@ namespace upcxx {
     template<typename Writer>
     static void serialize(Writer &w, std::forward_list<T0,Alloc> const &bag) {
       void *n_spot = w.place(storage_size_of<std::size_t>());
-      std::size_t n = w.push_sequence(bag.begin(), bag.end());
+      std::size_t n = w.write_sequence(bag.begin(), bag.end());
       ::new(n_spot) std::size_t(n);
     }
 
@@ -1607,21 +1597,21 @@ namespace upcxx {
 
     template<typename Reader>
     static deserialized_type* deserialize(Reader &r, void *raw) {
-      std::size_t n = r.template pop_trivial<std::size_t>();
+      std::size_t n = r.template read_trivial<std::size_t>();
       deserialized_type *ans = ::new(raw) deserialized_type;
       if(n != 0) {
-        ans->push_front(r.template pop<T0>());
+        ans->push_front(r.template read<T0>());
         
         auto last = ans->begin();
         while(n--)
-          last = ans->insert_after(last, r.template pop<T0>());
+          last = ans->insert_after(last, r.template read<T0>());
       }
       return ans;
     }
 
     template<typename Reader>
     static void skip(Reader &r) {
-      std::size_t n = r.template pop_trivial<std::size_t>();
+      std::size_t n = r.template read_trivial<std::size_t>();
       r.template skip_sequence<T>(n);
     }
 

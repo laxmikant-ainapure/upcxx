@@ -29,7 +29,7 @@ namespace detail {
     static void the_executor(Arg ...a) {
       detail::serialization_reader r = reader(a...);
       
-      r.template pop_trivial<executor_wire_t>();
+      r.template read_trivial<executor_wire_t>();
       
       detail::raw_storage<typename serialization_traits<Fn>::deserialized_type> fn;
       serialization_traits<Fn>::deserialize(r, &fn);
@@ -44,7 +44,7 @@ namespace detail {
     // Given a reader in the same state as the one passed into `command::serialize`,
     // this will retrieve the executor function.
     static executor_t get_executor(detail::serialization_reader r) {
-      executor_wire_t exec = r.template pop_trivial<executor_wire_t>();
+      executor_wire_t exec = r.template read_trivial<executor_wire_t>();
       UPCXX_ASSERT(exec.u_ != 0);
       return exec.fnptr_non_null();
     }
@@ -69,7 +69,7 @@ namespace detail {
     static void serialize(Writer &w, std::size_t size_ub, Fn1 &&fn) {
       executor_wire_t exec = executor_wire_t(&the_executor<Fn,reader,cleanup>);
       
-      w.template push_trivial<executor_wire_t>(exec);
+      w.template write_trivial<executor_wire_t>(exec);
       
       serialization_traits<Fn>::serialize(w, fn);
       

@@ -82,18 +82,18 @@ struct nonpod2 {
     return h==that.h && i==that.i;
   }
 
-  struct serialization {
+  struct upcxx_serialization {
     template<typename Writer>
     static void serialize(Writer &w, nonpod2 const &x) {
-      w.push(0xbeef);
-      w.push(x.h);
-      w.push(x.i);
+      w.write(0xbeef);
+      w.write(x.h);
+      w.write(x.i);
     }
     template<typename Reader>
     static nonpod2* deserialize(Reader &r, void *spot) {
-      UPCXX_ASSERT_ALWAYS(r.template pop<int>() == 0xbeef);
-      char h = r.template pop<char>();
-      char i = r.template pop<char>();
+      UPCXX_ASSERT_ALWAYS(r.template read<int>() == 0xbeef);
+      char h = r.template read<char>();
+      char i = r.template read<char>();
       return ::new(spot) nonpod2(h,i);
     }
   };
@@ -129,15 +129,15 @@ namespace upcxx {
     
     template<typename Writer>
     static void serialize(Writer &w, nonpod3 const &x) {
-      w.push(0xbeef);
-      w.push(x.h);
-      w.push(x.i);
+      w.write(0xbeef);
+      w.write(x.h);
+      w.write(x.i);
     }
     template<typename Reader>
     static nonpod3* deserialize(Reader &r, void *spot) {
-      UPCXX_ASSERT_ALWAYS(r.template pop<int>() == 0xbeef);
-      char h = r.template pop<char>();
-      char i = r.template pop<char>();
+      UPCXX_ASSERT_ALWAYS(r.template read<int>() == 0xbeef);
+      char h = r.template read<char>();
+      char i = r.template read<char>();
       return ::new(spot) nonpod3(h,i);
     }
   };
