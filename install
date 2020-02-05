@@ -1,18 +1,18 @@
-#!/bin/bash
+#!/bin/sh
 
-function usage {
+usage () {
   cat<<EOF
 Usage: ./install <install-to-path>
   See INSTALL.md for instructions.
 EOF
 }
 
-function failure_and_die {
+failure_and_die () {
   echo "UPC++ Installation failed. Please report the ENTIRE log above to: upcxx@googlegroups.com" >&2
   exit 1
 }
 
-function big_warning {
+big_warning () {
   cat<<EOF
 *******
 WARNING: This install script exists only to support legacy usage.
@@ -25,10 +25,10 @@ EOF
 
 big_warning
 
-if [[ "$1" = "-h" || "$1" = "--help" ]]; then
+if test "$1" = "-h" || test "$1" = "--help"; then
   usage
   exit 0
-elif [ "$#" -eq 1 ]; then
+elif test "$#" -eq 1; then
   install_to="$1"
 else
   >&2 usage

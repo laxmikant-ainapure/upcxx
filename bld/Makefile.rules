@@ -2,7 +2,7 @@
 # Top-level Makefile, minus the configuration variables
 #
 
-SHELL = /bin/bash
+SHELL = $(UPCXX_BASH)
 DST =
 
 default: all ; @: # empty rule

@@ -1,6 +1,6 @@
 # Makefile fragment for cached "make exe" behavior
 
-export SHELL = /bin/bash
+export SHELL = $(UPCXX_BASH)
 
 # Variables for more readable rules
 self       = $(upcxx_src)/bld/Makefile-exe.mak
