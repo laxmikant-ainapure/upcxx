@@ -36,7 +36,7 @@ else
 fi
 
 ./configure --prefix="${install_to}" || failure_and_die
-${UPCXX_MAKE:-make -j8} install || failure_and_die
+${UPCXX_MAKE:-${GMAKE:-make} -j8} install || failure_and_die
 
 echo 'UPC++ successfully installed'
 big_warning
