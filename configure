@@ -106,7 +106,7 @@ Usage:
         The default is normally sufficient.
 
   --with-gmake=...
-        Specify the location GNU Make 3.80 or newer.
+        Specify the location of GNU Make 3.80 or newer.
         Overrides the value of $GMAKE, if any.
         Default is to search for 'gmake' or 'make' in $PATH.
 
