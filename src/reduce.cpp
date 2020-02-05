@@ -1,9 +1,7 @@
 #include <upcxx/reduce.hpp>
 #include <upcxx/backend/gasnet/runtime.hpp>
 #include <upcxx/backend/gasnet/runtime_internal.hpp>
-#if !NOBS_DISCOVERY
-  #include <gasnet_coll.h>
-#endif
+#include <gasnet_coll.h>
 
 using namespace upcxx;
 using namespace std;

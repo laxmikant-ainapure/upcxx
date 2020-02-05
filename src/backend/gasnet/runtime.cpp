@@ -47,18 +47,16 @@ using namespace std;
 
 ////////////////////////////////////////////////////////////////////////
 
-#if !NOBS_DISCOVERY
-  #if UPCXX_BACKEND_GASNET_SEQ && !GASNET_SEQ
+#if UPCXX_BACKEND_GASNET_SEQ && !GASNET_SEQ
     #error "This backend is gasnet-seq only!"
-  #endif
+#endif
 
-  #if UPCXX_BACKEND_GASNET_PAR && !GASNET_PAR
+#if UPCXX_BACKEND_GASNET_PAR && !GASNET_PAR
     #error "This backend is gasnet-par only!"
-  #endif
+#endif
 
-  #if GASNET_SEGMENT_EVERYTHING
+#if GASNET_SEGMENT_EVERYTHING
     #error "Segment-everything not supported."
-  #endif
 #endif
 
 static_assert(

@@ -8,7 +8,7 @@
 
 #include <omp.h>
 
-#if !NOBS_DISCOVERY && !UPCXX_BACKEND_GASNET_PAR
+#if !UPCXX_BACKEND_GASNET_PAR
   #error "UPCXX_BACKEND=gasnet_par required."
 #endif
 
