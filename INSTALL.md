@@ -286,9 +286,9 @@ passed to the `configure` script.  Use the appropriate value for your system:
 * `--with-cross=cray-aries-slurm`: Cray XC systems using the SLURM job scheduler (srun)
 * `--with-cross=cray-aries-alps`: Cray XC systems using the Cray ALPS job scheduler (aprun)
 
-When Intel compilers are being used (usually the default for these systems), 
-a gcc environment module (6.4.0 or newer) is also required, and may need to be
-explicitly loaded, e.g.:
+When Intel compilers are being used (usually the default for these systems),
+`g++` in `$PATH` must be version 6.4.0 or newer.  If the default is too old,
+then you may need to explicitly load a `gcc` environment module, e.g.:
 
 ```bash
 module load gcc/7.1.0

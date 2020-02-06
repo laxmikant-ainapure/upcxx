@@ -51,8 +51,9 @@ platform_sanity_checks() {
         elif test -n "$CRAY_PRGENVPGI" ; then
             echo 'ERROR: UPC++ on Cray XC currently requires PrgEnv-gnu, intel or cray. Please do: `module switch PrgEnv-pgi PrgEnv-FAMILY` for your preferred compiler FAMILY'
             exit 1
-        elif test -n "$CRAY_PRGENVINTEL" && ( test -z "$GCC_VERSION" || expr "$GCC_VERSION" : "^[2345]" > /dev/null || expr "$GCC_VERSION" : "^6.[123]" > /dev/null ) ; then
-            echo 'ERROR: UPC++ on Cray XC with PrgEnv-intel must also have the gcc module loaded (version 6.4 or newer). Please do: `module load gcc`'
+        elif test -n "$CRAY_PRGENVINTEL" &&
+             g++ --version | head -1 | egrep ' +\([^\)]+\) +([1-5]\.|6\.[0-3])' 2>&1 > /dev/null ; then
+            echo 'ERROR: UPC++ on Cray XC with PrgEnv-intel requires g++ version 6.4 or newer in \$PATH. Please do: `module load gcc`, or otherwise ensure a new-enough `g++` is available.'
             exit 1
         elif test -n "$CRAY_PRGENVGNU$CRAY_PRGENVINTEL$CRAY_PRGENVCRAY" ; then
             CC=${CC:-cc}
