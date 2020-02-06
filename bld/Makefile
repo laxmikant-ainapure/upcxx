@@ -233,7 +233,7 @@ do-upcxx-run: force
 define upcxx_run_body
 #!$(UPCXX_BASH)
 export GASNET_PREFIX='$(builddir)/$(GASNETDIR)'
-exec '$(top_srcdir)/utils/upcxx-run' "$$@"
+exec $(UPCXX_PYTHON) '$(top_srcdir)/utils/upcxx-run' "$$@"
 endef
 
 # Body of a upcxx wrapper in a build dir
