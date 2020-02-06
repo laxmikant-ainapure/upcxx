@@ -158,6 +158,64 @@ test_install: force
 	 echo '  $(NETWORKS)'; \
 	 echo ' '
 
+.PHONY: do-post-install-test-script
+do-post-install-test-script: force
+	mkdir -p $(DESTDIR)$(prefix)/bin
+	@(                                                                \
+	 echo '#!$(UPCXX_BASH)';                                          \
+	 echo 'function shout { echo -e "========\n$$*\n========"; }';    \
+	 echo 'shout "Testing the UPC++ install at $(prefix)"';           \
+	 echo 'WORKDIR=$${TMPDIR:-/tmp}';                                 \
+	 echo 'cd $$WORKDIR';                                             \
+	 echo 'if [[ $$? != 0 ]]; then';                                  \
+	 echo '  echo ABORTING - Failed to cd to $$WORKDIR';              \
+	 echo '  exit 1';                                                 \
+	 echo 'fi';                                                       \
+	 echo 'UPCXX="$(prefix)/bin/upcxx"';                              \
+	 echo 'STEM="test-upcxx-$$$$"';                                   \
+	 echo 'SRCFILE="$$STEM.cpp"';                                     \
+	 echo 'EXEFILE="$$STEM$(EXESUFFIX)"';                             \
+	 echo 'for file in $$SRCFILE $$EXEFILE; do';                      \
+	 echo '  if [[ -e $$file ]]; then';                               \
+	 echo '    shout ABORTING';                                       \
+	 echo '    echo Would overwrite existing $$WORKDIR/$$file.';      \
+	 echo '    exit 1';                                               \
+	 echo '  fi';                                                     \
+	 echo 'done';                                                     \
+	 echo 'PS4=';                                                     \
+	 echo 'function cleanup { rm -f $$SRCFILE $$EXEFILE; }';          \
+	 echo 'trap cleanup EXIT';                                        \
+	 echo 'cat > $$SRCFILE <<_EOF';                                   \
+	 echo '#include <upcxx/upcxx.hpp>';                               \
+	 echo '#include <iostream>';                                      \
+	 echo '#include <sstream>';                                       \
+	 echo 'int main() {';                                             \
+	 echo '  upcxx::init();';                                         \
+	 echo '  std::ostringstream oss;';                                \
+	 echo '  oss << "Hello from "<<upcxx::rank_me()<<" of "<<upcxx::rank_n()<<std::endl;'; \
+	 echo '  std::cout << oss.str() << std::flush;';                  \
+	 echo '  upcxx::finalize();';                                     \
+	 echo '  return 0;';                                              \
+	 echo '}';                                                        \
+	 echo '_EOF';                                                     \
+	 echo 'for codemode in $(subst opt,O3,$(UPCXX_DBGOPT)); do';      \
+	 echo '  for threadmode in seq par; do';                          \
+	 echo '    for network in $(filter-out $(UNOFFICIAL_CONDUITS),$(CONDUITS)); do'; \
+	 echo '      (set -x; $$UPCXX -codemode=$$codemode \';            \
+	 echo '                      -threadmode=$$threadmode \';         \
+	 echo '                      -network=$$network \';               \
+	 echo '                      $$SRCFILE -o $$EXEFILE)';            \
+	 echo '      if [[ $$? != 0 ]]; then';                            \
+	 echo '        shout FAILED; exit 1';                             \
+	 echo '      fi';                                                 \
+	 echo '    done';                                                 \
+	 echo '  done';                                                   \
+	 echo 'done';                                                     \
+	 echo 'shout SUCCESS';                                            \
+	 echo 'exit 0';                                                   \
+	) >| $(DESTDIR)$(prefix)/bin/test-upcxx-install.sh
+	chmod 755 $(DESTDIR)$(prefix)/bin/test-upcxx-install.sh
+
 tests: force
 	@$(MAKE) $(MAKE_HERE) do-test-prereqs
 	@$(MAKE) $(MAKE_HERE) do-tests UPCXX_BINDIR=$(upcxx_bld)/bin UPCXX_QUIET=1 UPCXX_SKIP_REBUILD=1
