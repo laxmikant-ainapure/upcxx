@@ -175,6 +175,35 @@ void test_team_t(const upcxx::team &tm, std::vector<atomic_op> ops) {
   // of technically breaking atomicity semantics. See spec 13.1-2
 }
 
+template<typename T, size_t sz>
+struct _test_type {
+  void operator()(const char *TN, const upcxx::team &tm, std::vector<atomic_op> const &ops) {
+    if (!upcxx::rank_me()) 
+      std::cout << " --- SKIPPING atomic_domain<" << TN << "> --- (" << (sz*8) << "-bit)" << std::endl;
+    upcxx::barrier();
+  }
+};
+template<typename T>
+struct _test_type<T,4> {
+  void operator()(const char *TN, const upcxx::team &tm, std::vector<atomic_op> const &ops) {
+    if (!upcxx::rank_me()) 
+      std::cout << " --- Testing atomic_domain<" << TN << "> --- (32-bit)" << std::endl;
+    upcxx::barrier();
+    test_team_t<T>(tm,ops);
+  }
+};
+template<typename T>
+struct _test_type<T,8> {
+  void operator()(const char *TN, const upcxx::team &tm, std::vector<atomic_op> const &ops) {
+    if (!upcxx::rank_me()) 
+      std::cout << " --- Testing atomic_domain<" << TN << "> --- (64-bit)" << std::endl;
+    upcxx::barrier();
+    test_team_t<T>(tm,ops);
+  }
+};
+#define TEST_TYPE(T,ops) _test_type<T, sizeof(T)>()(#T, tm, ops)
+
+
 void test_team(const upcxx::team &tm) {
 
   upcxx::atomic_domain<int32_t> ad_i({atomic_op::store, atomic_op::fetch_add}, tm);
@@ -197,17 +226,34 @@ void test_team(const upcxx::team &tm) {
   ad_i.destroy();
 
   // test operation for all supported types
-  #define TEST_TYPE(T,ops) \
-    if (!upcxx::rank_me()) \
-      std::cout << " --- Testing atomic_domain<" #T "> --- " << std::endl; \
-    upcxx::barrier(); \
-    test_team_t<T>(tm,ops);
+
+  // Fixed-width integers
   TEST_TYPE(int32_t,  all_ops);
   TEST_TYPE(uint32_t, all_ops);
   TEST_TYPE(int64_t,  all_ops);
   TEST_TYPE(uint64_t, all_ops);
+
+  // Floating-point
   TEST_TYPE(float,    fp_ops);
   TEST_TYPE(double,   fp_ops);
+
+  // General integer types
+  TEST_TYPE(short,              all_ops);
+  TEST_TYPE(unsigned short,     all_ops);
+  TEST_TYPE(int,                all_ops);
+  TEST_TYPE(unsigned int,       all_ops);
+  TEST_TYPE(long,               all_ops);
+  TEST_TYPE(unsigned long,      all_ops);
+  TEST_TYPE(long long,          all_ops);
+  TEST_TYPE(unsigned long long, all_ops);
+  TEST_TYPE(ptrdiff_t,          all_ops);
+  TEST_TYPE(size_t,             all_ops);
+  TEST_TYPE(intptr_t,           all_ops);
+  TEST_TYPE(uintptr_t,          all_ops);
+
+  TEST_TYPE(intmax_t,  all_ops);
+  TEST_TYPE(uintmax_t, all_ops);
+
   upcxx::barrier();
   if (!upcxx::rank_me()) std::cout << "PASSED" << std::endl;
 }
