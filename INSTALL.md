@@ -278,6 +278,12 @@ For users of CMake 3.6 or newer, `<upcxx-install-path>/share/cmake/UPCXX`
 contains a `UPCXXConfig.cmake`.  Consult CMake documentation for instructions
 on use of this file.
 
+Finally, `<upcxx-install-path>/bin/test-upcxx-install.sh` is a script which can
+be run to replicate the verification performed by `make test_install` _without_
+`<upcxx-source-path>` and/or `<upcxx-build-path>`.  This could be useful, for
+instance, to verify permissions for a user other than the one performing the
+installation.
+
 ### Configuration: Cray XC
 
 To run on the compute nodes of a Cray XC, the `--with-cross=...` option must be
