@@ -96,12 +96,6 @@ The make targets utilizing the variables above:
 * `make gasnet-single`  
   Builds a single GASNet-EX conduit.
 
-* `make upcxx-unconfig`  
-  This gives a mechanism to remove all generated `upcxx_config.hpp` files.
-  This may be necessary when modifying the GASNet sources or anything that
-  could invalidate the generated header (including the probes themselves).
-  However, `make clean` is also sufficient.
-
 The `exe` and `run` targets accept both absolute and relative paths for `SRC`.
 Additionally, if the `SRC` value appears to be a relative path, but does not
 exist, a search is conducted in the `test`, `example` and `bench` directories
@@ -114,6 +108,27 @@ Note that while bash syntax allows the following sort of incantation:
 passing of the environment variables on the make command line can simplify this
 slightly to:  
     `X=$(make exe DBGSYM=1 ASSERT=1 OPTLEV=0 SRC=hello_gasnet.cpp)`
+
+Additional make targets:
+
+* `make upcxx-unconfig`  
+  This gives a mechanism to remove all generated `upcxx_config.hpp` files.
+  This may be necessary when modifying the GASNet sources or anything that
+  could invalidate the generated header (though modifying the probes will
+  also trigger regeneration).
+  However, `make clean` is also sufficient.
+
+* `make gasnet [DO_WHAT=sub_target] [NETWORK=xyz] [UPCXX_CODEMODE={O3,debug}]`  
+  This is a shortcut for `make -C <CONDUIT_DIR> sub_target`, where the value of
+  `<CONDUIT_DIR>` is computed from the `NETWORK` and `UPCXX_CODEMODE`, which
+  default to the default network and `debug`, respectively.  The default
+  `sub_target` is `all`.  
+  The `gasnet` target is intended to serve in support scenarios where one wants
+  to build and/or launch GASNet-EX jobs independent of libupcxx.  Therefore,
+  the names `NETWORK` and `UPCXX_CODEMODE` were chosen to match the concepts
+  used in user-facing documentation.  
+  Example: `make gasnet DO_WHAT=run-tests-seq` will build and run all of the
+  GASNet tests of the default network in debug mode.
 
 All make targets described here (as well as those documented for the end-user
 in [INSTALL.md](../INSTALL.md)) are intended to be parallel-make-safe (Eg `make
