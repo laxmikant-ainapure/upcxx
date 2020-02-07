@@ -172,7 +172,7 @@ tests: force
 	 echo 'First, ensure you are in a proper environment for launching parallel jobs'; \
 	 echo '(eg batch system session, if necessary) and then issue a command like:'; \
 	 echo ' '; \
-	 echo '  $(upcxx_bld)/bin)/upcxx-run -n 2 ./test-hello_upcxx-$(firstword $(NETWORKS))'; \
+	 echo '  $(upcxx_bld)/bin/upcxx-run -n 2 ./test-hello_upcxx-$(firstword $(NETWORKS))'; \
 	 echo ' '; \
 	 echo 'And similarly for any other of the tests compiled above.'
 
