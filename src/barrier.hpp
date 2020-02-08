@@ -16,10 +16,10 @@ namespace upcxx {
       using tuple_t = std::tuple<>;
     };
 
-    void barrier_async_inject(team &tm, backend::gasnet::handle_cb *cb);
+    void barrier_async_inject(const team &tm, backend::gasnet::handle_cb *cb);
   }
   
-  void barrier(team &tm = upcxx::world());
+  void barrier(const team &tm = upcxx::world());
   
   template<typename Cxs = completions<future_cx<operation_cx_event>>>
   typename detail::completions_returner<
@@ -28,7 +28,7 @@ namespace upcxx {
       Cxs
     >::return_t
   barrier_async(
-      team &tm = upcxx::world(),
+      const team &tm = upcxx::world(),
       Cxs cxs = completions<future_cx<operation_cx_event>>({})
     ) {
 

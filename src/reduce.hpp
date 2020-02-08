@@ -216,7 +216,7 @@ namespace upcxx {
     // Calls out to gex_Coll_ReduceTo{One,All}NB
     
     void reduce_one_or_all_trivial_erased(
-        team &tm, intrank_t root_or_all/*-1 = all*/,
+        const team &tm, intrank_t root_or_all/*-1 = all*/,
         const void *src, void *dst,
         std::size_t elt_sz, std::size_t elt_n,
         std::uintptr_t ty_id,
@@ -236,7 +236,7 @@ namespace upcxx {
       >::return_t
     reduce_one_or_all_trivial(
         T1 &&value, BinaryOp op, intrank_t root_or_all/*-1 = all*/,
-        team &tm = upcxx::world(),
+        const team &tm = upcxx::world(),
         Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
       ) {
       
@@ -308,7 +308,7 @@ namespace upcxx {
     reduce_one_or_all_trivial(
         T const *src, T *dst, std::size_t n,
         BinaryOp op, intrank_t root_or_all/*-1 = all*/,
-        team &tm = upcxx::world(),
+        const team &tm = upcxx::world(),
         Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
       ) {
       
@@ -375,7 +375,7 @@ namespace upcxx {
       }
       
       template<typename T1>
-      static void contribute(team&, intrank_t root, digest id, Op const &op, T1 &&value, cxs_state_t *cxs_st);
+      static void contribute(const team&, intrank_t root, digest id, Op const &op, T1 &&value, cxs_state_t *cxs_st);
     };
   }
   
@@ -392,7 +392,7 @@ namespace upcxx {
     >::return_t
   reduce_one(
       T1 value, BinaryOp op, intrank_t root,
-      team &tm = upcxx::world(),
+      const team &tm = upcxx::world(),
       Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
     ) {
     UPCXX_ASSERT(0 <= root && root < tm.rank_n());
@@ -412,7 +412,7 @@ namespace upcxx {
    reduce_one(
       T const *src, T *dst, std::size_t n,
       BinaryOp op, intrank_t root,
-      team &tm = upcxx::world(),
+      const team &tm = upcxx::world(),
       Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
     ) {
     UPCXX_ASSERT(0 <= root && root < tm.rank_n());
@@ -436,7 +436,7 @@ namespace upcxx {
       >::return_t
     reduce_one_nontrivial(
         T1 &&value, BinaryOp op, intrank_t root,
-        team &tm,
+        const team &tm,
         Cxs cxs,
         std::true_type trivial_yes
       ) {
@@ -453,7 +453,7 @@ namespace upcxx {
       >::return_t
     reduce_one_nontrivial(
         T1 &&value, BinaryOp op, intrank_t root,
-        team &tm,
+        const team &tm,
         Cxs cxs,
         std::false_type trivial_no
       ) {
@@ -468,7 +468,7 @@ namespace upcxx {
           Cxs
         >(cxs_st);
         
-      digest id = tm.next_collective_id(detail::internal_only());
+      digest id = const_cast<team*>(&tm)->next_collective_id(detail::internal_only());
       
       reduce_state::contribute(
           tm, root, id, std::move(op), std::forward<T1>(value), &cxs_st
@@ -488,7 +488,7 @@ namespace upcxx {
     >::return_t
   reduce_one_nontrivial(
       T1 &&value, BinaryOp op, intrank_t root,
-      team &tm = upcxx::world(),
+      const team &tm = upcxx::world(),
       Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
     ) {
       
@@ -511,7 +511,7 @@ namespace upcxx {
     >::return_t
   reduce_all(
       T1 value, BinaryOp op,
-      team &tm = upcxx::world(),
+      const team &tm = upcxx::world(),
       Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
     ) {
     return detail::reduce_one_or_all_trivial<T1,BinaryOp,Cxs,T>(
@@ -529,7 +529,7 @@ namespace upcxx {
   reduce_all(
       T const *src, T *dst, std::size_t n,
       BinaryOp op,
-      team &tm = upcxx::world(),
+      const team &tm = upcxx::world(),
       Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
     ) {
     return detail::reduce_one_or_all_trivial<T,BinaryOp,Cxs>(
@@ -551,7 +551,7 @@ namespace upcxx {
       >::return_t
     reduce_all_nontrivial(
         T1 &&value, BinaryOp op,
-        team &tm,
+        const team &tm,
         Cxs cxs,
         std::true_type trivial_yes
       ) {
@@ -568,7 +568,7 @@ namespace upcxx {
       >::return_t
     reduce_all_nontrivial(
         T1 &&value, BinaryOp op,
-        team &tm,
+        const team &tm,
         Cxs cxs,
         std::false_type trivial_no
       ) {
@@ -582,7 +582,7 @@ namespace upcxx {
           Cxs
         >(cxs_st);
       
-      digest id = tm.next_collective_id(detail::internal_only());
+      digest id = const_cast<team*>(&tm)->next_collective_id(detail::internal_only());
       intrank_t root = id.w0 % tm.rank_n();
       
       reduce_state::contribute(
@@ -603,7 +603,7 @@ namespace upcxx {
       >::return_t
   reduce_all_nontrivial(
       T1 &&value, BinaryOp op,
-      team &tm = upcxx::world(),
+      const team &tm = upcxx::world(),
       Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
     ) {
     return detail::reduce_all_nontrivial(
@@ -619,7 +619,7 @@ namespace upcxx {
     template<typename T, typename Op, bool one_not_all, typename Cxs>
     template<typename T1>
     void reduce_state<T,Op,one_not_all,Cxs>::contribute(
-        team &tm, intrank_t root, digest id, Op const &op, T1 &&value,
+        const team &tm, intrank_t root, digest id, Op const &op, T1 &&value,
         typename reduce_state::cxs_state_t *cxs_st
       ) {
       

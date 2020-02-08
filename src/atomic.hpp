@@ -53,14 +53,14 @@ namespace upcxx {
       int atomic_gex_ops = 0;
       // The opaque gasnet atomic domain handle.
       std::uintptr_t ad_gex_handle = 0;
-      team *parent_tm_;
+      const team *parent_tm_;
       
       // call to backend gasnet function
       detail::amo_done inject(
         T*, upcxx::global_ptr<T>, atomic_op, T, T,
         std::memory_order order,
         backend::gasnet::handle_cb*
-      );
+      ) const;
       
       // event values for non-fetching operations
       struct nofetch_aop_event_values {
@@ -115,7 +115,7 @@ namespace upcxx {
       // generic fetching atomic operation
       template<typename Cxs = FUTURE_CX>
       FETCH_RTYPE<Cxs> fop(atomic_op aop, global_ptr<T> gptr, std::memory_order order,
-                           T val1 = 0, T val2 = 0, Cxs cxs = Cxs{{}}) {
+                           T val1 = 0, T val2 = 0, Cxs cxs = Cxs{{}}) const {
         UPCXX_ASSERT(atomic_gex_ops != 0 || ad_gex_handle != 0, "Atomic domain is not constructed");
         UPCXX_ASSERT((detail::completions_has_event<Cxs, operation_cx_event>::value));
         UPCXX_ASSERT(gptr != nullptr, "Global pointer for atomic operation is null");
@@ -152,7 +152,7 @@ namespace upcxx {
       // generic non-fetching atomic operation
       template<typename Cxs = FUTURE_CX>
       NOFETCH_RTYPE<Cxs> op(atomic_op aop, global_ptr<T> gptr, std::memory_order order,
-                            T val1 = 0, T val2 = 0, Cxs cxs = Cxs{{}}) {
+                            T val1 = 0, T val2 = 0, Cxs cxs = Cxs{{}}) const {
         UPCXX_ASSERT(atomic_gex_ops != 0 || ad_gex_handle != 0, "Atomic domain is not constructed");
         UPCXX_ASSERT((detail::completions_has_event<Cxs, operation_cx_event>::value));
         UPCXX_ASSERT(gptr != nullptr, "Global pointer for atomic operation is null");
@@ -204,7 +204,7 @@ namespace upcxx {
       }
 
       // The constructor takes a vector of operations. Currently, flags is currently unsupported.
-      atomic_domain(std::vector<atomic_op> const &ops, team &tm = upcxx::world());
+      atomic_domain(std::vector<atomic_op> const &ops, const team &tm = upcxx::world());
       
       #if 0 // disabling move-assignment, for now
       atomic_domain &operator=(atomic_domain &&that) {
@@ -228,32 +228,32 @@ namespace upcxx {
       
       template<typename Cxs = FUTURE_CX>
       NOFETCH_RTYPE<Cxs> store(global_ptr<T> gptr, T val, std::memory_order order,
-                               Cxs cxs = Cxs{{}}) {
+                               Cxs cxs = Cxs{{}}) const {
         return op(atomic_op::store, gptr, order, val, (T)0, cxs);
       }
       template<typename Cxs = FUTURE_CX>
-      FETCH_RTYPE<Cxs> load(global_ptr<T> gptr, std::memory_order order, Cxs cxs = Cxs{{}}) {
+      FETCH_RTYPE<Cxs> load(global_ptr<T> gptr, std::memory_order order, Cxs cxs = Cxs{{}}) const {
         return fop(atomic_op::load, gptr, order, (T)0, (T)0, cxs);
       }
       template<typename Cxs = FUTURE_CX>
-      NOFETCH_RTYPE<Cxs> inc(global_ptr<T> gptr, std::memory_order order, Cxs cxs = Cxs{{}}) {
+      NOFETCH_RTYPE<Cxs> inc(global_ptr<T> gptr, std::memory_order order, Cxs cxs = Cxs{{}}) const {
         return op(atomic_op::inc, gptr, order, (T)0, (T)0, cxs);
       }
       template<typename Cxs = FUTURE_CX>
-      NOFETCH_RTYPE<Cxs> dec(global_ptr<T> gptr, std::memory_order order, Cxs cxs = Cxs{{}}) {
+      NOFETCH_RTYPE<Cxs> dec(global_ptr<T> gptr, std::memory_order order, Cxs cxs = Cxs{{}}) const {
         return op(atomic_op::dec,gptr, order, (T)0, (T)0, cxs);
       }
       template<typename Cxs = FUTURE_CX>
-      FETCH_RTYPE<Cxs> fetch_inc(global_ptr<T> gptr, std::memory_order order, Cxs cxs = Cxs{{}}) {
+      FETCH_RTYPE<Cxs> fetch_inc(global_ptr<T> gptr, std::memory_order order, Cxs cxs = Cxs{{}}) const {
         return fop(atomic_op::fetch_inc, gptr, order, (T)0, (T)0, cxs);
       }
       template<typename Cxs = FUTURE_CX>
-      FETCH_RTYPE<Cxs> fetch_dec(global_ptr<T> gptr, std::memory_order order, Cxs cxs = Cxs{{}}) {
+      FETCH_RTYPE<Cxs> fetch_dec(global_ptr<T> gptr, std::memory_order order, Cxs cxs = Cxs{{}}) const {
         return fop(atomic_op::fetch_dec, gptr, order, (T)0, (T)0, cxs);
       }
       template<typename Cxs = FUTURE_CX>
       FETCH_RTYPE<Cxs> compare_exchange(global_ptr<T> gptr, T val1, T val2, std::memory_order order,
-                                        Cxs cxs = Cxs{{}}) {
+                                        Cxs cxs = Cxs{{}}) const {
         return fop(atomic_op::compare_exchange, gptr, order, val1, val2, cxs);
       }
       
@@ -261,13 +261,13 @@ namespace upcxx {
         template<typename Cxs = FUTURE_CX>\
         constraint(FETCH_RTYPE<Cxs>) \
 	fetch_##name(global_ptr<T> gptr, T val, std::memory_order order,\
-                                      Cxs cxs = Cxs{{}}) {\
+                                      Cxs cxs = Cxs{{}}) const {\
           return fop(atomic_op::fetch_##name, gptr, order, val, (T)0, cxs);\
         }\
         template<typename Cxs = FUTURE_CX>\
         constraint(NOFETCH_RTYPE<Cxs>) \
 	name(global_ptr<T> gptr, T val, std::memory_order order,\
-                                Cxs cxs = Cxs{{}}) {\
+                                Cxs cxs = Cxs{{}}) const {\
           return op(atomic_op::name, gptr, order, val, (T)0, cxs);\
         }
       // sfinae helpers to disable unsupported typo/op combos

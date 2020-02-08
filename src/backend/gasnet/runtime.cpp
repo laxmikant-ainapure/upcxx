@@ -1021,7 +1021,7 @@ void gasnet::deallocate(void *p, sheap_footprint_t *foot) {
 //////////////////////////////////////////////////////////////////////
 // from: upcxx/backend.hpp
 
-void backend::quiesce(team &tm, upcxx::entry_barrier eb) {
+void backend::quiesce(const team &tm, upcxx::entry_barrier eb) {
   switch(eb) {
   case entry_barrier::none:
     break;
@@ -1104,18 +1104,18 @@ tuple<intrank_t/*rank*/, uintptr_t/*raw*/>  backend::globalize_memory(
     return otherwise;
 }
 
-intrank_t backend::team_rank_from_world(team &tm, intrank_t rank) {
+intrank_t backend::team_rank_from_world(const team &tm, intrank_t rank) {
   gex_Rank_t got = gex_TM_TranslateJobrankToRank(gasnet::handle_of(tm), rank);
   UPCXX_ASSERT(got != GEX_RANK_INVALID);
   return got;
 }
 
-intrank_t backend::team_rank_from_world(team &tm, intrank_t rank, intrank_t otherwise) {
+intrank_t backend::team_rank_from_world(const team &tm, intrank_t rank, intrank_t otherwise) {
   gex_Rank_t got = gex_TM_TranslateJobrankToRank(gasnet::handle_of(tm), rank);
   return got == GEX_RANK_INVALID ? otherwise : (intrank_t)got;
 }
 
-intrank_t backend::team_rank_to_world(team &tm, intrank_t peer) {
+intrank_t backend::team_rank_to_world(const team &tm, intrank_t peer) {
   return gex_TM_TranslateRankToJobrank(gasnet::handle_of(tm), peer);
 }
 
@@ -1123,7 +1123,7 @@ intrank_t backend::team_rank_to_world(team &tm, intrank_t peer) {
 // from: upcxx/backend/gasnet/runtime.hpp
 
 void gasnet::send_am_eager_restricted(
-    team &tm,
+    const team &tm,
     intrank_t recipient,
     void *buf,
     std::size_t buf_size,
@@ -1142,7 +1142,7 @@ void gasnet::send_am_eager_restricted(
 
 void gasnet::send_am_eager_master(
     progress_level level,
-    team &tm,
+    const team &tm,
     intrank_t recipient,
     void *buf,
     std::size_t buf_size,
@@ -1161,7 +1161,7 @@ void gasnet::send_am_eager_master(
 
 void gasnet::send_am_eager_persona(
     progress_level level,
-    team &tm,
+    const team &tm,
     intrank_t recipient_rank,
     persona *recipient_persona,
     void *buf,
@@ -1208,7 +1208,7 @@ namespace {
 
 void gasnet::send_am_rdzv(
     progress_level level,
-    team &tm,
+    const team &tm,
     intrank_t rank_d,
     persona *persona_d,
     void *buf_s,
@@ -1263,7 +1263,7 @@ void gasnet::send_am_rdzv(
 
 void gasnet::bcast_am_master_eager(
     progress_level level,
-    upcxx::team &tm,
+    const upcxx::team &tm,
     intrank_t rank_d_ub, // in range [0, 2*rank_n-1)
     bcast_payload_header *payload,
     size_t cmd_size, size_t cmd_align
@@ -1304,7 +1304,7 @@ void gasnet::bcast_am_master_eager(
 
 void gasnet::bcast_am_master_rdzv(
     progress_level level,
-    upcxx::team &tm,
+    const upcxx::team &tm,
     intrank_t rank_d_ub, // in range [0, 2*rank_n-1)
     intrank_t wrank_owner, // self or a local peer (in world)
     bcast_payload_header *payload_owner, // in owner address space
@@ -1844,7 +1844,7 @@ namespace {
 
 template<gasnet::rma_put_then_am_sync sync_lb, bool packed_protocol>
 gasnet::rma_put_then_am_sync gasnet::rma_put_then_am_master_protocol(
-    team &tm, intrank_t rank_d,
+    const team &tm, intrank_t rank_d,
     void *buf_d, void const *buf_s, std::size_t buf_size,
     progress_level am_level, void *am_cmd, std::size_t am_size, std::size_t am_align,
     gasnet::handle_cb *src_cb,
@@ -1954,7 +1954,7 @@ gasnet::rma_put_then_am_sync gasnet::rma_put_then_am_master_protocol(
   template \
   gasnet::rma_put_then_am_sync \
   gasnet::rma_put_then_am_master_protocol<sync_lb, packed_protocol>( \
-      team &tm, intrank_t rank_d, \
+      const team &tm, intrank_t rank_d, \
       void *buf_d, void const *buf_s, std::size_t buf_size, \
       progress_level am_level, void *am_cmd, std::size_t am_size, std::size_t am_align, \
       gasnet::handle_cb *src_cb, \

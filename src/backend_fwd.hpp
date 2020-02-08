@@ -126,7 +126,7 @@ namespace backend {
     #endif
   };
   
-  void quiesce(team &tm, entry_barrier eb);
+  void quiesce(const team &tm, entry_barrier eb);
   
   template<progress_level level, typename Fn>
   void during_level(Fn &&fn, persona &active_per = current_persona());
@@ -148,20 +148,20 @@ namespace backend {
     );
   
   template<progress_level level, typename Fn>
-  void send_am_master(team &tm, intrank_t recipient, Fn &&fn);
+  void send_am_master(const team &tm, intrank_t recipient, Fn &&fn);
   
   template<progress_level level, typename Fn>
-  void send_am_persona(team &tm, intrank_t recipient_rank, persona *recipient_persona, Fn &&fn);
+  void send_am_persona(const team &tm, intrank_t recipient_rank, persona *recipient_persona, Fn &&fn);
 
   template<typename ...T>
-  void send_awaken_lpc(team &tm, intrank_t recipient, detail::lpc_dormant<T...> *lpc, std::tuple<T...> &&vals);
+  void send_awaken_lpc(const team &tm, intrank_t recipient, detail::lpc_dormant<T...> *lpc, std::tuple<T...> &&vals);
 
   template<progress_level level, typename Fn>
-  void bcast_am_master(team &tm, Fn &&fn);
+  void bcast_am_master(const team &tm, Fn &&fn);
   
-  intrank_t team_rank_from_world(team &tm, intrank_t rank);
-  intrank_t team_rank_from_world(team &tm, intrank_t rank, intrank_t otherwise);
-  intrank_t team_rank_to_world(team &tm, intrank_t peer);
+  intrank_t team_rank_from_world(const team &tm, intrank_t rank);
+  intrank_t team_rank_from_world(const team &tm, intrank_t rank, intrank_t otherwise);
+  intrank_t team_rank_to_world(const team &tm, intrank_t peer);
 
   extern const bool all_ranks_definitely_local;
   bool rank_is_local(intrank_t r);

@@ -31,7 +31,7 @@
 namespace upcxx {
 namespace backend {
 namespace gasnet {
-  inline gex_TM_t handle_of(upcxx::team &tm) {
+  inline gex_TM_t handle_of(const upcxx::team &tm) {
     return reinterpret_cast<gex_TM_t>(tm.base(detail::internal_only()).handle);
   }
   

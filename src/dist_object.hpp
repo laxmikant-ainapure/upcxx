@@ -69,17 +69,17 @@ namespace std {
 namespace upcxx {
   template<typename T>
   class dist_object {
-    upcxx::team *tm_;
+    const upcxx::team *tm_;
     digest id_;
     T value_;
     
   public:
     template<typename ...U>
-    dist_object(upcxx::team &tm, U &&...arg):
+    dist_object(const upcxx::team &tm, U &&...arg):
       tm_(&tm),
       value_(std::forward<U>(arg)...) {
       
-      id_ = tm.next_collective_id(detail::internal_only());
+      id_ = const_cast<upcxx::team*>(&tm)->next_collective_id(detail::internal_only());
       
       backend::fulfill_during<progress_level::user>(
           detail::registered_promise<dist_object<T>&>(id_)->incref(1),
@@ -88,11 +88,11 @@ namespace upcxx {
         );
     }
     
-    dist_object(T value, upcxx::team &tm):
+    dist_object(T value, const upcxx::team &tm):
       tm_(&tm),
       value_(std::move(value)) {
       
-      id_ = tm.next_collective_id(detail::internal_only());
+      id_ = const_cast<upcxx::team*>(&tm)->next_collective_id(detail::internal_only());
       
       backend::fulfill_during<progress_level::user>(
           detail::registered_promise<dist_object<T>&>(id_)->incref(1),
@@ -139,7 +139,8 @@ namespace upcxx {
     T* operator->() const { return const_cast<T*>(&value_); }
     T& operator*() const { return const_cast<T&>(value_); }
     
-    upcxx::team& team() const { return *tm_; }
+    upcxx::team& team() { return *const_cast<upcxx::team*>(tm_); }
+    const upcxx::team& team() const { return *tm_; }
     dist_id<T> id() const { return dist_id<T>{id_}; }
     
     future<T> fetch(intrank_t rank) const {
