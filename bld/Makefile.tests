@@ -58,11 +58,11 @@ do-test-prereqs: force
 check: force
 	@$(MAKE) $(MAKE_HERE) -s do-test-prereqs
 	@if [[ '$(strip $(NETWORKS))' = '$(strip $(GASNET_CONDUIT))' ]]; \
-	   then scope='default network:';                                \
-	   else scope='following network(s):';                           \
+	   then scope='the default network,';                            \
+	   else scope='specified';                                       \
 	 fi;                                                             \
 	 echo '************'; \
-	 echo "Compiling and running tests for the $$scope $(strip $(NETWORKS))."; \
+	 echo "Compiling and running tests for $$scope NETWORKS='$(strip $(NETWORKS))'."; \
 	 echo 'Please, ensure you are in a proper environment for launching parallel jobs'; \
 	 echo '(eg batch system session, if necessary) or the run step may fail.'; \
 	 echo '************'; \
@@ -246,7 +246,7 @@ do-run-tests: force
 	@tmpfile=.testtmp_$$$$; rm -f $$tmpfile;                        \
 	 if [[ -z "$(RANKS)" ]]; then ranks=4; else ranks=$(RANKS); fi; \
 	 total=0; failed=0;                                             \
-	 echo "Running tests with $$ranks ranks";                       \
+	 echo "Running tests with RANKS=$$ranks";                       \
 	 for test in $(call ALL_TESTS,$(NETWORKS)); do                  \
 	   [[ -x $$test ]] || continue;                                 \
 	   echo "Running $$test"; : $$((++total));                      \
