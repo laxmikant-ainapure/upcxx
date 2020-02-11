@@ -34,13 +34,13 @@ std::vector<atomic_op> fp_ops;
 constexpr int ITERS = 10;
 
 // let's all hit the same rank
-upcxx::intrank_t target_rank(team &tm) {
+upcxx::intrank_t target_rank(const team &tm) {
   return 0xbeef % tm.rank_n();
 }
 
 template <typename T>
-void test_fetch_add(team &tm, global_ptr<T> target_counter,
-                    upcxx::atomic_domain<T> &dom) {
+void test_fetch_add(const team &tm, global_ptr<T> target_counter,
+                    const upcxx::atomic_domain<T> &dom) {
   T expected_val = static_cast<T>(tm.rank_n() * ITERS);
   if (tm.rank_me() == 0) {
     cout << "Test fetch_add: atomics, expect value " << expected_val << endl;
@@ -97,7 +97,7 @@ void test_fetch_add(team &tm, global_ptr<T> target_counter,
 }
 
 template <typename T>
-void test_put_get(team &tm, global_ptr<T> target_counter, upcxx::atomic_domain<T> &dom) {
+void test_put_get(const team &tm, global_ptr<T> target_counter, const upcxx::atomic_domain<T> &dom) {
   if (tm.rank_me() == 0) {
     cout << "Test puts and gets: expect a random rank number" << endl;
     // always use atomics to access or modify counter
@@ -133,7 +133,7 @@ void test_put_get(team &tm, global_ptr<T> target_counter, upcxx::atomic_domain<T
 #define CHECK_ATOMIC_VAL(v, V) UPCXX_ASSERT_ALWAYS(v == V, "expected " << V << ", got " << v);
 
 template <typename T>
-void test_all_ops(team &tm, global_ptr<T> target_counter, upcxx::atomic_domain<T> &dom) {
+void test_all_ops(const team &tm, global_ptr<T> target_counter, const upcxx::atomic_domain<T> &dom) {
   if (tm.rank_me() == 0) {
     dom.store(target_counter, (T)42, memory_order_relaxed).wait();
     T v = dom.load(target_counter, memory_order_relaxed).wait();
@@ -159,7 +159,7 @@ void test_all_ops(team &tm, global_ptr<T> target_counter, upcxx::atomic_domain<T
 }
 
 template <typename T>
-void test_team_t(upcxx::team &tm, std::vector<atomic_op> ops) {
+void test_team_t(const upcxx::team &tm, std::vector<atomic_op> ops) {
   upcxx::atomic_domain<T> ad_all( ops, tm);
 
   // get the global pointer to the target counter
@@ -175,7 +175,7 @@ void test_team_t(upcxx::team &tm, std::vector<atomic_op> ops) {
   // of technically breaking atomicity semantics. See spec 13.1-2
 }
 
-void test_team(upcxx::team &tm) {
+void test_team(const upcxx::team &tm) {
 
   upcxx::atomic_domain<int32_t> ad_i({atomic_op::store, atomic_op::fetch_add}, tm);
   upcxx::atomic_domain<int32_t> ad; 

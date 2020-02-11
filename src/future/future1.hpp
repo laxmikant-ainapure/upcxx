@@ -182,9 +182,9 @@ namespace upcxx {
         future1<Kind,T...>,
         typename std::decay<Fn>::type
       >::return_type
-    then(Fn &&fn) {
+    then(Fn &&fn) const {
       return detail::future_then<future1<Kind,T...>, typename std::decay<Fn>::type>()(
-        *this,
+        *const_cast<future1<Kind,T...>*>(this),
         std::forward<Fn>(fn)
       );
     }
@@ -203,10 +203,10 @@ namespace upcxx {
 
     #ifdef UPCXX_BACKEND
     template<int i=-1, typename Fn=detail::future_wait_upcxx_progress_user>
-    auto wait(Fn &&progress = detail::future_wait_upcxx_progress_user{})
+    auto wait(Fn &&progress = detail::future_wait_upcxx_progress_user{}) const
     #else
     template<int i=-1, typename Fn>
-    auto wait(Fn &&progress)
+    auto wait(Fn &&progress) const
     #endif
       -> typename std::conditional<
         (i<0 && sizeof...(T) > 1),
@@ -222,10 +222,10 @@ namespace upcxx {
     
     #ifdef UPCXX_BACKEND
     template<typename Fn=detail::future_wait_upcxx_progress_user>
-    results_type wait_tuple(Fn &&progress = detail::future_wait_upcxx_progress_user{})
+    results_type wait_tuple(Fn &&progress = detail::future_wait_upcxx_progress_user{}) const
     #else
     template<typename Fn>
-    results_type wait_tuple(Fn &&progress)
+    results_type wait_tuple(Fn &&progress) const
     #endif
     {
       while(!impl_.ready())

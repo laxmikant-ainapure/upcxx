@@ -60,7 +60,7 @@ namespace upcxx {
   
   // defaulted completions
   template<typename Fn, typename ...Arg>
-  auto rpc_ff(team &tm, intrank_t recipient, Fn &&fn, Arg &&...args)
+  auto rpc_ff(const team &tm, intrank_t recipient, Fn &&fn, Arg &&...args)
     // computes our return type, but SFINAE's out if fn(args...) is ill-formed
     -> typename detail::rpc_ff_return<Fn(Arg...), completions<>>::type {
 
@@ -88,7 +88,7 @@ namespace upcxx {
 
   // explicit completions
   template<typename Cxs, typename Fn, typename ...Arg>
-  auto rpc_ff(team &tm, intrank_t recipient, Cxs cxs, Fn &&fn, Arg &&...args)
+  auto rpc_ff(const team &tm, intrank_t recipient, Cxs cxs, Fn &&fn, Arg &&...args)
     // computes our return type, but SFINAE's out if fn(args...) is ill-formed
     -> typename detail::rpc_ff_return<Fn(Arg...), Cxs>::type {
 
@@ -196,7 +196,7 @@ namespace upcxx {
   
   namespace detail {
     template<typename Cxs, typename Fn, typename ...Arg>
-    auto rpc(team &tm, intrank_t recipient, Cxs cxs, Fn &&fn, Arg &&...args)
+    auto rpc(const team &tm, intrank_t recipient, Cxs cxs, Fn &&fn, Arg &&...args)
       // computes our return type, but SFINAE's out if fn(args...) is ill-formed
       -> typename detail::rpc_return<Fn(Arg...), Cxs>::type {
       
@@ -256,7 +256,7 @@ namespace upcxx {
   }
   
   template<typename Cxs, typename Fn, typename ...Arg>
-  auto rpc(team &tm, intrank_t recipient, Cxs cxs, Fn &&fn, Arg &&...args)
+  auto rpc(const team &tm, intrank_t recipient, Cxs cxs, Fn &&fn, Arg &&...args)
     // computes our return type, but SFINAE's out if fn(args...) is ill-formed
     -> typename detail::rpc_return<Fn(Arg...), Cxs>::type {
     
@@ -277,7 +277,7 @@ namespace upcxx {
   
   // rpc: default completions variant
   template<typename Fn, typename ...Arg>
-  auto rpc(team &tm, intrank_t recipient, Fn &&fn, Arg &&...args)
+  auto rpc(const team &tm, intrank_t recipient, Fn &&fn, Arg &&...args)
     // computes our return type, but SFINAE's out if fn(args...) is ill-formed
     -> typename detail::rpc_return<Fn(Arg...), completions<future_cx<operation_cx_event>>>::type {
     

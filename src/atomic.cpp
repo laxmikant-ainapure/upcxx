@@ -169,7 +169,7 @@ namespace {
 }
 
 template<typename T>
-atomic_domain<T>::atomic_domain(std::vector<atomic_op> const &ops, team &tm) {
+atomic_domain<T>::atomic_domain(std::vector<atomic_op> const &ops, const team &tm) {
   atomic_gex_ops = 0;
   for (auto next_op : ops) atomic_gex_ops |= to_gex_op_map[static_cast<int>(next_op)];
  
@@ -220,7 +220,7 @@ detail::amo_done atomic_domain<T>::inject(
     T val1, T val2,
     std::memory_order order,
     gasnet::handle_cb *cb
-  ) {
+  ) const {
 
   int op_gex = to_gex_op_map[static_cast<int>(opcode)];
 

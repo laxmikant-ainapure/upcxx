@@ -89,15 +89,15 @@ namespace upcxx {
     intrank_t rank_n() const { return n_; }
     intrank_t rank_me() const { return me_; }
     
-    intrank_t from_world(intrank_t rank) {
+    intrank_t from_world(intrank_t rank) const {
       return backend::team_rank_from_world(*this, rank);
     }
-    intrank_t from_world(intrank_t rank, intrank_t otherwise) {
+    intrank_t from_world(intrank_t rank, intrank_t otherwise) const {
       return backend::team_rank_from_world(*this, rank, otherwise);
     }
     
     intrank_t operator[](intrank_t peer) const {
-      return backend::team_rank_to_world(const_cast<team&>(*this), peer);
+      return backend::team_rank_to_world(*this, peer);
     }
     
     team_id id() const {
@@ -106,14 +106,14 @@ namespace upcxx {
     
     static constexpr intrank_t color_none = -0xbad;
     
-    team split(intrank_t color, intrank_t key);
+    team split(intrank_t color, intrank_t key) const;
     
     void destroy(entry_barrier eb = entry_barrier::user);
     
     ////////////////////////////////////////////////////////////////////////////
     // internal only
     
-    team_base& base(detail::internal_only) {
+    const team_base& base(detail::internal_only) const {
       return *this;
     }
     

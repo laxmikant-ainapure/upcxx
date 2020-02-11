@@ -123,7 +123,7 @@ namespace {
 }
 #endif // end hand-rolled barrier
 
-void upcxx::barrier(team &tm) {
+void upcxx::barrier(const team &tm) {
   UPCXX_ASSERT(backend::master.active_with_caller());
  
   // memory fencing is handled inside gex_Coll_BarrierNB + gex_Event_Test
@@ -138,7 +138,7 @@ void upcxx::barrier(team &tm) {
 }
 
 void upcxx::detail::barrier_async_inject(
-    team &tm,
+    const team &tm,
     backend::gasnet::handle_cb *cb
   ) {
   UPCXX_ASSERT(backend::master.active_with_caller());
