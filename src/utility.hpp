@@ -2,6 +2,7 @@
 #define _661bba4d_9f90_4fbe_b617_4474e1ed8cab
 
 #include <upcxx/diagnostic.hpp>
+#include <upcxx/upcxx_config.hpp>
 
 #include <array>
 #include <cstddef>
@@ -76,8 +77,12 @@ namespace detail {
 
   template<std::size_t align>
   inline void memcpy_aligned(void *dst, void const *src, std::size_t sz) noexcept {
+  #if UPCXX_HAVE___BUILTIN_ASSUME_ALIGNED
     std::memcpy(__builtin_assume_aligned(dst, align),
                 __builtin_assume_aligned(src, align), sz);
+  #else
+    std::memcpy(dst, src, sz);
+  #endif
   }
 
   //////////////////////////////////////////////////////////////////////////////
