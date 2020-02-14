@@ -37,7 +37,7 @@ Notable bug fixes:
 * issue #289: link failure for PGI with -std=c++17
 * issue #294: redundant-move warning in completion.hpp from g++-9.2
 * issue #304: Bad behavior for misspelled CC or CXX
-* [spec issue #148](Missing `const` qualifiers on team and other API objects)
+* [spec issue #148](https://bitbucket.org/berkeleylab/upcxx-spec/issues/148): Missing `const` qualifiers on team and other API objects
 * [spec issue #155](https://bitbucket.org/berkeleylab/upcxx-spec/issues/155): value argument type to value collectives is changed to a simple by-value T
 
 Breaking changes:
