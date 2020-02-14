@@ -516,13 +516,14 @@ else
   # We leave UPCXX_PYTHON unset to prevent rewrite of upcxx-run at install
   fpy=$(type -p python || true)
   if [[ ! -x "$fpy" ]]; then
-    echo "ERROR: No 'python' found in \$PATH."
+    echo "ERROR: No 'python' found in \$PATH."  >&2
     echo_and_die "ERROR: Use '--with-python=...' to specify a Python interpreter."
   fi
   python_whence="found in \$PATH"
 fi
 if ! $fpy -c "import sys; sys.exit(sys.version_info < (${UPCXX_PYTHON_MIN//./,}));" &> /dev/null; then
-  echo_and_die "ERROR: Python intrepeter '$fpy' is older than the minumum of $UPCXX_PYTHON_MIN."
+  echo "ERROR: Python interpreter '$fpy' reports version '$($fpy --version 2>&1)'" >&2
+  echo_and_die "ERROR: Python interpreter is older than the minimum of $UPCXX_PYTHON_MIN."
 fi
 check_known_path "$fpy" "Python interpreter '$fpy' $python_whence."
 
