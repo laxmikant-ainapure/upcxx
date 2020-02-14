@@ -5,7 +5,7 @@ This is the ChangeLog for public releases of [UPC++](https://upcxx.lbl.gov).
 For information on using UPC++, see: [README.md](README.md)    
 For information on installing UPC++, see: [INSTALL.md](INSTALL.md)
 
-### 20XX.YY.ZZ: PENDING
+### 2020.03.12: Release 2020.3.0 (PENDING)
 
 Infrastructure and requirements changes:
 
