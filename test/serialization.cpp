@@ -36,8 +36,8 @@ void roundtrip(T const &x) {
   typename std::aligned_storage<sizeof(T),alignof(T)>::type x1_;
   T *x1 = serialization_traits<T>::deserialize(r, &x1_);
 
-  const bool is_triv = is_definitely_trivially_serializable<T>::value; // workaround a bug in Xcode 8.2.1
-  UPCXX_ASSERT_ALWAYS(equals(*x1, x), "Serialization roundtrip failed. sizeof(T)="<<sizeof(T)<<" is_def_triv_serz="<<is_triv);
+  const bool is_triv = is_trivially_serializable<T>::value; // workaround a bug in Xcode 8.2.1
+  UPCXX_ASSERT_ALWAYS(equals(*x1, x), "Serialization roundtrip failed. sizeof(T)="<<sizeof(T)<<" is_triv_serz="<<is_triv);
 
   upcxx::detail::destruct(*x1);
   std::free(buf1);
@@ -134,19 +134,24 @@ namespace upcxx {
   };
 }
 
-static_assert(is_definitely_trivially_serializable<const int>::value, "Uh-oh.");static_assert(is_definitely_trivially_serializable<const int>::value, "Uh-oh.");
+static_assert(is_trivially_serializable<const int>::value, "Uh-oh.");
 
-static_assert(is_definitely_trivially_serializable<std::pair<int,char>>::value, "Uh-oh.");
-static_assert(is_definitely_trivially_serializable<std::pair<const int,char>>::value, "Uh-oh.");
+static_assert(is_trivially_serializable<std::pair<int,char>>::value, "Uh-oh.");
+static_assert(is_trivially_serializable<std::pair<const int,char>>::value, "Uh-oh.");
 static_assert(serialization_traits<std::pair<int,char>>::is_actually_trivially_serializable, "Uh-oh.");
 static_assert(serialization_traits<std::pair<const int,char>>::is_actually_trivially_serializable, "Uh-oh.");
 
-static_assert(is_definitely_trivially_serializable<std::tuple<int,char>>::value, "Uh-oh.");
-static_assert(is_definitely_trivially_serializable<std::tuple<const int,char>>::value, "Uh-oh.");
+static_assert(is_trivially_serializable<std::tuple<int,char>>::value, "Uh-oh.");
+static_assert(is_trivially_serializable<std::tuple<const int,char>>::value, "Uh-oh.");
 static_assert(serialization_traits<std::tuple<int,char>>::is_actually_trivially_serializable, "Uh-oh.");
 static_assert(serialization_traits<std::tuple<const int,char>>::is_actually_trivially_serializable, "Uh-oh.");
 
-static_assert(!is_definitely_trivially_serializable<std::string>::value, "Uh-oh");
+static_assert(!is_trivially_serializable<std::string>::value, "Uh-oh");
+
+static_assert(!is_trivially_serializable<nonpod1>::value, "Uh-oh");
+static_assert(!is_trivially_serializable<nonpod2>::value, "Uh-oh");
+static_assert(!is_trivially_serializable<nonpod3>::value, "Uh-oh");
+static_assert(!is_trivially_serializable<nonpod4>::value, "Uh-oh");
 
 int main() {
   print_test_header();

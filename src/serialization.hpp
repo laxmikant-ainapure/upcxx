@@ -36,18 +36,16 @@ namespace upcxx {
     struct serialization_is_specialized;
   }
 
-  #warning "TODO: rename *definitely*"
-  
   template<typename T>
-  struct is_definitely_trivially_serializable {
+  struct is_trivially_serializable {
     static constexpr bool value = std::is_trivially_copyable<T>::value && !detail::serialization_is_specialized<T>::value;
   };
-
+  
   template<typename T>
-  struct is_definitely_serializable {
-    static constexpr bool value = serialization_traits<T>::is_definitely_serializable;
+  struct is_serializable {
+    static constexpr bool value = serialization_traits<T>::is_serializable;
   };
-
+  
   template<typename T>
   struct deserialized_type_of {
     using type = typename serialization_traits<T>::deserialized_type;
@@ -938,7 +936,7 @@ namespace upcxx {
         decltype((std::declval<T&>().upcxx_serialized_values(), void()))
       >:
       serialization_values<T> {
-      static constexpr bool is_definitely_serializable = true;
+      static constexpr bool is_serializable = true;
     };
 
     template<typename T, typename>
@@ -949,14 +947,14 @@ namespace upcxx {
         decltype((std::declval<T&>().upcxx_serialized_fields(), void()))
       >:
       serialization_fields<T> {
-      static constexpr bool is_definitely_serializable = true;
+      static constexpr bool is_serializable = true;
     };
 
     template<typename T, typename>
     struct serialization_dispatch3:
       serialization_trivial<T> {
       static constexpr bool is_specialized = false;
-      static constexpr bool is_definitely_serializable = false;
+      static constexpr bool is_serializable = false;
     };
 
     template<typename T, typename>
@@ -974,12 +972,12 @@ namespace upcxx {
 
   namespace detail {
     template<typename T, typename=std::false_type>
-    struct serialization_traits_definitely_serializable {
-      static constexpr bool is_definitely_serializable = true;
+    struct serialization_traits_serializable {
+      static constexpr bool is_serializable = false;
     };
     template<typename T>
-    struct serialization_traits_definitely_serializable<T,
-        std::integral_constant<bool, false & serialization<T>::is_definitely_serializable>
+    struct serialization_traits_serializable<T,
+        std::integral_constant<bool, false & serialization<T>::is_serializable>
       > {
     };
 
@@ -1043,18 +1041,18 @@ namespace upcxx {
       > {
     };
     
-    template<typename T, bool is_def_triv_serz = is_definitely_trivially_serializable<T>::value>
+    template<typename T, bool is_triv_serz = is_trivially_serializable<T>::value>
     struct serialization_traits1;
 
     template<typename T>
-    struct serialization_traits1<T, /*is_def_triv_serz=*/true>:
+    struct serialization_traits1<T, /*is_triv_serz=*/true>:
       serialization_trivial<T> {
-      static constexpr bool is_definitely_serializable = true;
+      static constexpr bool is_serializable = true;
     };
     
     template<typename T>
-    struct serialization_traits1<T, /*is_def_triv_serz=*/false>:
-      detail::serialization_traits_definitely_serializable<T>,
+    struct serialization_traits1<T, /*is_triv_serz=*/false>:
+      detail::serialization_traits_serializable<T>,
       detail::serialization_traits_actually_trivially_serializable<T>,
       detail::serialization_traits_skip_is_fast<T>,
       detail::serialization_traits_ubound<T>,
@@ -1082,7 +1080,7 @@ namespace upcxx {
 
   namespace detail {
     struct serialization_not_supported {
-      static constexpr bool is_definitely_serializable = false;
+      static constexpr bool is_serializable = false;
     };
   }
   
@@ -1093,7 +1091,7 @@ namespace upcxx {
 
   template<typename T>
   struct serialization<T const>: serialization_traits<T> {
-    // inherit is_definitely_serializable
+    // inherit is_serializable
     // inherit references_buffer
 
     static constexpr bool is_specialized = detail::serialization_is_specialized<T>::value;
@@ -1116,7 +1114,7 @@ namespace upcxx {
 
   template<typename R, typename ...A>
   struct serialization<R(&)(A...)> {
-    static constexpr bool is_definitely_serializable = true;
+    static constexpr bool is_serializable = true;
     static constexpr bool references_buffer = false;
 
     using deserialized_type = std::reference_wrapper<R(A...)>;
@@ -1150,13 +1148,13 @@ namespace upcxx {
   //////////////////////////////////////////////////////////////////////////////
 
   template<>
-  struct is_definitely_trivially_serializable<std::tuple<>>: std::true_type {};
-
+  struct is_trivially_serializable<std::tuple<>>: std::true_type {};
+  
   template<typename T0, typename ...Ts>
-  struct is_definitely_trivially_serializable<std::tuple<T0,Ts...>> {
+  struct is_trivially_serializable<std::tuple<T0,Ts...>> {
     static constexpr bool value =
-      is_definitely_trivially_serializable<T0>::value &&
-      is_definitely_trivially_serializable<std::tuple<Ts...>>::value;
+      is_trivially_serializable<T0>::value &&
+      is_trivially_serializable<std::tuple<Ts...>>::value;
   };
   
   namespace detail {
@@ -1168,9 +1166,9 @@ namespace upcxx {
       using Ti = typename std::tuple_element<i, std::tuple<T...>>::type;
       using recurse_tail = serialization_tuple<std::tuple<T...>, i+1, n>;
       
-      static constexpr bool is_definitely_serializable =
-        serialization_traits<Ti>::is_definitely_serializable &&
-        recurse_tail::is_definitely_serializable;
+      static constexpr bool is_serializable =
+        serialization_traits<Ti>::is_serializable &&
+        recurse_tail::is_serializable;
 
       template<typename Prefix>
       static auto ubound(Prefix pre, std::tuple<T...> const &x)
@@ -1215,7 +1213,7 @@ namespace upcxx {
     
     template<typename ...T, int n>
     struct serialization_tuple<std::tuple<T...>, n, n> {
-      static constexpr bool is_definitely_serializable = true;
+      static constexpr bool is_serializable = true;
 
       template<typename Prefix>
       static Prefix ubound(Prefix pre, std::tuple<T...> const &x) {
@@ -1282,16 +1280,16 @@ namespace upcxx {
   //////////////////////////////////////////////////////////////////////////////
 
   template<typename A, typename B>
-  struct is_definitely_trivially_serializable<std::pair<A,B>> {
-    static constexpr bool value = is_definitely_trivially_serializable<A>::value &&
-                                  is_definitely_trivially_serializable<B>::value;
+  struct is_trivially_serializable<std::pair<A,B>> {
+    static constexpr bool value = is_trivially_serializable<A>::value &&
+                                  is_trivially_serializable<B>::value;
   };
-
+  
   template<typename A, typename B>
   struct serialization<std::pair<A,B>> {
-    static constexpr bool is_definitely_serializable =
-      serialization_traits<A>::is_definitely_serializable &&
-      serialization_traits<B>::is_definitely_serializable;
+    static constexpr bool is_serializable =
+      serialization_traits<A>::is_serializable &&
+      serialization_traits<B>::is_serializable;
 
     template<typename Prefix>
     static auto ubound(Prefix pre, std::pair<A,B> const &x)
@@ -1338,14 +1336,13 @@ namespace upcxx {
 
   #ifndef UPCXX_CREDUCE_SLIM
   template<typename T, std::size_t n>
-  struct is_definitely_trivially_serializable<std::array<T,n>>:
-    is_definitely_trivially_serializable<T> {
+  struct is_trivially_serializable<std::array<T,n>>:
+    is_trivially_serializable<T> {
   };
-
+  
   template<typename T, std::size_t n>
   struct serialization<std::array<T,n>> {
-    static constexpr bool is_definitely_serializable =
-      serialization_traits<T>::is_definitely_serializable;
+    static constexpr bool is_serializable = serialization_traits<T>::is_serializable;
 
     template<typename Prefix>
     static constexpr auto ubound(Prefix pre, std::array<T,n> const &x)
@@ -1383,14 +1380,13 @@ namespace upcxx {
   //////////////////////////////////////////////////////////////////////////////
 
   template<typename T, std::size_t n>
-  struct is_definitely_trivially_serializable<T[n]>:
-    is_definitely_trivially_serializable<T> {
+  struct is_trivially_serializable<T[n]>:
+    is_trivially_serializable<T> {
   };
-
+  
   template<typename T, std::size_t n>
   struct serialization<T[n]> {
-    static constexpr bool is_definitely_serializable =
-      serialization_traits<T>::is_definitely_serializable;
+    static constexpr bool is_serializable = serialization_traits<T>::is_serializable;
 
     template<typename Prefix>
     static constexpr auto ubound(Prefix pre, T const(&x)[n])
@@ -1431,7 +1427,7 @@ namespace upcxx {
   struct serialization<std::basic_string<CharT, Traits, Alloc>> {
     static_assert(std::is_trivial<CharT>::value, "Bad string character type.");
     
-    static constexpr bool is_definitely_serializable = true;
+    static constexpr bool is_serializable = true;
 
     using Str = std::basic_string<CharT,Traits,Alloc>;
     
@@ -1504,7 +1500,7 @@ namespace upcxx {
              typename T0 = typename BagIn::value_type,
              typename T1 = typename BagOut::value_type>
     struct serialization_container {
-      static constexpr bool is_definitely_serializable = serialization_traits<T0>::is_definitely_serializable;
+      static constexpr bool is_serializable = serialization_traits<T0>::is_serializable;
       
       template<typename Prefix>
       static auto ubound(Prefix pre, BagIn const &bag)
@@ -1642,7 +1638,7 @@ namespace upcxx {
     using T0 = T;
     using T1 = typename serialization_traits<T>::deserialized_type;
 
-    static constexpr bool is_definitely_serializable = serialization_traits<T0>::is_definitely_serializable;
+    static constexpr bool is_serializable = serialization_traits<T0>::is_serializable;
 
     // no ubound
     

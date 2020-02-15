@@ -66,10 +66,10 @@ namespace upcxx {
 
     static_assert(
       detail::trait_forall<
-          is_definitely_serializable,
+          is_serializable,
           typename binding<Arg>::on_wire_type...
         >::value,
-      "All rpc arguments must be DefinitelySerializable."
+      "All rpc arguments must be Serializable."
     );
       
     backend::template send_am_master<progress_level::user>(
@@ -94,10 +94,10 @@ namespace upcxx {
 
     static_assert(
       detail::trait_forall<
-          is_definitely_serializable,
+          is_serializable,
           typename binding<Arg>::on_wire_type...
         >::value,
-      "All rpc arguments must be DefinitelySerializable."
+      "All rpc arguments must be Serializable."
     );
       
     auto state = detail::completions_state<
@@ -161,8 +161,8 @@ namespace upcxx {
       using results_tuple = typename rpc_remote_results<Fn(Arg...)>::type;
       
       static_assert(
-        is_definitely_serializable<results_tuple>::value,
-        "rpc return values must be DefinitelySerializable."
+        is_serializable<results_tuple>::value,
+        "rpc return values must be Serializable."
       );
       
       static_assert(
@@ -202,10 +202,10 @@ namespace upcxx {
       
       static_assert(
         detail::trait_forall<
-            is_definitely_serializable,
+            is_serializable,
             typename binding<Arg>::on_wire_type...
           >::value,
-        "All rpc arguments must be DefinitelySerializable."
+        "All rpc arguments must be Serializable."
       );
         
       using cxs_state_t = detail::completions_state<

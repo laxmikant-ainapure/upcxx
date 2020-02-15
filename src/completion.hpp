@@ -676,7 +676,7 @@ namespace upcxx {
     > {
     using type = detail::completions_state_head<true, EventValues, rpc_cx<Event,Fn>, ordinal>;
 
-    static constexpr bool is_definitely_serializable = serialization_traits<Fn>::is_definitely_serializable;
+    static constexpr bool is_serializable = serialization_traits<Fn>::is_serializable;
     
     template<typename Ub>
     static auto ubound(Ub ub, type const &s)
@@ -719,7 +719,7 @@ namespace upcxx {
       detail::completions_state_head</*event_enabled=*/false, EventValues, Cx, ordinal>,
       /*empty=*/true
     > {
-    static constexpr bool is_definitely_serializable = true;
+    static constexpr bool is_serializable = true;
   };
   
   template<template<typename> class EventPredicate,
@@ -731,7 +731,7 @@ namespace upcxx {
       detail::completions_state<EventPredicate, EventValues, completions<>, ordinal>,
       /*empty=*/true
     > {
-    static constexpr bool is_definitely_serializable = true;
+    static constexpr bool is_serializable = true;
   };
 
   template<template<typename> class EventPredicate,
@@ -741,9 +741,9 @@ namespace upcxx {
     > {
     using type = detail::completions_state<EventPredicate, EventValues, completions<CxH,CxT...>, ordinal>;
 
-    static constexpr bool is_definitely_serializable =
-      serialization_traits<typename type::head_t>::is_definitely_serializable &&
-      serialization_traits<typename type::tail_t>::is_definitely_serializable;
+    static constexpr bool is_serializable =
+      serialization_traits<typename type::head_t>::is_serializable &&
+      serialization_traits<typename type::tail_t>::is_serializable;
     
     template<typename Ub>
     static auto ubound(Ub ub, type const &cxs)

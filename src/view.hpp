@@ -76,15 +76,15 @@ namespace upcxx {
   // looking at a consecutive sequence of packed T's.
   
   template<typename T,
-           bool definitely_trivial = is_definitely_trivially_serializable<T>::value>
+           bool trivial = is_trivially_serializable<T>::value>
   struct view_default_iterator;
   
   template<typename T>
-  struct view_default_iterator<T, /*definitely_trivial=*/true> {
+  struct view_default_iterator<T, /*trivial=*/true> {
     using type = T*;
   };
   template<typename T>
-  struct view_default_iterator<T, /*definitely_trivial=*/false> {
+  struct view_default_iterator<T, /*trivial=*/false> {
     using type = deserializing_iterator<T>;
   };
   
@@ -412,7 +412,7 @@ namespace upcxx {
   template<typename T, typename Iter>
   struct serialization<view<T,Iter>>:
       detail::serialization_view<T,Iter> {
-    static constexpr bool is_definitely_serializable = serialization_traits<T>::is_definitely_serializable;
+    static constexpr bool is_serializable = serialization_traits<T>::is_serializable;
     static constexpr bool references_buffer = true;
     static constexpr bool skip_is_fast = true;
   };

@@ -228,9 +228,9 @@ namespace upcxx {
   // make `bound_function` serializable
   template<typename Fn, typename ...B>
   struct serialization<bound_function<Fn,B...>> {
-    static constexpr bool is_definitely_serializable =
-      serialization_traits<typename binding<Fn>::on_wire_type>::is_definitely_serializable &&
-      serialization_traits<std::tuple<typename binding<B>::on_wire_type...>>::is_definitely_serializable;
+    static constexpr bool is_serializable =
+      serialization_traits<typename binding<Fn>::on_wire_type>::is_serializable &&
+      serialization_traits<std::tuple<typename binding<B>::on_wire_type...>>::is_serializable;
 
     template<typename Ub>
     static auto ubound(Ub ub, const bound_function<Fn,B...> &fn)

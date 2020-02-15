@@ -241,9 +241,10 @@ namespace upcxx {
       ) {
       
       static_assert(
-        upcxx::is_definitely_trivially_serializable<T>::value,
-        "`upcxx::reduce_[all|one]<T>` only permitted for DefinitelyTriviallySerialize T. "
-        "Consider using `upcxx::reduce_[all|one]_nontrivial<T>` instead (unsupported)."
+        upcxx::is_trivially_serializable<T>::value,
+        "`upcxx::reduce_[all|one]<T>` only permitted for TriviallySerialize T. "
+        "Consider using `upcxx::reduce_[all|one]_nontrivial<T>` instead "
+        "(experimental feature, use at own risk)."
       );
       
       UPCXX_ASSERT_ALWAYS(
@@ -494,7 +495,7 @@ namespace upcxx {
       
     return detail::reduce_one_nontrivial(
         std::forward<T1>(value), std::move(op), root, tm, std::move(cxs),
-        std::integral_constant<bool, upcxx::is_definitely_trivially_serializable<T>::value>()
+        std::integral_constant<bool, upcxx::is_trivially_serializable<T>::value>()
       );
   }
   
@@ -608,7 +609,7 @@ namespace upcxx {
     ) {
     return detail::reduce_all_nontrivial(
         std::forward<T1>(value), std::move(op), tm, std::move(cxs),
-        std::integral_constant<bool, upcxx::is_definitely_trivially_serializable<T>::value>()
+        std::integral_constant<bool, upcxx::is_trivially_serializable<T>::value>()
       );
   }
   
