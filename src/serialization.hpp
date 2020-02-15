@@ -862,14 +862,65 @@ namespace upcxx {
 
     ////////////////////////////////////////////////////////////////////////////
 
+    #define UPCXX_SERIALIZED_VALUES(...) \
+      auto upcxx_serialized_values() const \
+        UPCXX_RETURN_DECLTYPE( std::make_tuple(__VA_ARGS__) ) { \
+        return std::make_tuple(__VA_ARGS__); \
+      }
+
+    template<typename T>
+    struct serialization_values {
+      using vals_tup_type = decltype(std::declval<T&>().upcxx_serialized_values());
+      
+      template<typename Prefix>
+      static auto ubound(Prefix pre, T const &x)
+        UPCXX_RETURN_DECLTYPE(
+          serialization_traits<vals_tup_type>::ubound(pre, x.upcxx_serialized_values())
+        ) {
+        return serialization_traits<vals_tup_type>::ubound(pre, x.upcxx_serialized_values());
+      }
+
+      template<typename Writer>
+      static void serialize(Writer &w, T const &x) {
+        serialization_traits<vals_tup_type>::serialize(w, x.upcxx_serialized_values());
+      }
+
+      using deserialized_type = T;
+
+      static constexpr bool references_buffer = serialization_traits<vals_tup_type>::references_buffer;
+
+      template<int ...i>
+      static deserialized_type* construct_deserialized(vals_tup_type &&t, void *raw, index_sequence<i...>) {
+        return ::new(raw) T(std::get<i>(static_cast<vals_tup_type&&>(t))...);
+      }
+      
+      template<typename Reader>
+      static deserialized_type* deserialize(Reader &r, void *raw) {
+        return construct_deserialized(r.template read<vals_tup_type>(), raw, make_index_sequence<std::tuple_size<vals_tup_type>::value>());
+      }
+
+      static constexpr bool skip_is_fast = serialization_traits<vals_tup_type>::skip_is_fast;
+      
+      template<typename Reader>
+      static void skip(Reader &r) {
+        serialization_traits<vals_tup_type>::skip(r);
+      }
+    };
+    
+    ////////////////////////////////////////////////////////////////////////////
+
     // ...otherwise checks if has nested subclass T::upcxx_serialization
     template<typename T, typename=void>
     struct serialization_dispatch1;
 
+    // ...otherwise checks if has UPCXX_SERIALIZED_VALUES
+    template<typename T, typename=void>
+    struct serialization_dispatch2;
+
     // ...otherwise checks if has UPCXX_SERIALIZED_FIELDS
     // ...finally otherwise dispatch to trivial serialization
     template<typename T, typename=void>
-    struct serialization_dispatch2;
+    struct serialization_dispatch3;
 
     ////////////////////////////////////////////////////////////////////////////
 
@@ -884,6 +935,17 @@ namespace upcxx {
 
     template<typename T>
     struct serialization_dispatch2<T,
+        decltype((std::declval<T&>().upcxx_serialized_values(), void()))
+      >:
+      serialization_values<T> {
+      static constexpr bool is_definitely_serializable = true;
+    };
+
+    template<typename T, typename>
+    struct serialization_dispatch2: serialization_dispatch3<T> {};
+
+    template<typename T>
+    struct serialization_dispatch3<T,
         decltype((std::declval<T&>().upcxx_serialized_fields(), void()))
       >:
       serialization_fields<T> {
@@ -891,7 +953,7 @@ namespace upcxx {
     };
 
     template<typename T, typename>
-    struct serialization_dispatch2:
+    struct serialization_dispatch3:
       serialization_trivial<T> {
       static constexpr bool is_specialized = false;
       static constexpr bool is_definitely_serializable = false;

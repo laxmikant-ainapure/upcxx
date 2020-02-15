@@ -78,41 +78,16 @@ struct nonpod1: nonpod_base {
   UPCXX_SERIALIZED_FIELDS(h,i)
 };
 
-
 struct nonpod2: nonpod_base {
   nonpod2(char h, char i): nonpod_base(h,i) {}
-  
-  struct upcxx_serialization {
-    template<typename Writer>
-    static void serialize(Writer &w, nonpod2 const &x) {
-      w.write(0xbeef);
-      w.write(x.h);
-      w.write(x.i);
-    }
-    template<typename Reader>
-    static nonpod2* deserialize(Reader &r, void *spot) {
-      UPCXX_ASSERT_ALWAYS(r.template read<int>() == 0xbeef);
-      char h = r.template read<char>();
-      char i = r.template read<char>();
-      return ::new(spot) nonpod2(h,i);
-    }
-  };
+  nonpod2(char h, char i, char const *dummy): nonpod_base(h,i) {}
+  UPCXX_SERIALIZED_VALUES(h,i,"dummy")
 };
 
 struct nonpod3: nonpod_base {
   nonpod3(char h, char i): nonpod_base(h,i) {}
-};
-
-namespace upcxx {
-  template<>
-  struct serialization<nonpod3> {
-    // unpspec'd upper-bound support
-    template<typename Prefix>
-    static auto ubound(Prefix pre, nonpod3 const &x)
-      -> decltype(pre.cat_ubound_of(x.h).cat_ubound_of(x.i)) {
-      return pre.cat_ubound_of(x.h).cat_ubound_of(x.i);
-    }
-    
+  
+  struct upcxx_serialization {
     template<typename Writer>
     static void serialize(Writer &w, nonpod3 const &x) {
       w.write(0xbeef);
@@ -125,6 +100,36 @@ namespace upcxx {
       char h = r.template read<char>();
       char i = r.template read<char>();
       return ::new(spot) nonpod3(h,i);
+    }
+  };
+};
+
+struct nonpod4: nonpod_base {
+  nonpod4(char h, char i): nonpod_base(h,i) {}
+};
+
+namespace upcxx {
+  template<>
+  struct serialization<nonpod4> {
+    // unpspec'd upper-bound support
+    template<typename Prefix>
+    static auto ubound(Prefix pre, nonpod4 const &x)
+      -> decltype(pre.cat_ubound_of(x.h).cat_ubound_of(x.i)) {
+      return pre.cat_ubound_of(x.h).cat_ubound_of(x.i);
+    }
+    
+    template<typename Writer>
+    static void serialize(Writer &w, nonpod4 const &x) {
+      w.write(0xbeef);
+      w.write(x.h);
+      w.write(x.i);
+    }
+    template<typename Reader>
+    static nonpod4* deserialize(Reader &r, void *spot) {
+      UPCXX_ASSERT_ALWAYS(r.template read<int>() == 0xbeef);
+      char h = r.template read<char>();
+      char i = r.template read<char>();
+      return ::new(spot) nonpod4(h,i);
     }
   };
 }
@@ -179,6 +184,16 @@ int main() {
         std::tuple<std::string,nonpod3>("hi",{'a','b'}),
         std::tuple<std::string,nonpod3>("bob",{'x','y'}),
         std::tuple<std::string,nonpod3>("alice",{'\0','!'})
+      }
+    }
+  );
+  roundtrip<std::vector<std::list<std::tuple<std::string,nonpod4>>>>(
+    std::initializer_list<std::list<std::tuple<std::string,nonpod4>>>{
+      {},
+      std::initializer_list<std::tuple<std::string,nonpod4>>{
+        std::tuple<std::string,nonpod4>("hi",{'a','b'}),
+        std::tuple<std::string,nonpod4>("bob",{'x','y'}),
+        std::tuple<std::string,nonpod4>("alice",{'\0','!'})
       }
     }
   );
