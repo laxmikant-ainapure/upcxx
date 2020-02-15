@@ -44,44 +44,44 @@ void roundtrip(T const &x) {
   std::free(buf0);
 }
 
-struct nonpod1 {
-  char h;
-  char i;
+struct nonpod_base {
+  char h, i;
+  nonpod_base **mirror;
+  
+  nonpod_base() {
+    mirror = new nonpod_base*(this);
+  }
+  nonpod_base(char h, char i): nonpod_base() {
+    this->h = h;
+    this->i = i;
+  }
+  nonpod_base(const nonpod_base &that): nonpod_base() {
+    this->h = that.h;
+    this->i = that.i;
+  }
 
+  ~nonpod_base() {
+    UPCXX_ASSERT_ALWAYS(*mirror == this);
+    delete mirror;
+  }
+  
+  bool operator==(nonpod_base const &that) const {
+    UPCXX_ASSERT_ALWAYS(*this->mirror == this);
+    UPCXX_ASSERT_ALWAYS(*that.mirror == &that);
+    return this->h == that.h && this->i == that.i;
+  }
+};
+
+struct nonpod1: nonpod_base {
   nonpod1() = default;
-  nonpod1(char h, char i):
-    h(h), i(i) {
-  }
-  nonpod1(nonpod1 const &that):
-    h(that.h),
-    i(that.i) {
-  }
-
-  bool operator==(nonpod1 that) const {
-    return h==that.h && i==that.i;
-  }
-
+  nonpod1(char h, char i): nonpod_base(h,i) {}
   UPCXX_SERIALIZED_FIELDS(h,i)
 };
 
 
-struct nonpod2 {
-  char h;
-  char i;
-
-  nonpod2() = default;
-  nonpod2(char h, char i):
-    h(h), i(i) {
-  }
-  nonpod2(nonpod2 const &that):
-    h(that.h),
-    i(that.i) {
-  }
-
-  bool operator==(nonpod2 that) const {
-    return h==that.h && i==that.i;
-  }
-
+struct nonpod2: nonpod_base {
+  nonpod2(char h, char i): nonpod_base(h,i) {}
+  
   struct upcxx_serialization {
     template<typename Writer>
     static void serialize(Writer &w, nonpod2 const &x) {
@@ -99,22 +99,8 @@ struct nonpod2 {
   };
 };
 
-struct nonpod3 {
-  char h;
-  char i;
-
-  nonpod3() = default;
-  nonpod3(char h, char i):
-    h(h), i(i) {
-  }
-  nonpod3(nonpod3 const &that):
-    h(that.h),
-    i(that.i) {
-  }
-
-  bool operator==(nonpod3 that) const {
-    return h==that.h && i==that.i;
-  }
+struct nonpod3: nonpod_base {
+  nonpod3(char h, char i): nonpod_base(h,i) {}
 };
 
 namespace upcxx {
