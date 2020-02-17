@@ -50,40 +50,45 @@
 
 namespace upcxx { namespace detail {
 
-template<typename Obj, typename Mbr, typename Get,
+template<typename Obj, memory_kind Kind, typename Mbr, typename Get,
          bool standard_layout = std::is_standard_layout<Obj>::value>
 struct memberof_general_dispatch;
 
-template<typename Obj, typename Mbr, typename Get>
-struct memberof_general_dispatch<Obj, Mbr, Get, /*standard_layout=*/true> {
-  decltype(upcxx::make_future(std::declval<global_ptr<Mbr>>()))
-  operator()(global_ptr<Obj> gptr, Get getter) const {
-    return upcxx::make_future(global_ptr<Mbr>(detail::internal_only(), gptr.rank_, getter(gptr.raw_ptr_)));
+template<typename Obj, memory_kind Kind, typename Mbr, typename Get>
+struct memberof_general_dispatch<Obj, Kind, Mbr, Get, /*standard_layout=*/true> {
+  decltype(upcxx::make_future(std::declval<global_ptr<Mbr,Kind>>()))
+  operator()(global_ptr<Obj,Kind> gptr, Get getter) const {
+    return upcxx::make_future(
+            global_ptr<Mbr,Kind>(detail::internal_only(), gptr.rank_, 
+                                 getter(gptr.raw_ptr_), gptr.device_));
   }
 };
 
-template<typename Obj, typename Mbr, typename Get>
-struct memberof_general_dispatch<Obj, Mbr, Get, /*standard_layout=*/false> {
-  future<global_ptr<Mbr>> operator()(global_ptr<Obj> gptr, Get getter) const {
+template<typename Obj, memory_kind Kind, typename Mbr, typename Get>
+struct memberof_general_dispatch<Obj, Kind, Mbr, Get, /*standard_layout=*/false> {
+  future<global_ptr<Mbr,Kind>> 
+  operator()(global_ptr<Obj,Kind> gptr, Get getter) const {
     return upcxx::rpc(gptr.rank_, [=]() {
-      return global_ptr<Mbr>(detail::internal_only(), gptr.rank_, getter(gptr.raw_ptr_));
+      return global_ptr<Mbr,Kind>(detail::internal_only(), gptr.rank_, 
+                                  getter(gptr.raw_ptr_), gptr.device_);
     });
   }
 };
 
-// Infers Obj, Get and Mbr
-template<typename Obj, typename Get,
+// Infers all template parameters
+template<typename Obj, memory_kind Kind, typename Get, 
          typename Mbr = typename std::remove_pointer<decltype(std::declval<Get>()(std::declval<Obj*>()))>::type>
-auto memberof_general_helper(global_ptr<Obj> gptr, Get getter)
-  -> decltype(memberof_general_dispatch<Obj,Mbr,Get>()(gptr, getter)) {
-  return memberof_general_dispatch<Obj,Mbr,Get>()(gptr, getter);
+auto memberof_general_helper(global_ptr<Obj,Kind> gptr, Get getter)
+  -> decltype(memberof_general_dispatch<Obj,Kind,Mbr,Get>()(gptr, getter)) {
+  UPCXX_ASSERT(gptr, "Global pointer expression to upcxx_memberof_general() may not be null");
+  return memberof_general_dispatch<Obj,Kind,Mbr,Get>()(gptr, getter);
 }
 
 }} // namespace upcxx::detail
 
 #define upcxx_memberof_general(gp, FIELD) ( \
   ::upcxx::detail::memberof_general_helper((gp), \
-    [](UPCXX_ETYPE(gp) *lptr) { return &(lptr->FIELD); } \
+    [](UPCXX_ETYPE(gp) *lptr) { return ::std::addressof(lptr->FIELD); } \
   ) \
 )
 
