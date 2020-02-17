@@ -49,43 +49,43 @@
   )
 
 namespace upcxx { namespace detail {
-  template<typename FT, typename T, typename Func>
-  inline future<global_ptr<FT>>
-  memberof_general(const global_ptr<T> &gp, Func lookup_fn) {
-    UPCXX_ASSERT(gp, "Global pointer expression may not be null");
-    if (gp.is_local()) { // can be resolved locally (possibly via PSHM-bypass)
-      global_ptr<FT> result = lookup_fn(gp);
-      return upcxx::make_future<global_ptr<FT>>(result);
-    } else { // must communicate
-      intrank_t peer = gp.where();
-      return rpc(peer, lookup_fn, gp);
-    }
+
+template<typename Obj, typename Mbr, typename Get,
+         bool standard_layout = std::is_standard_layout<Obj>::value>
+struct memberof_general_dispatch;
+
+template<typename Obj, typename Mbr, typename Get>
+struct memberof_general_dispatch<Obj, Mbr, Get, /*standard_layout=*/true> {
+  decltype(upcxx::make_future(std::declval<global_ptr<Mbr>>()))
+  operator()(global_ptr<Obj> gptr, Get getter) const {
+    return upcxx::make_future(global_ptr<Mbr>(detail::internal_only(), gptr.rank_, getter(gptr.raw_ptr_)));
   }
+};
 
-  template<typename T> // workaround issue #288 - DOB: seems like there should be a better way..
-  inline upcxx::future<T> make_real_future(T v) { return upcxx::make_future<T>(v); }
-} }
+template<typename Obj, typename Mbr, typename Get>
+struct memberof_general_dispatch<Obj, Mbr, Get, /*standard_layout=*/false> {
+  future<global_ptr<Mbr>> operator()(global_ptr<Obj> gptr, Get getter) const {
+    return upcxx::rpc(gptr.rank_, [=]() {
+      return global_ptr<Mbr>(detail::internal_only(), gptr.rank_, getter(gptr.raw_ptr_));
+    });
+  }
+};
 
-// upcxx_memberof_general(global_ptr<T> gp, field-designator)
-// this variant works for any T, although it may need to communicate for remote objects
+// Infers Obj, Get and Mbr
+template<typename Obj, typename Get,
+         typename Mbr = typename std::remove_pointer<decltype(std::declval<Get>()(std::declval<Obj*>()))>::type>
+auto memberof_general_helper(global_ptr<Obj> gptr, Get getter)
+  -> decltype(memberof_general_dispatch<Obj,Mbr,Get>()(gptr, getter)) {
+  return memberof_general_dispatch<Obj,Mbr,Get>()(gptr, getter);
+}
+
+}} // namespace upcxx::detail
+
 #define upcxx_memberof_general(gp, FIELD) ( \
-     ::std::is_standard_layout<UPCXX_ETYPE(gp)>::value ? \
-        ::upcxx::detail::make_real_future( /* fast-path for standard layout (critical for remote) */ \
-           ::upcxx::global_ptr<decltype(::std::declval<UPCXX_ETYPE(gp)>().FIELD), UPCXX_KTYPE(gp)>( \
-              ::upcxx::detail::internal_only(), \
-              (gp), \
-              ([](UPCXX_ETYPE(gp) *p) { /* simulate offsetof while avoiding UB */ \
-                  return reinterpret_cast<::std::uintptr_t>(::std::addressof(p->FIELD)); \
-               })(nullptr) \
-           ) \
-        ) : \
-        ::upcxx::detail::memberof_general<decltype(::std::declval<UPCXX_ETYPE(gp)>().FIELD)> \
-                  ((gp), \
-                    [](const typename UPCXX_GPTYPE(gp) &gpr) { \
-                        return \
-                          UPCXX_ASSERT(gpr.is_local()), \
-                          ::upcxx::to_global_ptr(::std::addressof(gpr.local()->FIELD)); \
-                  }) \
-  )
+  ::upcxx::detail::memberof_general_helper((gp), \
+    [](UPCXX_ETYPE(gp) *lptr) { return &(lptr->FIELD); } \
+  ) \
+)
+
 
 #endif

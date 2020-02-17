@@ -146,7 +146,9 @@ void check_general() {
   auto fut1 = upcxx_memberof_general(gp_o, f1);
   auto fut2 = upcxx_memberof_general(gp_o, f2);
   bool all_ready = fut0.ready() && fut1.ready() && fut2.ready();
-  if (gp_o.is_local() || std::is_standard_layout<T>::value) assert(all_ready);
+  // the following is not guaranteed by spec, just tests the known implementation
+  bool expect_ready = std::is_standard_layout<T>::value;
+  if (expect_ready) assert(all_ready);
   else assert(!all_ready);
 
   upcxx::global_ptr<char> gp_f0 = fut0.wait();
