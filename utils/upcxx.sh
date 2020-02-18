@@ -166,8 +166,13 @@ EOF
   $CXX --help
   exit 0
 elif [[ $doversion ]] ; then
-  header="$prefix/upcxx.*/include/upcxx/upcxx.hpp"
-  version=`(grep "#define UPCXX_VERSION" $header | head -1 | cut -d' ' -f 3 ) 2> /dev/null`
+  header="$prefix/upcxx.*/include/upcxx/upcxx.hpp $prefix/include/upcxx/upcxx.hpp" # installed or build-tree
+  version=$(grep "# *define  *UPCXX_VERSION " ${header} 2>/dev/null| head -1)
+  if [[ "$version" =~ ([0-9]{4})([0-9]{2})([0-9]{2}) ]]; then
+    version="${BASH_REMATCH[1]}.${BASH_REMATCH[2]#0}.${BASH_REMATCH[3]#0}"
+  else
+    version=${version##*UPCXX_VERSION }
+  fi
   githash=`(cat $prefix/share/doc/upcxx/docs/version.git ) 2> /dev/null`
   gexhash=`(cat $prefix/gasnet.*/share/doc/GASNet/version.git | head -1 ) 2> /dev/null`
   if [[ -n $gexhash ]] ; then
