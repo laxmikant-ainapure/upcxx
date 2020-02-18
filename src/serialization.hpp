@@ -644,7 +644,7 @@ namespace upcxx {
       }
       
       template<typename T, typename OutIter>
-      void read_sequence_into(OutIter into, std::size_t n) {
+      void read_sequence_into_iterator(OutIter into, std::size_t n) {
         while(n--) {
           *into = this->template read<T>();
           ++into;
@@ -1529,7 +1529,7 @@ namespace upcxx {
         std::size_t n = r.template read_trivial<std::size_t>();
         BagOut *bag = ::new(raw) BagOut;
         detail::template reserve_if_supported<BagOut>()(*bag, n);
-        r.template read_sequence_into<T0>(detail::template inserter<BagOut>()(*bag), n);
+        r.template read_sequence_into_iterator<T0>(detail::template inserter<BagOut>()(*bag), n);
         return bag;
       }
 

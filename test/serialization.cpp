@@ -153,6 +153,86 @@ static_assert(!is_trivially_serializable<nonpod2>::value, "Uh-oh");
 static_assert(!is_trivially_serializable<nonpod3>::value, "Uh-oh");
 static_assert(!is_trivially_serializable<nonpod4>::value, "Uh-oh");
 
+template<typename Derived, typename T>
+struct my_seq_base {
+  // test inheritance of upcxx_serialization
+  struct upcxx_serialization {
+    template<typename Writer>
+    static void serialize(Writer &w, Derived const &x) {
+      auto handle = w.template reserve<int>();
+      int n = (int)x.elts.size();
+      uint64_t rng = 0xbeef;
+
+      // perform write_sequence's of random length until all n elts have been written
+      for(int i=0; i < n;) {
+        int n1 = rng % (n - i + 1);
+        int i1 = i + n1;
+        rng ^= rng >> 30;
+        rng *= 0x1234567890abcdef;
+        rng += 0xbeef;
+        
+        w.write_sequence(x.elts.begin() + i, x.elts.begin() + i1, n1); // with explicit elt count
+        i = i1;
+        
+        n1 = rng % (n - i + 1);
+        i1 = i + n1;
+        rng ^= rng >> 30;
+        rng *= 0x1234567890abcdef;
+        rng += 0xbeef;
+        
+        w.write_sequence(x.elts.begin() + i, x.elts.begin() + i1); // without explicit elt count
+        i = i1;
+      }
+      
+      w.template commit<int>(handle, n);
+    }
+
+    template<typename Reader>
+    static Derived* deserialize(Reader &r, void *spot) {
+      int n = r.template read<int>();
+      void *mem = ::operator new(n*sizeof(T));
+
+      T *elts = nullptr;
+      if(n > 0) {
+        // deserialize one elt individually
+        elts = r.template read_into<T>(mem);
+        // then the rest as a sequence
+        r.template read_sequence_into<T>(elts+1, n-1);
+      }
+
+      Derived *ans = ::new(spot) Derived(decltype(Derived::elts)(elts, elts + n));
+      for(int i=0; i < n; i++)
+        elts[i].~T();
+      ::operator delete(mem);
+      return ans;
+    }
+  };
+};
+
+template<typename T>
+struct my_seq1: public my_seq_base<my_seq1<T>, T> {
+  // inherits upcxx_serialization
+  
+  std::vector<T> elts;
+  my_seq1(std::vector<T> elts): elts(std::move(elts)) {}
+
+  friend bool operator==(my_seq1 const &a, my_seq1 const &b) {
+    return a.elts == b.elts;
+  }
+};
+
+template<typename T>
+struct my_seq2: public my_seq_base<my_seq2<T>, T> {
+  // inherits upcxx_serialization
+
+  std::deque<T> elts;
+  my_seq2(std::deque<T> elts): elts(std::move(elts)) {}
+
+  friend bool operator==(my_seq2 const &a, my_seq2 const &b) {
+    return a.elts == b.elts;
+  }
+};
+
 int main() {
   print_test_header();
   
@@ -220,6 +300,42 @@ int main() {
     for(int i=0; i < 1000; i++)
       m.insert({i, std::string(11*i,'x')});
     roundtrip(m);
+  }
+
+  {
+    std::vector<short> lots;
+    for(int i=0; i < 1<<20; i++)
+      lots.push_back(i & 0x1234);
+    
+    roundtrip<std::pair<nonpod2, my_seq1<my_seq1<short>>>>({
+      {'u','v'},
+      my_seq1<my_seq1<short>>(
+        std::initializer_list<my_seq1<short>>{
+          std::vector<short>{100, 200, 300},
+          lots,
+          std::vector<short>{},
+          std::vector<short>{100, 200, 300}
+        }
+      )
+    });
+  }
+
+  {
+    std::deque<int> lots;
+    for(int i=0; i < 1<<20; i++)
+      lots.push_back(i);
+    
+    roundtrip<std::pair<nonpod3, my_seq2<my_seq2<int>>>>({
+      {'u','v'},
+      my_seq2<my_seq2<int>>(
+        std::initializer_list<my_seq2<int>>{
+          std::deque<int>{100, 200, 300},
+          lots,
+          std::deque<int>{},
+          std::deque<int>{100, 200, 300}
+        }
+      )
+    });
   }
 
   print_test_success();
