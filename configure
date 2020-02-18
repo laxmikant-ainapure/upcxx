@@ -142,8 +142,8 @@ EOF
 }
 
 function version {
-  header="src/upcxx.hpp"
-  version=$( (grep "#define UPCXX_VERSION" src/upcxx.hpp | head -1 | cut -d' ' -f 3 ) 2> /dev/null)
+  header="$UPCXX_SRC/src/upcxx.hpp"
+  version=$( (grep "#define UPCXX_VERSION" $header | head -1 | cut -d' ' -f 3 ) 2> /dev/null)
   githash=$(git describe --always 2> /dev/null)
   echo "UPC++ version $version $githash"
   echo "Copyright (c) 2020, The Regents of the University of California,"
