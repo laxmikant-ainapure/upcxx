@@ -75,6 +75,7 @@ The make targets utilizing the variables above:
   Builds the given test printing the full path of the executable on stdout.  
   Executables are cached, including sensitivity to `EXTRAFLAGS` and to changes
   made to the `SRC` file, its crawled dependencies, and to UPC\+\+ source files.
+  Note that `EXTRAFLAGS` does not influence UPC\+\+ or GASNet library builds.
 * `make run SRC=foo.cpp [EXTRAFLAGS=-Dfoo=bar] [ARGS='arg1 arg2'] [RANKS=n]`  
   Builds and runs the given test with the optional arguments.  
   Executables are cached just as with `exe`.
