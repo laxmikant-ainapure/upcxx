@@ -35,7 +35,7 @@ $(depfile): $(SRC) $(library)
 $(target): $(SRC) $(library) $(depfile)
 	@source $(upcxx_meta) SET; \
 	 case '$(SRC)' in \
-	 *.c) cmd="$$CC  $$CCFLAGS  $$CPPFLAGS $$LDFLAGS $(SRC) $$LIBS -o $(target) $(EXTRAFLAGS)";; \
-	 *)   cmd="$$CXX $$CXXFLAGS $$CPPFLAGS $$LDFLAGS $(SRC) $$LIBS -o $(target) $(EXTRAFLAGS)";; \
+	 *.c) cmd="$$CC  $$CCFLAGS  $$CPPFLAGS $$LDFLAGS $(SRC) $$LIBS -o $(target) $(UPCXX_COLOR_CFLAGS)   $(EXTRAFLAGS)";; \
+	 *)   cmd="$$CXX $$CXXFLAGS $$CPPFLAGS $$LDFLAGS $(SRC) $$LIBS -o $(target) $(UPCXX_COLOR_CXXFLAGS) $(EXTRAFLAGS)";; \
 	 esac; \
 	 echo "$$cmd"; eval "$$cmd"

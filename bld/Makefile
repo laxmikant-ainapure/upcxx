@@ -117,9 +117,15 @@ do-gasnet-configure: force
 ifeq ($(strip $(GASNET_TYPE)),build)
 gasnet-single: ; @: # empty rule
 else
+gasnet-single: MANUAL_CFLAGS   += $(UPCXX_COLOR_CFLAGS)
+gasnet-single: MANUAL_CXXFLAGS += $(UPCXX_COLOR_CXXFLAGS)
 gasnet-single: do-gasnet-configure
-	@$(MAKE) -C "$(GASNETDIR)/$(GASNET_CONDUIT)-conduit" $(GASNET_THREADMODE)
-	@if test $(GASNET_CONDUIT) = udp; then $(MAKE) -C "$(GASNETDIR)/other/amudp" amudprun; fi
+	@$(MAKE) -C "$(GASNETDIR)/$(GASNET_CONDUIT)-conduit" $(GASNET_THREADMODE) \
+	    MANUAL_CFLAGS='$(MANUAL_CFLAGS)' MANUAL_CXXFLAGS='$(MANUAL_CXXFLAGS)'
+	@if test $(GASNET_CONDUIT) = udp; then \
+	    $(MAKE) -C "$(GASNETDIR)/other/amudp" amudprun \
+	        MANUAL_CFLAGS='$(MANUAL_CFLAGS)' MANUAL_CXXFLAGS='$(MANUAL_CXXFLAGS)'; \
+	 fi
 endif
 
 #
@@ -316,8 +322,8 @@ include $(wildcard *.d)
 endif
 
 # Pattern rules with dependency file as extra prerequisite
-%.o: %.c   %.d; $(LIBUPCXX_C_COMPILE)   $($*_EXTRA_FLAGS) -c $< -o $@
-%.o: %.cpp %.d; $(LIBUPCXX_CXX_COMPILE) $($*_EXTRA_FLAGS) -c $< -o $@
+%.o: %.c   %.d; $(LIBUPCXX_C_COMPILE)   $($*_EXTRA_FLAGS) $(UPCXX_COLOR_CFLAGS)   -c $< -o $@
+%.o: %.cpp %.d; $(LIBUPCXX_CXX_COMPILE) $($*_EXTRA_FLAGS) $(UPCXX_COLOR_CXXFLAGS) -c $< -o $@
 
 # Pattern rules for first build when dependency file is missing
 # Must be the second of these two rule pairs

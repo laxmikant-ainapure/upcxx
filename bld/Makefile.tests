@@ -84,6 +84,7 @@ do-build-%: force
 	   UPCXX_THREADMODE=$$threadmode                 \
 	   UPCXX_NETWORK=$$network                       \
 	   $(UPCXX_BINDIR)/upcxx $(upcxx_src)/test/$$src \
+	                         $(UPCXX_COLOR_CXXFLAGS) \
 	                         -o $$exe$(EXESUFFIX) ); \
 	 if [[ $$? == 0 ]]; then                         \
 	   printf 'Compiling %-30s SUCCESS\n' "$$exe";   \

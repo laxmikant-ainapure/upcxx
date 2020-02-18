@@ -576,6 +576,30 @@ GASNET_CONFIGURE_ARGS+=" --with-cflags=\"${CFLAGS//\"/\\\"}\""
 GASNET_CONFIGURE_ARGS+=" --with-cxxflags=\"${CXXFLAGS//\"/\\\"}\""
 
 #
+# Colorization support
+# Use of __INTEL_POST_CFLAGS is an ugly hack to convert a specific warning to an error
+# TODO: better soln for Intel?
+#
+color_opts=( '-fdiagnostics-color=always' )
+echo 'int main() { return 0; }' >| conftest.c
+UPCXX_COLOR_CFLAGS=''
+for opt in "${color_opts[@]}"; do
+  if __INTEL_POST_CFLAGS+=' -we10148' $CC -c $opt -o conftest.o conftest.c >& /dev/null; then
+    UPCXX_COLOR_CFLAGS="$opt"
+    break
+  fi
+done
+echo 'int main() { return 0; }' >| conftest.cpp
+UPCXX_COLOR_CXXFLAGS=''
+for opt in "${color_opts[@]}"; do
+  if __INTEL_POST_CFLAGS+=' -we10148' $CXX -c $opt -o conftest.o conftest.cpp >& /dev/null; then
+    UPCXX_COLOR_CXXFLAGS="$opt"
+    break
+  fi
+done
+rm -f conftest.cpp conftest.c conftest.o
+
+#
 # UPCXX_PYTHON
 # First expand full path or validating existence
 # Second check version
@@ -843,6 +867,8 @@ export CONFIG_CXX=$CXX
 export GASNET=$GASNET
 export GASNET_TYPE=$GASNET_TYPE
 export CROSS=$CROSS
+export UPCXX_COLOR_CFLAGS=$UPCXX_COLOR_CFLAGS
+export UPCXX_COLOR_CXXFLAGS=$UPCXX_COLOR_CXXFLAGS
 export UPCXX_CSUMCMD=$UPCXX_CSUMCMD
 export UPCXX_MPSC_QUEUE=UPCXX_MPSC_QUEUE_$(tr '[a-z]' '[A-Z]' <<<$UPCXX_MPSC_QUEUE)
 export UPCXX_DBGOPT=$UPCXX_DBGOPT
