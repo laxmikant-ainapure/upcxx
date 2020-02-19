@@ -738,9 +738,9 @@ namespace upcxx {
     #define UPCXX_SERIALIZED_FIELDS(...) \
       auto upcxx_serialized_fields() \
         UPCXX_RETURN_DECLTYPE( \
-          std::forward_as_tuple(__VA_ARGS__) \
+          ::std::forward_as_tuple(__VA_ARGS__) \
         ) { \
-        return std::forward_as_tuple(__VA_ARGS__); \
+        return ::std::forward_as_tuple(__VA_ARGS__); \
       }
 
     template<typename TupRefs,
@@ -862,8 +862,8 @@ namespace upcxx {
 
     #define UPCXX_SERIALIZED_VALUES(...) \
       auto upcxx_serialized_values() const \
-        UPCXX_RETURN_DECLTYPE( std::make_tuple(__VA_ARGS__) ) { \
-        return std::make_tuple(__VA_ARGS__); \
+        UPCXX_RETURN_DECLTYPE( ::std::make_tuple(__VA_ARGS__) ) { \
+        return ::std::make_tuple(__VA_ARGS__); \
       }
 
     template<typename T>
