@@ -244,7 +244,12 @@ void check_general(bool has_virtual) {
   auto fut2 = upcxx_memberof_general(gp_o, f2);
   bool all_ready = fut0.ready() && fut1.ready() && fut2.ready();
   // the following is not guaranteed by spec, just tests the known implementation
-  bool expect_ready = std::is_standard_layout<T>::value;
+  bool expect_ready = std::is_standard_layout<T>::value
+                      || gp_o.where() == upcxx::rank_me()
+                      #if UPCXX_UNIFORM_LOCAL_VTABLES
+                      || gp_o.is_local()
+                      #endif
+                      ;
   if (expect_ready) assert(all_ready);
   else assert(!all_ready);
 
@@ -295,7 +300,7 @@ void check_general(bool has_virtual) {
     auto fut1 = upcxx_memberof_general(gpu_o, f1);
     auto fut2 = upcxx_memberof_general(gpu_o, f2);
     // the following is not guaranteed by spec, just tests the known implementation
-    bool expect_ready = std::is_standard_layout<T>::value;
+    bool expect_ready = std::is_standard_layout<T>::value || gpu_o.where() == upcxx::rank_me();
     bool all_ready = fut0.ready() && fut1.ready() && fut2.ready();
     if (expect_ready) assert(all_ready);
     else assert(!all_ready);

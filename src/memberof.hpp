@@ -11,6 +11,7 @@
 #include <upcxx/memory_kind.hpp>
 #include <upcxx/rpc.hpp>
 #include <upcxx/future.hpp>
+#include <upcxx/upcxx_config.hpp>
 
 #include <cstddef> // ptrdiff_t
 #include <cstdint> // uintptr_t
@@ -48,6 +49,24 @@
      upcxx_memberof_unsafe(gp, FIELD) \
   )
 
+// UPCXX_UNIFORM_LOCAL_VTABLES: set to non-zero when the C++ vtables for user types (which live in an .rodata segment)
+//   are known to be loaded at the same virtual address across the local_team().
+///  This enables shared-memory bypass optimization of memberof_general, even in the presence of virtual bases.
+//   Note this only applies to user types (and not, eg libstdc++.so), because std:: has no 
+//   public non-static data members in classes with virtual bases that could be passed to this macro.
+#ifndef UPCXX_UNIFORM_LOCAL_VTABLES
+  #if UPCXX_NETWORK_SMP
+    // smp-conduit always spawns using fork(), guaranteeing uniform segment layout
+    #define UPCXX_UNIFORM_LOCAL_VTABLES 1
+  #elif __PIE__ || __PIC__ 
+    // this is conservative: -fPIC alone doesn't generate relocatable vtables,
+    // but some compilers only define(__PIC__) for -pie -fpie
+    #define UPCXX_UNIFORM_LOCAL_VTABLES 0
+  #else
+    #define UPCXX_UNIFORM_LOCAL_VTABLES 1
+  #endif
+#endif
+
 namespace upcxx { namespace detail {
 
 template<typename Obj, memory_kind Kind, typename Mbr, typename Get,
@@ -68,6 +87,21 @@ template<typename Obj, memory_kind Kind, typename Mbr, typename Get>
 struct memberof_general_dispatch<Obj, Kind, Mbr, Get, /*standard_layout=*/false> {
   future<global_ptr<Mbr,Kind>> 
   operator()(global_ptr<Obj,Kind> gptr, Get getter) const {
+    if (gptr.rank_ == upcxx::rank_me()) {  // this rank owns - return a ready future
+      return upcxx::make_future(
+            global_ptr<Mbr,Kind>(detail::internal_only(), gptr.rank_, 
+                                 getter(gptr.raw_ptr_), gptr.device_));
+    }
+  #if UPCXX_UNIFORM_LOCAL_VTABLES
+    else if (gptr.dynamic_kind() == memory_kind::host && gptr.is_local()) { // in local_team host segment
+      // safe to directly compute the address of the field, without communication
+      Obj *lp = gptr.local();
+      Mbr *mbr = getter(lp);
+      std::intptr_t offset = reinterpret_cast<std::uintptr_t>(mbr) - reinterpret_cast<std::uintptr_t>(lp);
+      return upcxx::make_future(global_ptr<Mbr,Kind>(detail::internal_only(), gptr, offset));
+    }
+  #endif
+    else // communicate with owner
     return upcxx::rpc(gptr.rank_, [=]() {
       return global_ptr<Mbr,Kind>(detail::internal_only(), gptr.rank_, 
                                   getter(gptr.raw_ptr_), gptr.device_);
