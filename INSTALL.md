@@ -327,10 +327,18 @@ control over how UPC\+\+ is configured can be found in the
 [Advanced Configuration](#markdown-header-advanced-configuration) section below.
 
 By default ibv-conduit (InfiniBand support) will use MPI for job spawning if a
-working `mpicc` is found when UPC\+\+ is built.  When this occurs, one must pass
-`--with-cxx=mpicxx` (or similar) to `configure` to ensure correct linkage of
-ibv-conduit executables.  Alternatively, one may pass `--disable-mpi-compat` to
-exclude support for MPI as a job spawner.
+working `mpicc` is found in your `$PATH` when UPC\+\+ is built.  When this
+occurs, one must pass `--with-cxx=mpicxx` (or similar) to `configure` to ensure
+correct linkage of ibv-conduit executables.  It is then important that GASNet's
+MPI support use a corresponding/compatible `mpicc` and `mpirun`.  In the common
+case, the un-prefixed `mpicc` and `mpirun` in `$PATH` are compatible (ie. same
+vendor/version/ABI) with the provided `--with-cxx=mpicxx`, in which case
+nothing more should be required.  Otherwise, one may need to additionally pass
+options like `--with-mpi-cc='/path/to/compatible/mpicc -options'` and/or
+`--with-mpirun-cmd='/path/to/compatible/mpirun -np %N %C'`.  Please see
+GASNet's mpi-conduit documentation for details.  Alternatively, one may pass
+`--disable-mpi-compat` to disable support for MPI as a job spawner, eliminating
+the need to use an MPI C\+\+ compiler.
 
 After running `configure`, return to
 [Step 2: Compiling UPC\+\+](#markdown-header-2-compiling-upc4343), above.
