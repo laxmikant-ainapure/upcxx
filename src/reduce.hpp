@@ -242,7 +242,7 @@ namespace upcxx {
       
       static_assert(
         upcxx::is_trivially_serializable<T>::value,
-        "`upcxx::reduce_[all|one]<T>` only permitted for TriviallySerialize T. "
+        "`upcxx::reduce_[all|one]<T>` only permitted for TriviallySerializable T. "
         "Consider using `upcxx::reduce_[all|one]_nontrivial<T>` instead "
         "(experimental feature, use at own risk)."
       );
