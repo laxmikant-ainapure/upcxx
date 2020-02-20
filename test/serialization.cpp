@@ -194,6 +194,18 @@ static_assert(is_serializable<asym_type>::value, "Uh-oh.");
 static_assert(!is_trivially_serializable<asym_type>::value, "Uh-oh.");
 static_assert(std::is_same<int, deserialized_type_t<asym_type>>::value, "Uh-oh.");
 
+struct mod_eq {
+  int mod;
+  bool operator()(int a, int b) const { return a%mod == b%mod; }
+};
+
+struct mod_hash: nonpod_base {
+  int mod;
+  mod_hash(int m): mod(m) {}
+  std::size_t operator()(int a) const { return ((a % mod) + mod) % mod; }
+  UPCXX_SERIALIZED_VALUES(mod)
+};
+
 template<typename Derived, typename T>
 struct my_seq_base {
   // test inheritance of upcxx_serialization
@@ -336,6 +348,12 @@ int main() {
 
   {
     std::unordered_map<int, std::pair<int,std::string>> m;
+    for(int i=0; i < 1000; i++)
+      m[i] = {i, std::string(11*i,'x')};
+    roundtrip(m);
+  }
+  { // test non-default key hasher and equality functors
+    std::unordered_map<int, std::pair<int,std::string>, mod_hash, mod_eq> m(1, mod_hash(10), mod_eq{10});
     for(int i=0; i < 1000; i++)
       m[i] = {i, std::string(11*i,'x')};
     roundtrip(m);
