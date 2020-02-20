@@ -174,7 +174,7 @@ namespace upcxx {
       template<typename Event>
       using tuple_t = typename std::conditional<
           std::is_same<Event, operation_cx_event>::value,
-          /*Event == operation_cx_event:*/deserialized_type_of_t<results_tuple>,
+          /*Event == operation_cx_event:*/deserialized_type_t<results_tuple>,
           /*Event != operation_cx_event:*/std::tuple<>
         >::type;
     };
@@ -231,7 +231,7 @@ namespace upcxx {
       backend::template send_am_master<progress_level::user>(
         tm, recipient,
         upcxx::bind(
-          [=](deserialized_type_of_t<fn_bound_t> &&fn_bound1) {
+          [=](deserialized_type_t<fn_bound_t> &&fn_bound1) {
             return upcxx::apply_as_future(std::move(fn_bound1))
               .then(
                 // Wish we could just use a lambda here, but since it has

@@ -148,6 +148,22 @@ struct nonpod5: nonpod_base, nonpod5_side {
   UPCXX_SERIALIZED_FIELDS(h,i, UPCXX_SERIALIZED_BASE(nonpod5_side))
 };
 
+struct asym_type {
+  struct upcxx_serialization {
+    template<typename W>
+    static void serialize(W &w, asym_type const &x) {
+      w.template write<int>(123);
+    }
+    template<typename R>
+    static int* deserialize(R &r, void *spot) {
+      return ::new int(r.template read<int>());
+    }
+  };
+};
+
+static_assert(is_serializable<asym_type>::value, "Uh-oh.");
+static_assert(!is_trivially_serializable<asym_type>::value, "Uh-oh.");
+static_assert(std::same<int, deserialized_type_t<asym_type>>::value, "Uh-oh.");
 
 static_assert(is_trivially_serializable<const int>::value, "Uh-oh.");
 

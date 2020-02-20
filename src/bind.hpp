@@ -18,7 +18,7 @@ namespace upcxx {
   template<typename T>
   struct binding/*{
     // these must satisfy the type equality:
-    //   deserialized_type_of_t<binding<T>::on_wire_type>
+    //   deserialized_type_t<binding<T>::on_wire_type>
     //    ==
     //   binding<binding<T>::off_wire_type>::on_wire_type
     typedef on_wire_type;
@@ -45,7 +45,7 @@ namespace upcxx {
   struct binding_trivial {
     using stripped_type = T;
     using on_wire_type = T;
-    using off_wire_type = deserialized_type_of_t<T>;
+    using off_wire_type = deserialized_type_t<T>;
     using off_wire_future_type = typename detail::make_future<off_wire_type>::return_type;
     static constexpr bool immediate = true;
     
@@ -269,10 +269,10 @@ namespace upcxx {
 
     template<typename Reader>
     static deserialized_type* deserialize(Reader &r, void *spot) {
-      detail::raw_storage<deserialized_type_of_t<typename binding<Fn>::on_wire_type>> fn;
+      detail::raw_storage<deserialized_type_t<typename binding<Fn>::on_wire_type>> fn;
       r.template read_into<typename binding<Fn>::on_wire_type>(&fn);
 
-      detail::raw_storage<deserialized_type_of_t<std::tuple<typename binding<B>::on_wire_type...>>> b;
+      detail::raw_storage<deserialized_type_t<std::tuple<typename binding<B>::on_wire_type...>>> b;
       //#warning "uncomment"
       r.template read_into<std::tuple<typename binding<B>::on_wire_type...>>(&b);
       

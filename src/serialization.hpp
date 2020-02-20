@@ -47,11 +47,11 @@ namespace upcxx {
   };
   
   template<typename T>
-  struct deserialized_type_of {
+  struct deserialized_type {
     using type = typename serialization_traits<T>::deserialized_type;
   };
   template<typename T>
-  using deserialized_type_of_t = typename serialization_traits<T>::deserialized_type;
+  using deserialized_type_t = typename serialization_traits<T>::deserialized_type;
 
   namespace detail {
     template<typename T>
