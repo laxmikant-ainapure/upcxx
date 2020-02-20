@@ -1420,45 +1420,57 @@ namespace upcxx {
   //////////////////////////////////////////////////////////////////////////////
 
   #ifndef UPCXX_CREDUCE_SLIM
+  template<typename T>
+  struct is_trivially_serializable<std::allocator<T>>: std::true_type {};
+  #endif
+  
+  //////////////////////////////////////////////////////////////////////////////
+
+  #ifndef UPCXX_CREDUCE_SLIM
   template<typename CharT, typename Traits, typename Alloc>
   struct serialization<std::basic_string<CharT, Traits, Alloc>> {
     static_assert(std::is_trivial<CharT>::value, "Bad string character type.");
     
-    static constexpr bool is_serializable = true;
+    static constexpr bool is_serializable = serialization_traits<Alloc>::is_serializable;
 
     using Str = std::basic_string<CharT,Traits,Alloc>;
     
     template<typename Prefix>
     static auto ubound(Prefix pre, Str const &s)
       UPCXX_RETURN_DECLTYPE(
-        pre.template cat_ubound_of<std::size_t>(1)
+        pre.template cat_ubound_of<Alloc>(std::declval<Alloc>())
+           .template cat_ubound_of<std::size_t>(1)
            .cat(storage_size_of<CharT>().arrayed(1))
       ) {
       std::size_t n = s.size();
-      return pre.template cat_ubound_of<std::size_t>(n)
+      return pre.template cat_ubound_of<Alloc>(s.get_allocator())
+                .template cat_ubound_of<std::size_t>(n)
                 .cat(storage_size_of<CharT>().arrayed(n));
     }
 
     template<typename Writer>
     static void serialize(Writer &w, Str const &s) {
       std::size_t n = s.size();
+      w.template write<Alloc>(s.get_allocator());
       w.template write<std::size_t>(n);
       w.write_sequence(&s[0], &s[0] + n, n);
     }
 
-    static constexpr bool references_buffer = false;
+    static constexpr bool references_buffer = serialization_traits<Alloc>::references_buffer;
     
     template<typename Reader>
     static Str* deserialize(Reader &r, void *raw) {
+      Alloc a = r.template read<Alloc>();
       std::size_t n = r.template read<std::size_t>();
       CharT const *p = (CharT const*)r.unplace(storage_size_of<CharT>().arrayed(n));
-      return ::new(raw) Str(p, n);
+      return ::new(raw) Str(p, n, std::move(a));
     }
 
-    static constexpr bool skip_is_fast = true;
+    static constexpr bool skip_is_fast = serialization_traits<Alloc>::skip_is_fast;
 
     template<typename Reader>
     static void skip(Reader &r) {
+      r.template skip<Alloc>();
       std::size_t n = r.template read<std::size_t>();
       r.unplace(storage_size_of<CharT>().arrayed(n));
     }
@@ -1497,34 +1509,40 @@ namespace upcxx {
              typename T0 = typename BagIn::value_type,
              typename T1 = typename BagOut::value_type>
     struct serialization_container {
-      static constexpr bool is_serializable = serialization_traits<T0>::is_serializable;
+      static constexpr bool is_serializable = serialization_traits<typename BagIn::allocator_type>::is_serializable &&
+                                              serialization_traits<T0>::is_serializable;
       
       template<typename Prefix>
       static auto ubound(Prefix pre, BagIn const &bag)
         UPCXX_RETURN_DECLTYPE(
-          pre.template cat_ubound_of<std::size_t>(1)
+          pre.template cat_ubound_of<typename BagIn::allocator_type>(std::declval<typename BagIn::allocator_type>())
+             .template cat_ubound_of<std::size_t>(1)
              .cat(serialization_traits<T0>::static_ubound.arrayed(1))
         ) {
         std::size_t n = bag.size();
-        return pre.template cat_ubound_of<std::size_t>(n)
+        return pre.template cat_ubound_of<typename BagIn::allocator_type>(bag.get_allocator())
+                  .template cat_ubound_of<std::size_t>(n)
                   .cat(serialization_traits<T0>::static_ubound.arrayed(n));
       }
 
       template<typename Writer>
       static void serialize(Writer &w, BagIn const &bag) {
         std::size_t n = bag.size();
+        w.template write<typename BagIn::allocator_type>(bag.get_allocator());
         w.write_trivial(n);
         w.write_sequence(bag.begin(), bag.end(), n);
       }
 
-      static constexpr bool references_buffer = serialization_traits<T0>::references_buffer;
+      static constexpr bool references_buffer = serialization_traits<typename BagIn::allocator_type>::references_buffer ||
+                                                serialization_traits<T0>::references_buffer;
 
       using deserialized_type = BagOut;
 
       template<typename Reader>
       static BagOut* deserialize(Reader &r, void *raw) {
+        typename BagOut::allocator_type a = r.template read<typename BagIn::allocator_type>();
         std::size_t n = r.template read_trivial<std::size_t>();
-        BagOut *bag = ::new(raw) BagOut;
+        BagOut *bag = ::new(raw) BagOut(std::move(a));
         detail::template reserve_if_supported<BagOut>()(*bag, n);
         r.template read_sequence_into_iterator<T0>(detail::template inserter<BagOut>()(*bag), n);
         return bag;
@@ -1532,11 +1550,13 @@ namespace upcxx {
 
       template<typename Reader>
       static void skip(Reader &r) {
+        r.template skip<typename BagIn::allocator_type>();
         std::size_t n = r.template read_trivial<std::size_t>();
         r.template skip_sequence<T0>(n);
       }
 
-      static constexpr bool skip_is_fast = serialization_reader::template skip_sequence_is_fast<T0>();
+      static constexpr bool skip_is_fast = serialization_traits<typename BagIn::allocator_type>::skip_is_fast &&
+                                           serialization_reader::template skip_sequence_is_fast<T0>();
     };
   }
 
@@ -1544,21 +1564,21 @@ namespace upcxx {
   struct serialization<std::vector<T,Alloc>>:
     detail::serialization_container<
       std::vector<T, Alloc>,
-      std::vector<typename serialization_traits<T>::deserialized_type, Alloc>
+      std::vector<typename serialization_traits<T>::deserialized_type, typename serialization_traits<Alloc>::deserialized_type>
     > {
   };
   template<typename T, typename Alloc>
   struct serialization<std::deque<T,Alloc>>:
     detail::serialization_container<
       std::deque<T, Alloc>,
-      std::deque<typename serialization_traits<T>::deserialized_type, Alloc>
+      std::deque<typename serialization_traits<T>::deserialized_type, typename serialization_traits<Alloc>::deserialized_type>
     > {
   };
   template<typename T, typename Alloc>
   struct serialization<std::list<T,Alloc>>:
     detail::serialization_container<
       std::list<T, Alloc>,
-      std::list<typename serialization_traits<T>::deserialized_type, Alloc>
+      std::list<typename serialization_traits<T>::deserialized_type, typename serialization_traits<Alloc>::deserialized_type>
     > {
   };
 
@@ -1566,14 +1586,14 @@ namespace upcxx {
   struct serialization<std::set<T,Cmp,Alloc>>:
     detail::serialization_container<
       std::set<T,Cmp,Alloc>,
-      std::set<typename serialization_traits<T>::deserialized_type, Cmp, Alloc>
+      std::set<typename serialization_traits<T>::deserialized_type, Cmp, typename serialization_traits<Alloc>::deserialized_type>
     > {
   };
   template<typename T, typename Cmp, typename Alloc>
   struct serialization<std::multiset<T,Cmp,Alloc>>:
     detail::serialization_container<
       std::multiset<T,Cmp,Alloc>,
-      std::multiset<typename serialization_traits<T>::deserialized_type, Cmp, Alloc>
+      std::multiset<typename serialization_traits<T>::deserialized_type, Cmp, typename serialization_traits<Alloc>::deserialized_type>
     > {
   };
 
@@ -1581,14 +1601,14 @@ namespace upcxx {
   struct serialization<std::unordered_set<T,Hash,Eq,Alloc>>:
     detail::serialization_container<
       std::unordered_set<T,Hash,Eq,Alloc>,
-      std::unordered_set<typename serialization_traits<T>::deserialized_type, Hash, Eq, Alloc>
+      std::unordered_set<typename serialization_traits<T>::deserialized_type, Hash, Eq, typename serialization_traits<Alloc>::deserialized_type>
     > {
   };
   template<typename T, typename Hash, typename Eq, typename Alloc>
   struct serialization<std::unordered_multiset<T,Hash,Eq,Alloc>>:
     detail::serialization_container<
       std::unordered_multiset<T,Hash,Eq,Alloc>,
-      std::unordered_multiset<typename serialization_traits<T>::deserialized_type, Hash, Eq, Alloc>
+      std::unordered_multiset<typename serialization_traits<T>::deserialized_type, Hash, Eq, typename serialization_traits<Alloc>::deserialized_type>
     > {
   };
 
@@ -1598,7 +1618,7 @@ namespace upcxx {
       std::map<K,V,Cmp,Alloc>,
       std::map<
         typename serialization_traits<K>::deserialized_type,
-        typename serialization_traits<V>::deserialized_type, Cmp, Alloc>
+        typename serialization_traits<V>::deserialized_type, Cmp, typename serialization_traits<Alloc>::deserialized_type>
     > {
   };
   template<typename K, typename V, typename Cmp, typename Alloc>
@@ -1607,7 +1627,7 @@ namespace upcxx {
       std::multimap<K,V,Cmp,Alloc>,
       std::multimap<
         typename serialization_traits<K>::deserialized_type,
-        typename serialization_traits<V>::deserialized_type, Cmp, Alloc>
+        typename serialization_traits<V>::deserialized_type, Cmp, typename serialization_traits<Alloc>::deserialized_type>
     > {
   };
 
@@ -1617,7 +1637,7 @@ namespace upcxx {
       std::unordered_map<K,V,Hash,Eq,Alloc>,
       std::unordered_map<
         typename serialization_traits<K>::deserialized_type,
-        typename serialization_traits<V>::deserialized_type, Hash, Eq, Alloc>
+        typename serialization_traits<V>::deserialized_type, Hash, Eq, typename serialization_traits<Alloc>::deserialized_type>
     > {
   };
   template<typename K, typename V, typename Hash, typename Eq, typename Alloc>
@@ -1626,7 +1646,7 @@ namespace upcxx {
       std::unordered_multimap<K,V,Hash,Eq,Alloc>,
       std::unordered_multimap<
         typename serialization_traits<K>::deserialized_type,
-        typename serialization_traits<V>::deserialized_type, Hash, Eq, Alloc>
+        typename serialization_traits<V>::deserialized_type, Hash, Eq, typename serialization_traits<Alloc>::deserialized_type>
     > {
   };
 
@@ -1635,25 +1655,29 @@ namespace upcxx {
     using T0 = T;
     using T1 = typename serialization_traits<T>::deserialized_type;
 
-    static constexpr bool is_serializable = serialization_traits<T0>::is_serializable;
+    static constexpr bool is_serializable = serialization_traits<Alloc>::is_serializable &&
+                                            serialization_traits<T0>::is_serializable;
 
     // no ubound
     
     template<typename Writer>
     static void serialize(Writer &w, std::forward_list<T0,Alloc> const &bag) {
+      w.write(bag.get_allocator());
       void *n_spot = w.place(storage_size_of<std::size_t>());
       std::size_t n = w.write_sequence(bag.begin(), bag.end());
       ::new(n_spot) std::size_t(n);
     }
 
-    static constexpr bool references_buffer = serialization_traits<T0>::references_buffer;
+    static constexpr bool references_buffer = serialization_traits<Alloc>::references_buffer ||
+                                              serialization_traits<T0>::references_buffer;
 
-    using deserialized_type = std::forward_list<T1,Alloc>;
+    using deserialized_type = std::forward_list<T1, typename serialization_traits<Alloc>::deserialized_type>;
 
     template<typename Reader>
     static deserialized_type* deserialize(Reader &r, void *raw) {
+      auto a = r.template read<Alloc>();
       std::size_t n = r.template read_trivial<std::size_t>();
-      deserialized_type *ans = ::new(raw) deserialized_type;
+      deserialized_type *ans = ::new(raw) deserialized_type(std::move(a));
       if(n != 0) {
         ans->push_front(r.template read<T0>());
         
@@ -1666,11 +1690,13 @@ namespace upcxx {
 
     template<typename Reader>
     static void skip(Reader &r) {
+      r.template skip<Alloc>();
       std::size_t n = r.template read_trivial<std::size_t>();
       r.template skip_sequence<T>(n);
     }
 
-    static constexpr bool skip_is_fast = detail::serialization_reader::template skip_sequence_is_fast<T>();
+    static constexpr bool skip_is_fast = serialization_traits<Alloc>::skip_is_fast &&
+                                         detail::serialization_reader::template skip_sequence_is_fast<T>();
   };
   #endif
 }
