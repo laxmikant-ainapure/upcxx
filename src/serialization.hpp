@@ -737,11 +737,15 @@ namespace upcxx {
 
     #define UPCXX_SERIALIZED_FIELDS(...) \
       auto upcxx_serialized_fields() \
-        UPCXX_RETURN_DECLTYPE( \
-          ::std::forward_as_tuple(__VA_ARGS__) \
-        ) { \
+        UPCXX_RETURN_DECLTYPE(::std::forward_as_tuple(__VA_ARGS__)) { \
         return ::std::forward_as_tuple(__VA_ARGS__); \
-      }
+      } \
+      struct upcxx_serialization { \
+        template<typename T> \
+        struct supply_type_please: ::upcxx::detail::serialization_fields<T> {}; \
+      };
+    
+    #define UPCXX_SERIALIZED_BASE(ty) *static_cast<ty*>(this)
 
     template<typename TupRefs,
              int i = 0,
@@ -825,6 +829,8 @@ namespace upcxx {
     struct serialization_fields {
       using refs_tup_type = decltype(std::declval<T&>().upcxx_serialized_fields());
       
+      static constexpr bool is_serializable = true;
+
       template<typename Prefix>
       static auto ubound(Prefix pre, T const &x)
         UPCXX_RETURN_DECLTYPE(
@@ -864,12 +870,18 @@ namespace upcxx {
       auto upcxx_serialized_values() const \
         UPCXX_RETURN_DECLTYPE( ::std::make_tuple(__VA_ARGS__) ) { \
         return ::std::make_tuple(__VA_ARGS__); \
-      }
-
+      } \
+      struct upcxx_serialization { \
+        template<typename T> \
+        struct supply_type_please: ::upcxx::detail::serialization_values<T> {}; \
+      };
+    
     template<typename T>
     struct serialization_values {
       using vals_tup_type = decltype(std::declval<T&>().upcxx_serialized_values());
-      
+
+      static constexpr bool is_serializable = true;
+    
       template<typename Prefix>
       static auto ubound(Prefix pre, T const &x)
         UPCXX_RETURN_DECLTYPE(
@@ -907,25 +919,21 @@ namespace upcxx {
     
     ////////////////////////////////////////////////////////////////////////////
 
-    // ...otherwise checks if has nested subclass T::upcxx_serialization
+    // ...otherwise checks if has nested subclass T::upcxx_serialization::supply_type_please<typename>
     template<typename T, typename=void>
     struct serialization_dispatch1;
 
-    // ...otherwise checks if has UPCXX_SERIALIZED_VALUES
-    template<typename T, typename=void>
-    struct serialization_dispatch2;
-
-    // ...otherwise checks if has UPCXX_SERIALIZED_FIELDS
+    // ...otherwise checks if has T::upcxx_serialization
     // ...finally otherwise dispatch to trivial serialization
     template<typename T, typename=void>
-    struct serialization_dispatch3;
+    struct serialization_dispatch2;
 
     ////////////////////////////////////////////////////////////////////////////
 
     template<typename T>
     struct serialization_dispatch1<T,
-        typename std::conditional<true, void, typename T::upcxx_serialization>::type
-      >: T::upcxx_serialization {
+        typename std::conditional<true, void, typename T::upcxx_serialization::template supply_type_please<T>>::type
+      >: T::upcxx_serialization::template supply_type_please<T> {
     };
 
     template<typename T, typename>
@@ -933,30 +941,19 @@ namespace upcxx {
 
     template<typename T>
     struct serialization_dispatch2<T,
-        decltype((std::declval<T&>().upcxx_serialized_values(), void()))
-      >:
-      serialization_values<T> {
-      static constexpr bool is_serializable = true;
+        typename std::conditional<true, void, typename T::upcxx_serialization>::type
+      >: T::upcxx_serialization {
     };
 
     template<typename T, typename>
-    struct serialization_dispatch2: serialization_dispatch3<T> {};
-
-    template<typename T>
-    struct serialization_dispatch3<T,
-        decltype((std::declval<T&>().upcxx_serialized_fields(), void()))
-      >:
-      serialization_fields<T> {
-      static constexpr bool is_serializable = true;
-    };
-
-    template<typename T, typename>
-    struct serialization_dispatch3:
+    struct serialization_dispatch2:
       serialization_trivial<T> {
-      static constexpr bool is_specialized = false;
+      static constexpr bool is_specialized = false; // only case where this is needed since serialization_is_specialized defaults to true
       static constexpr bool is_serializable = false;
     };
 
+    // query to determine if serialization has been specialized or provided
+    // via nested class or macros.
     template<typename T, typename>
     struct serialization_is_specialized: std::true_type {};
 
@@ -973,7 +970,7 @@ namespace upcxx {
   namespace detail {
     template<typename T, typename=std::false_type>
     struct serialization_traits_serializable {
-      static constexpr bool is_serializable = false;
+      static constexpr bool is_serializable = true; // true since its absence means the user has provided serialization
     };
     template<typename T>
     struct serialization_traits_serializable<T,

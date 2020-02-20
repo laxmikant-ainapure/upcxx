@@ -134,6 +134,21 @@ namespace upcxx {
   };
 }
 
+// This case tests that UPCXX_SERIALIZED_BASE works and that serialization macros
+// in base classes are shadowed by those in derived classes.
+
+struct nonpod5_side {
+  UPCXX_SERIALIZED_VALUES(123)
+  nonpod5_side(int _123) { UPCXX_ASSERT_ALWAYS(_123 == 123); }
+};
+
+struct nonpod5: nonpod_base, nonpod5_side {
+  nonpod5(): nonpod_base(), nonpod5_side(123) {}
+  nonpod5(char h, char i): nonpod_base(h,i), nonpod5_side(123) {}
+  UPCXX_SERIALIZED_FIELDS(h,i, UPCXX_SERIALIZED_BASE(nonpod5_side))
+};
+
+
 static_assert(is_trivially_serializable<const int>::value, "Uh-oh.");
 
 static_assert(is_trivially_serializable<std::pair<int,char>>::value, "Uh-oh.");
@@ -149,9 +164,19 @@ static_assert(serialization_traits<std::tuple<const int,char>>::is_actually_triv
 static_assert(!is_trivially_serializable<std::string>::value, "Uh-oh");
 
 static_assert(!is_trivially_serializable<nonpod1>::value, "Uh-oh");
+static_assert(is_serializable<nonpod1>::value, "Uh-oh");
+
 static_assert(!is_trivially_serializable<nonpod2>::value, "Uh-oh");
+static_assert(is_serializable<nonpod2>::value, "Uh-oh");
+
 static_assert(!is_trivially_serializable<nonpod3>::value, "Uh-oh");
+static_assert(is_serializable<nonpod3>::value, "Uh-oh");
+
 static_assert(!is_trivially_serializable<nonpod4>::value, "Uh-oh");
+static_assert(is_serializable<nonpod4>::value, "Uh-oh");
+
+static_assert(!is_trivially_serializable<nonpod5>::value, "Uh-oh");
+static_assert(is_serializable<nonpod5>::value, "Uh-oh");
 
 template<typename Derived, typename T>
 struct my_seq_base {
@@ -279,6 +304,16 @@ int main() {
         std::tuple<std::string,nonpod4>("hi",{'a','b'}),
         std::tuple<std::string,nonpod4>("bob",{'x','y'}),
         std::tuple<std::string,nonpod4>("alice",{'\0','!'})
+      }
+    }
+  );
+  roundtrip<std::vector<std::list<std::tuple<std::string,nonpod5>>>>(
+    std::initializer_list<std::list<std::tuple<std::string,nonpod5>>>{
+      {},
+      std::initializer_list<std::tuple<std::string,nonpod5>>{
+        std::tuple<std::string,nonpod5>("hi",{'a','b'}),
+        std::tuple<std::string,nonpod5>("bob",{'x','y'}),
+        std::tuple<std::string,nonpod5>("alice",{'\0','!'})
       }
     }
   );
