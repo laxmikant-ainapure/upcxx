@@ -25,6 +25,10 @@ New features/enhancements: (see specification and programmer's guide for full de
 * Improve GASNet polling heuristic to reduce head-of-line blocking
 * `upcxx::promise` now behaves as a CopyAssignable handle to a reference-counted hidden object,
   meaning users no longer have to worry about promise lifetime issues.
+* `atomic_domain<T>` is now implemented for all 32- and 64-bit integer types,
+  in addition to the fixed-width integer types, `(u)int{32,64}_t`.
+* `atomic_domain<T>` implementation has been streamlined to reduce overhead,
+  most notably for targets with affinity to `local_team` using CPU-based atomics.
 * Installed CMake package file is now more robust, and supports versioning.
 
 Notable bug fixes:
@@ -42,7 +46,8 @@ Notable bug fixes:
 
 Breaking changes:
 
-* ...
+* atomic_domain has been specified as non-DefaultConstructible since UPC++ spec draft 8 (2018.9)
+  Thie release removes the default constructor implementation from atomic_domain.
 
 ### 2019.09.14: Release 2019.9.0
 
