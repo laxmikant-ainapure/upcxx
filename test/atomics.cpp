@@ -207,13 +207,12 @@ struct _test_type<T,8> {
 void test_team(const upcxx::team &tm) {
 
   upcxx::atomic_domain<int32_t> ad_i({atomic_op::store, atomic_op::fetch_add}, tm);
-  upcxx::atomic_domain<int32_t> ad; 
 
   // uncomment to evaluate error checking
   //upcxx::atomic_domain<const int> ad_cint({upcxx::atomic_op::load});
   // will fail with an error message about no move/copy assignment or copy constructor
-  //ad = std::move(ad_i);
-  //ad = ad_i;
+  //upcxx::atomic_domain<int32_t> ad = std::move(ad_i);
+  //upcxx::atomic_domain<int32_t> ad = ad_i;
   //upcxx::atomic_domain<int32_t> ad2 = ad_i; 
   // this will fail with an error message about an unsupported domain
   //ad_i.load(upcxx::allocate<int32_t>(1), memory_order_relaxed).wait();

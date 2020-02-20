@@ -46,7 +46,8 @@ Notable bug fixes:
 
 Breaking changes:
 
-* ...
+* atomic_domain has been specified as non-DefaultConstructible since UPC++ spec draft 8 (2018.9)
+  Thie release removes the default constructor implementation from atomic_domain.
 
 ### 2019.09.14: Release 2019.9.0
 

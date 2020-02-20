@@ -278,7 +278,9 @@ namespace upcxx {
     public:
       // default constructor 
       // issue #316: this is NOT guaranteed by spec
+      #if 0
       atomic_domain() {}
+      #endif
 
       atomic_domain(atomic_domain &&that) {
         this->ad_gex_handle = that.ad_gex_handle;
