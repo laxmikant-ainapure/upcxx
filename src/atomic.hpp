@@ -52,8 +52,10 @@ namespace upcxx {
         case std::memory_order_relaxed: return 0;
         case std::memory_order_seq_cst:
           UPCXX_ASSERT(0, "Unsupported memory order: std::memory_order_seq_cst");
+          break;
         case std::memory_order_consume:
           UPCXX_ASSERT(0, "Unsupported memory order: std::memory_order_consume");
+          break;
         default:
           UPCXX_ASSERT(0, "Unrecognized memory order: " << (int)order);      
       }
