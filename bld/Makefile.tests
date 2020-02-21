@@ -107,7 +107,7 @@ do-tests: force
 	     targets+=" do-build-$${test/\//..}-$$network";  \
 	   done;                                             \
 	 done;                                               \
-	 if [[ -n '$(filter -j,$(MAKEFLAGS))' ]]; then       \
+	 if [[ -n '$(filter -j%,$(MAKEFLAGS))' ]]; then      \
 	   $(MAKE) $(MAKE_HERE) $$targets || exit $$?;       \
 	   echo;                                             \
 	 else                                                \
