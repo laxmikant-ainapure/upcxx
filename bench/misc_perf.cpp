@@ -77,10 +77,13 @@ int main(int argc, char **argv) {
 
   nranks = upcxx::rank_n();
   self = upcxx::rank_me();
-  peer = (self + 1) % upcxx::rank_n();
+  // cross-machine symmetric pairing
+  if (nranks % 2 == 1 && self == nranks - 1) peer = self;
+  else if (self < nranks/2) peer = self + nranks/2;
+  else peer = self - nranks/2;
   std::stringstream ss;
 
-  ss << self << "/" << nranks << " : " << gasnett_gethostname() << "\n";
+  ss << self << "/" << nranks << " : " << gasnett_gethostname() << " : peer=" << peer << "\n";
   std::cout << ss.str() << std::flush;
 
   upcxx::barrier();
@@ -164,7 +167,9 @@ void doit2() {
 }
 void doit3() {
   if (upcxx::rank_n() > 1) {
-    if (!upcxx::rank_me()) std::cout << "\n Remote UPC++ tests:" << std::endl;
+    bool all_local = upcxx::reduce_all(upcxx::local_team_contains(peer), upcxx::op_fast_bit_and).wait();
+    if (!upcxx::rank_me()) std::cout << "\n Remote UPC++ tests: " 
+                                     << (all_local ? "(local_team())" : "(world())") << std::endl;
     TIME_OPERATION("upcxx::rpc(peer,noop0)",upcxx::rpc(peer,&noop0).wait());
     TIME_OPERATION("upcxx::rpc(peer,noop8)",upcxx::rpc(peer,&noop8,0,0,0,0,0,0,0,0).wait());
     TIME_OPERATION("upcxx::rpc(peer,lamb0)",upcxx::rpc(peer,[](){}).wait());
@@ -175,8 +180,7 @@ void doit3() {
 
     using upcxx::atomic_op;
     { upcxx::promise<> p;
-      upcxx::team &ad_team = (upcxx::local_team_contains(peer) ? 
-                              upcxx::local_team() : upcxx::world());
+      upcxx::team &ad_team = (all_local ? upcxx::local_team() : upcxx::world());
       upcxx::atomic_domain<std::int64_t> ad_fa({atomic_op::fetch_add, atomic_op::add}, ad_team);
       TIME_OPERATION("atomic_domain<int64>::add(relaxed) peer overhead", 
                      ad_fa.add(gpi64_peer, 1, std::memory_order_relaxed, upcxx::operation_cx::as_promise(p)));
