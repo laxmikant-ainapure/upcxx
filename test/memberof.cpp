@@ -29,9 +29,11 @@ void typeprops() {
 struct tricksy { // standard layout, trivial, POD
   static void _() { typeprops<tricksy,true,true,true>(); }
   char z;
+  #ifndef __PGI // PGI offsetof() known to be broken wrt operator& in many installs
   void operator&() { 
     assert(0 && "tricksy::operator& invoked!");    
   }
+  #endif
 };
 
 struct A {  // standard layout, trivial, POD
