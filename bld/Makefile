@@ -539,6 +539,10 @@ UPCXX_EXE      = $(UPCXX_EXE_STEM)$(call GASNET_VAR,$(builddir)/$(GASNETDIR),EXE
 
 do-exe: force
 	@mkdir -p $(UPCXXDIR)/exe
+	@if [[ -z '$(UPCXX_EXE_CSUM)' ]]; then \
+	   echo "Developer targets 'exe' and 'run' are unavailable (missing or broken checksum utility)"; \
+	   exit 1;  \
+	 fi
 	@$(MAKE) $(UPCXXDIR)/libupcxx.a
 	@$(MAKE) -C "$(STARTDIR)" -f $(top_srcdir)/bld/Makefile-exe.mak \
 		GASNET_CC_FAMILY='$(GASNET_CC_FAMILY)' GASNET_CXX_FAMILY='$(GASNET_CXX_FAMILY)' \

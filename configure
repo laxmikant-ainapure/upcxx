@@ -601,7 +601,8 @@ for cmd in shasum sha1sum md5sum md5; do
   fi
 done
 if [[ -z "$UPCXX_CSUMCMD" ]]; then
-  echo_and_die Unable to find a usable checksum utility
+  warnings+="\nWARNING: The developer targets 'exe' and 'run' are unavailable due to\n"
+  warnings+="WARNING: lack of a usable checksum utility.\n"
 fi
 
 #
