@@ -35,7 +35,7 @@ Notable bug fixes:
 
 * issue #247: unused-local-typedef warning for some compilers
 * issue #271: Use of `-pthread` in `example/prog-guide/Makefile` breaks PGI
-* issue #277: Ensure completion_cx::as_promise(p) works even when p is destroyed prior to fulfillment
+* issue #277: Ensure `completion_cx::as_promise(p)` works even when p is destroyed prior to fulfillment
 * issue #282: Improve installed CMake package files
 * issue #287: Bogus install warnings on Cray XC regarding CC/CXX
 * issue #289: link failure for PGI with -std=c++17
@@ -46,8 +46,8 @@ Notable bug fixes:
 
 Breaking changes:
 
-* atomic_domain has been specified as non-DefaultConstructible since UPC++ spec draft 8 (2018.9)
-  Thie release removes the default constructor implementation from atomic_domain.
+* `atomic_domain` has been specified as non-DefaultConstructible since UPC++ spec draft 8 (2018.9)
+  This release removes the default constructor implementation from `atomic_domain`.
 
 ### 2019.09.14: Release 2019.9.0
 
