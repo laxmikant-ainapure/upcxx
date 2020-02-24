@@ -31,9 +31,11 @@ New features/enhancements: (see specification and programmer's guide for full de
 * `atomic_domain<T>` implementation has been streamlined to reduce overhead,
   most notably for targets with affinity to `local_team` using CPU-based atomics.
 * Installed CMake package file is now more robust, and supports versioning.
+* `global_ptr<T>` now enforces many additional sanity checks in debug mode
 
 Notable bug fixes:
 
+* issue #83: strengthen `global_ptr` correctness assertions
 * issue #247: unused-local-typedef warning for some compilers
 * issue #271: Use of `-pthread` in `example/prog-guide/Makefile` breaks PGI
 * issue #277: Ensure `completion_cx::as_promise(p)` works even when p is destroyed prior to fulfillment
