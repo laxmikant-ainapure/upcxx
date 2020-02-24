@@ -1037,18 +1037,18 @@ namespace upcxx {
         typename std::conditional<true, void, typename serialization<T>::deserialized_type>::type
       > {
     };
-    
+
     template<typename T, bool is_triv_serz = is_trivially_serializable<T>::value>
-    struct serialization_traits1;
+    struct serialization_traits2;
 
     template<typename T>
-    struct serialization_traits1<T, /*is_triv_serz=*/true>:
+    struct serialization_traits2<T, /*is_triv_serz=*/true>:
       serialization_trivial<T> {
       static constexpr bool is_serializable = true;
     };
     
     template<typename T>
-    struct serialization_traits1<T, /*is_triv_serz=*/false>:
+    struct serialization_traits2<T, /*is_triv_serz=*/false>:
       detail::serialization_traits_serializable<T>,
       detail::serialization_traits_actually_trivially_serializable<T>,
       detail::serialization_traits_skip_is_fast<T>,
@@ -1056,6 +1056,63 @@ namespace upcxx {
       detail::serialization_traits_references_buffer<T>,
       detail::serialization_traits_deserialized_type<T>,
       serialization<T> {
+    };
+
+    template<typename T, typename=void>
+    struct serialization_traits_deserialized_value {
+      // Can't implement deserialized_value() because it's return type would be a
+      // not returnable type (like a native array).
+    };
+    template<typename T>
+    struct serialization_traits_deserialized_value<T,
+        // this specialization fails if deserilized_value has an invalid signature
+        typename std::conditional<true, void, typename serialization_traits2<T>::deserialized_type(*)()>::type
+      > {
+      static typename serialization_traits2<T>::deserialized_type
+      deserialized_value(T const &x) {
+        using T1 = typename serialization_traits2<T>::deserialized_type;
+        
+        auto ub = serialization_traits2<T>::ubound(empty_storage_size, x);
+        constexpr std::size_t static_storage_size = decltype(ub)::static_size < 512 ? decltype(ub)::static_size : 512;
+        detail::xaligned_storage<static_storage_size, serialization_align_max> static_storage;
+        
+        void *storage;
+        std::size_t storage_size;
+        
+        if(decltype(ub)::is_static || !decltype(ub)::is_valid) {
+          storage = static_storage.storage();
+          storage_size = static_storage_size;
+        }
+        else {
+          storage = detail::alloc_aligned(ub.size, ub.align);
+          storage_size = ub.size;
+        }
+        
+        detail::serialization_writer</*bounded=*/decltype(ub)::is_valid> w(storage, storage_size);
+        
+        serialization_traits2<T>::serialize(w, x);
+        
+        if(!w.contained_in_initial()) {
+          storage_size = w.size();
+          storage = detail::alloc_aligned(storage_size, std::max(sizeof(void*), w.align()));
+          w.compact_and_invalidate(storage);
+        }
+        
+        detail::serialization_reader r(storage);
+        detail::raw_storage<T1> x1_raw;
+        (void)serialization_traits2<T>::deserialize(r, &x1_raw);
+        
+        if(storage != static_storage.storage())
+          std::free(storage);
+        
+        return x1_raw.value_and_destruct();
+      }
+    };
+    
+    template<typename T>
+    struct serialization_traits1:
+      detail::serialization_traits_deserialized_value<T>,
+      serialization_traits2<T> {
     };
   }
   
@@ -1812,7 +1869,7 @@ namespace upcxx {
       deserialized_type *ans = ::new(raw) deserialized_type(std::move(a));
       if(n != 0) {
         ans->push_front(r.template read<T0>());
-        
+        n--;
         auto last = ans->begin();
         while(n--)
           last = ans->insert_after(last, r.template read<T0>());

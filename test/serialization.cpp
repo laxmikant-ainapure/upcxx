@@ -288,7 +288,26 @@ struct my_seq2: public my_seq_base<my_seq2<T>, T> {
 
 int main() {
   print_test_header();
-  
+
+  // roundtrip checks using serialization_traits::deserialized_value()
+  UPCXX_ASSERT_ALWAYS(upcxx::serialization_traits<int>::deserialized_value(0xbeef) == 0xbeef);
+  UPCXX_ASSERT_ALWAYS(upcxx::serialization_traits<std::string>::deserialized_value(std::string(10000,'x')) == std::string(10000,'x'));
+  {
+    std::forward_list<int> fwd0;
+    for(int i=0; i < 10000; i++)
+      fwd0.push_front(i);
+    std::forward_list<int> fwd1 = upcxx::serialization_traits<std::forward_list<int>>::deserialized_value(fwd0);
+    UPCXX_ASSERT_ALWAYS(fwd0 == fwd1);
+  }
+  {
+    std::forward_list<std::string> fwd0;
+    for(int i=0; i < 10000; i++)
+      fwd0.push_front(std::string(i%300, 'a' + i%26));
+    std::forward_list<std::string> fwd1 = upcxx::serialization_traits<std::forward_list<std::string>>::deserialized_value(fwd0);
+    UPCXX_ASSERT_ALWAYS(fwd0 == fwd1);
+  }
+
+  // roundtrip checks not relying on serialization_traits::deserialized_value()
   roundtrip<std::int8_t>(1);
   roundtrip<std::uint16_t>(1000);
   roundtrip<std::int32_t>(1<<29);
