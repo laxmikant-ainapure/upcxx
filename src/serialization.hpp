@@ -750,8 +750,15 @@ namespace upcxx {
         template<typename T> \
         struct supply_type_please: ::upcxx::detail::serialization_fields<T> {}; \
       };
-    
-    #define UPCXX_SERIALIZED_BASE(ty) *static_cast<ty*>(this)
+
+    template<typename T, typename U>
+    T* serialized_fields_base_cast(U *u) {
+      static_assert(!std::is_polymorphic<T>::value, "UPCXX_SERIALIZED_BASE(Type) requires Type not be polymorphic.");
+      return static_cast<T*>(u);
+    }
+    // Need to use "..." to accept a type since template instantiations can
+    // contain commas not nested in parenthesis.
+    #define UPCXX_SERIALIZED_BASE(...) *::upcxx::detail::template serialized_fields_base_cast<__VA_ARGS__>(this)
 
     template<typename TupRefs,
              int i = 0,
@@ -791,13 +798,19 @@ namespace upcxx {
       static constexpr bool references_buffer = serialization_traits<Ti>::references_buffer
                                              && serialization_fields_each<TupRefs, i+1, n>::references_buffer;
 
-      template<typename Reader>
-      static void deserialize(Reader &r, TupRefs refs) {
+      static void deserialize_destruct(TupRefs refs) {
         Ti *spot = &std::template get<i>(refs);
         detail::template destruct<Ti>(*spot);
+        
+        serialization_fields_each<TupRefs, i+1, n>::deserialize_destruct(refs);
+      }
+
+      template<typename Reader>
+      static void deserialize_read(Reader &r, TupRefs refs) {
+        Ti *spot = &std::template get<i>(refs);
         r.template read_into<Ti>(spot);
         
-        serialization_fields_each<TupRefs, i+1, n>::deserialize(r, refs);
+        serialization_fields_each<TupRefs, i+1, n>::deserialize_read(r, refs);
       }
 
       static constexpr bool skip_is_fast = serialization_traits<Ti>::skip_is_fast
@@ -822,8 +835,9 @@ namespace upcxx {
 
       static constexpr bool references_buffer = false;
       
+      static void deserialize_destruct(TupRefs refs) {}
       template<typename Reader>
-      static void deserialize(Reader &r, TupRefs refs) {}
+      static void deserialize_read(Reader &r, TupRefs refs) {}
 
       static constexpr bool skip_is_fast = true;
       
@@ -857,7 +871,18 @@ namespace upcxx {
       template<typename Reader>
       static deserialized_type* deserialize(Reader &r, void *raw) {
         T *rec = ::new(raw) T;
-        serialization_fields_each<refs_tup_type>::deserialize(r, rec->upcxx_serialized_fields());
+        refs_tup_type refs_tup(rec->upcxx_serialized_fields());
+        
+        // Deserialization happens in two phases: 1) destruct, 2) read.
+        // This avoids a tiny corner case when empty base subobjects can alias
+        // the storage of member fields (empty base optimization) and that base's
+        // destructor likes to nuke the one byte it *thinks* it inhabits, e.g.:
+        //
+        // struct bad_empty_base { ~bad_empty_base() { std::memset(this, 0 , sizeof(bad_empty_base)); } };
+        //
+        serialization_fields_each<refs_tup_type>::deserialize_destruct(refs_tup);
+        serialization_fields_each<refs_tup_type>::deserialize_read(r, refs_tup);
+        
         // since we're destructing/placement-new'ing fields in-place we have to launder the instance pointer.
         return detail::launder(rec);
       }
