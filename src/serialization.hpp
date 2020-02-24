@@ -11,6 +11,12 @@
 #include <utility>
 
 #ifndef UPCXX_CREDUCE_SLIM
+  /* UPCXX_CREDUCE_SLIM should be defined when we're hunting down compiler ICE's
+   * using the cReduce tool. Including all these std containers greatly
+   * increases the size of the translation unit which slows down cReduce
+   * considerably. The end effect is that serialization logic is not registered
+   * for most std types.
+   */
   #include <array>
   #include <deque>
   #include <forward_list>
