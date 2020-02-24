@@ -274,16 +274,16 @@ namespace upcxx {
       }
 
       template<typename T>
-      using reserve_handle = T*;
+      struct reserve_handle { void *ptr; };
 
       template<typename T>
-      T* reserve() {
-        return (T*)this->place(storage_size_of<T>());
+      reserve_handle<T> reserve() {
+        return reserve_handle<T>{this->place(storage_size_of<T>())};
       }
 
       template<typename T>
-      void commit(T *handle, T const &val) {
-        ::new((void*)handle) T(val);
+      void commit(reserve_handle<T> handle, T const &val) {
+        ::new(handle.ptr) T(val);
       }
       
       template<typename T>
