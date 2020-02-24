@@ -52,7 +52,7 @@ namespace upcxx {
     }
     
     bool is_local() const {
-      return device_ == -1 && backend::rank_is_local(rank_);
+      return device_ == -1 && (raw_ptr_ == nullptr || backend::rank_is_local(rank_));
     }
 
     bool is_null() const {
