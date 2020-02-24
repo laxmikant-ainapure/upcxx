@@ -44,6 +44,7 @@ namespace upcxx {
 
   template<typename T>
   void deallocate(global_ptr<T> gptr) {
+    UPCXX_GPTR_CHK(gptr);
     if (gptr != nullptr) {
       UPCXX_ASSERT(
         gptr.rank_ == upcxx::rank_me(),
@@ -157,6 +158,7 @@ namespace upcxx {
   void delete_(global_ptr<T> gptr) {
     static_assert(std::is_destructible<T>::value,
                   "T must be destructible");
+    UPCXX_GPTR_CHK(gptr);
     
     if (gptr != nullptr) {
       UPCXX_ASSERT(
@@ -174,6 +176,7 @@ namespace upcxx {
   void delete_array(global_ptr<T> gptr) {
     static_assert(std::is_destructible<T>::value,
                   "T must be destructible");
+    UPCXX_GPTR_CHK(gptr);
     
     if (gptr != nullptr) {
       UPCXX_ASSERT(

@@ -198,6 +198,7 @@ namespace upcxx {
                            T val1 = 0, T val2 = 0, Cxs cxs = Cxs{{}}) const {
         UPCXX_ASSERT(this->atomic_gex_ops || this->ad_gex_handle, "Atomic domain is not constructed");
         UPCXX_ASSERT((detail::completions_has_event<Cxs, operation_cx_event>::value));
+        UPCXX_GPTR_CHK(gptr);
         UPCXX_ASSERT(gptr != nullptr, "Global pointer for atomic operation is null");
         UPCXX_ASSERT(this->parent_tm_->from_world(gptr.rank_,-1) >= 0, 
                      "Global pointer must reference a member of the team used to construct atomic_domain");
@@ -242,6 +243,7 @@ namespace upcxx {
                             T val1 = 0, T val2 = 0, Cxs cxs = Cxs{{}}) const {
         UPCXX_ASSERT(this->atomic_gex_ops || this->ad_gex_handle, "Atomic domain is not constructed");
         UPCXX_ASSERT((detail::completions_has_event<Cxs, operation_cx_event>::value));
+        UPCXX_GPTR_CHK(gptr);
         UPCXX_ASSERT(gptr != nullptr, "Global pointer for atomic operation is null");
         UPCXX_ASSERT(this->parent_tm_->from_world(gptr.rank_,-1) >= 0, 
                      "Global pointer must reference a member of the team used to construct atomic_domain");

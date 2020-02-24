@@ -114,6 +114,7 @@ template<typename Obj, memory_kind Kind, typename Get,
          typename Mbr = typename std::remove_pointer<decltype(std::declval<Get>()(std::declval<Obj*>()))>::type>
 auto memberof_general_helper(global_ptr<Obj,Kind> gptr, Get getter)
   -> decltype(memberof_general_dispatch<Obj,Kind,Mbr,Get>()(gptr, getter)) {
+  UPCXX_GPTR_CHK(gptr);
   UPCXX_ASSERT(gptr, "Global pointer expression to upcxx_memberof_general() may not be null");
   return memberof_general_dispatch<Obj,Kind,Mbr,Get>()(gptr, getter);
 }
