@@ -1510,6 +1510,15 @@ namespace upcxx {
   #ifndef UPCXX_CREDUCE_SLIM
   template<typename T>
   struct is_trivially_serializable<std::allocator<T>>: std::true_type {};
+
+  template<typename T>
+  struct is_trivially_serializable<std::less<T>>: std::true_type {};
+
+  template<typename T>
+  struct is_trivially_serializable<std::equal_to<T>>: std::true_type {};
+
+  template<typename T>
+  struct is_trivially_serializable<std::hash<T>>: std::true_type {};
   #endif
   
   //////////////////////////////////////////////////////////////////////////////
