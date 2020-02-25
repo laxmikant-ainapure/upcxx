@@ -742,6 +742,7 @@ namespace upcxx {
     };
 
     #define UPCXX_SERIALIZED_FIELDS(...) \
+      template<typename upcxx_fields_not_values = std::true_type> \
       auto upcxx_serialized_fields() \
         UPCXX_RETURN_DECLTYPE(::std::forward_as_tuple(__VA_ARGS__)) { \
         return ::std::forward_as_tuple(__VA_ARGS__); \
@@ -751,14 +752,16 @@ namespace upcxx {
         struct supply_type_please: ::upcxx::detail::serialization_fields<T> {}; \
       };
 
-    template<typename T, typename U>
-    T* serialized_fields_base_cast(U *u) {
-      static_assert(!std::is_polymorphic<T>::value, "UPCXX_SERIALIZED_BASE(Type) requires Type not be polymorphic.");
-      return static_cast<T*>(u);
+    template<typename T, typename U, bool fields_not_values,
+             typename T_maybe_const = typename std::conditional<fields_not_values, T, T const>::type>
+    T_maybe_const* serialized_fields_base_cast(U *u, std::integral_constant<bool,fields_not_values>) {
+      static_assert(!fields_not_values || !std::is_polymorphic<T>::value, "UPCXX_SERIALIZED_BASE(Type) within UPCXX_SERIALIZED_FIELDS(...) requires Type not be polymorphic.");
+      static_assert(fields_not_values || !std::is_abstract<T>::value, "UPCXX_SERIALIZED_BASE(Type) within UPCXX_SERIALIZED_VALUES(...) requires Type not be abstract.");
+      return static_cast<T_maybe_const*>(u);
     }
     // Need to use "..." to accept a type since template instantiations can
     // contain commas not nested in parenthesis.
-    #define UPCXX_SERIALIZED_BASE(...) *::upcxx::detail::template serialized_fields_base_cast<__VA_ARGS__>(this)
+    #define UPCXX_SERIALIZED_BASE(...) *::upcxx::detail::template serialized_fields_base_cast<__VA_ARGS__>(this, upcxx_fields_not_values())
 
     template<typename TupRefs,
              int i = 0,
@@ -897,54 +900,132 @@ namespace upcxx {
 
     ////////////////////////////////////////////////////////////////////////////
 
+    /* The tuple returned from upcxx_serialized_values() will have rvalue-refs
+     * decayed to naked values but lvalue (const or not) preserved. Since the
+     * expression generating each value has access to the object members but no
+     * function locals or parameters, we know that any lvalues that come out
+     * must be part of the object (or globals, weird). So we keep those as lvalues
+     * to avoid copying them (which could be bad). The rvalues must have been
+     * computed by the expression so must be decayed and copied (via move) to
+     * survive into the beyond.
+     */
     #define UPCXX_SERIALIZED_VALUES(...) \
+      template<typename upcxx_fields_not_values = std::false_type> \
       auto upcxx_serialized_values() const \
-        UPCXX_RETURN_DECLTYPE( ::std::make_tuple(__VA_ARGS__) ) { \
-        return ::std::make_tuple(__VA_ARGS__); \
+        UPCXX_RETURN_DECLTYPE(::upcxx::detail::forward_as_tuple_lrefs_only(__VA_ARGS__)) { \
+        return ::upcxx::detail::forward_as_tuple_lrefs_only(__VA_ARGS__); \
       } \
       struct upcxx_serialization { \
         template<typename T> \
         struct supply_type_please: ::upcxx::detail::serialization_values<T> {}; \
       };
     
+    template<typename TupRefs, int i=0, int n=std::tuple_size<TupRefs>::value>
+    struct serialization_values_each {
+      // Ti = decay(TupRefs[i]) but without decaying arrays, leave those be!
+      using Ti = typename std::remove_cv<typename std::remove_reference<typename std::tuple_element<i, TupRefs>::type>::type>::type;
+      using recurse_tail = serialization_values_each<TupRefs, i+1, n>;
+      
+      template<typename Prefix>
+      static auto ubound(Prefix pre, TupRefs const &refs)
+        UPCXX_RETURN_DECLTYPE(
+          recurse_tail::ubound(
+            pre.cat_ubound_of(std::template get<i>(refs)),
+            refs
+          )
+        ) {
+        return recurse_tail::ubound(
+          pre.cat_ubound_of(std::template get<i>(refs)),
+          refs
+        );
+      }
+
+      template<typename Writer>
+      static void serialize(Writer &w, TupRefs const &refs) {
+        w.write(std::template get<i>(refs));
+        recurse_tail::serialize(w, refs);
+      }
+
+      static constexpr bool references_buffer = serialization_traits<Ti>::references_buffer
+                                             && recurse_tail::references_buffer;
+      
+      template<typename Obj, typename Reader, typename ...Ptrs>
+      static Obj* deserialize(Reader &r, void *spot, Ptrs ...ptrs) {
+        using Ti1 = typename serialization_traits<Ti>::deserialized_type;
+        typename std::aligned_storage<sizeof(Ti1), alignof(Ti1)>::type storage;
+        Ti1 *val = r.template read_into<Ti>(&storage);
+        Obj *ans = recurse_tail::template deserialize<Obj>(r, spot, ptrs..., val);
+        detail::template destruct<Ti1>(*val);
+        return ans;
+      }
+
+      static constexpr bool skip_is_fast = serialization_traits<Ti>::skip_is_fast
+                                        && recurse_tail::skip_is_fast;
+      
+      template<typename Reader>
+      static void skip(Reader &r) {
+        r.template skip<Ti>();
+        recurse_tail::skip(r);
+      }
+    };
+
+    template<typename TupRefs, int n>
+    struct serialization_values_each<TupRefs, n, n> {
+      template<typename Prefix>
+      static Prefix ubound(Prefix pre, TupRefs const &refs) {
+        return pre;
+      }
+
+      template<typename Writer>
+      static void serialize(Writer &w, TupRefs refs) {}
+
+      static constexpr bool references_buffer = false;
+
+      template<typename Obj, typename Reader, typename ...Ptrs>
+      static Obj* deserialize(Reader &r, void *spot, Ptrs ...ptrs) {
+        return ::new(spot) Obj(static_cast<typename std::remove_pointer<Ptrs>::type&&>(*ptrs)...);
+      }
+      
+      static constexpr bool skip_is_fast = true;
+      
+      template<typename Reader>
+      static void skip(Reader &r) {}
+    };
+
     template<typename T>
     struct serialization_values {
-      using vals_tup_type = decltype(std::declval<T&>().upcxx_serialized_values());
+      // a tuple possibly mixed of lvalue refs and naked values
+      using refs_tup_type = decltype(std::declval<T&>().upcxx_serialized_values());
 
       static constexpr bool is_serializable = true;
     
       template<typename Prefix>
       static auto ubound(Prefix pre, T const &x)
         UPCXX_RETURN_DECLTYPE(
-          serialization_traits<vals_tup_type>::ubound(pre, x.upcxx_serialized_values())
+          serialization_values_each<refs_tup_type>::ubound(pre, x.upcxx_serialized_values())
         ) {
-        return serialization_traits<vals_tup_type>::ubound(pre, x.upcxx_serialized_values());
+        return serialization_values_each<refs_tup_type>::ubound(pre, x.upcxx_serialized_values());
       }
 
       template<typename Writer>
       static void serialize(Writer &w, T const &x) {
-        serialization_traits<vals_tup_type>::serialize(w, x.upcxx_serialized_values());
+        serialization_values_each<refs_tup_type>::serialize(w, x.upcxx_serialized_values());
       }
 
       using deserialized_type = T;
 
-      static constexpr bool references_buffer = serialization_traits<vals_tup_type>::references_buffer;
-
-      template<int ...i>
-      static deserialized_type* construct_deserialized(vals_tup_type &&t, void *raw, index_sequence<i...>) {
-        return ::new(raw) T(std::get<i>(static_cast<vals_tup_type&&>(t))...);
-      }
-      
+      static constexpr bool references_buffer = serialization_values_each<refs_tup_type>::references_buffer;
+           
       template<typename Reader>
-      static deserialized_type* deserialize(Reader &r, void *raw) {
-        return construct_deserialized(r.template read<vals_tup_type>(), raw, make_index_sequence<std::tuple_size<vals_tup_type>::value>());
+      static deserialized_type* deserialize(Reader &r, void *spot) {
+        return serialization_values_each<refs_tup_type>::template deserialize<T>(r, spot);
       }
 
-      static constexpr bool skip_is_fast = serialization_traits<vals_tup_type>::skip_is_fast;
+      static constexpr bool skip_is_fast = serialization_values_each<refs_tup_type>::skip_is_fast;
       
       template<typename Reader>
       static void skip(Reader &r) {
-        serialization_traits<vals_tup_type>::skip(r);
+        serialization_values_each<refs_tup_type>::skip(r);
       }
     };
     
@@ -1249,6 +1330,7 @@ namespace upcxx {
     template<typename ...T, int i, int n>
     struct serialization_tuple<std::tuple<T...>, i, n> {
       using Ti = typename std::tuple_element<i, std::tuple<T...>>::type;
+      using Ti1 = typename serialization_traits<Ti>::deserialized_type;
       using recurse_tail = serialization_tuple<std::tuple<T...>, i+1, n>;
       
       static constexpr bool is_serializable =
@@ -1279,10 +1361,13 @@ namespace upcxx {
         recurse_tail::serialize(w, x);
       }
 
-      template<typename Reader, typename Storage, typename Pointers>
-      static void deserialize_each(Reader &r, Storage &raws, Pointers &ptrs) {
-        std::template get<i>(ptrs) = r.template read_into<Ti>(&std::template get<i>(raws));
-        recurse_tail::deserialize_each(r, raws, ptrs);
+      template<typename TupOut, typename Reader, typename ...Ptrs>
+      static TupOut* deserialize_each(Reader &r, void *spot, Ptrs ...ptrs) {
+        typename std::aligned_storage<sizeof(Ti1),alignof(Ti1)>::type storage;
+        Ti1 *val = r.template read_into<Ti>(&storage);
+        TupOut *ans = recurse_tail::template deserialize_each<TupOut>(r, spot, ptrs..., val);
+        detail::template destruct<Ti1>(*val);
+        return ans;
       }
 
       static constexpr bool skip_is_fast =
@@ -1309,9 +1394,11 @@ namespace upcxx {
 
       template<typename Writer>
       static void serialize(Writer &w, std::tuple<T...> const &x) {}
-
-      template<typename Reader, typename Storage, typename Pointers>
-      static void deserialize_each(Reader &r, Storage &raws, Pointers &ptrs) {/*nop*/}
+      
+      template<typename TupOut, typename Reader, typename ...Ptrs>
+      static TupOut* deserialize_each(Reader &r, void *spot, Ptrs ...ptrs) {
+        return ::new(spot) TupOut(static_cast<typename std::remove_pointer<Ptrs>::type&&>(*ptrs)...);
+      }
 
       static constexpr bool skip_is_fast = true;
 
@@ -1324,41 +1411,13 @@ namespace upcxx {
   struct serialization<std::tuple<T...>>:
     detail::serialization_tuple<std::tuple<T...>> {
     
-    using deserialized_raws = std::tuple<typename std::aligned_storage<
-        sizeof(typename serialization_traits<T>::deserialized_type),
-        alignof(typename serialization_traits<T>::deserialized_type)
-      >::type...>;
-
-    using deserialized_ptrs = std::tuple<
-        typename serialization_traits<T>::deserialized_type*...
-      >;
-    
     using deserialized_type = std::tuple<
         typename serialization_traits<T>::deserialized_type...
       >;
-
-    template<typename Ti>
-    static Ti take_one(Ti *x) {
-      Ti tmp = std::move(*x);
-      detail::destruct(*x);
-      return tmp;
-    }
     
-    template<int ...i>
-    static deserialized_type* take_all(
-        deserialized_ptrs &ptrs,
-        void *into,
-        detail::index_sequence<i...>
-      ) {
-      return ::new(into) deserialized_type(take_one(std::template get<i>(ptrs))...);
-    }
-
     template<typename Reader>
-    static deserialized_type* deserialize(Reader &r, void *raw) {
-      deserialized_raws raws;
-      deserialized_ptrs ptrs;
-      detail::serialization_tuple<std::tuple<T...>>::deserialize_each(r, raws, ptrs);
-      return take_all(ptrs, raw, detail::make_index_sequence<sizeof...(T)>());
+    static deserialized_type* deserialize(Reader &r, void *spot) {
+      return detail::serialization_tuple<std::tuple<T...>>::template deserialize_each<deserialized_type>(r, spot);
     }
   };
 

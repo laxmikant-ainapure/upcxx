@@ -206,13 +206,19 @@ namespace detail {
   // detail::destruct
 
   template<typename T>
-  void destruct(T &x) noexcept { x.~T(); }
-  
+  struct destruct_dispatch {
+    void operator()(T &x) const noexcept { x.~T(); }
+  };
   template<typename T, std::size_t n>
-  void destruct(T (&x)[n]) noexcept {
-    for(std::size_t i=0; i != n; i++)
-      destruct(x[i]);
-  }
+  struct destruct_dispatch<T[n]> {
+    void operator()(T (&x)[n]) const noexcept {
+      for(std::size_t i=0; i != n; i++)
+        destruct_dispatch<T>()(x[i]);
+    }
+  };
+  
+  template<typename T>
+  void destruct(T &x) noexcept { destruct_dispatch<T>()(x); }
   
   //////////////////////////////////////////////////////////////////////////////
   // detail::alloc_aligned
@@ -674,6 +680,15 @@ namespace detail {
     );
   }
   
+  //////////////////////////////////////////////////////////////////////
+  // forward_as_tuple_lrefs_only: like std::forward_as_tuple, but drops
+  // rvalue-refs (&&) from components, lvalues (&, const&) are preserved.
+  
+  template<typename ...T>
+  std::tuple<T...> forward_as_tuple_lrefs_only(T &&...refs) {
+    return std::tuple<T...>(static_cast<T&&>(refs)...);
+  }
+    
   //////////////////////////////////////////////////////////////////////
   // apply_tupled: Apply a callable against an argument list wrapped
   // in a tuple.

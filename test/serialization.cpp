@@ -46,6 +46,7 @@ void roundtrip(T const &x) {
 
 struct nonpod_base {
   char h, i;
+  int _123[3]{1,2,3};
   nonpod_base **mirror;
   
   nonpod_base() {
@@ -62,6 +63,7 @@ struct nonpod_base {
 
   ~nonpod_base() {
     UPCXX_ASSERT_ALWAYS(*mirror == this);
+    UPCXX_ASSERT_ALWAYS(_123[0]==1 && _123[1]==2 && _123[2]==3);
     delete mirror;
   }
   
@@ -75,13 +77,17 @@ struct nonpod_base {
 struct nonpod1: nonpod_base {
   nonpod1() = default;
   nonpod1(char h, char i): nonpod_base(h,i) {}
-  UPCXX_SERIALIZED_FIELDS(h,i)
+  UPCXX_SERIALIZED_FIELDS(h,i,_123)
 };
 
 struct nonpod2: nonpod_base {
   nonpod2(char h, char i): nonpod_base(h,i) {}
-  nonpod2(char h, char i, char const *dummy): nonpod_base(h,i) {}
-  UPCXX_SERIALIZED_VALUES(h,i,"dummy")
+  nonpod2(char h, char i, int x123[3], char const *dummy):
+    nonpod_base(h,i) {
+    UPCXX_ASSERT_ALWAYS(x123[0]==1 && x123[1]==2 && x123[2]==3);
+    UPCXX_ASSERT_ALWAYS(std::string(dummy) == "dummy");
+  }
+  UPCXX_SERIALIZED_VALUES(h,i,_123,"dummy")
 };
 
 struct nonpod3: nonpod_base {
@@ -145,7 +151,14 @@ struct nonpod5_side {
 struct nonpod5: nonpod_base, nonpod5_side {
   nonpod5(): nonpod_base(), nonpod5_side(123) {}
   nonpod5(char h, char i): nonpod_base(h,i), nonpod5_side(123) {}
-  UPCXX_SERIALIZED_FIELDS(h,i, UPCXX_SERIALIZED_BASE(nonpod5_side))
+  UPCXX_SERIALIZED_FIELDS(h,i,_123, UPCXX_SERIALIZED_BASE(nonpod5_side))
+};
+
+struct nonpod6: nonpod_base, nonpod5_side {
+  nonpod6(): nonpod_base(), nonpod5_side(123) {}
+  nonpod6(char h, char i): nonpod_base(h,i), nonpod5_side(123) {}
+  nonpod6(char h, char i, nonpod5_side side): nonpod_base(h,i), nonpod5_side(side) {}
+  UPCXX_SERIALIZED_VALUES(h,i, UPCXX_SERIALIZED_BASE(nonpod5_side))
 };
 
 static_assert(is_trivially_serializable<const int>::value, "Uh-oh.");
@@ -361,6 +374,16 @@ int main() {
         std::tuple<std::string,nonpod5>("hi",{'a','b'}),
         std::tuple<std::string,nonpod5>("bob",{'x','y'}),
         std::tuple<std::string,nonpod5>("alice",{'\0','!'})
+      }
+    }
+  );
+  roundtrip<std::vector<std::list<std::tuple<std::string,nonpod6>>>>(
+    std::initializer_list<std::list<std::tuple<std::string,nonpod6>>>{
+      {},
+      std::initializer_list<std::tuple<std::string,nonpod6>>{
+        std::tuple<std::string,nonpod6>("hi",{'a','b'}),
+        std::tuple<std::string,nonpod6>("bob",{'x','y'}),
+        std::tuple<std::string,nonpod6>("alice",{'\0','!'})
       }
     }
   );
