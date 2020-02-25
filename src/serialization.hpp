@@ -755,8 +755,8 @@ namespace upcxx {
     template<typename T, typename U, bool fields_not_values,
              typename T_maybe_const = typename std::conditional<fields_not_values, T, T const>::type>
     T_maybe_const* serialized_fields_base_cast(U *u, std::integral_constant<bool,fields_not_values>) {
-      static_assert(!fields_not_values || !std::is_polymorphic<T>::value, "UPCXX_SERIALIZED_BASE(Type) within UPCXX_SERIALIZED_FIELDS(...) requires Type not be polymorphic.");
-      static_assert(fields_not_values || !std::is_abstract<T>::value, "UPCXX_SERIALIZED_BASE(Type) within UPCXX_SERIALIZED_VALUES(...) requires Type not be abstract.");
+      static_assert(fields_not_values ? !std::is_polymorphic<T>::value : true, "UPCXX_SERIALIZED_BASE(Type) within UPCXX_SERIALIZED_FIELDS(...) requires Type not be polymorphic.");
+      static_assert(fields_not_values ? true : !std::is_abstract<T>::value, "UPCXX_SERIALIZED_BASE(Type) within UPCXX_SERIALIZED_VALUES(...) requires Type not be abstract.");
       return static_cast<T_maybe_const*>(u);
     }
     // Need to use "..." to accept a type since template instantiations can
@@ -799,7 +799,7 @@ namespace upcxx {
       }
 
       static constexpr bool references_buffer = serialization_traits<Ti>::references_buffer
-                                             && serialization_fields_each<TupRefs, i+1, n>::references_buffer;
+                                             || serialization_fields_each<TupRefs, i+1, n>::references_buffer;
 
       static void deserialize_destruct(TupRefs refs) {
         Ti *spot = &std::template get<i>(refs);
@@ -905,15 +905,15 @@ namespace upcxx {
      * expression generating each value has access to the object members but no
      * function locals or parameters, we know that any lvalues that come out
      * must be part of the object (or globals, weird). So we keep those as lvalues
-     * to avoid copying them (which could be bad). The rvalues must have been
+     * to avoid copying them (which could be bad for perf). The rvalues must have been
      * computed by the expression so must be decayed and copied (via move) to
      * survive into the beyond.
      */
     #define UPCXX_SERIALIZED_VALUES(...) \
       template<typename upcxx_fields_not_values = std::false_type> \
       auto upcxx_serialized_values() const \
-        UPCXX_RETURN_DECLTYPE(::upcxx::detail::forward_as_tuple_lrefs_only(__VA_ARGS__)) { \
-        return ::upcxx::detail::forward_as_tuple_lrefs_only(__VA_ARGS__); \
+        UPCXX_RETURN_DECLTYPE(::upcxx::detail::forward_as_tuple_decay_rrefs(__VA_ARGS__)) { \
+        return ::upcxx::detail::forward_as_tuple_decay_rrefs(__VA_ARGS__); \
       } \
       struct upcxx_serialization { \
         template<typename T> \
@@ -947,7 +947,7 @@ namespace upcxx {
       }
 
       static constexpr bool references_buffer = serialization_traits<Ti>::references_buffer
-                                             && recurse_tail::references_buffer;
+                                             || recurse_tail::references_buffer;
       
       template<typename Obj, typename Reader, typename ...Ptrs>
       static Obj* deserialize(Reader &r, void *spot, Ptrs ...ptrs) {
@@ -1185,7 +1185,7 @@ namespace upcxx {
         using T1 = typename serialization_traits2<T>::deserialized_type;
         
         auto ub = serialization_traits2<T>::ubound(empty_storage_size, x);
-        constexpr std::size_t static_storage_size = decltype(ub)::static_size < 512 ? decltype(ub)::static_size : 512;
+        constexpr std::size_t static_storage_size = (decltype(ub)::static_size) < 512 ? decltype(ub)::static_size : 512;
         detail::xaligned_storage<static_storage_size, serialization_align_max> static_storage;
         
         void *storage;

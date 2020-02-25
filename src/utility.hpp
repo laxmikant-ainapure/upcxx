@@ -681,11 +681,11 @@ namespace detail {
   }
   
   //////////////////////////////////////////////////////////////////////
-  // forward_as_tuple_lrefs_only: like std::forward_as_tuple, but drops
+  // forward_as_tuple_decay_rrefs: like std::forward_as_tuple, but drops
   // rvalue-refs (&&) from components, lvalues (&, const&) are preserved.
   
   template<typename ...T>
-  std::tuple<T...> forward_as_tuple_lrefs_only(T &&...refs) {
+  std::tuple<T...> forward_as_tuple_decay_rrefs(T &&...refs) {
     return std::tuple<T...>(static_cast<T&&>(refs)...);
   }
     
