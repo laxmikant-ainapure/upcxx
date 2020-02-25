@@ -20,6 +20,7 @@ Infrastructure and requirements changes:
 
 New features/enhancements: (see specification and programmer's guide for full details)
 
+* Implement `upcxx_memberof(_general)()`, enabling RMA access to fields of remote objects
 * Significantly improve compile latency associated with `upcxx` compiler wrapper script
 * Improve handling of `upcxx-run -v` verbose options
 * Improve GASNet polling heuristic to reduce head-of-line blocking

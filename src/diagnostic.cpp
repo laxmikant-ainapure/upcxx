@@ -21,7 +21,7 @@ void upcxx::assert_failed(const char *file, int line, const char *msg) {
 
   #ifdef UPCXX_BACKEND
     ss << " rank=" << upcxx::backend::rank_me<<'\n';
-	#endif
+  #endif
   
   ss << " file="<<file<<':'<<line<<'\n';
   if(msg != nullptr && '\0' != msg[0])

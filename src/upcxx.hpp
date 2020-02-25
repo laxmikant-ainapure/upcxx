@@ -3,7 +3,7 @@
 
 // UPCXX_VERSION release identifier format:
 // YYYYMMPPL = [YEAR][MONTH][PATCH]
-#define UPCXX_VERSION 20190905L
+#define UPCXX_VERSION 20190907L
 
 // UPCXX_SPEC_VERSION release identifier format:
 // YYYYMM00L = [YEAR][MONTH]
@@ -34,5 +34,6 @@ namespace upcxx {
 #include <upcxx/vis.hpp>
 //#include <upcxx/wait.hpp>
 #include <upcxx/view.hpp>
+#include <upcxx/memberof.hpp>
 
 #endif
