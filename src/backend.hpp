@@ -5,6 +5,7 @@
 #include <upcxx/future.hpp>
 #include <upcxx/persona.hpp>
 #include <upcxx/team.hpp>
+#include <upcxx/memory_kind.hpp>
 
 #include <cstdint>
 #include <memory>
@@ -201,6 +202,9 @@ namespace backend {
     
     return raw;
   }
+
+  void validate_global_ptr(bool allow_null, intrank_t rank, void *raw_ptr, std::int32_t device,
+                           memory_kind KindSet, size_t T_align, const char *T_name, const char *context);
 }}
   
 ////////////////////////////////////////////////////////////////////////////////

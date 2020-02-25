@@ -14,6 +14,7 @@
 #include <tuple>
 #include <utility>
 #include <new> // launder
+#include <typeinfo> // typeid
 
 #include <cstdlib> // posix_memalign
 
@@ -700,6 +701,27 @@ namespace detail {
       make_index_sequence<std::tuple_size<Tup>::value>()
     );
   }
+
+  //////////////////////////////////////////////////////////////////////
+  // align_of<T>(): returns alignof(T) or 0 for incomplete types
+
+  template <typename T, std::size_t align = alignof(T)>
+  constexpr size_t align_of_(T *_) { return align; }
+  constexpr size_t align_of_(...) { return 0; }
+
+  template<typename T>
+  constexpr size_t align_of() { return align_of_((T*)nullptr); }
+
+  //////////////////////////////////////////////////////////////////////
+  // typename_of<T>(): returns typeid(T).name() or null for incomplete types
+
+  template <typename T, std::size_t x = sizeof(T)>
+  inline const char *typename_of_(T *_) { return typeid(T).name(); }
+  inline const char *typename_of_(...) { return nullptr; }
+
+  template<typename T>
+  inline const char *typename_of() { return typename_of_((T*)nullptr); }
+
 } // namespace detail
 } // namespace upcxx
 #endif

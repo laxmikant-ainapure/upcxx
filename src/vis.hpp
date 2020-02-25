@@ -455,6 +455,7 @@ namespace upcxx
     if(dest.size()!=0) gpdrank = std::get<0>(*dst_runs_begin).rank_; //hoist gpdrank assign out of loop
     for(DestIter d=dst_runs_begin; !(d==dst_runs_end); ++d,++dv)
       {
+        UPCXX_GPTR_CHK(std::get<0>(*d));
 	UPCXX_ASSERT(std::get<0>(*d), "pointer arguments to rput_irregular may not be null");
         UPCXX_ASSERT(gpdrank==std::get<0>(*d).rank_, "pointer arguments to rput_irregular must all target the same affinity");
         dv->gex_addr=(std::get<0>(*d)).raw_ptr_;
@@ -557,6 +558,7 @@ namespace upcxx
     if(src.size()!=0) rank_s = std::get<0>(*src_runs_begin).rank_; // hoist rank_s assign out of loop
     for(SrcIter s=src_runs_begin; !(s==src_runs_end); ++s,++sv)
       {
+        UPCXX_GPTR_CHK(std::get<0>(*s));
 	UPCXX_ASSERT(std::get<0>(*s), "pointer arguments to rget_irregular may not be null");
         UPCXX_ASSERT(rank_s==std::get<0>(*s).rank_,
                      "pointer arguments to rget_irregular must all target the same affinity");
@@ -643,6 +645,7 @@ namespace upcxx
     intrank_t dst_rank = upcxx::rank_me(); // default for empty sequence is self
     if(dst_ptrs.capacity() !=0) dst_rank = (*dst_runs_begin).rank_;
     for(DestIter d=dst_runs_begin; !(d == dst_runs_end); ++d) {
+      UPCXX_GPTR_CHK(*d);
       UPCXX_ASSERT(*d, "pointer arguments to rput_regular may not be null");
       UPCXX_ASSERT(dst_rank==(*d).rank_, "pointer arguments to rput_regular must all target the same affinity");
       dst_rank = (*d).rank_;
@@ -748,6 +751,7 @@ namespace upcxx
     intrank_t src_rank = upcxx::rank_me(); // default for empty sequence is self
     if(src_ptrs.capacity() != 0) src_rank = (*src_runs_begin).rank_;
     for(SrcIter s=src_runs_begin; !(s == src_runs_end); ++s) {
+      UPCXX_GPTR_CHK(*s);
       UPCXX_ASSERT((*s), "pointer arguments to rget_regular may not be null");
       UPCXX_ASSERT(src_rank==(*s).rank_, "pointer arguments to rget_regular must all target the same affinity");
       src_ptrs.push_back((*s).raw_ptr_);
@@ -806,6 +810,7 @@ namespace upcxx
       "safe to read or write again."
                          );
     
+    UPCXX_GPTR_CHK(dest_base);
     UPCXX_ASSERT(src_base && dest_base, "pointer arguments to rput_strided may not be null");
 
     using cxs_here_t = detail::completions_state<
@@ -880,6 +885,7 @@ namespace upcxx
                  "error. You'll have know way of ever knowing when the target memory is "
                  "safe to read or write again.");
  
+    UPCXX_GPTR_CHK(src_base);
     UPCXX_ASSERT(src_base && dest_base, "pointer arguments to rget_strided may not be null");
 
     using cxs_here_t = detail::completions_state<

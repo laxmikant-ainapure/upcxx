@@ -189,7 +189,8 @@ namespace upcxx {
       "way of ever knowing when then the source or target memory are safe to "
       "access again without incurring a data race."
     );
-
+   
+    UPCXX_GPTR_CHK(gp_s);
     UPCXX_ASSERT(gp_s, "pointer arguments to rget may not be null");
     
     using cxs_here_t = detail::completions_state<
@@ -263,6 +264,7 @@ namespace upcxx {
       "access again without incurring a data race."
     );
     
+    UPCXX_GPTR_CHK(gp_s);
     UPCXX_ASSERT(buf_d && gp_s, "pointer arguments to rget may not be null");
 
     using cxs_here_t = detail::completions_state<
