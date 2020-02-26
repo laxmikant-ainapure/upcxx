@@ -179,8 +179,8 @@ namespace upcxx {
     namespace gasnet = upcxx::backend::gasnet;
     
     static_assert(
-      is_definitely_trivially_serializable<T>::value,
-      "RMA operations only work on DefinitelyTriviallySerializable types."
+      is_trivially_serializable<T>::value,
+      "RMA operations only work on TriviallySerializable types."
     );
 
     UPCXX_ASSERT_ALWAYS(
@@ -253,8 +253,8 @@ namespace upcxx {
     namespace gasnet = upcxx::backend::gasnet;
     
     static_assert(
-      is_definitely_trivially_serializable<T>::value,
-      "RMA operations only work on DefinitelyTriviallySerializable types."
+      is_trivially_serializable<T>::value,
+      "RMA operations only work on TriviallySerializable types."
     );
 
     UPCXX_ASSERT_ALWAYS(

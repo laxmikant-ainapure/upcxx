@@ -66,10 +66,10 @@ namespace upcxx {
 
     static_assert(
       detail::trait_forall<
-          is_definitely_serializable,
+          is_serializable,
           typename binding<Arg>::on_wire_type...
         >::value,
-      "All rpc arguments must be DefinitelySerializable."
+      "All rpc arguments must be Serializable."
     );
       
     backend::template send_am_master<progress_level::user>(
@@ -94,10 +94,10 @@ namespace upcxx {
 
     static_assert(
       detail::trait_forall<
-          is_definitely_serializable,
+          is_serializable,
           typename binding<Arg>::on_wire_type...
         >::value,
-      "All rpc arguments must be DefinitelySerializable."
+      "All rpc arguments must be Serializable."
     );
       
     auto state = detail::completions_state<
@@ -161,8 +161,8 @@ namespace upcxx {
       using results_tuple = typename rpc_remote_results<Fn(Arg...)>::type;
       
       static_assert(
-        is_definitely_serializable<results_tuple>::value,
-        "rpc return values must be DefinitelySerializable."
+        is_serializable<results_tuple>::value,
+        "rpc return values must be Serializable."
       );
       
       static_assert(
@@ -174,7 +174,7 @@ namespace upcxx {
       template<typename Event>
       using tuple_t = typename std::conditional<
           std::is_same<Event, operation_cx_event>::value,
-          /*Event == operation_cx_event:*/deserialized_type_of_t<results_tuple>,
+          /*Event == operation_cx_event:*/deserialized_type_t<results_tuple>,
           /*Event != operation_cx_event:*/std::tuple<>
         >::type;
     };
@@ -202,10 +202,10 @@ namespace upcxx {
       
       static_assert(
         detail::trait_forall<
-            is_definitely_serializable,
+            is_serializable,
             typename binding<Arg>::on_wire_type...
           >::value,
-        "All rpc arguments must be DefinitelySerializable."
+        "All rpc arguments must be Serializable."
       );
         
       using cxs_state_t = detail::completions_state<
@@ -231,7 +231,7 @@ namespace upcxx {
       backend::template send_am_master<progress_level::user>(
         tm, recipient,
         upcxx::bind(
-          [=](deserialized_type_of_t<fn_bound_t> &&fn_bound1) {
+          [=](deserialized_type_t<fn_bound_t> &&fn_bound1) {
             return upcxx::apply_as_future(std::move(fn_bound1))
               .then(
                 // Wish we could just use a lambda here, but since it has

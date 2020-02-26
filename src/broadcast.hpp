@@ -127,9 +127,10 @@ namespace upcxx {
       Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
     ) {
     static_assert(
-      upcxx::is_definitely_trivially_serializable<T>::value,
+      upcxx::is_trivially_serializable<T>::value,
       "Only TriviallySerializable types permitted for `upcxx::broadcast`. "
-      "Consider `upcxx::broadcast_nontrivial` instead (unsupported)."
+      "Consider `upcxx::broadcast_nontrivial` instead (experimental feature, "
+      "use at own risk)."
     );
     
     struct broadcast_cb final: backend::gasnet::handle_cb {
@@ -174,9 +175,10 @@ namespace upcxx {
     ) {
     
     static_assert(
-      upcxx::is_definitely_trivially_serializable<T>::value,
+      upcxx::is_trivially_serializable<T>::value,
       "Only TriviallySerializable types permitted for `upcxx::broadcast`. "
-      "Consider `upcxx::broadcast_nontrivial` instead (unsupported)."
+      "Consider `upcxx::broadcast_nontrivial` instead (experimental feature, "
+      "use at own risk)."
     );
 
     struct broadcast_cb final: backend::gasnet::handle_cb {

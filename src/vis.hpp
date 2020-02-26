@@ -422,8 +422,9 @@ namespace upcxx
 
     using T = typename std::tuple_element<0,typename std::iterator_traits<DestIter>::value_type>::type::element_type;
     using S = typename std::tuple_element<0,typename std::iterator_traits<SrcIter>::value_type>::type;
-    static_assert(is_definitely_trivially_serializable<T>::value,
-      "RMA operations only work on DefinitelyTriviallySerializable types.");
+
+    static_assert(is_trivially_serializable<T>::value,
+      "RMA operations only work on TriviallySerializable types.");
     
     static_assert(std::is_convertible<S, const T*>::value,
                   "SrcIter and DestIter need to be over same base T type");
@@ -514,8 +515,8 @@ namespace upcxx
     using T = typename std::tuple_element<0,typename std::iterator_traits<SrcIter>::value_type>::type::element_type;
     using D = typename std::tuple_element<0,typename std::iterator_traits<DestIter>::value_type>::type;
 
-    static_assert(is_definitely_trivially_serializable<T>::value,
-      "RMA operations only work on DefinitelyTriviallySerializable types.");
+    static_assert(is_trivially_serializable<T>::value,
+      "RMA operations only work on TriviallySerializable types.");
     
     static_assert(std::is_convertible<D, const T*>::value,
                   "SrcIter and DestIter need to be over same base T type");
@@ -605,8 +606,8 @@ namespace upcxx
     using T = typename std::iterator_traits<DestIter>::value_type::element_type;
     
     static_assert(
-                  is_definitely_trivially_serializable<T>::value,
-                  "RMA operations only work on DefinitelyTriviallySerializable types."
+                  is_trivially_serializable<T>::value,
+                  "RMA operations only work on TriviallySerializable types."
                   );
     
     UPCXX_ASSERT_ALWAYS((
@@ -709,8 +710,8 @@ namespace upcxx
     static_assert(std::is_convertible</*from*/D, /*to*/const T*>::value,
                   "Destination iterator's value type not convertible to T*." );
 
-    static_assert(is_definitely_trivially_serializable<T>::value,
-                  "RMA operations only work on DefinitelyTriviallySerializable types.");
+    static_assert(is_trivially_serializable<T>::value,
+                  "RMA operations only work on TriviallySerializable types.");
     
     UPCXX_ASSERT_ALWAYS((detail::completions_has_event<Cxs, operation_cx_event>::value |
                   detail::completions_has_event<Cxs, remote_cx_event>::value),
@@ -719,8 +720,8 @@ namespace upcxx
                  "safe to read or write again.");
     
 
-    static_assert( is_definitely_trivially_serializable<T>::value,
-                   "RMA operations only work on DefinitelyTriviallySerializable types.");
+    static_assert( is_trivially_serializable<T>::value,
+                   "RMA operations only work on TriviallySerializable types.");
     
     using cxs_here_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_here,
@@ -798,8 +799,8 @@ namespace upcxx
        Cxs cxs=completions<future_cx<operation_cx_event>>{{}})
   {
     static_assert(
-      is_definitely_trivially_serializable<T>::value,
-      "RMA operations only work on DefinitelyTriviallySerializable types."
+      is_trivially_serializable<T>::value,
+      "RMA operations only work on TriviallySerializable types."
     );
     
     UPCXX_ASSERT_ALWAYS((
@@ -876,8 +877,8 @@ namespace upcxx
                std::size_t const *extents,
                Cxs cxs=completions<future_cx<operation_cx_event>>{{}})
   {
-    static_assert(is_definitely_trivially_serializable<T>::value,
-      "RMA operations only work on DefinitelyTriviallySerializable types.");
+    static_assert(is_trivially_serializable<T>::value,
+      "RMA operations only work on TriviallySerializable types.");
     
     UPCXX_ASSERT_ALWAYS((detail::completions_has_event<Cxs, operation_cx_event>::value |
                   detail::completions_has_event<Cxs, remote_cx_event>::value),

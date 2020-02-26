@@ -676,7 +676,7 @@ namespace upcxx {
     > {
     using type = detail::completions_state_head<true, EventValues, rpc_cx<Event,Fn>, ordinal>;
 
-    static constexpr bool is_definitely_serializable = serialization_traits<Fn>::is_definitely_serializable;
+    static constexpr bool is_serializable = serialization_traits<Fn>::is_serializable;
     
     template<typename Ub>
     static auto ubound(Ub ub, type const &s)
@@ -688,7 +688,7 @@ namespace upcxx {
 
     template<typename Writer>
     static void serialize(Writer &w, type const &s) {
-      w.template push<Fn>(s.state_.fn_);
+      w.template write<Fn>(s.state_.fn_);
     }
 
     using deserialized_type = detail::completions_state_head<
@@ -707,7 +707,7 @@ namespace upcxx {
 
     template<typename Reader>
     static deserialized_type* deserialize(Reader &r, void *spot) {
-      return new(spot) deserialized_type(r.template pop<Fn>());
+      return new(spot) deserialized_type(r.template read<Fn>());
     }
   };
 
@@ -719,7 +719,7 @@ namespace upcxx {
       detail::completions_state_head</*event_enabled=*/false, EventValues, Cx, ordinal>,
       /*empty=*/true
     > {
-    static constexpr bool is_definitely_serializable = true;
+    static constexpr bool is_serializable = true;
   };
   
   template<template<typename> class EventPredicate,
@@ -731,7 +731,7 @@ namespace upcxx {
       detail::completions_state<EventPredicate, EventValues, completions<>, ordinal>,
       /*empty=*/true
     > {
-    static constexpr bool is_definitely_serializable = true;
+    static constexpr bool is_serializable = true;
   };
 
   template<template<typename> class EventPredicate,
@@ -741,9 +741,9 @@ namespace upcxx {
     > {
     using type = detail::completions_state<EventPredicate, EventValues, completions<CxH,CxT...>, ordinal>;
 
-    static constexpr bool is_definitely_serializable =
-      serialization_traits<typename type::head_t>::is_definitely_serializable &&
-      serialization_traits<typename type::tail_t>::is_definitely_serializable;
+    static constexpr bool is_serializable =
+      serialization_traits<typename type::head_t>::is_serializable &&
+      serialization_traits<typename type::tail_t>::is_serializable;
     
     template<typename Ub>
     static auto ubound(Ub ub, type const &cxs)
@@ -757,8 +757,8 @@ namespace upcxx {
 
     template<typename Writer>
     static void serialize(Writer &w, type const &cxs) {
-      w.template push<typename type::head_t>(cxs.head());
-      w.template push<typename type::tail_t>(cxs.tail());
+      w.template write<typename type::head_t>(cxs.head());
+      w.template write<typename type::tail_t>(cxs.tail());
     }
 
     using deserialized_type = detail::completions_state<
@@ -783,8 +783,8 @@ namespace upcxx {
 
     template<typename Reader>
     static deserialized_type* deserialize(Reader &r, void *spot) {
-      typename type::head_t h = r.template pop<typename type::head_t>();
-      typename type::tail_t t = r.template pop<typename type::tail_t>();
+      typename type::head_t h = r.template read<typename type::head_t>();
+      typename type::tail_t t = r.template read<typename type::tail_t>();
       return new(spot) deserialized_type(std::move(h), std::move(t));
     }
   };

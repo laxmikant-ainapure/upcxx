@@ -18,7 +18,7 @@ namespace upcxx {
   template<typename T>
   struct binding/*{
     // these must satisfy the type equality:
-    //   deserialized_type_of_t<binding<T>::on_wire_type>
+    //   deserialized_type_t<binding<T>::on_wire_type>
     //    ==
     //   binding<binding<T>::off_wire_type>::on_wire_type
     typedef on_wire_type;
@@ -45,7 +45,7 @@ namespace upcxx {
   struct binding_trivial {
     using stripped_type = T;
     using on_wire_type = T;
-    using off_wire_type = deserialized_type_of_t<T>;
+    using off_wire_type = deserialized_type_t<T>;
     using off_wire_future_type = typename detail::make_future<off_wire_type>::return_type;
     static constexpr bool immediate = true;
     
@@ -228,9 +228,9 @@ namespace upcxx {
   // make `bound_function` serializable
   template<typename Fn, typename ...B>
   struct serialization<bound_function<Fn,B...>> {
-    static constexpr bool is_definitely_serializable =
-      serialization_traits<typename binding<Fn>::on_wire_type>::is_definitely_serializable &&
-      serialization_traits<std::tuple<typename binding<B>::on_wire_type...>>::is_definitely_serializable;
+    static constexpr bool is_serializable =
+      serialization_traits<typename binding<Fn>::on_wire_type>::is_serializable &&
+      serialization_traits<std::tuple<typename binding<B>::on_wire_type...>>::is_serializable;
 
     template<typename Ub>
     static auto ubound(Ub ub, const bound_function<Fn,B...> &fn)
@@ -244,8 +244,8 @@ namespace upcxx {
     
     template<typename Writer>
     static void serialize(Writer &w, const bound_function<Fn,B...> &fn) {
-      w.template push<typename binding<Fn>::on_wire_type>(fn.fn_);
-      w.template push<std::tuple<typename binding<B>::on_wire_type...>>(fn.b_);
+      w.template write<typename binding<Fn>::on_wire_type>(fn.fn_);
+      w.template write<std::tuple<typename binding<B>::on_wire_type...>>(fn.b_);
     }
 
     using deserialized_type = bound_function<
@@ -269,12 +269,12 @@ namespace upcxx {
 
     template<typename Reader>
     static deserialized_type* deserialize(Reader &r, void *spot) {
-      detail::raw_storage<deserialized_type_of_t<typename binding<Fn>::on_wire_type>> fn;
-      r.template pop_into<typename binding<Fn>::on_wire_type>(&fn);
+      detail::raw_storage<deserialized_type_t<typename binding<Fn>::on_wire_type>> fn;
+      r.template read_into<typename binding<Fn>::on_wire_type>(&fn);
 
-      detail::raw_storage<deserialized_type_of_t<std::tuple<typename binding<B>::on_wire_type...>>> b;
+      detail::raw_storage<deserialized_type_t<std::tuple<typename binding<B>::on_wire_type...>>> b;
       //#warning "uncomment"
-      r.template pop_into<std::tuple<typename binding<B>::on_wire_type...>>(&b);
+      r.template read_into<std::tuple<typename binding<B>::on_wire_type...>>(&b);
       
       return ::new(spot) deserialized_type(
         fn.value_and_destruct(),

@@ -75,8 +75,8 @@ namespace upcxx {
       template<typename T>
       static void assert_sane() {
         static_assert(
-          is_definitely_trivially_serializable<T>::value,
-          "RMA operations only work on DefinitelyTriviallySerializable types."
+          is_trivially_serializable<T>::value,
+          "RMA operations only work on TriviallySerializable types."
         );
         
         UPCXX_ASSERT_ALWAYS((want_op | want_remote),

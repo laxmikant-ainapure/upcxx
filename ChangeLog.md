@@ -52,6 +52,9 @@ Breaking changes:
 
 * `atomic_domain` has been specified as non-DefaultConstructible since UPC++ spec draft 8 (2018.9)
   This release removes the default constructor implementation from `atomic_domain`.
+* The trait template classes `upcxx::is_definitely_trivially_serializable` and
+  `upcxx::is_definitely_serializable` have been renamed such that the "definitely"
+  word has been dropped, e.g.: `upcxx::is_trivially_serializable`.
 
 ### 2019.09.14: Release 2019.9.0
 
