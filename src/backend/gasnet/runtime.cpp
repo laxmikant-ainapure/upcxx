@@ -1172,7 +1172,7 @@ void backend::validate_global_ptr(bool allow_null, intrank_t rank, void *raw_ptr
 
     if_pf (
         (KindSet == memory_kind::host && device != -1) // host should always be device -1
-     || (int(KindSet) & int(memory_kind::host) == 0 && device == -1) // non-host gptr cannot ref host device
+     || ((int(KindSet) & int(memory_kind::host)) == 0 && device == -1) // non-host gptr cannot ref host device
      || (device < -1) // currently never use other negative devices
      || (KindSet == memory_kind::cuda_device && device > max_cuda_device) // invalid cuda device
       ) {
