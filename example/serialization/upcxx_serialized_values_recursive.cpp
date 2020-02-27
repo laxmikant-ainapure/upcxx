@@ -19,8 +19,7 @@ class custom_class_1 {
         custom_class_1(int _rank, std::string _msg) : rank(_rank), msg(_msg) { }
         custom_class_1(std::string _full_msg) : full_msg(_full_msg) { }
 
-        UPCXX_SERIALIZED_VALUES("RANK " + std::to_string(rank) + "[" + msg +
-                "]");
+        UPCXX_SERIALIZED_VALUES("RANK " + std::to_string(rank) + "[" + msg + "]")
 };
 
 std::string concat_strings(const std::vector<std::string>& v) {
@@ -43,7 +42,7 @@ class custom_class_2 {
         void add_msg(std::string m) { msgs.push_back(m); }
 
         UPCXX_SERIALIZED_VALUES("RANK " + std::to_string(rank) + "[" +
-                concat_strings(msgs) + "]");
+                concat_strings(msgs) + "]")
 };
 
 int main(void) {

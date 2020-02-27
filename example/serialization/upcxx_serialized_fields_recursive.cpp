@@ -16,7 +16,7 @@ class custom_class_1 {
         custom_class_1() { }
         custom_class_1(std::string _msg) : msg(_msg) { }
 
-        UPCXX_SERIALIZED_FIELDS(msg);
+        UPCXX_SERIALIZED_FIELDS(msg)
 };
 
 class custom_class_2 {
@@ -25,7 +25,7 @@ class custom_class_2 {
         custom_class_2() { }
         void add_msg(std::string m) { msgs.push_back(m); }
 
-        UPCXX_SERIALIZED_FIELDS(msgs);
+        UPCXX_SERIALIZED_FIELDS(msgs)
 };
 
 class custom_class_3 {
@@ -34,7 +34,7 @@ class custom_class_3 {
         custom_class_3() { }
         void add_msg(std::string m) { msgs.push_back(custom_class_1(m)); }
 
-        UPCXX_SERIALIZED_FIELDS(msgs);
+        UPCXX_SERIALIZED_FIELDS(msgs)
 };
 
 int main(void) {
