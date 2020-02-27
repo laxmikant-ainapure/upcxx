@@ -426,6 +426,13 @@ $(all_libupcxx): force
 # Helpers to iterate over conduits and backends
 #
 
+# Normal headers for public install are automatically crawled from upcxx_headers.cpp
+# This variable lists headers that should be installed but can't be crawled from there
+# (for example because they aren't guaranteed to pass preprocess at install time)
+
+UPCXX_NOCRAWL_INSTALL_HEADERS = \
+	boost.hpp
+
 do-upcxx-all: force
 	@$(MAKE) do-gasnet-configure
 	@targets='';                                                           \
@@ -442,7 +449,9 @@ do-upcxx-install-headers: force
 	 for file in $$(find . -name '*.hpp'); do                         \
 	   file="$${file##./}";                                           \
 	   if fgrep -e "/bld/$(UPCXXDIR)/include/upcxx/$$file"            \
-		    -e "$$src/$$file" "$$depfile" >/dev/null; then        \
+		    -e "$$src/$$file" "$$depfile" >/dev/null ||           \
+	      fgrep -e " $$file " >/dev/null                              \
+	            <<< " $(UPCXX_NOCRAWL_INSTALL_HEADERS) "; then        \
 	     mkdir -p "$$dst/$$(dirname $$file)" || exit $$?;             \
 	     cp $$file "$$dst/$$file" || exit $$?;                        \
 	   fi;                                                            \
