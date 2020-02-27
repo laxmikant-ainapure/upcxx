@@ -48,6 +48,13 @@ Notable bug fixes:
 * [spec issue #148](https://bitbucket.org/berkeleylab/upcxx-spec/issues/148): Missing `const` qualifiers on team and other API objects
 * [spec issue #155](https://bitbucket.org/berkeleylab/upcxx-spec/issues/155): value argument type to value collectives is changed to a simple by-value T
 
+This library release mostly conforms to the
+[UPC++ v1.0 Specification, Revision 2020.3.0](docs/spec.pdf).
+The following features from that specification are not yet implemented:
+
+* view buffer lifetime extension for `remote_cx::as_rpc` (issue #262)
+* `boost_serialization` adapter class is not yet implemented (issue #330)
+
 Breaking changes:
 
 * `atomic_domain` has been specified as non-DefaultConstructible since UPC++ spec draft 8 (2018.9)
@@ -115,7 +122,7 @@ Notable bug fixes:
 * [spec issue #142](https://bitbucket.org/berkeleylab/upcxx-spec/issues/142): add `persona::active_with_caller()`
 
 This library release mostly conforms to the
-[UPC++ v1.0 Specification, Revision 2019.9.0](docs/spec.pdf).
+[UPC++ v1.0 Specification, Revision 2019.9.0](https://bitbucket.org/berkeleylab/upcxx/downloads/upcxx-spec-2019.9.0.pdf).
 The following features from that specification are not yet implemented:
 
 * view buffer lifetime extension for `remote_cx::as_rpc` (issue #262)
