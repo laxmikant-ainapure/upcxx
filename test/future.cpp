@@ -118,6 +118,13 @@ int main() {
   future<int> ans0 = fib(arg);
   future<int> ans1 = ans0.then([](int x) { return x+1; }).then(fib);
   future<int> ans2 = /*future<int>*/(ans1.then_pure([](int x){return 2*x;})).then(fib);
+
+  // important optimization: "then" callbacks can take args by && when its provable
+  // the future value can be moved-out from
+  make_future(1).then([=](int &&x) {});
+  // ensure when_all preserves this ability
+  when_all(make_future(1),when_all(make_future(.01f),make_future(.02f)))
+    .then([](int &&a, float &&b, float &&) {}); 
   
   when_all(
       // stress nested concatenation
@@ -175,15 +182,21 @@ int main() {
     static_assert(std::is_same<int const&, decltype(when_all(ans0).member)>::value, "Uh-oh");\
     (void)when_all(ans0).member;\
     static_assert(std::is_same<tuple<int const&,int const&,float const&,int const&>, decltype(when_all(ans0, ans1, make_future<float>(3.14), ans2).member)>::value, "Uh-oh");\
-    (void)when_all(ans0, ans1, make_future<float>(3.14), ans2).member;
+    (void)when_all(ans0, ans1, make_future<float>(3.14), ans2).member;\
+    static_assert(std::is_same<tuple<int const&,int&,int const&,int&&,int const&&>, decltype(std::declval<future<int,int&,int const&,int&&,int const&&>>().member)>::value, "Uh-oh");\
+    static_assert(std::is_same<int&, decltype(std::declval<future<int&>>().member)>::value, "Uh-oh");\
+    static_assert(std::is_same<int const&, decltype(std::declval<future<int const&>>().member)>::value, "Uh-oh");\
+    static_assert(std::is_same<int&&, decltype(std::declval<future<int&&>>().member)>::value, "Uh-oh");\
+    static_assert(std::is_same<int const&&, decltype(std::declval<future<int const&&>>().member)>::value, "Uh-oh");
   THEM(result_reference())
   THEM(wait_reference(nop))
   #undef THEM
   
   static_assert(std::is_same<float, decltype(make_future(true,1,3.14f).result<2>())>::value, "Uh-oh");
-  static_assert(std::is_same<float const&, decltype(make_future(true,1,3.14f).result_reference<2>())>::value, "Uh-oh");
+  static_assert(std::is_same<float const&, decltype(std::declval<future<bool,float> const&>().result_reference<1>())>::value, "Uh-oh");
+  static_assert(std::is_same<float const&, decltype(make_future(true,3.14f).result_reference<1>())>::value, "Uh-oh");
   static_assert(std::is_same<float, decltype(make_future(true,1,3.14f).wait<2>(nop))>::value, "Uh-oh");
-  static_assert(std::is_same<float const&, decltype(make_future(true,1,3.14f).wait_reference<2>(nop))>::value, "Uh-oh");
+  static_assert(std::is_same<float const&, decltype(std::declval<future<bool,int,float> const&>().wait_reference<2>(nop))>::value, "Uh-oh");
   
   static_assert(std::is_same<tuple<bool,int>,decltype(make_future(true,1).result_tuple())>::value, "uh-oh");
   static_assert(std::is_same<tuple<bool,int>,decltype(make_future(true,1).wait_tuple(nop))>::value, "uh-oh");

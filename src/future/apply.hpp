@@ -104,7 +104,7 @@ namespace detail {
   };
   
   //////////////////////////////////////////////////////////////////////
-  // future/core.hpp: detail::pply_tupled_as_future
+  // future/core.hpp: detail::apply_tupled_as_future
 
   template<typename Fn, typename Args,
            typename ArgsD = typename std::decay<Args>::type>
@@ -134,7 +134,7 @@ namespace detail {
   template<typename Fn, typename Arg, typename Kind, typename ...T>
   struct apply_futured_as_future_help<Fn, Arg, /*ArgD=*/future1<Kind,T...>> {
     using tupled = apply_tupled_as_future_help<
-      Fn, /*Args=*/std::tuple<typename detail::add_lref_if_nonref<T>::type...>
+      Fn, /*Args=*/decltype(std::declval<Arg>().impl_.result_refs_or_vals())
     >;
     
     using return_type = typename tupled::return_type;
@@ -142,15 +142,16 @@ namespace detail {
     return_type operator()(Fn fn, Arg arg) {
       return tupled()(
         static_cast<Fn&&>(fn),
-        static_cast<Arg&&>(arg).impl_.result_lrefs_getter()()
+        static_cast<Arg&&>(arg).impl_.result_refs_or_vals()
       );
     }
     
     return_type operator()(Fn fn, future_dependency<future1<Kind,T...>> const &arg) {
-      return tupled()(
-        static_cast<Fn&&>(fn),
-        arg.result_lrefs_getter()()
-      );
+      return tupled()(static_cast<Fn&&>(fn), arg.result_refs_or_vals());
+    }
+
+    return_type operator()(Fn fn, future_dependency<future1<Kind,T...>> &&arg) {
+      return tupled()(static_cast<Fn&&>(fn), std::move(arg).result_refs_or_vals());
     }
   };
 

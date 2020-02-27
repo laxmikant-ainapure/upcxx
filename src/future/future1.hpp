@@ -20,20 +20,13 @@ namespace upcxx {
    * 
    *   bool ready() const;
    * 
-   *   // Return a no-argument callable which returns a tuple of lvalue-
-   *   // references to results. The references are valid so long as
-   *   // both this FutureImpl and the callable are alive. Tuple
-   *   // componenets which are already reference type (& or &&) will
-   *   // just have their type unaltered.
-   *   LRefsGetter result_lrefs_getter() const;
-   * 
    *   // Return result tuple where each component is either a value or
-   *   // rvalue-reference depending on whether the reference
+   *   // reference (const& or &&) depending on whether the reference
    *   // would be valid for as long as this future lives.
    *   // Therefor we guarantee that references will be valid as long
    *   // as this future lives. If any T are already & or && then they
    *   // are returned unaltered.
-   *   tuple<(T or T&&)...> result_rvals();
+   *   tuple<(T, T&&, or T const&)...> result_refs_or_vals() [const&, &&];
    *   
    *   // Returns a future_header (with refcount included for consumer)
    *   // for this future. Leaves us in an undefined state (only safe
@@ -118,8 +111,8 @@ namespace upcxx {
     typedef std::tuple<T...> results_type;
     typedef typename Kind::template with_types<T...> impl_type; // impl_type is a FutureImpl.
     
-    using results_rvals_type = decltype(std::declval<impl_type>().result_rvals());
-    using results_reference_type = typename detail::tuple_rrefs_to_clrefs_return<results_rvals_type>::type;
+    using clref_results_refs_or_vals_type = decltype(std::declval<impl_type const&>().result_refs_or_vals());
+    using rref_results_refs_or_vals_type = decltype(std::declval<impl_type&&>().result_refs_or_vals());
     
     impl_type impl_;
     
@@ -187,36 +180,40 @@ namespace upcxx {
       >::type
     result() const {
       return get_at_(
-          impl_.result_lrefs_getter()(),
+          impl_.result_refs_or_vals(),
           std::integral_constant<int, (
               i >= (int)sizeof...(T) ? (int)sizeof...(T) :
-              i>=0 ? i :
-              sizeof...(T)>1 ? -1 :
+              i >= 0 ? i :
+              sizeof...(T) > 1 ? -1 :
+              0
+            )>()
+        );
+    }
+    
+    template<int i=-1>
+    typename std::conditional<
+        (i<0 && sizeof...(T) > 1),
+          clref_results_refs_or_vals_type,
+          typename detail::tuple_element_or_void<(i<0 ? 0 : i), clref_results_refs_or_vals_type>::type
+      >::type
+    result_reference() const {
+      return get_at_(
+          impl_.result_refs_or_vals(),
+          std::integral_constant<int, (
+              i >= (int)sizeof...(T) ? (int)sizeof...(T) :
+              i >= 0 ? i :
+              sizeof...(T) > 1 ? -1 :
               0
             )>()
         );
     }
     
     results_type result_tuple() const {
-      return const_cast<impl_type&>(impl_).result_lrefs_getter()();
+      return impl_.result_refs_or_vals();
     }
     
-    template<int i=-1>
-    typename std::conditional<
-        (i<0 && sizeof...(T) > 1),
-          results_reference_type,
-          typename detail::tuple_element_or_void<(i<0 ? 0 : i), results_reference_type>::type
-      >::type
-    result_reference() const {
-      return get_at_(
-          detail::tuple_rrefs_to_clrefs(const_cast<impl_type&>(impl_).result_rvals()),
-          std::integral_constant<int, (
-              i >= (int)sizeof...(T) ? (int)sizeof...(T) :
-              i>=0 ? i :
-              sizeof...(T)>1 ? -1 :
-              0
-            )>()
-        );
+    clref_results_refs_or_vals_type result_reference_tuple() const {
+      return impl_.result_refs_or_vals();
     }
     
     template<typename Fn>
@@ -224,10 +221,20 @@ namespace upcxx {
         future1<Kind,T...>,
         typename std::decay<Fn>::type
       >::return_type
-    then(Fn &&fn) const {
+    then(Fn &&fn) const& {
       return detail::future_then<future1<Kind,T...>, typename std::decay<Fn>::type>()(
-        *const_cast<future1<Kind,T...>*>(this),
-        std::forward<Fn>(fn)
+        *this, static_cast<Fn&&>(fn)
+      );
+    }
+
+    template<typename Fn>
+    typename detail::future_then<
+        future1<Kind,T...>,
+        typename std::decay<Fn>::type
+      >::return_type
+    then(Fn &&fn) && {
+      return detail::future_then<future1<Kind,T...>, typename std::decay<Fn>::type>()(
+        std::move(*this), static_cast<Fn&&>(fn)
       );
     }
     
@@ -236,10 +243,20 @@ namespace upcxx {
         future1<Kind,T...>,
         typename std::decay<Fn>::type
       >::return_type
-    then_pure(Fn &&pure_fn) const {
+    then_pure(Fn &&pure_fn) const& {
       return detail::future_then_pure<future1<Kind,T...>, typename std::decay<Fn>::type>()(
-        *const_cast<future1<Kind,T...>*>(this),
-        std::forward<Fn>(pure_fn)
+        *this, static_cast<Fn&&>(pure_fn)
+      );
+    }
+
+    template<typename Fn>
+    typename detail::future_then_pure<
+        future1<Kind,T...>,
+        typename std::decay<Fn>::type
+      >::return_type
+    then_pure(Fn &&pure_fn) && {
+      return detail::future_then_pure<future1<Kind,T...>, typename std::decay<Fn>::type>()(
+        std::move(*this), static_cast<Fn&&>(pure_fn)
       );
     }
 
@@ -285,8 +302,8 @@ namespace upcxx {
     #endif
       -> typename std::conditional<
         (i<0 && sizeof...(T) > 1),
-          results_reference_type,
-          typename detail::tuple_element_or_void<(i<0 ? 0 : i), results_reference_type>::type
+          clref_results_refs_or_vals_type,
+          typename detail::tuple_element_or_void<(i<0 ? 0 : i), clref_results_refs_or_vals_type>::type
       >::type {
       
       while(!impl_.ready())

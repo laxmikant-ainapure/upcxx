@@ -30,15 +30,13 @@ namespace upcxx {
       
       bool ready() const { return true; }
       
-      detail::constant_function<std::tuple<T&...>> result_lrefs_getter() const {
-        return {
-          detail::tuple_lrefs(const_cast<std::tuple<T...>&>(results_))
-        };
+      detail::tuple_refs_return_t<std::tuple<T...> const&>
+      result_refs_or_vals() const& {
+        return detail::tuple_refs(results_);
       }
-      
-      auto result_rvals()
-        UPCXX_RETURN_DECLTYPE(detail::tuple_rvals(results_)) {
-        return detail::tuple_rvals(results_);
+      detail::tuple_refs_return_t<std::tuple<T...>&&>
+      result_refs_or_vals() && {
+        return detail::tuple_refs(std::move(results_));
       }
       
       typedef future_header_ops_result_ready header_ops;
@@ -52,11 +50,7 @@ namespace upcxx {
     struct future_impl_result<> {
       bool ready() const { return true; }
       
-      detail::constant_function<std::tuple<>> result_lrefs_getter() const {
-        return {std::tuple<>{}};
-      }
-      
-      std::tuple<> result_rvals() { return std::tuple<>{}; }
+      std::tuple<> result_refs_or_vals() const { return std::tuple<>(); }
       
       typedef future_header_ops_result_ready header_ops;
       
@@ -84,10 +78,13 @@ namespace upcxx {
       
       void cleanup_early() {}
       
-      detail::constant_function<std::tuple<T&...>> result_lrefs_getter() const {
-        return {
-          detail::tuple_lrefs(const_cast<std::tuple<T...>&>(results_))
-        };
+      detail::tuple_refs_return_t<std::tuple<T...> const&>
+      result_refs_or_vals() const& {
+        return detail::tuple_refs(results_);
+      }
+      detail::tuple_refs_return_t<std::tuple<T...>&&>
+      result_refs_or_vals() && {
+        return detail::tuple_refs(std::move(results_));
       }
       
       void cleanup_ready() {}
@@ -95,7 +92,7 @@ namespace upcxx {
       future_header* cleanup_ready_get_header() {
         return &(new future_header_result<T...>(
             /*not_ready=*/false,
-            /*values=*/std::tuple<T...>{std::move(results_)}
+            /*values=*/std::move(results_)
           ))->base_header;
       }
     };
@@ -112,8 +109,8 @@ namespace upcxx {
       
       void cleanup_early() {}
       
-      detail::constant_function<std::tuple<>> result_lrefs_getter() const {
-        return {std::tuple<>{}};
+      std::tuple<> result_refs_or_vals() const {
+        return std::tuple<>();
       }
       
       void cleanup_ready() {}
@@ -121,7 +118,7 @@ namespace upcxx {
       future_header* cleanup_ready_get_header() {
         return &(new future_header_result<>(
             /*not_ready=*/false,
-            /*value=*/std::tuple<>{}
+            /*value=*/std::tuple<>()
           ))->base_header;
       }
     };

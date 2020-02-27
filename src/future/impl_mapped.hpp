@@ -28,63 +28,29 @@ namespace upcxx {
     
     public:
       future_impl_mapped(FuArg arg, Fn fn):
-        arg_{std::move(arg)},
-        fn_{std::move(fn)} {
+        arg_(std::move(arg)),
+        fn_(std::move(fn)) {
       }
       
       bool ready() const {
         return this->arg_.impl_.ready();
       }
       
-      struct result_lrefs_function {
-        typedef apply_futured_as_future_return_t<Fn,FuArg> fn_return_t;
-        typedef decltype(std::declval<fn_return_t>().impl_.result_lrefs_getter()) fn_return_getter_t;
-        
-        fn_return_t result_;
-        fn_return_getter_t getter_;
-        
-        result_lrefs_function(fn_return_t result):
-          result_{std::move(result)},
-          getter_{result_.impl_.result_lrefs_getter()} {
-        }
-        
-        result_lrefs_function(const result_lrefs_function &that):
-          result_{that.result_},
-          getter_{this->result_.impl_.result_lrefs_getter()} {
-        }
-        result_lrefs_function& operator=(const result_lrefs_function &that) {
-          this->result_ = that.result_;
-          this->getter_ = this->result_.impl_.result_lrefs_getter();
-          return *this;
-        }
-        
-        result_lrefs_function(result_lrefs_function &&that):
-          result_{std::move(that.result_)},
-          getter_{this->result_.impl_.result_lrefs_getter()} {
-        }
-        result_lrefs_function& operator=(result_lrefs_function &&that) {
-          this->result_ = std::move(that.result_);
-          this->getter_ = this->result_.impl_.result_lrefs_getter();
-          return *this;
-        }
-        
-        auto operator()() const
-          UPCXX_RETURN_DECLTYPE(getter_()) {
-          return getter_();
-        }
-      };
+      using fn_return_t = apply_futured_as_future_return_t<Fn,FuArg>;
+      static_assert(future_is_trivially_ready<fn_return_t>::value, "Mapped futures must return trivially ready futures.");
       
-      result_lrefs_function result_lrefs_getter() const {
-        return result_lrefs_function{
+      std::tuple<T...> result_refs_or_vals() const& {
+        return std::tuple<T...>(
           apply_futured_as_future<Fn const&, FuArg const&>()(this->fn_, this->arg_)
-        };
+            .impl_.result_refs_or_vals()
+        );
       }
-      
-      std::tuple<T...> result_rvals() {
-        return std::tuple<T...>{
-          apply_futured_as_future<Fn&, FuArg&>()(this->fn_, this->arg_)
-            .impl_.result_lrefs_getter()()
-        };
+
+      std::tuple<T...> result_refs_or_vals() && {
+        return std::tuple<T...>(
+          apply_futured_as_future<Fn&&, FuArg&&>()(std::move(this->fn_), std::move(this->arg_))
+            .impl_.result_refs_or_vals()
+        );
       }
       
     public:
@@ -130,19 +96,25 @@ namespace upcxx {
       
       void cleanup_early() { dep_.cleanup_early(); }
       void cleanup_ready() { dep_.cleanup_ready(); }
-      
-      typedef typename future_impl_mapped<FuArg,Fn,T...>::result_lrefs_function result_lrefs_function;
-      
-      result_lrefs_function result_lrefs_getter() const {
-        return result_lrefs_function{
+
+      std::tuple<T...> result_refs_or_vals() const& {
+        return std::tuple<T...>(
           apply_futured_as_future<Fn const&, FuArg const&>()(this->fn_, this->dep_)
-        };
+            .impl_.result_refs_or_vals()
+        );
+      }
+
+      std::tuple<T...> result_refs_or_vals() && {
+        return std::tuple<T...>(
+          apply_futured_as_future<Fn&&, FuArg&&>()(std::move(this->fn_), std::move(this->dep_))
+            .impl_.result_refs_or_vals()
+        );
       }
       
       future_header* cleanup_ready_get_header() {
         future_header *hdr = &(new future_header_result<T...>(
             /*not_ready=*/false,
-            this->result_lrefs_getter()()
+            /*values=*/std::move(*this).result_refs_or_vals()
           ))->base_header;
         
         dep_.cleanup_ready();

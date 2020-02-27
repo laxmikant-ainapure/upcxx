@@ -82,7 +82,7 @@ namespace upcxx {
         return *this;
       }
       
-      future_impl_shref(future_impl_shref &&that) {
+      future_impl_shref(future_impl_shref &&that) noexcept {
         this->hdr_ = that.hdr_;
         that.hdr_ = future_header_nil::nil();
       }
@@ -90,12 +90,12 @@ namespace upcxx {
       future_impl_shref(
           future_impl_shref<Ops1,T...> &&that,
           typename std::enable_if<std::is_base_of<HeaderOps,Ops1>::value>::type* = 0
-        ) {
+        ) noexcept {
         this->hdr_ = that.hdr_;
         that.hdr_ = future_header_nil::nil();
       }
       
-      future_impl_shref& operator=(future_impl_shref &&that) {
+      future_impl_shref& operator=(future_impl_shref &&that) noexcept {
         future_header *tmp = this->hdr_;
         this->hdr_ = that.hdr_;
         that.hdr_ = tmp;
@@ -104,7 +104,7 @@ namespace upcxx {
       
       // build from some other future implementation
       template<typename Impl>
-      future_impl_shref(Impl &&that) {
+      future_impl_shref(Impl &&that) noexcept {
         this->hdr_ = that.steal_header();
       }
       
@@ -117,23 +117,9 @@ namespace upcxx {
         return HeaderOps::is_trivially_ready_result || hdr_->status_ == future_header::status_ready;
       }
       
-      detail::constant_function<std::tuple<T&...>> result_lrefs_getter() const {
-        return {
-          detail::tuple_lrefs(
-            future_header_result<T...>::results_of(hdr_->result_)
-          )
-        };
-      }
-      
-      auto result_rvals()
-        UPCXX_RETURN_DECLTYPE(
-          detail::tuple_rvals(
-            future_header_result<T...>::results_of(hdr_->result_)
-          )
-        ) {
-        return detail::tuple_rvals(
-          future_header_result<T...>::results_of(hdr_->result_)
-        );
+      detail::tuple_refs_return_t<std::tuple<T...> const&>
+      result_refs_or_vals() const {
+        return detail::tuple_refs(future_header_result<T...>::results_of(hdr_->result_));
       }
       
       typedef HeaderOps header_ops;
@@ -223,24 +209,20 @@ namespace upcxx {
       
       void cleanup_early() {
         this->unlink_();
-        auto *hdr = this->header_();
-        HeaderOps::template dropref<T...>(hdr, /*maybe_nil=*/std::true_type());
+        HeaderOps::template dropref<T...>(this->header_(), /*maybe_nil=*/std::true_type());
       }
       
       void cleanup_ready() {
         future_header_ops_result_ready::template dropref<T...>(this->header_(), /*maybe_nil*/std::false_type());
       }
       
-      detail::constant_function<std::tuple<T&...>> result_lrefs_getter() const {
-        return {
-          detail::tuple_lrefs(
-            future_header_result<T...>::results_of(this->header_())
-          )
-        };
+      detail::tuple_refs_return_t<std::tuple<T...> const&>
+      result_refs_or_vals() const {
+        return detail::tuple_refs(future_header_result<T...>::results_of(this->header_()));
       }
       
       future_header* cleanup_ready_get_header() {
-        return this->header_();
+        return this->header_(); // moving refcount to caller
       }
     };
   }
