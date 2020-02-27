@@ -178,7 +178,7 @@ struct calc { static void _(upcxx::global_ptr<T> gp_o) {
   upcxx::global_ptr<tricksy> gp_tz = upcxx_memberof(gp_o, z);
   upcxx::global_ptr<char> gp_tz_ = upcxx::reinterpret_pointer_cast<char>(gp_tz);
   ssize_t dz = gp_tz_ - gp_base;
-  assert(dz >= 0 && dz < sizeof(T));
+  assert(dz >= 0 && (size_t)dz < sizeof(T));
   upcxx::global_ptr<char> gp_tzz = upcxx_memberof(gp_o, z.z);
   assert(gp_tz_ == gp_tzz);
   #endif
@@ -278,7 +278,7 @@ void check_general(bool has_virtual) {
   upcxx::global_ptr<tricksy> gp_tz = fz.wait();
   upcxx::global_ptr<char> gp_tz_ = upcxx::reinterpret_pointer_cast<char>(gp_tz);
   ssize_t dz = gp_tz_ - gp_base;
-  assert(dz >= 0 && dz < sizeof(T));
+  assert(dz >= 0 && (size_t)dz < sizeof(T));
   auto fzz = upcxx_memberof_general(gp_o, z.z);
   upcxx::global_ptr<char> gp_tzz = fzz.wait();
   assert(gp_tz_ == gp_tzz);
