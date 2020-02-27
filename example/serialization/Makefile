@@ -38,7 +38,7 @@ TARGETS= \
 all: $(TARGETS)
 
 %: %.cpp
-	$(CXX) $(FLAGS) $@.cpp -o $@
+	$(CXX) $(CXXFLAGS) $@.cpp -o $@
 
 clean:
 	rm -f $(TARGETS)
