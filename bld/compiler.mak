@@ -4,6 +4,7 @@
 # The following are available (among others)
 #   GASNET_{CC,CXX}
 #   GASNET_{CC,CXX}_FAMILY
+#   GASNET_{CC,CXX}_SUBFAMILY
 #   GASNET_{C,CXX}FLAGS
 #
 # NOTE: sufficiently old GNU Make lacks 'else if*'

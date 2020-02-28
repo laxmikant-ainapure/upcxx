@@ -66,6 +66,8 @@ ifneq ($(wildcard $(builddir)/$(GASNETDIR)),)
 GASNET_CONDUITS   := $(call GASNET_VAR,$(builddir)/$(GASNETDIR),CONDUITS)
 GASNET_CC_FAMILY  := $(call GASNET_VAR,$(builddir)/$(GASNETDIR),CC_FAMILY)
 GASNET_CXX_FAMILY := $(call GASNET_VAR,$(builddir)/$(GASNETDIR),CXX_FAMILY)
+GASNET_CC_SUBFAMILY  := $(call GASNET_VAR,$(builddir)/$(GASNETDIR),CC_SUBFAMILY)
+GASNET_CXX_SUBFAMILY := $(call GASNET_VAR,$(builddir)/$(GASNETDIR),CXX_SUBFAMILY)
 endif
 
 
@@ -554,7 +556,8 @@ do-exe: force
 	 fi
 	@$(MAKE) $(UPCXXDIR)/libupcxx.a
 	@$(MAKE) -C "$(STARTDIR)" -f $(top_srcdir)/bld/Makefile-exe.mak \
-		GASNET_CC_FAMILY='$(GASNET_CC_FAMILY)' GASNET_CXX_FAMILY='$(GASNET_CXX_FAMILY)' \
+		GASNET_CC_FAMILY='$(GASNET_CC_FAMILY)' GASNET_CC_SUBFAMILY='$(GASNET_CC_SUBFAMILY)' \
+		GASNET_CXX_FAMILY='$(GASNET_CXX_FAMILY)' GASNET_CXX_SUBFAMILY='$(GASNET_CXX_SUBFAMILY)' \
 		UPCXX_DIR='$(builddir)/$(UPCXXDIR)' UPCXX_EXE='$(UPCXX_EXE)'
 
 # NOTE: only the final $(UPCXX_EXE) may go to stdout
