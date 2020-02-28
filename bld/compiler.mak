@@ -28,24 +28,43 @@ endif
 # LIBUPCXX_CFLAGS
 # Any CFLAGS specific to compilation of objects in libupcxx
 #
-LIBUPCXX_CFLAGS := 
+LIBUPCXX_CFLAGS := -Wall
+
+# PGI:
+# + strip unsupported `-Wall`
+ifeq ($(GASNET_CC_FAMILY),PGI)
+LIBUPCXX_CFLAGS := $(filter-out -Wall,$(LIBUPCXX_CFLAGS))
+endif
+
+# Deal w/ (unsupported) nvcc -Xcompiler mess
+ifeq ($(GASNET_CC_SUBFAMILY),NVIDIA)
+LIBUPCXX_CFLAGS := $(patsubst %,-Xcompiler %,$(LIBUPCXX_CFLAGS))
+endif
 
 #
 # LIBUPCXX_CXXFLAGS
 # Any CXXFLAGS specific to compilation of objects in libupcxx
 #
-LIBUPCXX_CXXFLAGS := 
+LIBUPCXX_CXXFLAGS := -Wall
 
-# Address issue #286 with PGI compiler
+# PGI:
+# + strip unsupported `-Wall`
+# + address issue #286 (bogus warning on future/core.cpp)
 ifeq ($(GASNET_CXX_FAMILY),PGI)
-LIBUPCXX_CXXFLAGS := --diag_suppress1427
+LIBUPCXX_CXXFLAGS := $(filter-out -Wall,$(LIBUPCXX_CXXFLAGS)) --diag_suppress1427
 endif
 
-# Address issue #286 with Intel compiler (for -Wextra only)
+# Intel:
+# + address issue #286 (bogus warning on future/core.cpp)  -Wextra only
 ifeq ($(GASNET_CXX_FAMILY),Intel)
 ifneq ($(findstring -Wextra,$(GASNET_CXX) $(GASNET_CXXFLAGS)),)
-LIBUPCXX_CXXFLAGS := -Wno-invalid-offsetof
+LIBUPCXX_CXXFLAGS += -Wno-invalid-offsetof
 endif
+endif
+
+# Deal w/ (unsupported) nvcc -Xcompiler mess
+ifeq ($(GASNET_CXX_SUBFAMILY),NVIDIA)
+LIBUPCXX_CXXFLAGS := $(patsubst %,-Xcompiler %,$(LIBUPCXX_CXXFLAGS))
 endif
 
 #
