@@ -23,7 +23,7 @@ UPCXX_CODEMODE ?= debug
 export UPCXX_CODEMODE
 CXX = $(UPCXX)
 
-EXTRA_FLAGS = -g
+CXXFLAGS = # optional command-line override
 
 # Programs to build, assuming each has a corresponding *.cpp file
 EXAMPLES = \
@@ -55,7 +55,7 @@ cuda: $(CUDA_EXAMPLES)
 
 # The rule for building any example.
 %: %.cpp $(wildcard *.h) $(wildcard *.hpp)
-	$(CXX) $@.cpp $(EXTRA_FLAGS) -o $@
+	$(CXX) $@.cpp $(CXXFLAGS) -o $@
 
 
 # Example-specific variable specializations.
