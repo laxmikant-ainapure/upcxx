@@ -1572,9 +1572,17 @@ namespace upcxx {
 
   template<typename T>
   struct is_trivially_serializable<std::less<T>>: std::true_type {};
+  template<typename T>
+  struct is_trivially_serializable<std::less_equal<T>>: std::true_type {};
+  template<typename T>
+  struct is_trivially_serializable<std::greater<T>>: std::true_type {};
+  template<typename T>
+  struct is_trivially_serializable<std::greater_equal<T>>: std::true_type {};
 
   template<typename T>
   struct is_trivially_serializable<std::equal_to<T>>: std::true_type {};
+  template<typename T>
+  struct is_trivially_serializable<std::not_equal_to<T>>: std::true_type {};
 
   template<typename T>
   struct is_trivially_serializable<std::hash<T>>: std::true_type {};
