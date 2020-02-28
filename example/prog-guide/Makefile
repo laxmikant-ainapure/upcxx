@@ -59,9 +59,11 @@ cuda: $(CUDA_EXAMPLES)
 
 
 # Example-specific variable specializations.
-persona-example: export UPCXX_THREADMODE=par
-persona-example-rputs: export UPCXX_THREADMODE=par
-view-matrix-tasks: export UPCXX_THREADMODE=par
+PAR_EXAMPLES = \
+  persona-example \
+  persona-example-rputs \
+  view-matrix-tasks
+$(PAR_EXAMPLES): UPCXX_THREADMODE=par
 
 clean:
 	rm -f $(EXAMPLES)
