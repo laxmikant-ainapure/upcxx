@@ -69,10 +69,9 @@ void upcxx::cuda::cu_failed(CUresult res, const char *file, int line, const char
   cuGetErrorString(res, &errstr);
   
   std::stringstream ss;
-  ss<<"CUDA call failed: "<<expr
-    <<"\n  error="<<errname<<": "<<errstr<<'\n';
+  ss << expr <<"\n  error="<<errname<<": "<<errstr;
   
-  upcxx::assert_failed(file, line, ss);
+  upcxx::fatal_error(ss.str(), "CUDA call failed", file, line);
 }
 
 void upcxx::cuda::curt_failed(cudaError_t res, const char *file, int line, const char *expr) {
@@ -81,10 +80,9 @@ void upcxx::cuda::curt_failed(cudaError_t res, const char *file, int line, const
   errstr = cudaGetErrorString(res);
   
   std::stringstream ss;
-  ss<<"CUDA call failed: "<<expr
-    <<"\n  error="<<errname<<": "<<errstr<<'\n';
+  ss << expr <<"\n  error="<<errname<<": "<<errstr;
   
-  upcxx::assert_failed(file, line, ss);
+  upcxx::fatal_error(ss.str(), "CUDA call failed", file, line);
 }
 #endif
 

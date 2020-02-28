@@ -8,28 +8,18 @@ namespace upcxx {
   inline void fatal_error(const std::string &msg, const char *title=nullptr, const char *file=0, int line=0) {
     fatal_error(msg.c_str(), title, file, line);
   }
-  inline void fatal_error(const std::stringstream &msg, const char *title=nullptr, const char *file=0, int line=0) {
-    fatal_error(msg.str().c_str(), title, file, line);
-  }
-  inline void fatal_error(std::stringstream &&msg, const char *title=nullptr, const char *file=0, int line=0) {
-    fatal_error(msg.str().c_str(), title, file, line);
-  }
 
   void assert_failed(const char *file, int line, const char *msg=nullptr);
   inline void assert_failed(const char *file, int line, const std::string &str) {
     assert_failed(file, line, str.c_str());
   }
-  inline void assert_failed(const char *file, int line, const std::stringstream &ss) {
-    assert_failed(file, line, ss.str().c_str());
-  }
-  inline void assert_failed(const char *file, int line, std::stringstream &&ss) {
-    assert_failed(file, line, ss.str().c_str());
-  }
 }
 
 // unconditional fatal error, with file/line and custom message
 #define UPCXX_FATAL_ERROR(ios_msg) \
-      ::upcxx::fatal_error(dynamic_cast<::std::stringstream&&>(::std::stringstream() << ios_msg), \
+      ::upcxx::fatal_error(([&]() { ::std::stringstream _upcxx_fatal_ss; \
+                                     _upcxx_fatal_ss << ios_msg; \
+                                     return _upcxx_fatal_ss.str(); })(), \
                            nullptr, __FILE__, __LINE__)
 
 #define UPCXX_ASSERT_1(ok) \
@@ -39,7 +29,9 @@ namespace upcxx {
 #define UPCXX_ASSERT_2(ok, ios_msg) \
  ( (ok) ? (void)0 : \
       ::upcxx::assert_failed(__FILE__, __LINE__, \
-                            dynamic_cast<::std::stringstream&&>(::std::stringstream() << ios_msg)) )
+        ([&]() { ::std::stringstream _upcxx_assert_ss; \
+                 _upcxx_assert_ss << ios_msg; \
+                 return _upcxx_assert_ss.str(); })()) )
 
 #define UPCXX_ASSERT_DISPATCH(_1, _2, NAME, ...) NAME
 
