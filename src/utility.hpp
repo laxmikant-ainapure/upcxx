@@ -14,7 +14,14 @@
 #include <tuple>
 #include <utility>
 #include <new> // launder
+
+// RTTI support
+#ifndef UPCXX_HAVE_RTTI
+#define UPCXX_HAVE_RTTI (__GXX_RTTI || __cpp_rtti)
+#endif
+#if UPCXX_HAVE_RTTI
 #include <typeinfo> // typeid
+#endif
 
 #include <cstdlib> // posix_memalign
 
@@ -731,7 +738,13 @@ namespace detail {
   // typename_of<T>(): returns typeid(T).name() or null for incomplete types
 
   template <typename T, std::size_t x = sizeof(T)>
-  inline const char *typename_of_(T *_) { return typeid(T).name(); }
+  inline const char *typename_of_(T *_) { 
+    #if UPCXX_HAVE_RTTI
+      return typeid(T).name(); 
+    #else
+      return "";
+    #endif
+  }
   inline const char *typename_of_(...) { return nullptr; }
 
   template<typename T>
