@@ -70,6 +70,28 @@ namespace upcxx {
   
   //////////////////////////////////////////////////////////////////////
   // future1: The actual type users get (aliased as future<>).
+
+  namespace detail {
+    // These ought to live in utility.hpp, but since this is going away when
+    // we refactor future reference management, it'll just stay here.
+    
+    template<typename T>
+    struct rref_to_clref { using type = T; };
+    template<typename T>
+    struct rref_to_clref<T&&> { using type = T const&; };
+    
+    template<typename Tup>
+    struct tuple_rrefs_to_clrefs;
+    template<typename ...T>
+    struct tuple_rrefs_to_clrefs<std::tuple<T...>> {
+      using type = std::tuple<typename rref_to_clref<T>::type...>;
+    };
+    
+    static_assert(std::is_same<
+      tuple_rrefs_to_clrefs<std::tuple<int&&,int>>::type,
+      std::tuple<int const&, int>
+    >::value,"Uhoh");
+  }
   
   template<typename Kind, typename ...T>
   struct future1 {
@@ -78,6 +100,7 @@ namespace upcxx {
     typedef typename Kind::template with_types<T...> impl_type; // impl_type is a FutureImpl.
     
     using results_rvals_type = decltype(std::declval<impl_type>().result_rvals());
+    using results_reference_type = typename detail::tuple_rrefs_to_clrefs<results_rvals_type>::type;
     
     impl_type impl_;
     
@@ -162,12 +185,12 @@ namespace upcxx {
     template<int i=-1>
     typename std::conditional<
         (i<0 && sizeof...(T) > 1),
-          results_rvals_type,
-          typename detail::tuple_element_or_void<(i<0 ? 0 : i), results_rvals_type>::type
+          results_reference_type,
+          typename detail::tuple_element_or_void<(i<0 ? 0 : i), results_reference_type>::type
       >::type
-    result_moved() {
+    result_reference() const {
       return get_at_(
-          impl_.result_rvals(),
+          const_cast<impl_type&>(impl_).result_rvals(),
           std::integral_constant<int, (
               i >= (int)sizeof...(T) ? (int)sizeof...(T) :
               i>=0 ? i :
@@ -194,9 +217,9 @@ namespace upcxx {
         future1<Kind,T...>,
         typename std::decay<Fn>::type
       >::return_type
-    then_pure(Fn &&pure_fn) {
+    then_pure(Fn &&pure_fn) const {
       return detail::future_then_pure<future1<Kind,T...>, typename std::decay<Fn>::type>()(
-        *this,
+        *const_cast<future1<Kind,T...>*>(this),
         std::forward<Fn>(pure_fn)
       );
     }
@@ -236,21 +259,21 @@ namespace upcxx {
     
     #ifdef UPCXX_BACKEND
     template<int i=-1, typename Fn=detail::future_wait_upcxx_progress_user>
-    auto wait_moved(Fn &&progress = detail::future_wait_upcxx_progress_user{})
+    auto wait_reference(Fn &&progress = detail::future_wait_upcxx_progress_user{}) const
     #else
     template<int i=-1, typename Fn>
-    auto wait_moved(Fn &&progress)
+    auto wait_reference(Fn &&progress) const
     #endif
       -> typename std::conditional<
         (i<0 && sizeof...(T) > 1),
-          results_rvals_type,
-          typename detail::tuple_element_or_void<(i<0 ? 0 : i), results_rvals_type>::type
+          results_reference_type,
+          typename detail::tuple_element_or_void<(i<0 ? 0 : i), results_reference_type>::type
       >::type {
       
       while(!impl_.ready())
         progress();
       
-      return this->template result_moved<i>();
+      return this->template result_reference<i>();
     }
   };
 }
