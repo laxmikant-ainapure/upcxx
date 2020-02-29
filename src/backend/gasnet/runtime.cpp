@@ -1159,7 +1159,7 @@ void backend::validate_global_ptr(bool allow_null, intrank_t rank, void *raw_ptr
       break; // end of null pointer checks
     }
 
-    if_pf ((uint64_t)(rank) >= backend::rank_n) {
+    if_pf ((uint64_t)rank >= (uint64_t)backend::rank_n) {
       ss << pretty_type() << " representation corrupted, bad rank\n";
       error = true; break;
     }
