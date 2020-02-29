@@ -295,11 +295,13 @@ $(basename $(upcxx_git_version_obj))_EXTRA_FLAGS = -DUPCXX_GIT_VERSION='$(UPCXX_
 endif
 endif
 
-LIBUPCXX_C_COMPILE   := $(GASNET_CC)  $(GASNET_CPPFLAGS)    $(GASNET_CFLAGS) \
-                        $(LIBUPCXX_CFLAGS)   $(UPCXX_DEFINES) \
+LIBUPCXX_C_COMPILE   := $(GASNET_CC)  $(LIBUPCXX_CFLAGS) \
+                        $(GASNET_CPPFLAGS)    $(GASNET_CFLAGS) \
+                        $(UPCXX_DEFINES) \
                         -I$(UPCXX_DIR)/include -I$(UPCXX_DIR)/gen_include
-LIBUPCXX_CXX_COMPILE := $(GASNET_CXX) $(GASNET_CXXCPPFLAGS) $(GASNET_CXXFLAGS) $(UPCXX_STDCXX) \
-                        $(LIBUPCXX_CXXFLAGS) $(UPCXX_DEFINES) \
+LIBUPCXX_CXX_COMPILE := $(GASNET_CXX) $(LIBUPCXX_CXXFLAGS) \
+                        $(GASNET_CXXCPPFLAGS) $(GASNET_CXXFLAGS) \
+                        $(UPCXX_STDCXX) $(UPCXX_DEFINES) \
                         -I$(UPCXX_DIR)/include -I$(UPCXX_DIR)/gen_include
 
 #
