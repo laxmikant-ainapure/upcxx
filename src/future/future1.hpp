@@ -81,14 +81,33 @@ namespace upcxx {
     struct rref_to_clref<T&&> { using type = T const&; };
     
     template<typename Tup>
-    struct tuple_rrefs_to_clrefs;
+    struct tuple_rrefs_to_clrefs_return;
     template<typename ...T>
-    struct tuple_rrefs_to_clrefs<std::tuple<T...>> {
+    struct tuple_rrefs_to_clrefs_return<std::tuple<T...>> {
       using type = std::tuple<typename rref_to_clref<T>::type...>;
     };
+
+    template<typename ...T, int ...i>
+    typename tuple_rrefs_to_clrefs_return<std::tuple<T...>>::type
+    tuple_rrefs_to_clrefs_help(std::tuple<T...> &&t, index_sequence<i...>) {
+      return std::tuple<typename rref_to_clref<T>::type...>(
+        static_cast<typename rref_to_clref<T>::type>(
+          std::template get<i>(t)
+        )...
+      );
+    }
+
+    template<typename ...T>
+    typename tuple_rrefs_to_clrefs_return<std::tuple<T...>>::type
+    tuple_rrefs_to_clrefs(std::tuple<T...> &&t) {
+      return tuple_rrefs_to_clrefs_help(
+        static_cast<std::tuple<T...>&&>(t),
+        make_index_sequence<sizeof...(T)>()
+      );
+    }
     
     static_assert(std::is_same<
-      tuple_rrefs_to_clrefs<std::tuple<int&&,int>>::type,
+      tuple_rrefs_to_clrefs_return<std::tuple<int&&,int>>::type,
       std::tuple<int const&, int>
     >::value,"Uhoh");
   }
@@ -100,7 +119,7 @@ namespace upcxx {
     typedef typename Kind::template with_types<T...> impl_type; // impl_type is a FutureImpl.
     
     using results_rvals_type = decltype(std::declval<impl_type>().result_rvals());
-    using results_reference_type = typename detail::tuple_rrefs_to_clrefs<results_rvals_type>::type;
+    using results_reference_type = typename detail::tuple_rrefs_to_clrefs_return<results_rvals_type>::type;
     
     impl_type impl_;
     
@@ -190,7 +209,7 @@ namespace upcxx {
       >::type
     result_reference() const {
       return get_at_(
-          const_cast<impl_type&>(impl_).result_rvals(),
+          detail::tuple_rrefs_to_clrefs(const_cast<impl_type&>(impl_).result_rvals()),
           std::integral_constant<int, (
               i >= (int)sizeof...(T) ? (int)sizeof...(T) :
               i>=0 ? i :
