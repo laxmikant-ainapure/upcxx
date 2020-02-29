@@ -324,7 +324,6 @@ namespace upcxx {
           RemoteFn &&remote
         ) {
         //upcxx::say()<<"amlong without reply";
-        auto *o = static_cast<Obj*>(this);
         auto sync_out = backend::gasnet::template rma_put_then_am_master<sync_lb1>(
           upcxx::world(), rank_d, buf_d, buf_s, buf_size,
           progress_level::user, std::move(remote),
