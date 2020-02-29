@@ -5,8 +5,6 @@ namespace detail = upcxx::detail;
 
 using std::size_t;
 
-constexpr std::size_t detail::device_allocator_core<upcxx::cuda_device>::min_alignment; // required before C++17
-
 #if UPCXX_CUDA_ENABLED
   namespace {
     detail::segment_allocator make_segment(upcxx::cuda::device_state *st, void *base, size_t size) {
