@@ -183,10 +183,10 @@ upcxx::detail::atomic_domain_untyped<size,bit_flavor>::~atomic_domain_untyped() 
   }
 }
 
-template class upcxx::detail::atomic_domain_untyped<4,0>;
-template class upcxx::detail::atomic_domain_untyped<4,1>;
-template class upcxx::detail::atomic_domain_untyped<4,2>;
-template class upcxx::detail::atomic_domain_untyped<8,0>;
-template class upcxx::detail::atomic_domain_untyped<8,1>;
-template class upcxx::detail::atomic_domain_untyped<8,2>;
+template struct upcxx::detail::atomic_domain_untyped<4,0>;
+template struct upcxx::detail::atomic_domain_untyped<4,1>;
+template struct upcxx::detail::atomic_domain_untyped<4,2>;
+template struct upcxx::detail::atomic_domain_untyped<8,0>;
+template struct upcxx::detail::atomic_domain_untyped<8,1>;
+template struct upcxx::detail::atomic_domain_untyped<8,2>;
 
