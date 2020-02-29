@@ -626,7 +626,7 @@ if [[ $UPCXX_CUDA -eq 1 ]]; then
   UPCXX_CUDA_NVCC="$nvcc"
 
   unset cxx_is_nvcc
-  if $CXX --version |& grep 'Cuda compiler driver' &> /dev/null; then
+  if $CXX --version 2>&1 | grep 'Cuda compiler driver' &> /dev/null; then
     cxx_is_nvcc=1
   fi
 
