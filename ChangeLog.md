@@ -50,6 +50,7 @@ Notable bug fixes:
 * issue #313: ***PARTIAL FIX*** Implement future::{result,wait}_reference.
   These work with the exception of `&&` references in the future type. For instance,
   `future<int&&>::result_reference()` returns a `int const&` instead of `int&&`.
+* issue #333: Multiply defined symbol detail::device_allocator_core<cuda_device>::min_alignment w/ std=c++2a
 
 This library release mostly conforms to the
 [UPC++ v1.0 Specification, Revision 2020.3.0](docs/spec.pdf).
