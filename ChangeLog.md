@@ -47,6 +47,9 @@ Notable bug fixes:
 * issue #323: Incorrect behavior for global_ptr<T>(nullptr).is_local() in multi-node jobs
 * [spec issue #148](https://bitbucket.org/berkeleylab/upcxx-spec/issues/148): Missing `const` qualifiers on team and other API objects
 * [spec issue #155](https://bitbucket.org/berkeleylab/upcxx-spec/issues/155): value argument type to value collectives is changed to a simple by-value T
+* issue #313: ***PARTIAL FIX*** Implement future::{result,wait}_reference.
+  These work with the exception of `&&` references in the future type. For instance,
+  `future<int&&>::result_reference()` returns a `int const&` instead of `int&&`.
 
 This library release mostly conforms to the
 [UPC++ v1.0 Specification, Revision 2020.3.0](docs/spec.pdf).
@@ -62,6 +65,7 @@ Breaking changes:
 * The trait template classes `upcxx::is_definitely_trivially_serializable` and
   `upcxx::is_definitely_serializable` have been renamed such that the "definitely"
   word has been dropped, e.g.: `upcxx::is_trivially_serializable`.
+* `future::{result,wait}_moved` have been removed, as they were already deprecated.
 
 ### 2019.09.14: Release 2019.9.0
 
