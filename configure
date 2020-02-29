@@ -625,8 +625,17 @@ if [[ $UPCXX_CUDA -eq 1 ]]; then
   echo
   UPCXX_CUDA_NVCC="$nvcc"
 
+  unset cxx_is_nvcc
+  if $CXX --version |& grep 'Cuda compiler driver' &> /dev/null; then
+    cxx_is_nvcc=1
+  fi
+
   # UPCXX_CUDA_CPPFLAGS: pre-processor flags
-  if [[ ${UPCXX_CUDA_CPPFLAGS-unset} ]]; then
+  if [[ ${UPCXX_CUDA_CPPFLAGS+set} ]]; then
+    : # Keep existing value
+  elif [[ $cxx_is_nvcc ]]; then
+    UPCXX_CUDA_CPPFLAGS=''
+  else
     # We run a subprocess w/ output to fd 3, and append $? (w/o trailing newline) to this fd
     # Bash "read" will yield non-zero due to lack of newline, which we use to capture $rc
     # Inspired by
@@ -650,7 +659,11 @@ if [[ $UPCXX_CUDA -eq 1 ]]; then
   fi
 
   # UPCXX_CUDA_LIBFLAGS: linker flags
-  if [[ ${UPCXX_CUDA_LIBFLAGS-unset} ]]; then
+  if [[ ${UPCXX_CUDA_LIBFLAGS+set} ]]; then
+    : # Keep existing value
+  elif [[ $cxx_is_nvcc ]]; then
+    UPCXX_CUDA_LIBFLAGS='-lcuda'
+  else
     libflags=''
     # Use incantation similar to one above to yield rc and last line output
     exec 3< <( $nvcc --dryrun foo.o 2>&1 ; echo -n $?)
