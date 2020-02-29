@@ -37,7 +37,8 @@ namespace upcxx {
     #define UPCXX_GPTR_CHECK_ALIGNMENT 1 // -DUPCXX_GPTR_CHECK_ALIGNMENT=0 disables alignment checking
     #endif
     void check(bool allow_null=true, const char *context=nullptr) const {
-        UPCXX_ASSERT_ALWAYS(this, "global_ptr::check() invoked on a null pointer to global_ptr");
+        void *this_sanity_check = (void*)this;
+        UPCXX_ASSERT_ALWAYS(this_sanity_check, "global_ptr::check() invoked on a null pointer to global_ptr");
         #if UPCXX_GPTR_CHECK_ALIGNMENT
           constexpr size_t align = detail::align_of<T>();
         #else
