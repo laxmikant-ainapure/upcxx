@@ -29,7 +29,15 @@ namespace upcxx {
     
   //public:
     dist_object<T>& here() const {
-      return detail::registered_promise<dist_object<T>&>(dig_)->get_future().result();
+      return std::get<0>(
+        // 3. retrieve results tuple
+        detail::future_header_result<dist_object<T>&>::results_of(
+          // 1. get future_header_promise<...>* for this digest
+          &detail::registered_promise<dist_object<T>&>(dig_)
+            // 2. cast to future_header* (not using inheritnace, must use embedded first member)
+            ->base_header_result.base_header
+        )
+      );
     }
     
     future<dist_object<T>&> when_here() const {
