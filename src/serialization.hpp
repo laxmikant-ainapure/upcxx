@@ -22,6 +22,7 @@
   #include <forward_list>
   #include <list>
   #include <map>
+  #include <memory>
   #include <set>
   #include <unordered_map>
   #include <unordered_set>
@@ -1567,25 +1568,88 @@ namespace upcxx {
   //////////////////////////////////////////////////////////////////////////////
 
   #ifndef UPCXX_CREDUCE_SLIM
+
+  /* This is where we hardcode certain builtin c++ std types which semantically
+   * *ought* to be Serializable and make them so. When hardcoding parametric
+   * sets of types like `foo<T>` we don't specialize `is_trivially_serializable<foo<T>>`
+   * since that may become out of sync if a concrete element of the set (say
+   * `foo<int>`) gets its serialization user-specialized some other way. The
+   * failure being that `is_trivially_copyable<foo<int>>` reports true while non-trivial
+   * user code is registered for the more specific type.
+   */
+
+  // std::allocator is hardcoded to be TrivialSerializable.
   template<typename T>
   struct is_trivially_serializable<std::allocator<T>>: std::true_type {};
 
-  template<typename T>
-  struct is_trivially_serializable<std::less<T>>: std::true_type {};
-  template<typename T>
-  struct is_trivially_serializable<std::less_equal<T>>: std::true_type {};
-  template<typename T>
-  struct is_trivially_serializable<std::greater<T>>: std::true_type {};
-  template<typename T>
-  struct is_trivially_serializable<std::greater_equal<T>>: std::true_type {};
+  namespace detail {
+    template<typename T,
+             // We force to true now until we're comfortable asserting in the false case
+             bool is_trivially_copyable = true || std::is_trivially_copyable<T>::value>
+    struct serialization_iff_trivially_copyable;
+    
+    template<typename T>
+    struct serialization_iff_trivially_copyable<T, /*is_triv_copy=*/true>: serialization_dispatch1<T> {};
+    template<typename T>
+    struct serialization_iff_trivially_copyable<T, /*is_triv_copy=*/false> {
+      static_assert(std::is_trivially_copyable<T>::value, "This standard type required to be TriviallyCopyable to support Serializable.");
+    };
+  }
 
+  // The std comparison function objects assert that they are TriviallyCopyable to guarantee
+  // Serializable
   template<typename T>
-  struct is_trivially_serializable<std::equal_to<T>>: std::true_type {};
+  struct serialization<std::less<T>>: detail::serialization_iff_trivially_copyable<std::less<T>> {};
   template<typename T>
-  struct is_trivially_serializable<std::not_equal_to<T>>: std::true_type {};
+  struct serialization<std::less_equal<T>>: detail::serialization_iff_trivially_copyable<std::less_equal<T>> {};
+  template<typename T>
+  struct serialization<std::greater<T>>: detail::serialization_iff_trivially_copyable<std::greater<T>> {};
+  template<typename T>
+  struct serialization<std::greater_equal<T>>: detail::serialization_iff_trivially_copyable<std::greater_equal<T>> {};
+  template<typename T>
+  struct serialization<std::equal_to<T>>: detail::serialization_iff_trivially_copyable<std::equal_to<T>> {};
+  template<typename T>
+  struct serialization<std::not_equal_to<T>>: detail::serialization_iff_trivially_copyable<std::not_equal_to<T>> {};
 
+  // We hardcode the builtin specialization of std::hash to be TriviallySerializable.
+  template<> struct is_trivially_serializable<std::hash<bool>>: std::true_type {};
+  template<> struct is_trivially_serializable<std::hash<char>>: std::true_type {};
+  template<> struct is_trivially_serializable<std::hash<signed char>>: std::true_type {};
+  template<> struct is_trivially_serializable<std::hash<unsigned char>>: std::true_type {};
+  #if __cplusplus >= 202000L
+    template<> struct is_trivially_serializable<std::hash<char8_t>>: std::true_type {};
+  #endif
+  template<> struct is_trivially_serializable<std::hash<char16_t>>: std::true_type {};
+  template<> struct is_trivially_serializable<std::hash<char32_t>>: std::true_type {};
+  template<> struct is_trivially_serializable<std::hash<wchar_t>>: std::true_type {};
+  template<> struct is_trivially_serializable<std::hash<short>>: std::true_type {};
+  template<> struct is_trivially_serializable<std::hash<unsigned short>>: std::true_type {};
+  template<> struct is_trivially_serializable<std::hash<int>>: std::true_type {};
+  template<> struct is_trivially_serializable<std::hash<unsigned int>>: std::true_type {};
+  template<> struct is_trivially_serializable<std::hash<long>>: std::true_type {};
+  template<> struct is_trivially_serializable<std::hash<long long>>: std::true_type {};
+  template<> struct is_trivially_serializable<std::hash<unsigned long>>: std::true_type {};
+  template<> struct is_trivially_serializable<std::hash<unsigned long long>>: std::true_type {};
+  template<> struct is_trivially_serializable<std::hash<float>>: std::true_type {};
+  template<> struct is_trivially_serializable<std::hash<double>>: std::true_type {};
+  template<> struct is_trivially_serializable<std::hash<long double>>: std::true_type {};
+  #if __cplusplus >= 201700L
+    template<> struct is_trivially_serializable<std::hash<std::nullptr_t>>: std::true_type {};
+  #endif
+  template<typename T> struct is_trivially_serializable<std::hash<T*>>: std::true_type {};
+
+  template<typename CharT, typename Traits, typename Alloc>
+  struct serialization<
+      std::hash<std::basic_string<CharT, Traits, Alloc>>
+    >: detail::serialization_trivial<
+      std::hash<std::basic_string<CharT, Traits, Alloc>>
+    > {
+  };
+
+  template<typename T, typename Del>
+  struct serialization<std::hash<std::unique_ptr<T,Del>>>: detail::serialization_trivial<std::hash<std::unique_ptr<T,Del>>> {};
   template<typename T>
-  struct is_trivially_serializable<std::hash<T>>: std::true_type {};
+  struct serialization<std::hash<std::shared_ptr<T>>>: detail::serialization_trivial<std::hash<std::shared_ptr<T>>> {};
   #endif
   
   //////////////////////////////////////////////////////////////////////////////
