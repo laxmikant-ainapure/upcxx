@@ -43,7 +43,11 @@ EXAMPLES = \
   team_simple \
   team_advanced \
   persona-example-rputs \
-  persona-example	
+  persona-example	\
+  serial-custom \
+  serial-fields \
+  serial-recursive \
+  serial-values 
 
 
 CUDA_EXAMPLES = \
