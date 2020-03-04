@@ -430,8 +430,11 @@ def main():
 
     if not args.show:
         sys.stdout.flush()
-        os.execvp(cmd[0], cmd)
-
+        try:
+            os.execvp(cmd[0], cmd)
+        except OSError as err:
+            print("UPCXX_RUN: OS error executing '" + ' '.join(cmd) +
+                  "'\n    {0}".format(err))
 
         
 if __name__ == '__main__':
