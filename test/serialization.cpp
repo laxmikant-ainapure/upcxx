@@ -173,6 +173,7 @@ static_assert(is_trivially_serializable<std::tuple<const int,char>>::value, "Uh-
 static_assert(serialization_traits<std::tuple<int,char>>::is_actually_trivially_serializable, "Uh-oh.");
 static_assert(serialization_traits<std::tuple<const int,char>>::is_actually_trivially_serializable, "Uh-oh.");
 
+static_assert(is_serializable<std::hash<int>>::value, "Uh-oh.");
 static_assert(is_trivially_serializable<std::hash<int>>::value, "Uh-oh.");
 static_assert(is_serializable<std::hash<std::string>>::value, "Uh-oh.");
 static_assert(is_trivially_serializable<std::equal_to<std::vector<int>>>::value, "Uh-oh.");

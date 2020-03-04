@@ -39,13 +39,26 @@ namespace upcxx {
   struct serialization_traits;
 
   namespace detail {
+    enum class serialization_existence {
+      user, // the user has provided serialization via specialization, nested subclass, or macros
+      trivial_unsafe, // best effort trivial serialization will be performed, is_serializable will report false
+      trivial_blessed, // trivial serialization that reports as is_serializable and is_trivially_serializable
+      trivial_asserted // currently unused
+    };
+
+    // determines what kind of serialization has been registered excepting specialization of is_trivially_serializable
     template<typename T, typename=std::false_type>
-    struct serialization_is_specialized;
+    struct serialization_get_existence;
   }
 
   template<typename T>
   struct is_trivially_serializable {
-    static constexpr bool value = std::is_trivially_copyable<T>::value && !detail::serialization_is_specialized<T>::value;
+    static constexpr bool value =
+      detail::serialization_get_existence<T>::value == detail::serialization_existence::user ? false :
+      detail::serialization_get_existence<T>::value == detail::serialization_existence::trivial_unsafe ? std::is_trivially_copyable<T>::value :
+      detail::serialization_get_existence<T>::value == detail::serialization_existence::trivial_blessed ? true :
+      detail::serialization_get_existence<T>::value == detail::serialization_existence::trivial_asserted ? true :
+      false; // impossible
   };
   
   template<typename T>
@@ -1033,52 +1046,62 @@ namespace upcxx {
     ////////////////////////////////////////////////////////////////////////////
 
     // ...otherwise checks if has nested subclass T::upcxx_serialization::supply_type_please<typename>
-    template<typename T, typename=void>
+    template<typename T, bool bless_trivial_default, typename=void>
     struct serialization_dispatch1;
 
     // ...otherwise checks if has T::upcxx_serialization
     // ...finally otherwise dispatch to trivial serialization
-    template<typename T, typename=void>
+    template<typename T, bool bless_trivial_default, typename=void>
     struct serialization_dispatch2;
 
     ////////////////////////////////////////////////////////////////////////////
 
-    template<typename T>
-    struct serialization_dispatch1<T,
+    template<typename T, bool bless_trivial_default>
+    struct serialization_dispatch1<T, bless_trivial_default,
         typename std::conditional<true, void, typename T::upcxx_serialization::template supply_type_please<T>>::type
       >: T::upcxx_serialization::template supply_type_please<T> {
     };
 
-    template<typename T, typename>
-    struct serialization_dispatch1: serialization_dispatch2<T> {};
+    template<typename T, bool bless_trivial_default, typename>
+    struct serialization_dispatch1: serialization_dispatch2<T, bless_trivial_default> {};
 
-    template<typename T>
-    struct serialization_dispatch2<T,
+    template<typename T, bool bless_trivial_default>
+    struct serialization_dispatch2<T, bless_trivial_default,
         typename std::conditional<true, void, typename T::upcxx_serialization>::type
       >: T::upcxx_serialization {
     };
 
-    template<typename T, typename>
+    template<typename T, bool bless_trivial_default, typename>
     struct serialization_dispatch2:
       serialization_trivial<T> {
-      static constexpr bool is_specialized = false; // only case where this is needed since serialization_is_specialized defaults to true
-      static constexpr bool is_serializable = false;
+
+      static constexpr serialization_existence existence =
+        bless_trivial_default ? serialization_existence::trivial_blessed
+                              : serialization_existence::trivial_unsafe;
+
+      static constexpr bool is_serializable = bless_trivial_default;
     };
 
     // query to determine if serialization has been specialized or provided
     // via nested class or macros.
-    template<typename T, typename>
-    struct serialization_is_specialized: std::true_type {};
+    template<typename T, typename/*=std::false_type*/>
+    struct serialization_get_existence {
+      static constexpr serialization_existence value = serialization_existence::user;
+    };
 
     template<typename T>
-    struct serialization_is_specialized<T,
-        std::integral_constant<bool, false & serialization<T>::is_specialized>
-      >: std::integral_constant<bool, serialization<T>::is_specialized>  {
+    struct serialization_get_existence<T,
+        std::integral_constant<bool,
+          // some expression involving serialization<T>::existence that always produces false
+          serialization<T>::existence != serialization<T>::existence
+        >
+      > {
+      static constexpr serialization_existence value = serialization<T>::existence;
     };
   }
 
   template<typename T>
-  struct serialization: detail::serialization_dispatch1<T> {};
+  struct serialization: detail::serialization_dispatch1<T, /*bless_trivial_default=*/false> {};
 
   namespace detail {
     template<typename T, typename=std::false_type>
@@ -1261,7 +1284,7 @@ namespace upcxx {
     // inherit is_serializable
     // inherit references_buffer
 
-    static constexpr bool is_specialized = detail::serialization_is_specialized<T>::value;
+    static constexpr detail::serialization_existence existence = detail::serialization_get_existence<T>::value;
     
     using deserialized_type = const typename serialization_traits<T>::deserialized_type;
 
@@ -1570,86 +1593,109 @@ namespace upcxx {
   #ifndef UPCXX_CREDUCE_SLIM
 
   /* This is where we hardcode certain builtin c++ std types which semantically
-   * *ought* to be Serializable and make them so. When hardcoding parametric
-   * sets of types like `foo<T>` we don't specialize `is_trivially_serializable<foo<T>>`
-   * since that may become out of sync if a concrete element of the set (say
-   * `foo<int>`) gets its serialization user-specialized some other way. The
-   * failure being that `is_trivially_copyable<foo<int>>` reports true while non-trivial
-   * user code is registered for the more specific type.
+   * *ought* to be Serializable and make them so. Our strategy is to provide a
+   * different specialization for upcxx::serialization that instructs the dispatch
+   * machinery to "bless" the default strategy of trivial serialization in the
+   * case where no user provided mechanism was found.
+   *
+   * Q) Does this work if the user specializes upcxx::serialization?
+   * A) Yes. Their specialization will be a better fit than ours and thus chosen
+   *    unamibguously by the compiler and so nothing we do here will matter.
+   *    Example:
+   *
+   *   namespace upcxx {
+   *      // user specialization
+   *      template<> struct serialization<std::equal_to<user_type>> {...};
+   *      // is a tighter fit than ours:
+   *      template<typename T> struct serialization<std::equal_to<T>> {...};
+   *   }
+   *
+   * Q) Does this work if the user nests serialization into the class via
+   *    subclass or macros?
+   * A) Yes. detail::serialization_dispatch1 will find that and ignore the value
+   *    we're pushing here for bless_trivial_defalut, which is only utilized
+   *    when no serialization was found nested in class.
+   *
+   * Q) Does this work if user specializes is_trivially_serializable<T> to true?
+   * A) Yes. serialization_triats<T> first looks at is_trivially_serializable<T>
+   *    before anything else, so again, nothing we do here will matter.
    */
 
-  // std::allocator is hardcoded to be TrivialSerializable.
   template<typename T>
-  struct is_trivially_serializable<std::allocator<T>>: std::true_type {};
+  struct serialization<std::allocator<T>>: detail::serialization_dispatch1<std::allocator<T>, /*bless_trivial_default=*/true> {};
+  
+  template<typename T>
+  struct serialization<std::less<T>>: detail::serialization_dispatch1<std::less<T>, /*bless_trivial_default=*/true> {};
+  template<typename T>
+  struct serialization<std::less_equal<T>>: detail::serialization_dispatch1<std::less_equal<T>, /*bless_trivial_default=*/true> {};
+  template<typename T>
+  struct serialization<std::greater<T>>: detail::serialization_dispatch1<std::greater<T>, /*bless_trivial_default=*/true> {};
+  template<typename T>
+  struct serialization<std::greater_equal<T>>: detail::serialization_dispatch1<std::greater_equal<T>, /*bless_trivial_default=*/true> {};
+  template<typename T>
+  struct serialization<std::equal_to<T>>: detail::serialization_dispatch1<std::equal_to<T>, /*bless_trivial_default=*/true> {};
+  template<typename T>
+  struct serialization<std::not_equal_to<T>>: detail::serialization_dispatch1<std::not_equal_to<T>, /*bless_trivial_default=*/true> {};
 
-  namespace detail {
-    template<typename T,
-             // We force to true now until we're comfortable asserting in the false case
-             bool is_trivially_copyable = true || std::is_trivially_copyable<T>::value>
-    struct serialization_iff_trivially_copyable;
-    
-    template<typename T>
-    struct serialization_iff_trivially_copyable<T, /*is_triv_copy=*/true>: serialization_dispatch1<T> {};
-    template<typename T>
-    struct serialization_iff_trivially_copyable<T, /*is_triv_copy=*/false> {
-      static_assert(std::is_trivially_copyable<T>::value, "This standard type required to be TriviallyCopyable to support Serializable.");
-    };
-  }
+  #define UPCXX_HARDCODE_STD_HASH(type) \
+    template<> \
+    struct serialization<std::hash<type>>: detail::serialization_dispatch1<std::hash<type>, /*bless_trivial_default=*/true> {};
 
-  // The std comparison function objects assert that they are TriviallyCopyable to guarantee
-  // Serializable
-  template<typename T>
-  struct serialization<std::less<T>>: detail::serialization_iff_trivially_copyable<std::less<T>> {};
-  template<typename T>
-  struct serialization<std::less_equal<T>>: detail::serialization_iff_trivially_copyable<std::less_equal<T>> {};
-  template<typename T>
-  struct serialization<std::greater<T>>: detail::serialization_iff_trivially_copyable<std::greater<T>> {};
-  template<typename T>
-  struct serialization<std::greater_equal<T>>: detail::serialization_iff_trivially_copyable<std::greater_equal<T>> {};
-  template<typename T>
-  struct serialization<std::equal_to<T>>: detail::serialization_iff_trivially_copyable<std::equal_to<T>> {};
-  template<typename T>
-  struct serialization<std::not_equal_to<T>>: detail::serialization_iff_trivially_copyable<std::not_equal_to<T>> {};
-
-  // We hardcode the builtin specialization of std::hash to be TriviallySerializable.
-  template<> struct is_trivially_serializable<std::hash<bool>>: std::true_type {};
-  template<> struct is_trivially_serializable<std::hash<char>>: std::true_type {};
-  template<> struct is_trivially_serializable<std::hash<signed char>>: std::true_type {};
-  template<> struct is_trivially_serializable<std::hash<unsigned char>>: std::true_type {};
+  UPCXX_HARDCODE_STD_HASH(bool)
+  UPCXX_HARDCODE_STD_HASH(char)
+  UPCXX_HARDCODE_STD_HASH(signed char)
+  UPCXX_HARDCODE_STD_HASH(unsigned char)
   #if __cpp_char8_t
-    template<> struct is_trivially_serializable<std::hash<char8_t>>: std::true_type {};
+    UPCXX_HARDCODE_STD_HASH(char8_t)
   #endif
-  template<> struct is_trivially_serializable<std::hash<char16_t>>: std::true_type {};
-  template<> struct is_trivially_serializable<std::hash<char32_t>>: std::true_type {};
-  template<> struct is_trivially_serializable<std::hash<wchar_t>>: std::true_type {};
-  template<> struct is_trivially_serializable<std::hash<short>>: std::true_type {};
-  template<> struct is_trivially_serializable<std::hash<unsigned short>>: std::true_type {};
-  template<> struct is_trivially_serializable<std::hash<int>>: std::true_type {};
-  template<> struct is_trivially_serializable<std::hash<unsigned int>>: std::true_type {};
-  template<> struct is_trivially_serializable<std::hash<long>>: std::true_type {};
-  template<> struct is_trivially_serializable<std::hash<long long>>: std::true_type {};
-  template<> struct is_trivially_serializable<std::hash<unsigned long>>: std::true_type {};
-  template<> struct is_trivially_serializable<std::hash<unsigned long long>>: std::true_type {};
-  template<> struct is_trivially_serializable<std::hash<float>>: std::true_type {};
-  template<> struct is_trivially_serializable<std::hash<double>>: std::true_type {};
-  template<> struct is_trivially_serializable<std::hash<long double>>: std::true_type {};
+  UPCXX_HARDCODE_STD_HASH(char16_t)
+  UPCXX_HARDCODE_STD_HASH(char32_t)
+  UPCXX_HARDCODE_STD_HASH(wchar_t)
+  UPCXX_HARDCODE_STD_HASH(short)
+  UPCXX_HARDCODE_STD_HASH(unsigned short)
+  UPCXX_HARDCODE_STD_HASH(int)
+  UPCXX_HARDCODE_STD_HASH(unsigned int)
+  UPCXX_HARDCODE_STD_HASH(long)
+  UPCXX_HARDCODE_STD_HASH(long long)
+  UPCXX_HARDCODE_STD_HASH(unsigned long)
+  UPCXX_HARDCODE_STD_HASH(unsigned long long)
+  UPCXX_HARDCODE_STD_HASH(float)
+  UPCXX_HARDCODE_STD_HASH(double)
+  UPCXX_HARDCODE_STD_HASH(long double)
   #if __cplusplus >= 201700L
-    template<> struct is_trivially_serializable<std::hash<std::nullptr_t>>: std::true_type {};
+    UPCXX_HARDCODE_STD_HASH(std::nullptr_t)
   #endif
-  template<typename T> struct is_trivially_serializable<std::hash<T*>>: std::true_type {};
 
+  #undef UPCXX_HARDCODE_STD_HASH
+  
+  template<typename T>
+  struct serialization<std::hash<T*>>:
+    detail::serialization_dispatch1<
+      std::hash<T*>, /*bless_trivial_default=*/true
+    > {
+  };
+  
   template<typename CharT, typename Traits, typename Alloc>
-  struct serialization<
-      std::hash<std::basic_string<CharT, Traits, Alloc>>
-    >: detail::serialization_trivial<
-      std::hash<std::basic_string<CharT, Traits, Alloc>>
+  struct serialization<std::hash<std::basic_string<CharT, Traits, Alloc>>>:
+    detail::serialization_dispatch1<
+      std::hash<std::basic_string<CharT, Traits, Alloc>>, /*bless_trivial_default=*/true
     > {
   };
 
   template<typename T, typename Del>
-  struct serialization<std::hash<std::unique_ptr<T,Del>>>: detail::serialization_trivial<std::hash<std::unique_ptr<T,Del>>> {};
+  struct serialization<std::hash<std::unique_ptr<T,Del>>>:
+    detail::serialization_dispatch1<
+      std::hash<std::unique_ptr<T,Del>>, /*bless_trivial_default=*/true
+    > {
+  };
+  
   template<typename T>
-  struct serialization<std::hash<std::shared_ptr<T>>>: detail::serialization_trivial<std::hash<std::shared_ptr<T>>> {};
+  struct serialization<std::hash<std::shared_ptr<T>>>:
+    detail::serialization_dispatch1<
+      std::hash<std::shared_ptr<T>>, /*bless_trivial_default=*/true
+    > {
+  };
+  
   #endif
   
   //////////////////////////////////////////////////////////////////////////////
