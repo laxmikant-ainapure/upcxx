@@ -1616,7 +1616,7 @@ namespace upcxx {
   template<> struct is_trivially_serializable<std::hash<char>>: std::true_type {};
   template<> struct is_trivially_serializable<std::hash<signed char>>: std::true_type {};
   template<> struct is_trivially_serializable<std::hash<unsigned char>>: std::true_type {};
-  #if __cplusplus >= 202000L
+  #if __cpp_char8_t
     template<> struct is_trivially_serializable<std::hash<char8_t>>: std::true_type {};
   #endif
   template<> struct is_trivially_serializable<std::hash<char16_t>>: std::true_type {};
