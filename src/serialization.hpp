@@ -43,7 +43,8 @@ namespace upcxx {
       user, // the user has provided serialization via specialization, nested subclass, or macros
       trivial_unsafe, // best effort trivial serialization will be performed, is_serializable will report false
       trivial_blessed, // trivial serialization that reports as is_serializable and is_trivially_serializable
-      trivial_asserted // currently unused
+      trivial_asserted, // currently unused
+      invalid // definitely never used
     };
 
     // determines what kind of serialization has been registered excepting specialization of is_trivially_serializable
@@ -1093,7 +1094,7 @@ namespace upcxx {
     struct serialization_get_existence<T,
         std::integral_constant<bool,
           // some expression involving serialization<T>::existence that always produces false
-          serialization<T>::existence != serialization<T>::existence
+          serialization<T>::existence == serialization_existence::invalid
         >
       > {
       static constexpr serialization_existence value = serialization<T>::existence;
