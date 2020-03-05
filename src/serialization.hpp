@@ -756,6 +756,23 @@ namespace upcxx {
       static void skip(Reader&) {}
     };
 
+    #define UPCXX_SERIALIZED_DELETE() \
+      struct upcxx_serialization { \
+        template<typename T> \
+        struct supply_type_please { \
+          static constexpr bool is_serializable = false; \
+          template<typename Writer> \
+          static void serialize(Writer &w, T const&) { \
+            static_assert(-sizeof(Writer)==1, "Type has serialization deleted via UPCXX_SERIALIZED_DELETE."); \
+          }; \
+          template<typename Reader> \
+          static T* deserialize(Reader &r, void *spot) { \
+            static_assert(-sizeof(Reader)==1, "Type has serialization deleted via UPCXX_SERIALIZED_DELETE."); \
+            return nullptr; \
+          }; \
+        }; \
+      };
+    
     #define UPCXX_SERIALIZED_FIELDS(...) \
       template<typename upcxx_fields_not_values = std::true_type> \
       auto upcxx_serialized_fields() \
