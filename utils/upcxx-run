@@ -253,23 +253,20 @@ def main():
         print_error_and_abort('Must specify the number of processes, -n or -np')
 
 
-    executable = args.cmd
-    full_args = [args.cmd] + args.cmd_args
+    cmd = [args.cmd] + args.cmd_args
     is_valid = False
-    for arg in [ str(x) for x in  full_args ]:
-        if os.path.isfile(arg):
-            conduit = get_conduit(arg)
+    for i in range(len(cmd)):
+        if os.path.isfile(cmd[i]):
+            conduit = get_conduit(cmd[i])
             if conduit:
+                if os.path.basename(cmd[i]) == cmd[i]:
+                     cmd[i] = './' + cmd[i]
+                executable = cmd[i]
                 is_valid = True
-                executable = arg
                 break
 
-    if os.path.basename(executable) == executable:
-        executable = './' + executable
-    cmd = [args.cmd]
-
     if not is_valid:
-        print_error_and_abort('"' + ' '.join(full_args) + '" does not appear to execute a UPC++/GASNet executable')
+        print_error_and_abort('"' + ' '.join(cmd) + '" does not appear to execute a UPC++/GASNet executable')
 
     if args.info:
         print_env_info(executable)
@@ -316,9 +313,6 @@ def main():
     if args.sshservers and conduit not in ['udp', 'ibv', 'ucx']:
         print('Ignoring -ssh-servers setting: only applies to UDP and IBV conduits, not', conduit)
         
-    if args.cmd_args:
-        cmd += args.cmd_args
-    
     if spawner:
         print_verbose('UPCXX_RUN: Looking for spawner "' + spawner + '" in:')
         paths = []
