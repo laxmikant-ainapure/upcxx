@@ -36,6 +36,7 @@ New features/enhancements: (see specification and programmer's guide for full de
 Notable bug fixes:
 
 * issue #83: strengthen `global_ptr` correctness assertions
+* issue #173: upcxx-run for executables in CWD and error messages
 * issue #247: unused-local-typedef warning for some compilers
 * issue #271: Use of `-pthread` in `example/prog-guide/Makefile` breaks PGI
 * issue #277: Ensure `completion_cx::as_promise(p)` works even when p is destroyed prior to fulfillment
