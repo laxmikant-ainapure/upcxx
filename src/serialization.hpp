@@ -764,12 +764,12 @@ namespace upcxx {
           template<typename Writer> \
           static void serialize(Writer &w, T const&) { \
             static_assert(-sizeof(Writer)==1, "Type has serialization deleted via UPCXX_SERIALIZED_DELETE."); \
-          }; \
+          } \
           template<typename Reader> \
           static T* deserialize(Reader &r, void *spot) { \
             static_assert(-sizeof(Reader)==1, "Type has serialization deleted via UPCXX_SERIALIZED_DELETE."); \
             return nullptr; \
-          }; \
+          } \
         }; \
       };
     
