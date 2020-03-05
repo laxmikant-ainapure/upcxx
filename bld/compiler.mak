@@ -102,3 +102,7 @@ ifeq ($(GASNET_CXX_FAMILY),PGI)
 # NOTE: we've assumed '@' does not appear in the target paths
 UPCXX_DEP_GEN = $(1) -E -M -MT UPCXX_DEP_TARGET $(4) $(5) | sed -e 's@^UPCXX_DEP_TARGET@$(2) $(3)@'
 endif
+ifeq ($(GASNET_CXX_SUBFAMILY),NVIDIA)
+# NOTE: this is known to be insufficient if nvcc's backend is PGI
+UPCXX_DEP_GEN = $(1) -E -Xcompiler "-M -MT '$(2) $(3)'" $(4) $(5)
+endif
