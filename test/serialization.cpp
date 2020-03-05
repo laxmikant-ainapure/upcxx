@@ -304,9 +304,20 @@ struct my_seq2: public my_seq_base<my_seq2<T>, T> {
   }
 };
 
+struct noserz {
+  UPCXX_SERIALIZED_DELETE()
+};
+
 int main() {
   print_test_header();
 
+  #if 0
+    // instantiating serialization when DELETED dies compile time
+    upcxx::serialization_traits<noserz>::deserialized_value(noserz{});
+  #endif
+  // compile time queries when serialization is DELETED still work
+  static_assert(!is_serializable<noserz>::value, "Uh-oh.");
+  
   // roundtrip checks using serialization_traits::deserialized_value()
   UPCXX_ASSERT_ALWAYS(upcxx::serialization_traits<int>::deserialized_value(0xbeef) == 0xbeef);
   UPCXX_ASSERT_ALWAYS(upcxx::serialization_traits<std::string>::deserialized_value(std::string(10000,'x')) == std::string(10000,'x'));
