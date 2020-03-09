@@ -34,6 +34,9 @@ Other topics are covered in the following documents:
 * Implementation-defined behavior, see: [docs/implementation-defined.md](docs/implementation-defined.md) 
 * Copyright notice and licensing agreement, see: [LICENSE.txt](LICENSE.txt)
 
+Usage information for public installs of UPC\+\+ at certain computing centers
+is available [online](https://upcxx.lbl.gov/wiki/docs/site-docs.md).
+
 To report problems or request features: [issue tracker](https://upcxx-bugs.lbl.gov).
 
 # Compiling Against UPC\+\+ on the Command Line
