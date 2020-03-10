@@ -136,15 +136,11 @@ influence which backend `upcxx-meta` selects:
     * `udp` is a portable low-performance alternative for testing and debugging.
     * `mpi` is a portable low-performance alternative for testing and debugging. 
 
-* `UPCXX_THREADMODE=[seq|par]`: The value `seq` limits the application to only
+* `UPCXX_THREADMODE=[seq|par]`: The value `seq` restrcts the application to only
   calling "communicating" upcxx routines from the thread that invoked
-  `upcxx::init`, and only while that thread is holding the master persona. The
-  benefit is that `seq` can be synchronization-free in much of its internals. 
-  A thread-mode value of `par` selects the thread-safe library that allows any
-  thread in each process to issue communication as allowed by the specification,
-  enabling greater injection concurrency in a multi-threaded application, at
-  the expensive of greater internal synchronization (higher overhead per operation).  
-  The default value is always `seq`.
+  `upcxx::init`, but at the benefit of lower library-internal overhead.
+  See [docs/implementation-defined.md](docs/implementation-defined.md) for
+  detailed requirements. The default value is always `seq`.
   
 * `UPCXX_CODEMODE=[O3|debug]`: `O3` is for highly compiler-optimized
   code. `debug` produces unoptimized code, includes extra error checking
