@@ -121,7 +121,8 @@ your project.
 UPC\+\+ provides multiple "backends" offering the user flexibility to choose the
 means by which the parallel communication facilities are implemented. Those
 backends are characterized by three dimensions: conduit, thread-mode, and
-code-mode. The conduit and thread-mode parameters map directly to the GASNet
+code-mode. All objects in a given executable must agree on the backend in
+use. The conduit and thread-mode parameters map directly to the GASNet
 concepts of the same name (for more explanation, see below). Code-mode selects
 between highly optimized code and highly debuggable code. The `upcxx-meta`
 script will assume sensible defaults for these parameters based on the
