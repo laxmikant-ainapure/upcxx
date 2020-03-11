@@ -97,7 +97,7 @@ to orchestrate their own "funneling" strategy, e.g.:
 
 // How a non-primordial thread can tell the master persona to put an rpc on the
 // wire on its behalf.
-upcxx::master_persona().lpc([=]() {
-  upcxx::rpc(99, [=]() { std::cout << "Initiated from far away."; });
+upcxx::master_persona().lpc_ff([=]() {
+  upcxx::rpc_ff(99, [=]() { std::cout << "Initiated from far away."; });
 });
 ```
