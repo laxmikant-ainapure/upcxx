@@ -48,20 +48,24 @@ The following `std::` types enjoy the following serialization behavior:
 
 ## UPCXX_THREADMODE=seq Restrictions ##
 
-The "seq" build of libupcxx is performance-optmized for single-threaded
+The "seq" build of libupcxx is performance-optimized for single-threaded
 processes, or for a model where only a single thread per process will ever be
 invoking interprocess communication via upcxx. The performance gains with
 respect to the "par" build stem from the removal of internal synchronization
 (mutexes, atomic memory ops) within the upcxx runtime. Affected upcxx routines
 will be observed to have lower overhead than their "par" counterparts.
 
-The restrictions on a seq-mode client are thus:
+Whereas "par-mode" libupcxx permits the full generality of the UPC++
+specification with respect to multi-threading concerns, "seq" imposes these
+additional restrictions on the client application:
 
   * Only the thread which invokes `upcxx::init()` may ever hold the master
     persona. This thread is regarded as the "primordial" thread.
 
-  * Any inter-process communicating upcxx routine (e.g. `upcxx::rput/rget/rpc/...`)
-    must be called from the primordial thread while holding the master persona.
+  * Any upcxx routine with internal or user-progress (typically inter-process
+    communication, e.g. `upcxx::rput/rget/rpc/...`) must be called from the
+    primordial thread while holding the master persona. There are some routines
+    which are excepted from this restriction and are listed below.
 
   * Shared-heap allocation/deallocation (e.g. `upcxx::allocate/deallocate/new_/
     new_array/delete_/delete_array`) must be called from the primordial thread
@@ -69,11 +73,12 @@ The restrictions on a seq-mode client are thus:
 
 Types of communication that do not experience restriction:
 
-  * Intra-process communication (e.g. `upcxx::persona::lpc()`) is always OK.
+  * Sending lpc's via `upcxx::persona::lpc()` or `<completion>_cx::as_lpc()`
+    has no added restriction.
 
-  * `upcxx::progress()` is always OK. Incoming rpc's are only
-    processed if progress is called from the primordial thread while it has the
-    master persona.
+  * `upcxx::progress()` and `upcxx::future::wait()` have no added restriction.
+    Incoming rpc's are only processed if progress is called from the primordial
+    thread while it has the master persona.
 
   * Upcasting/downcasting shared heap memory (e.g. `global_ptr::local()`) is
     always OK. This facilitates a kind of interprocess communication via native
