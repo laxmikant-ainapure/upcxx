@@ -20,38 +20,42 @@ Infrastructure and requirements changes:
 
 New features/enhancements: (see specification and programmer's guide for full details)
 
+* Added support for non-trivial serialization of user-defined types.  See the 
+  [new chapter of the programmer's guide](https://upcxx.lbl.gov/docs/html/guide.html#serialization)
+  for an introduction, and [the specification](docs/spec.pdf) for all the details.
 * Implement `upcxx_memberof(_general)()`, enabling RMA access to fields of remote objects
-* Significantly improve compile latency associated with `upcxx` compiler wrapper script
-* Improve handling of `upcxx-run -v` verbose options
-* Improve GASNet polling heuristic to reduce head-of-line blocking
 * `upcxx::promise` now behaves as a CopyAssignable handle to a reference-counted hidden object,
   meaning users no longer have to worry about promise lifetime issues.
 * `atomic_domain<T>` is now implemented for all 32- and 64-bit integer types,
   in addition to the fixed-width integer types, `(u)int{32,64}_t`.
 * `atomic_domain<T>` implementation has been streamlined to reduce overhead,
   most notably for targets with affinity to `local_team` using CPU-based atomics.
+* Improve GASNet polling heuristic to reduce head-of-line blocking
 * Installed CMake package file is now more robust, and supports versioning.
-* `global_ptr<T>` now enforces many additional sanity checks in debug mode
+* `global_ptr<T>` now enforces many additional correctness checks in debug mode
+* Significantly improve compile latency associated with `upcxx` compiler wrapper script
+* Improve handling of `upcxx-run -v` verbose options
 
 Notable bug fixes:
 
 * issue #83: strengthen `global_ptr` correctness assertions
+* issue #142: Clarify semantic restrictions on `UPCXX_THREADMODE=seq`
 * issue #173: upcxx-run for executables in CWD and error messages
 * issue #247: unused-local-typedef warning for some compilers
+* issue #266: Redundant completion handler type breaks compile
+* issue #267: Same completion value can't be received multiple times
 * issue #271: Use of `-pthread` in `example/prog-guide/Makefile` breaks PGI
 * issue #277: Ensure `completion_cx::as_promise(p)` works even when p is destroyed prior to fulfillment
+* issue #280: Off-by-one error in promise constructor leads to breakage with any explicit argument
 * issue #282: Improve installed CMake package files
 * issue #287: Bogus install warnings on Cray XC regarding CC/CXX
 * issue #289: link failure for PGI with -std=c++17
 * issue #294: redundant-move warning in completion.hpp from g++-9.2
 * issue #304: Bad behavior for misspelled CC or CXX
-* issue #323: Incorrect behavior for global_ptr<T>(nullptr).is_local() in multi-node jobs
+* issue #323: Incorrect behavior for `global_ptr<T>(nullptr).is_local()` in multi-node jobs
+* issue #333: Multiply defined symbol `detail::device_allocator_core<cuda_device>::min_alignment` w/ std=c++2a
 * [spec issue #148](https://bitbucket.org/berkeleylab/upcxx-spec/issues/148): Missing `const` qualifiers on team and other API objects
 * [spec issue #155](https://bitbucket.org/berkeleylab/upcxx-spec/issues/155): value argument type to value collectives is changed to a simple by-value T
-* issue #313: ***PARTIAL FIX*** Implement future::{result,wait}_reference.
-  These work with the exception of `&&` references in the future type. For instance,
-  `future<int&&>::result_reference()` returns a `int const&` instead of `int&&`.
-* issue #333: Multiply defined symbol detail::device_allocator_core<cuda_device>::min_alignment w/ std=c++2a
 
 This library release mostly conforms to the
 [UPC++ v1.0 Specification, Revision 2020.3.0](docs/spec.pdf).
@@ -59,15 +63,18 @@ The following features from that specification are not yet implemented:
 
 * view buffer lifetime extension for `remote_cx::as_rpc` (issue #262)
 * `boost_serialization` adapter class is not yet implemented (issue #330)
+* `future<T&&>::{result,wait}_reference` currently return the wrong type.
+  E.g. `future<int&&>::result_reference()` returns `int const&` instead of `int&&` (issue #313)
 
 Breaking changes:
 
 * `atomic_domain` has been specified as non-DefaultConstructible since UPC++ spec draft 8 (2018.9)
-  This release removes the default constructor implementation from `atomic_domain`.
+  This release removes the default constructor implementation from `atomic_domain` (issue #316).
 * The trait template classes `upcxx::is_definitely_trivially_serializable` and
   `upcxx::is_definitely_serializable` have been renamed such that the "definitely"
   word has been dropped, e.g.: `upcxx::is_trivially_serializable`.
-* `future::{result,wait}_moved` have been removed, as they were already deprecated.
+* `future::{result,wait}_moved`, deprecated since 2019.9.0, have been removed.
+  New `future::{result,wait}_reference` calls provide related functionality.
 
 ### 2019.09.14: Release 2019.9.0
 
