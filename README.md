@@ -34,6 +34,9 @@ Other topics are covered in the following documents:
 * Implementation-defined behavior, see: [docs/implementation-defined.md](docs/implementation-defined.md) 
 * Copyright notice and licensing agreement, see: [LICENSE.txt](LICENSE.txt)
 
+Usage information for public installs of UPC\+\+ at certain computing centers
+is available [online](https://upcxx.lbl.gov/wiki/docs/site-docs.md).
+
 To report problems or request features: [issue tracker](https://upcxx-bugs.lbl.gov).
 
 # Compiling Against UPC\+\+ on the Command Line
@@ -104,14 +107,14 @@ that `Makefile`, first set the `UPCXX_INSTALL` shell variable to the
 
 ## Using UPC++ with CMake
 
-A UPCXX CMake module is provided in the installation directory. To use it
+A UPCXX CMake package is provided in the installation directory. To use it
 in a CMake project, append the UPC++ installation directory to the
 `CMAKE_PREFIX_PATH` variable 
 (`cmake ... -DCMAKE_PREFIX_PATH=/path/to/upcxx/install/prefix ...`), 
 then use `find_package(UPCXX)` in the
 CMakeLists.txt file of the project.
 
-If it is able to find a compatible UPC++ installation, the CMake module
+If it is able to find a compatible UPC++ installation, the CMake package
 will define a `UPCXX:upcxx target` (as well as a `UPCXX_LIBRARIES`
 variable for legacy projects) that can be added as dependency to
 your project.
