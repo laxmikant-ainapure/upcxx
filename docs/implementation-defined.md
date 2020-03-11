@@ -82,7 +82,7 @@ threading libraries that have outstanding work. For instance, when an OpenMP
 thread enters an OpenMP barrier it will no longer be capable of servicing
 the upcxx runtime: OpenMP is not kind enough make calls to `upcxx::progress()`
 while waiting for the condition that will release it from the barrier. Deadlock
-can insue whenever there are two threads A and B (possibly on different
+can ensue whenever there are two threads A and B (possibly on different
 processes) where thread A is blocking for an OpenMP condition before servicing
 upcxx and thread B is blocking for a upcxx condition before servicing OpenMP.
 
@@ -103,18 +103,18 @@ The following example has such a deadlock:
   // in the omp barrier the master can't respond to rpc's. So we cant reply to
   // our buddy's message and therefor will delay the buddy's sending
   // thread from making it to the omp barrier. And if our buddy is in the same
-  // situtation with respect to our message then we deadlock.
+  // situation with respect to our message then we deadlock.
 }
 
 ```
 
-Unfortunately we have no obvious fix for this sceanario. There are two separate
+Unfortunately we have no obvious fix for this scenario. There are two separate
 runtimes blocking for conditions that can only be satisfied by the other
 runtime making progress. The user must ensure this doesn't happen by either
 breaking the cyclic dependencies, or carefully quiescing the activity of one
 runtime before blocking in the another.
 
-Another deadlock issue can arrise from failing to discharge personas before
+Another deadlock issue can arise from failing to discharge personas before
 they cease to be attentive:
 
 ```
@@ -164,7 +164,7 @@ OpenMP barrier safely? Not by the specification's rules. But here in the
 implementation we've loosened the requirement somewhat. This implementation and
 all of its future versions guarantee that under `UPCXX_THREADMODE={seq|par}`
 the master persona will never silently be required to progress outgoing work
-initiated by another persona on this process. The impliciation is that for
+initiated by another persona on this process. The implication is that for
 `upcxx::discharge/progress_required()` the master persona comes with the same
 discharging guarantees as other personas. With this property of the
 implementation, the second example remains fixable according to the advice given.
