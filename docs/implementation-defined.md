@@ -79,44 +79,43 @@ threading library blocks a thread waiting for a condition that is satisfied
 concurrently by another thread. Unfortunately, when threading libraries block,
 they tend only to service their internal state and not the state of the other
 threading libraries that have outstanding work. For instance, when an OpenMP
-thread enters a `#pragma omp barrer` it will no longer be capable of servicing
+thread enters an OpenMP barrier it will no longer be capable of servicing
 the upcxx runtime: OpenMP is not kind enough make calls to `upcxx::progress()`
-while waiting for the condition that will release it from the barrier. So if
-another thread is waiting for upcxx to complete something, and the upcxx
-runtime needs that thread which is now stuck in the barrier, deadlock can
-insue.
+while waiting for the condition that will release it from the barrier. Deadlock
+can insue whenever there are two threads A and B (possibly on different
+processes) where thread A is blocking for an OpenMP condition before servicing
+upcxx and thread B is blocking for a upcxx condition before servicing OpenMP.
 
 The following example has such a deadlock:
 
 ```
 #!c++
 
-upcxx::persona personas[2];
-
 #omp parallel num_threads(2)
 {
-  upcxx::persona_scope scoped(personas[omp_get_thread_num()]);
+  // Assume thread 0 has the master persona...
   
-  if(omp_get_thread_num() == 0)
-    personas[1].lpc([=](){}).wait(); // bounce off thread 1
-
-  // Try to be nice, but not good enough since there's no guarantee the inbound
-  // lpc has reached us yet.
-  upcxx::progress();
-
-  // If thread=1 makes it here without responding to the lpc we're hosed.
-  #pragma omp barrier
-
-  if(omp_get_thread_num() == 0)
-    std::cout<<"I guess we got lucky this time."<<std::endl;
+  if(omp_get_thread_num() == 1) {
+    // Bounce an rpc off buddy rank and wait for it.
+    upcxx::rpc(upcxx::rank_me() ^ 1, [=](){}).wait();
+  }
+  // Here comes the implicit omp barrier at end of the parallel region. While
+  // in the omp barrier the master can't respond to rpc's. So we cant reply to
+  // our buddy's message and therefor will delay the buddy's sending
+  // thread from making it to the omp barrier. And if our buddy is in the same
+  // situtation with respect to our message then we deadlock.
 }
+
 ```
 
-To fix it, the user needs to change that single call to progress into a spin
-loop that persists in calling progress until there are no more inbound lpc's
-which must be serviced before the upcoming barrier.
+Unfortunately we have no obvious fix for this sceanario. There are two separate
+runtimes blocking for conditions that can only be satisfied by the other
+runtime making progress. The user must ensure this doesn't happen by either
+breaking the cyclic dependencies, or carefully quiescing the activity of one
+runtime before blocking in the another.
 
-A similar deadlock can occur where it isn't so obviously the user's fault:
+Another deadlock issue can arrise from failing to discharge personas before
+they cease to be attentive:
 
 ```
 #!c++
@@ -125,6 +124,8 @@ int got = -1;
 
 #omp parallel num_threads(2)
 {
+  // Assume thread 0 has master...
+  
   upcxx::global_ptr<int> gp = /*...*/;
   
   if(omp_get_thread_num() == 1) {
@@ -154,16 +155,16 @@ region, or thread 1 releasing the persona it used to inject the rget (the
 default persona won't work), and the serial thread outside the region picks up
 that persona while spinning.
 
-The astute reader of the "UPC++ Specification: Progress" section may notice that
-`upcxx::progress_required()` is semantically prohibited from ever conveying to
-the application that the master persona is free from needing progress. So
-attempting to discharge the master persona has no effect on being provably
-deadlock free, which begs the question can that thread ever enter an OpenMP
-barrier safely? Not by the specification's rules. But here in the
-implementation we've loosened the requirement somewhat. The implementation
-guarantees that at least for `UPCXX_THREADMODE={seq|par}` the master persona
-will never silently be required to process work initiated by another persona.
-The impliciation is that for `upcxx::discharge/progress_required()` the master
-persona comes with the same guarantees as any other persona. So long as the
-previous advice in this section is minded, deadlock freedom is attainable even
-while all threads block in another party's library.
+The astute reader of the "UPC++ Specification: Progress" section may notice
+that `upcxx::progress_required()` is semantically prohibited from ever
+conveying to the application that the master persona is free from needing
+progress. So attempting to discharge the master persona has no effect on being
+provably deadlock free, which begs the question can that thread ever enter an
+OpenMP barrier safely? Not by the specification's rules. But here in the
+implementation we've loosened the requirement somewhat. This implementation and
+all of its future versions guarantee that under `UPCXX_THREADMODE={seq|par}`
+the master persona will never silently be required to progress outgoing work
+initiated by another persona on this process. The impliciation is that for
+`upcxx::discharge/progress_required()` the master persona comes with the same
+discharging guarantees as other personas. With this property of the
+implementation, the second example remains fixable according to the advice given.
