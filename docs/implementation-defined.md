@@ -71,6 +71,9 @@ additional restrictions on the client application:
     new_array/delete_/delete_array`) must be called from the primordial thread
     while holding the master persona.
 
+Note that these restrictions must be respected by all object files linked into
+the final executable, as they are all sharing the same libupcxx.
+
 Types of communication that do not experience restriction:
 
   * Sending lpc's via `upcxx::persona::lpc()` or `<completion>_cx::as_lpc()`
