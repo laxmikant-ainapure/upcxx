@@ -2,7 +2,7 @@
 
 UPC++ now has experimental support for interoperability with the 
 [Berkeley UPC Runtime](https://upc.lbl.gov) (a.k.a "UPCR"), 
-using any of the four UPC translators targetting that runtime.
+using any of the four UPC translators targeting that runtime.
 This makes it possible to run hybrid applications that use both UPC and UPC++
 (in separate object files, due to the difference in base languages).
 
@@ -17,7 +17,7 @@ interoperability examples, where `main()` is in UPC or UPC++, respectively.
 Both layers may be active simultaneously, and shared objects from either layer are also 
 valid shared objects in the other layer - however there are some important caveats. 
 In particular, the `upcxx::global_ptr` and UPC pointer-to-shared
-representations are NOT interchangable. Passing of shared objects across layers should be
+representations are NOT interchangeable. Passing of shared objects across layers should be
 accomplished by "down-casting" to a raw C pointer (ie `void *`) on a process with affinity
 to the shared object (eg in UPC this is done using a `(void*)` cast, in UPC++ use `global_ptr<T>::local()`).
 The raw pointer can then be passed across layers, and "up-cast" using the

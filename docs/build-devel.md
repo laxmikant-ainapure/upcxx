@@ -214,7 +214,7 @@ the `case $GASNET_CONDUIT` in `configure`.
 
 For conduits we rather not support officially (including MPI and possibly ones
 with "experimental" status in GASNet-EX), there is an `UNOFFICIAL_CONDUITS`
-variable.  At the time of writting this, the only impact of inclusion is to
+variable.  At the time of writing this, the only impact of inclusion is to
 skip the given network(s) in `make tests` and `make test_install`.
 
 #### Testing GASNet-EX changes

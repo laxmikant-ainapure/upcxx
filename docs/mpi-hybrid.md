@@ -212,7 +212,7 @@ here are some things to consider:
     2.  Use UDP for communication in UPC++  
         Set `export UPCXX_NETWORK=udp` when compiling UPC++ app code
     3.  Use MPI for communication in UPC++  
-        Set `export UPCXX_NETWORK=mpi` when compling UPC++ app code
+        Set `export UPCXX_NETWORK=mpi` when compiling UPC++ app code
 
 2.  The Aries network adapter on the Cray XC platform has approximately 120
     hardware contexts for communications.  With MPI and UPC++ each consuming one
