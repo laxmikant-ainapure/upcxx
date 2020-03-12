@@ -91,7 +91,7 @@ The following example has such a deadlock:
 ```
 #!c++
 
-#omp parallel num_threads(2)
+#pragma omp parallel num_threads(2)
 {
   // Assume thread 0 has the master persona...
   
@@ -99,20 +99,24 @@ The following example has such a deadlock:
     // Bounce an rpc off buddy rank and wait for it.
     upcxx::rpc(upcxx::rank_me() ^ 1, [=](){}).wait();
   }
-  // Here comes the implicit omp barrier at end of the parallel region. While
-  // in the omp barrier the master can't respond to rpc's. So we cant reply to
-  // our buddy's message and therefor will delay the buddy's sending
-  // thread from making it to the omp barrier. And if our buddy is in the same
+  // Here comes the implicit OpenMP barrier at the end of the parallel region. 
+  // While in the OpenMP barrier, the master can't respond to rpc's. So we can't 
+  // reply to our buddy's message and therefore will delay the buddy's sending
+  // thread from making it to the OpenMP barrier. And if our buddy is in the same
   // situation with respect to our message then we deadlock.
 }
 
 ```
 
-Unfortunately we have no obvious fix for this scenario. There are two separate
+Unfortunately we have no simple fix for this scenario. There are two separate
 runtimes blocking for conditions that can only be satisfied by the other
 runtime making progress. The user must ensure this doesn't happen by either
 breaking the cyclic dependencies, or carefully quiescing the activity of one
-runtime before blocking in the another.
+runtime before blocking in the another. Another strategy is to separate
+the master persona from the threads using OpenMP, for example by moving the
+master persona to a scheduling thread that never blocks in OpenMP constructs.
+This can ensure the master persona always remains attentive to service incoming
+RPCs from other processes.
 
 Another deadlock issue can arise from failing to discharge personas before
 they cease to be attentive:
@@ -122,7 +126,7 @@ they cease to be attentive:
 
 int got = -1;
 
-#omp parallel num_threads(2)
+#pragma omp parallel num_threads(2)
 {
   // Assume thread 0 has master...
   
