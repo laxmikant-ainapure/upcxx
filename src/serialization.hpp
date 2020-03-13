@@ -1631,11 +1631,11 @@ namespace upcxx {
    * Q) Does this work if the user nests serialization into the class via
    *    subclass or macros?
    * A) Yes. detail::serialization_dispatch1 will find that and ignore the value
-   *    we're pushing here for bless_trivial_defalut, which is only utilized
+   *    we're pushing here for bless_trivial_default, which is only utilized
    *    when no serialization was found nested in class.
    *
    * Q) Does this work if user specializes is_trivially_serializable<T> to true?
-   * A) Yes. serialization_triats<T> first looks at is_trivially_serializable<T>
+   * A) Yes. serialization_traits<T> first looks at is_trivially_serializable<T>
    *    before anything else, so again, nothing we do here will matter.
    */
 
