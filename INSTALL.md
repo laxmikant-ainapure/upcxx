@@ -53,7 +53,7 @@ The current release is known to work on the following configurations:
 
     Support for InfiniBand on Linux/aarch64 should be considered experimental.
     For more information, please see
-    [GASNet bug 3997](https://upc-bugs.lbl.gov/bugzilla/show_bug.cgi?id=3997).
+    [GASNet bug 3997](https://gasnet-bugs.lbl.gov/bugzilla/show_bug.cgi?id=3997).
 
 * Cray XC x86\_64 with one of the following PrgEnv environment modules and
   its dependencies.  (smp and aries conduits)
