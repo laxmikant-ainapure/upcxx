@@ -32,6 +32,10 @@ install-hook: force
 	 install_to="$(prefix)" install_common
 
 install install-opt install-debug: force
+	@if [[ ! '$(prefix)' =~ ^/ ]]; then \
+	   echo 'ERROR: installation prefix "$(prefix)" is not an absolute path' >&2; \
+	   exit 1; \
+	 fi
 	@$(MAKE) -C $(BLDDIR) $@ || $(MAKE) failure TARGET=installation
 	@$(MAKE) install-hook || $(MAKE) failure TARGET=installation
 	@echo; \
