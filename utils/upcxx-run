@@ -123,7 +123,7 @@ def heapsz_type(a):
     
 def load_args():
     global _parser
-    _parser = argparse.ArgumentParser(description='A portable parallel job launcher for UPC++ programs, v2019.9.0')
+    _parser = argparse.ArgumentParser(description='A portable parallel job launcher for UPC++ programs, v2020.3.0')
     _parser.add_argument('-n', '-np', dest='nranks', type=ranks_type, default=None, metavar='NUM',
                          help='Spawn NUM number of UPC++ processes. Required.')
     _parser.add_argument('-N', dest='nnodes', type=nodes_type, default=None, metavar='NUM',
@@ -142,10 +142,8 @@ def load_args():
                          help='List of SSH servers, comma separated.')
     _parser.add_argument('-localhost', dest='localhost', default=False, action='store_true',
                          help='Run UDP-conduit program on local host only')
-    _parser.add_argument('-v', dest='verbose', default=False, action='store_true',
-                         help='Verbose output')
-    _parser.add_argument('-vv', dest='veryverbose', default=False, action='store_true',
-                         help='Very verbose output')
+    _parser.add_argument('-v', dest='verbose', default=0, action='count',
+                         help='Generate verbose output. Multiple applications increase verbosity.')
     _parser.add_argument('-E', dest='env_list', default=[], action='append', metavar='VAR1[,VAR2]',
                          help='Adds provided arguments to the list of environment variables to propagate to compute processes.')
     cmd_arg_group = _parser.add_argument_group('command to execute')
@@ -159,8 +157,8 @@ def load_args():
 
 def print_error_and_abort(err):
     _parser.print_usage()
-    print('\nError: ' + err)
-    sys.exit(0)
+    print('\nError: ' + err, file=sys.stderr)
+    sys.exit(1)
     
 
 def is_printable(text, printables=""):
@@ -255,33 +253,29 @@ def main():
         print_error_and_abort('Must specify the number of processes, -n or -np')
 
 
-    executable = args.cmd
-    full_args = [args.cmd] + args.cmd_args
+    cmd = [args.cmd] + args.cmd_args
     is_valid = False
-    for arg in [ str(x) for x in  full_args ]:
-        if os.path.isfile(arg):
-            conduit = get_conduit(arg)
+    for i in range(len(cmd)):
+        if os.path.isfile(cmd[i]):
+            conduit = get_conduit(cmd[i])
             if conduit:
+                if os.path.basename(cmd[i]) == cmd[i]:
+                     cmd[i] = './' + cmd[i]
+                executable = cmd[i]
                 is_valid = True
-                executable = arg
                 break
 
-    if os.path.basename(executable) == executable:
-        executable = './' + executable
-    cmd = [args.cmd]
-
     if not is_valid:
-        print_error_and_abort('"' + ' '.join(full_args) + '" does not appear to execute a UPC++/GASNet executable')
+        print_error_and_abort('"' + ' '.join(cmd) + '" does not appear to execute a UPC++/GASNet executable')
 
     if args.info:
         print_env_info(executable)
         return 0
         
     spawner = None
-    if args.veryverbose:
+    if args.verbose > 1:
         os.environ['GASNET_VERBOSEENV'] = '1'
         os.environ['UPCXX_VERBOSE'] = '1'
-        args.verbose = True
 
     if args.verbose:
         print('UPCXX_RUN:', executable, 'is compiled with', conduit, 'conduit')
@@ -302,12 +296,12 @@ def main():
             os.environ['GASNET_SPAWNFN'] = 'L'
         else:
             set_ssh_servers(args.sshservers, args.nranks, conduit)
-    elif conduit in ['mpi', 'ibv', 'aries', 'gemini', 'pami']:
+    elif conduit in ['mpi', 'ibv', 'aries', 'pami', 'ucx']:
         spawner = 'gasnetrun_' + conduit
         cmd = ['-n', str(args.nranks)] + cmd
         if args.nnodes:
             cmd = ['-N', str(args.nnodes)] + cmd
-        if conduit == 'ibv':
+        if conduit in ['ibv', 'ucx']:
             set_ssh_servers(args.sshservers, args.nranks, conduit)
     else:
         print_error_and_abort('Unknown GASNet conduit: ' + conduit)
@@ -315,12 +309,10 @@ def main():
     if conduit != 'udp' and args.localhost:
         print('Ignoring -localhost setting: only applies to UDP conduit, not', conduit)
         
-    if args.sshservers and conduit not in ['udp', 'ibv']:
+    # FIXME: ucx intentionally omitted from warning until we claim support
+    if args.sshservers and conduit not in ['udp', 'ibv', 'ucx']:
         print('Ignoring -ssh-servers setting: only applies to UDP and IBV conduits, not', conduit)
         
-    if args.cmd_args:
-        cmd += args.cmd_args
-    
     if spawner:
         print_verbose('UPCXX_RUN: Looking for spawner "' + spawner + '" in:')
         paths = []
@@ -350,7 +342,7 @@ def main():
         if spawner_path:
             print_verbose('UPCXX_RUN: Found spawner "' + spawner_path + '"')
             spawner = [ spawner_path ]
-            if args.veryverbose:
+            if args.verbose > 2:
                 spawner += ['-v']
         else:
             print_error_and_abort('Could not find spawner "' + spawner + '"')
@@ -432,8 +424,11 @@ def main():
 
     if not args.show:
         sys.stdout.flush()
-        os.execvp(cmd[0], cmd)
-
+        try:
+            os.execvp(cmd[0], cmd)
+        except OSError as err:
+            print("UPCXX_RUN: OS error executing '" + ' '.join(cmd) +
+                  "'\n    {0}".format(err))
 
         
 if __name__ == '__main__':

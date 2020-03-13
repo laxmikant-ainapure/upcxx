@@ -29,11 +29,19 @@ namespace upcxx {
     
   //public:
     dist_object<T>& here() const {
-      return detail::registered_promise<dist_object<T>&>(dig_)->get_future().result();
+      return std::get<0>(
+        // 3. retrieve results tuple
+        detail::future_header_result<dist_object<T>&>::results_of(
+          // 1. get future_header_promise<...>* for this digest
+          &detail::registered_promise<dist_object<T>&>(dig_)
+            // 2. cast to future_header* (not using inheritnace, must use embedded first member)
+            ->base_header_result.base_header
+        )
+      );
     }
     
     future<dist_object<T>&> when_here() const {
-      return detail::registered_promise<dist_object<T>&>(dig_)->get_future();
+      return detail::promise_get_future(detail::registered_promise<dist_object<T>&>(dig_));
     }
     
     #define UPCXX_COMPARATOR(op) \
@@ -69,33 +77,33 @@ namespace std {
 namespace upcxx {
   template<typename T>
   class dist_object {
-    upcxx::team *tm_;
+    const upcxx::team *tm_;
     digest id_;
     T value_;
     
   public:
     template<typename ...U>
-    dist_object(upcxx::team &tm, U &&...arg):
+    dist_object(const upcxx::team &tm, U &&...arg):
       tm_(&tm),
       value_(std::forward<U>(arg)...) {
       
-      id_ = tm.next_collective_id(detail::internal_only());
+      id_ = const_cast<upcxx::team*>(&tm)->next_collective_id(detail::internal_only());
       
       backend::fulfill_during<progress_level::user>(
-          *detail::registered_promise<dist_object<T>&>(id_),
+          detail::registered_promise<dist_object<T>&>(id_)->incref(1),
           std::tuple<dist_object<T>&>(*this),
           backend::master
         );
     }
     
-    dist_object(T value, upcxx::team &tm):
+    dist_object(T value, const upcxx::team &tm):
       tm_(&tm),
       value_(std::move(value)) {
       
-      id_ = tm.next_collective_id(detail::internal_only());
+      id_ = const_cast<upcxx::team*>(&tm)->next_collective_id(detail::internal_only());
       
       backend::fulfill_during<progress_level::user>(
-          *detail::registered_promise<dist_object<T>&>(id_),
+          detail::registered_promise<dist_object<T>&>(id_)->incref(1),
           std::tuple<dist_object<T>&>(*this),
           backend::master
         );
@@ -106,28 +114,32 @@ namespace upcxx {
     }
     
     dist_object(dist_object const&) = delete;
-    
+
     dist_object(dist_object &&that) noexcept:
       tm_(that.tm_),
       id_(that.id_),
       value_(std::move(that.value_)) {
       
+      UPCXX_ASSERT(backend::master.active_with_caller());
+      UPCXX_ASSERT((that.id_ != digest{~0ull, ~0ull}));
+
       that.id_ = digest{~0ull, ~0ull}; // the tombstone id value
-      
-      promise<dist_object<T>&> *pro = new promise<dist_object<T>&>;
-      
-      pro->fulfill_result(*this);
-      
-      void *pro_void = static_cast<void*>(pro);
-      std::swap(pro_void, detail::registry[id_]);
-      
-      delete static_cast<promise<dist_object<T>&>*>(pro_void);
+
+      // Moving is painful for us because the original constructor (of that)
+      // created a promise, set its result to point to that, and then
+      // deferred its fulfillment until user progress. We hackishly overwrite
+      // the promise/future's result with our new address. Whether or not the
+      // deferred fulfillment has happened doesn't matter, but will determine
+      // whether the app observes the same future taking different values at
+      // different times (definitely not usual for futures).
+      static_cast<detail::future_header_promise<dist_object<T>&>*>(detail::registry[id_])
+        ->base_header_result.reconstruct_results(std::tuple<dist_object<T>&>(*this));
     }
     
     ~dist_object() {
       if(id_ != digest{~0ull, ~0ull}) {
         auto it = detail::registry.find(id_);
-        delete static_cast<promise<dist_object<T>&>*>(it->second);
+        static_cast<detail::future_header_promise<dist_object<T>&>*>(it->second)->dropref();
         detail::registry.erase(it);
       }
     }
@@ -135,7 +147,8 @@ namespace upcxx {
     T* operator->() const { return const_cast<T*>(&value_); }
     T& operator*() const { return const_cast<T&>(value_); }
     
-    upcxx::team& team() const { return *tm_; }
+    upcxx::team& team() { return *const_cast<upcxx::team*>(tm_); }
+    const upcxx::team& team() const { return *tm_; }
     dist_id<T> id() const { return dist_id<T>{id_}; }
     
     future<T> fetch(intrank_t rank) const {

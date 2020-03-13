@@ -13,8 +13,16 @@ function verbose {
 }
 
 function set_upcxx_var {
-  local var=UPCXX_`echo "$1" | awk '{ print toupper($0) }'`
-  local val=`echo "$2" | awk '{ print tolower($0) }'`
+  local var="UPCXX_$1"
+  local val="$2"
+  if [[ ${BASH_VERSINFO[0]} -ge 4 ]] ; then 
+    # use case modification operators when avail, for efficiency
+    var="${var^^}"
+    val="${val,,}"
+  else # legacy bash (eg macOS), fork additional processes
+    var=`echo "$var" | awk '{ print toupper($0) }'`
+    val=`echo "$val" | awk '{ print tolower($0) }'`
+  fi
   # per-var processing
   case $var in
     UPCXX_CODEMODE)
@@ -30,12 +38,14 @@ function set_upcxx_var {
   eval $var='$val'
 }
 
-if ! test -x "$UPCXX_META" ; then
-  error UPCXX_META not found
-fi
-prefix="`dirname $UPCXX_META`/.."
-if ! test -d "$prefix" ; then
-  error install prefix $prefix not found
+if [[ "$UPCXX_META" != 'BUILDDIR' ]]; then
+  if ! test -x "$UPCXX_META" ; then
+    error UPCXX_META=$UPCXX_META not found
+  fi
+  prefix="${UPCXX_META%/*/*}" # strip the last two components in the path
+  if ! test -d "$prefix" ; then
+    error install prefix $prefix not found
+  fi
 fi
 
 UPCXX_NETWORK=${UPCXX_NETWORK:-$UPCXX_GASNET_CONDUIT} # backwards-compat
@@ -56,15 +66,16 @@ for ((i = 1 ; i <= $# ; i++)); do
   arg="${@:i:1}"
   case $arg in 
     +(-)network=*|+(-)threadmode=*|+(-)codemode=*)
-      var=`echo "$arg" | cut -d= -f1 | awk -F- '{print $NF}'`
-      val=`echo "$arg" | cut -d= -f2-`
+      var="${arg%%=*}"
+      var="${var##+(-)}"
+      val="${arg#*=}"
       eval set_upcxx_var "$var" "$val"
       # swallow current arg
       set -- "${@:1:i-1}" "${@:i+1}"
       i=$((i-1))
     ;;
     +(-)network|+(-)threadmode|+(-)codemode)
-      var=`echo "$arg" | awk -F- '{print $NF}'`
+      var="${arg##+(-)}"
       val="${@:i+1:1}"
       eval set_upcxx_var "$var" "$val"
       # swallow current and next arg
@@ -72,7 +83,7 @@ for ((i = 1 ; i <= $# ; i++)); do
       i=$((i-1))
     ;;
     -Wc,*) # -Wc,anything : anything is passed-thru uninterpreted
-      val=`echo "$arg" | cut -d, -f2-`
+      val="${arg#*,}"
       set -- "${@:1:i-1}" "$val" "${@:i+1}"
     ;;
     -E|-c|-S) dolink='' ;;
@@ -113,18 +124,23 @@ elif [[ $docc && $dolink ]] ; then
   error "please compile C language source files separately using -c"
 fi
 
+if [[ "$UPCXX_META" == 'BUILDDIR' ]]; then
+  for var in UPCXX_CODEMODE UPCXX_NETWORK UPCXX_THREADMODE ; do
+    eval "[[ -n "\$$var" ]] && echo $var=\$$var"
+  done
+  exit 0
+fi
+
 for var in UPCXX_CODEMODE UPCXX_NETWORK UPCXX_THREADMODE ; do
   eval verbose $var=\$$var
 done
 
-for var in CC CXX CXXFLAGS CPPFLAGS LDFLAGS LIBS ; do 
-  val=`$UPCXX_META $var`
-  eval $var=\$val
-  verbose "$UPCXX_META $var: $val"
-  if [[ -z "$CC" ]] ; then
-    error "upcxx-meta failed."
-  fi
+source $UPCXX_META SET
+[[ -z "$CC" ]] && error "failure in UPCXX_META=$UPCXX_META"
+for var in CC CFLAGS CXX CXXFLAGS CPPFLAGS LDFLAGS LIBS ; do 
+  eval verbose "$var: \$$var"
 done
+
 EXTRAFLAGS=""
 if [[ $dohelp ]] ; then
   cat<<EOF
@@ -150,15 +166,20 @@ EOF
   $CXX --help
   exit 0
 elif [[ $doversion ]] ; then
-  header="$prefix/upcxx.*/include/upcxx/upcxx.hpp"
-  version=`(grep "#define UPCXX_VERSION" $header | head -1 | cut -d' ' -f 3 ) 2> /dev/null`
+  header="$prefix/upcxx.*/include/upcxx/upcxx.hpp $prefix/include/upcxx/upcxx.hpp" # installed or build-tree
+  version=$(grep "# *define  *UPCXX_VERSION " ${header} 2>/dev/null| head -1)
+  if [[ "$version" =~ ([0-9]{4})([0-9]{2})([0-9]{2}) ]]; then
+    version="${BASH_REMATCH[1]}.${BASH_REMATCH[2]#0}.${BASH_REMATCH[3]#0}"
+  else
+    version=${version##*UPCXX_VERSION }
+  fi
   githash=`(cat $prefix/share/doc/upcxx/docs/version.git ) 2> /dev/null`
   gexhash=`(cat $prefix/gasnet.*/share/doc/GASNet/version.git | head -1 ) 2> /dev/null`
   if [[ -n $gexhash ]] ; then
     gexhash=" / $gexhash"
   fi
   echo "UPC++ version $version $githash$gexhash"
-  echo "Copyright (c) 2019, The Regents of the University of California,"
+  echo "Copyright (c) 2020, The Regents of the University of California,"
   echo "through Lawrence Berkeley National Laboratory."
   echo "https://upcxx.lbl.gov"
   echo ""
@@ -171,7 +192,7 @@ function doit {
   exec "$@"
 }
 if [[ $docc ]] ; then # C language compilation, for convenience
-  doit $CC $CPPFLAGS "$@"
+  doit $CC $CFLAGS $CPPFLAGS "$@"
 elif [[ ! $dolink ]] ; then
   doit $CXX $EXTRAFLAGS $CXXFLAGS $CPPFLAGS "$@"
 else

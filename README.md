@@ -26,7 +26,6 @@ Other topics are covered in the following documents:
 * Installing the UPC++ software, see: [INSTALL.md](INSTALL.md)
 * Tutorial on programming with UPC++, see: [UPC++ Programmer's Guide](docs/guide.pdf)
 * Formal details on UPC++ semantics, see: [UPC++ Specification](docs/spec.pdf)
-* Running basic UPC++ correctness tests, see: [docs/testing.md](docs/testing.md)
 * Software change history of UPC++, see: [ChangeLog.md](ChangeLog.md)
 * Debugging UPC++ programs, see: [docs/debugging.md](docs/debugging.md)
 * Using UPC++ and MPI in the same program, see: [docs/mpi-hybrid.md](docs/mpi-hybrid.md).
@@ -34,6 +33,9 @@ Other topics are covered in the following documents:
 * Using UPC++ with oversubscribed cores, see: [docs/oversubscription.md](docs/oversubscription.md)
 * Implementation-defined behavior, see: [docs/implementation-defined.md](docs/implementation-defined.md) 
 * Copyright notice and licensing agreement, see: [LICENSE.txt](LICENSE.txt)
+
+Usage information for public installs of UPC\+\+ at certain computing centers
+is available [online](https://upcxx.lbl.gov/wiki/docs/site-docs.md).
 
 To report problems or request features: [issue tracker](https://upcxx-bugs.lbl.gov).
 
@@ -105,14 +107,14 @@ that `Makefile`, first set the `UPCXX_INSTALL` shell variable to the
 
 ## Using UPC++ with CMake
 
-A UPCXX CMake module is provided in the installation directory. To use it
+A UPCXX CMake package is provided in the installation directory. To use it
 in a CMake project, append the UPC++ installation directory to the
 `CMAKE_PREFIX_PATH` variable 
 (`cmake ... -DCMAKE_PREFIX_PATH=/path/to/upcxx/install/prefix ...`), 
 then use `find_package(UPCXX)` in the
 CMakeLists.txt file of the project.
 
-If it is able to find a compatible UPC++ installation, the CMake module
+If it is able to find a compatible UPC++ installation, the CMake package
 will define a `UPCXX:upcxx target` (as well as a `UPCXX_LIBRARIES`
 variable for legacy projects) that can be added as dependency to
 your project.
@@ -122,7 +124,8 @@ your project.
 UPC\+\+ provides multiple "backends" offering the user flexibility to choose the
 means by which the parallel communication facilities are implemented. Those
 backends are characterized by three dimensions: conduit, thread-mode, and
-code-mode. The conduit and thread-mode parameters map directly to the GASNet
+code-mode. All objects in a given executable must agree on the backend in
+use. The conduit and thread-mode parameters map directly to the GASNet
 concepts of the same name (for more explanation, see below). Code-mode selects
 between highly optimized code and highly debuggable code. The `upcxx-meta`
 script will assume sensible defaults for these parameters based on the
@@ -137,15 +140,13 @@ influence which backend `upcxx-meta` selects:
     * `udp` is a portable low-performance alternative for testing and debugging.
     * `mpi` is a portable low-performance alternative for testing and debugging. 
 
-* `UPCXX_THREADMODE=[seq|par]`: The value `seq` limits the application to only
-  calling "communicating" upcxx routines from the thread that invoked
-  `upcxx::init`, and only while that thread is holding the master persona. The
-  benefit is that `seq` can be synchronization-free in much of its internals. 
-  A thread-mode value of `par` selects the thread-safe library that allows any
-  thread in each process to issue communication as allowed by the specification,
-  enabling greater injection concurrency in a multi-threaded application, at
-  the expensive of greater internal synchronization (higher overhead per operation).  
-  The default value is always `seq`.
+* `UPCXX_THREADMODE=[seq|par]`: The value `par` selects the thread-safe version
+  of the library which permits any upcxx function to be called from any thread,
+  within the parameters set by the specification. The value `seq` adds
+  thread-safety restrictions on the majority of upcxx routines (mostly that
+  communication can only be initiated by a single thread) at the benefit of
+  lower library-internal overhead. See [docs/implementation-defined.md](docs/implementation-defined.md)
+  for detailed requirements. The default value is always `seq`.
   
 * `UPCXX_CODEMODE=[O3|debug]`: `O3` is for highly compiler-optimized
   code. `debug` produces unoptimized code, includes extra error checking

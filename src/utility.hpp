@@ -2,6 +2,7 @@
 #define _661bba4d_9f90_4fbe_b617_4474e1ed8cab
 
 #include <upcxx/diagnostic.hpp>
+#include <upcxx/upcxx_config.hpp>
 
 #include <array>
 #include <cstddef>
@@ -13,6 +14,14 @@
 #include <tuple>
 #include <utility>
 #include <new> // launder
+
+// RTTI support
+#ifndef UPCXX_HAVE_RTTI
+#define UPCXX_HAVE_RTTI (__GXX_RTTI || __cpp_rtti)
+#endif
+#if UPCXX_HAVE_RTTI
+#include <typeinfo> // typeid
+#endif
 
 #include <cstdlib> // posix_memalign
 
@@ -76,8 +85,12 @@ namespace detail {
 
   template<std::size_t align>
   inline void memcpy_aligned(void *dst, void const *src, std::size_t sz) noexcept {
+  #if UPCXX_HAVE___BUILTIN_ASSUME_ALIGNED
     std::memcpy(__builtin_assume_aligned(dst, align),
                 __builtin_assume_aligned(src, align), sz);
+  #else
+    std::memcpy(dst, src, sz);
+  #endif
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -93,7 +106,8 @@ namespace detail {
     return p;
   }
 
-  #if __cpp_lib_launder >= 201606 // std::launder is not reliably available in C++17 (eg clang 8)
+  #if __cpp_lib_launder >= 201606 /* std::launder is not reliably available in C++17 (eg clang 8) */ \
+      && !__PGI /* issue #289/#297: std::launder broken for all known versions of PGI */
     template<typename T>
     constexpr T* launder(T *p) {
       return std::launder(p);
@@ -199,13 +213,19 @@ namespace detail {
   // detail::destruct
 
   template<typename T>
-  void destruct(T &x) noexcept { x.~T(); }
-  
+  struct destruct_dispatch {
+    void operator()(T &x) const noexcept { x.~T(); }
+  };
   template<typename T, std::size_t n>
-  void destruct(T (&x)[n]) noexcept {
-    for(std::size_t i=0; i != n; i++)
-      destruct(x[i]);
-  }
+  struct destruct_dispatch<T[n]> {
+    void operator()(T (&x)[n]) const noexcept {
+      for(std::size_t i=0; i != n; i++)
+        destruct_dispatch<T>()(x[i]);
+    }
+  };
+  
+  template<typename T>
+  void destruct(T &x) noexcept { destruct_dispatch<T>()(x); }
   
   //////////////////////////////////////////////////////////////////////////////
   // detail::alloc_aligned
@@ -668,6 +688,15 @@ namespace detail {
   }
   
   //////////////////////////////////////////////////////////////////////
+  // forward_as_tuple_decay_rrefs: like std::forward_as_tuple, but drops
+  // rvalue-refs (&&) from components, lvalues (&, const&) are preserved.
+  
+  template<typename ...T>
+  std::tuple<T...> forward_as_tuple_decay_rrefs(T &&...refs) {
+    return std::tuple<T...>(static_cast<T&&>(refs)...);
+  }
+    
+  //////////////////////////////////////////////////////////////////////
   // apply_tupled: Apply a callable against an argument list wrapped
   // in a tuple.
   
@@ -694,6 +723,33 @@ namespace detail {
       make_index_sequence<std::tuple_size<Tup>::value>()
     );
   }
+
+  //////////////////////////////////////////////////////////////////////
+  // align_of<T>(): returns alignof(T) or 0 for incomplete types
+
+  template <typename T, std::size_t align = alignof(T)>
+  constexpr size_t align_of_(T *_) { return align; }
+  constexpr size_t align_of_(...) { return 0; }
+
+  template<typename T>
+  constexpr size_t align_of() { return align_of_((T*)nullptr); }
+
+  //////////////////////////////////////////////////////////////////////
+  // typename_of<T>(): returns typeid(T).name() or null for incomplete types
+
+  template <typename T, std::size_t x = sizeof(T)>
+  inline const char *typename_of_(T *_) { 
+    #if UPCXX_HAVE_RTTI
+      return typeid(T).name(); 
+    #else
+      return "";
+    #endif
+  }
+  inline const char *typename_of_(...) { return nullptr; }
+
+  template<typename T>
+  inline const char *typename_of() { return typename_of_((T*)nullptr); }
+
 } // namespace detail
 } // namespace upcxx
 #endif

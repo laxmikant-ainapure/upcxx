@@ -95,6 +95,13 @@ void operator delete(void *p) {
 }
 #endif
 
+template<typename T>
+void say_type() {
+  // Causes a static_assert error. Typically the compiler will pretty print
+  // the type of T into the context above the error.
+  static_assert(sizeof(T) == 0, "That's a type!");
+}
+
 int main() {
   print_test_header();
     
@@ -151,24 +158,24 @@ int main() {
   THEM(result())
   THEM(wait(nop))
   #undef THEM
-  
+
   #define THEM(member)\
     static_assert(std::is_same<void, decltype(make_future().member)>::value, "Uh-oh");\
     (void)make_future().member;\
-    static_assert(std::is_same<int&&, decltype(ans0.member)>::value, "Uh-oh");\
+    static_assert(std::is_same<int const&, decltype(ans0.member)>::value, "Uh-oh");\
     (void)ans0.member;\
-    static_assert(std::is_same<int&&, decltype(when_all(ans0).member)>::value, "Uh-oh");\
+    static_assert(std::is_same<int const&, decltype(when_all(ans0).member)>::value, "Uh-oh");\
     (void)when_all(ans0).member;\
-    static_assert(std::is_same<tuple<int&&,int&&,float&&,int&&>, decltype(when_all(ans0, ans1, make_future<float>(3.14), ans2).member)>::value, "Uh-oh");\
+    static_assert(std::is_same<tuple<int const&,int const&,float const&,int const&>, decltype(when_all(ans0, ans1, make_future<float>(3.14), ans2).member)>::value, "Uh-oh");\
     (void)when_all(ans0, ans1, make_future<float>(3.14), ans2).member;
-  THEM(result_moved())
-  THEM(wait_moved(nop))
+  THEM(result_reference())
+  THEM(wait_reference(nop))
   #undef THEM
   
   static_assert(std::is_same<float, decltype(make_future(true,1,3.14f).result<2>())>::value, "Uh-oh");
-  static_assert(std::is_same<float&&, decltype(make_future(true,1,3.14f).result_moved<2>())>::value, "Uh-oh");
+  static_assert(std::is_same<float const&, decltype(make_future(true,1,3.14f).result_reference<2>())>::value, "Uh-oh");
   static_assert(std::is_same<float, decltype(make_future(true,1,3.14f).wait<2>(nop))>::value, "Uh-oh");
-  static_assert(std::is_same<float&&, decltype(make_future(true,1,3.14f).wait_moved<2>(nop))>::value, "Uh-oh");
+  static_assert(std::is_same<float const&, decltype(make_future(true,1,3.14f).wait_reference<2>(nop))>::value, "Uh-oh");
   
   static_assert(std::is_same<tuple<bool,int>,decltype(make_future(true,1).result_tuple())>::value, "uh-oh");
   static_assert(std::is_same<tuple<bool,int>,decltype(make_future(true,1).wait_tuple(nop))>::value, "uh-oh");

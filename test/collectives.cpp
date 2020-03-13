@@ -11,7 +11,7 @@
 
 using namespace std;
 
-upcxx::future<> test_team(upcxx::team &tm) {
+upcxx::future<> test_team(const upcxx::team &tm) {
   upcxx::future<> all_done = upcxx::make_future();
   int me = tm.rank_me();
   int n = tm.rank_n();
@@ -225,8 +225,9 @@ int main() {
     // world split #2 split #1
     upcxx::team tm3 = tm2.split(rng(), (unsigned)upcxx::rank_me()*0xdeadbeefu);
     all_done = upcxx::when_all(all_done, test_team(tm3));
-    
-    upcxx::team tm4 = tm3.split(upcxx::team::color_none, 0);
+   
+    upcxx::team const &tm3c = tm3;
+    upcxx::team tm4 = tm3c.split(upcxx::team::color_none, 0);
     UPCXX_ASSERT_ALWAYS(tm4.rank_n() == 0);
     
     all_done.wait();

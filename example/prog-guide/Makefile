@@ -6,20 +6,24 @@
 # or (for bash)
 # export UPCXX_INSTALL=<myinstalldir>; make hello-world
 
-ifeq ($(wildcard $(UPCXX_INSTALL)/bin/upcxx-meta),)
+ifeq ($(UPCXX_INSTALL),)
+$(warning UPCXX_INSTALL environment variable is not set, assuming upcxx is in the PATH)
+UPCXX=upcxx
+else
+ifeq ($(wildcard $(UPCXX_INSTALL)/bin/upcxx),)
 $(error Please set UPCXX_INSTALL=/path/to/upcxx/install)
+else
+UPCXX=$(UPCXX_INSTALL)/bin/upcxx
+endif
 endif
 
 UPCXX_THREADMODE ?= seq
 export UPCXX_THREADMODE
 UPCXX_CODEMODE ?= debug
 export UPCXX_CODEMODE
-CXX = $(UPCXX_INSTALL)/bin/upcxx
+CXX = $(UPCXX)
 
-PTHREAD_FLAGS = -pthread
-OPENMP_FLAGS = -fopenmp
-
-EXTRA_FLAGS = -g
+CXXFLAGS = # optional command-line override
 
 # Programs to build, assuming each has a corresponding *.cpp file
 EXAMPLES = \
@@ -30,7 +34,7 @@ EXAMPLES = \
   dmap-atomics-test \
   dmap-conjoined-test \
   dmap-promises-test \
-  rb1d-av \
+  rb1d \
   hello-world \
   view-histogram1 \
   view-histogram2 \
@@ -39,7 +43,11 @@ EXAMPLES = \
   team_simple \
   team_advanced \
   persona-example-rputs \
-  persona-example	
+  persona-example	\
+  serial-custom \
+  serial-fields \
+  serial-recursive \
+  serial-values 
 
 
 CUDA_EXAMPLES = \
@@ -51,16 +59,15 @@ cuda: $(CUDA_EXAMPLES)
 
 # The rule for building any example.
 %: %.cpp $(wildcard *.h) $(wildcard *.hpp)
-	$(CXX) $@.cpp $(EXTRA_FLAGS) -o $@
+	$(CXX) $@.cpp $(CXXFLAGS) -o $@
 
 
 # Example-specific variable specializations.
-persona-example: export UPCXX_THREADMODE=par
-persona-example: EXTRA_FLAGS += $(PTHREAD_FLAGS)
-persona-example-rputs: export UPCXX_THREADMODE=par
-persona-example-rputs: EXTRA_FLAGS += $(PTHREAD_FLAGS)
-view-matrix-tasks: export UPCXX_THREADMODE=par
-view-matrix-tasks: EXTRA_FLAGS += $(PTHREAD_FLAGS)
+PAR_EXAMPLES = \
+  persona-example \
+  persona-example-rputs \
+  view-matrix-tasks
+$(PAR_EXAMPLES): UPCXX_THREADMODE=par
 
 clean:
 	rm -f $(EXAMPLES)

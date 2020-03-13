@@ -13,7 +13,7 @@ sys_info() {
         echo " "
         echo Date: `date 2>&1`
         echo Current directory: `pwd 2>&1`
-        echo Install directory: $INSTALL_DIR
+        echo Install directory: $install_to
         local SETTINGS=
         for var in CC CXX GASNET GASNET_CONFIGURE_ARGS CROSS OPTLEV DBGSYM \
 	           UPCXX_BACKEND GASNET_INSTALL_TO \
@@ -26,14 +26,8 @@ sys_info() {
         done
         echo "Settings:$SETTINGS"
         echo " "
-	if test -n "$UPCXX_PYTHON" ; then
-            fpy=`type -p $UPCXX_PYTHON`
-            if test -x "$fpy" ; then
-              echo "$fpy: " `$fpy --version 2>&1`
-            else
-              echo "UPCXX_PYTHON=$UPCXX_PYTHON not found!"
-            fi
-	fi
+        fpy=${UPCXX_PYTHON:-$(type -p python)}
+        echo "$fpy: " $($fpy --version 2>&1)
         echo " "
     ) fi
 }
@@ -57,10 +51,11 @@ platform_sanity_checks() {
         elif test -n "$CRAY_PRGENVPGI" ; then
             echo 'ERROR: UPC++ on Cray XC currently requires PrgEnv-gnu, intel or cray. Please do: `module switch PrgEnv-pgi PrgEnv-FAMILY` for your preferred compiler FAMILY'
             exit 1
-        elif test -n "$CRAY_PRGENVINTEL" && ( test -z "$GCC_VERSION" || expr "$GCC_VERSION" : "^[2345]" > /dev/null || expr "$GCC_VERSION" : "^6.[123]" > /dev/null ) ; then
-            echo 'ERROR: UPC++ on Cray XC with PrgEnv-intel must also have the gcc module loaded (version 6.4 or newer). Please do: `module load gcc`'
+        elif test -n "$CRAY_PRGENVINTEL" &&
+             g++ --version | head -1 | egrep ' +\([^\)]+\) +([1-5]\.|6\.[0-3])' 2>&1 > /dev/null ; then
+            echo 'ERROR: UPC++ on Cray XC with PrgEnv-intel requires g++ version 6.4 or newer in \$PATH. Please do: `module load gcc`, or otherwise ensure a new-enough `g++` is available.'
             exit 1
-        elif test -n "$CRAY_PRGENVCRAY$CRAY_PRGENVINTEL$CRAY_PRGENVCRAY" ; then
+        elif test -n "$CRAY_PRGENVGNU$CRAY_PRGENVINTEL$CRAY_PRGENVCRAY" ; then
             CC=${CC:-cc}
             CXX=${CXX:-CC}
 	    # second condition eliminates build warnings in CI for: GASNET=build_or_inst_dir install -single
@@ -91,9 +86,19 @@ platform_sanity_checks() {
             ARCH_BAD=1
         fi
 
-        # absify compilers
-        CXX=`type -p ${CXX%% *}`${CXX/${CXX%% *}/}
-        CC=`type -p ${CC%% *}`${CC/${CC%% *}/}
+        # absify compilers, checking they exist
+        cxx_exec=$(type -p ${CXX%% *})
+        if [[ -z "$cxx_exec" ]]; then
+            echo "ERROR: could not find CXX='${CXX%% *}' in \$PATH"
+            exit 1
+        fi
+        CXX=$cxx_exec${CXX/${CXX%% *}/}
+        cc_exec=$(type -p ${CC%% *})
+        if [[ -z "$cc_exec" ]]; then
+            echo "ERROR: could not find CC='${CC%% *}' in \$PATH"
+            exit 1
+        fi
+        CC=$cc_exec${CC/${CC%% *}/}
         if test -z "$UPCXX_INSTALL_QUIET" ; then
             echo $CXX
             $CXX --version 2>&1 | grep -v 'warning #10315'

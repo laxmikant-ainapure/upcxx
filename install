@@ -1,229 +1,42 @@
-#!/bin/bash
+#!/bin/sh
 
-function usage {
+usage () {
   cat<<EOF
 Usage: ./install <install-to-path>
   See INSTALL.md for instructions.
 EOF
 }
 
-function failure_and_die {
-  echo "UPC++ Installation failed. Please report the entire log above to: upcxx@googlegroups.com" >&2
+failure_and_die () {
+  echo "UPC++ Installation failed. Please report the ENTIRE log above to: upcxx@googlegroups.com" >&2
   exit 1
 }
 
-function echo_and_die {
-  echo $* >&2
-  exit 1
+big_warning () {
+  cat<<EOF
+*******
+WARNING: This install script exists only to support legacy usage.
+WARNING: New features in UPC++ may not be supported via this interface.
+WARNING: Users are encouraged to use the 'configure; make; make install'
+WARNING: steps as documented in INSTALL.md.
+*******
+EOF
 }
 
-if [[ "$1" = "-h" || "$1" = "--help" ]]; then
+big_warning
+
+if test "$1" = "-h" || test "$1" = "--help"; then
   usage
   exit 0
-elif [ "$#" -eq 1 ]; then
-  single=0
+elif test "$#" -eq 1; then
   install_to="$1"
-elif [ "$#" -eq 2 ]; then
-  if [ "$1" != "--single" ]; then
-    >&2 usage
-    exit 1
-  fi
-  single=1
-  install_to="$2"
 else
   >&2 usage
   exit 1
 fi
 
-# Enable offline installers with an embedded GASNet-EX tarball
-gex_offline=`/bin/ls "$PWD"/src/GASNet-2???.*.tar.gz 2> /dev/null | sort -t. -k1,1 -k2,2n -k3n | tail -1`
-if [[ -z "$GASNET" && -r "$gex_offline" ]]; then
-  export GASNET="$gex_offline"
-fi
+./configure --prefix="${install_to}" || failure_and_die
+${UPCXX_MAKE:-${GMAKE:-make} -j8} install || failure_and_die
 
-trap failure_and_die ERR
-
-. sourceme
-install_to=$(absify "$install_to")
-
-. utils/system-checks.sh
-sys_info
-platform_sanity_checks
-platform_settings
-export CC
-export CXX
-
-# Check that Python/nobs is usable
-if ! nobs gasnet_conduit >/dev/null ; then
-    echo_and_die "Error invoking Python"
-fi
-
-if [ "$single" -eq 1 ]; then
-  nobs install src/upcxx.cpp "$install_to" \
-    || failure_and_die
-else
-  # Let's not purge nobs before each install FOR DEVELOPERS to:
-  #  1. Make installations after incremental updates fast.
-  #  2. Encourage devs tripping on remaining bugs, so they can be reported.
-  test -d .git || rm -rf .nobs
-  
-  case $(nobs gasnet_user_kind) in
-  tarball|tarball-url|source)
-    ;;
-  *)
-    echo_and_die "GASNET must point to local tarball file, tarball url, or gasnet source tree."
-    ;;
-  esac
-  
-  function foreach_codemode {
-    export ASSERT=1 DBGSYM=1 OPTLEV=0
-    export upcxx_codemode='debug'
-    export gasnet_codemode='debug'
-    foreach_backend
-    
-    if false; then
-      # Attempting O2 is pointless since gasnet forces everyone to O3
-      # through the CXXFLAGS it exports in makefile fragments.
-      export ASSERT=0 DBGSYM=0 OPTLEV=2
-      export upcxx_codemode='O2'
-      export gasnet_codemode='opt'
-      foreach_backend
-    fi
-    
-    export ASSERT=0 DBGSYM=0 OPTLEV=3
-    export upcxx_codemode='O3'
-    export gasnet_codemode='opt'
-    foreach_backend
-  }
-  
-  function foreach_backend {
-    export UPCXX_BACKEND=gasnet_seq
-    foreach_conduit
-    
-    export UPCXX_BACKEND=gasnet_par
-    foreach_conduit
-  }
-  
-  function foreach_conduit {
-    conduits=$(GASNET_CONDUIT='' nobs gasnet_configured_conduits)
-    if [ $? -ne 0 ]; then failure_and_die; fi
-    
-    for conduit in ${conduits}; do
-      export GASNET_INSTALL_TO="${install_to}/gasnet.${gasnet_codemode}"
-      export GASNET_CONDUIT=${conduit}
-      nobs install src/upcxx.cpp "${install_to}/upcxx.${upcxx_codemode}.${UPCXX_BACKEND}.${conduit}" \
-        || failure_and_die
-    done
-  }
-  
-  foreach_codemode
-  
-  conduits=$(nobs gasnet_configured_conduits)
-  conduits_pipes="${conduits//$'\n'/|}"
-  conduits_commas="${conduits//$'\n'/, }"
-  
-  conduit_default=$(GASNET_CONDUIT='' nobs gasnet_conduit)
-  
-  mkdir -p "${install_to}/bin"
-  cat <<EOF >| "${install_to}/bin/upcxx-meta"
-#!/bin/bash
-# This file is generated during installation - do not edit
-
-function echo_and_die {
-  echo \$* >&2
-  exit 1
-}
-
-# Validate the cross-compile Cray CPU target, if any
-UPCXX_CRAY_CPU_TARGET=${CROSS:+$CRAY_CPU_TARGET}
-if test -n "\$UPCXX_CRAY_CPU_TARGET" && test "\$UPCXX_CRAY_CPU_TARGET" != "\$CRAY_CPU_TARGET"; then
-  echo "WARNING: This UPC++ installation was built for \$UPCXX_CRAY_CPU_TARGET CPUs, but you are currently compiling for \$CRAY_CPU_TARGET"
-  echo "WARNING: This can lead to non-working executables and/or serious performance degradation."
-  echo "WARNING: Please load the appropriate craype-\$UPCXX_CRAY_CPU_TARGET module, or use a UPC++ install built for this CPU."
-  echo " "
-fi 1>&2
-
-PARAMS="CPPFLAGS PPFLAGS CXXFLAGS LIBS LIBFLAGS LDFLAGS CXX CC GASNET_CONDUIT GASNET_INSTALL"
-FAIL=true
-for P in \$PARAMS; do
-    if [[ "\$1" == "\$P" ]]; then
-        FAIL=false
-        break
-    fi
-done
-
-if [[ \$FAIL == true ]]; then
-    echo_and_die "Error: parameter passed to upcxx-meta must be one of \$PARAMS"
-fi
-
-case \${UPCXX_CODEMODE} in
-"")
-  UPCXX_CODEMODE=O3
-  ;;
-debug|O3)
-  ;;
-*)
-  echo_and_die "UPCXX_CODEMODE must be set to one of: O3 (default), debug"
-  ;;
-esac
-
-case \${UPCXX_THREADMODE} in
-"")
-  UPCXX_THREADMODE=seq
-  ;;
-seq|par)
-  ;;
-*)
-  echo_and_die "UPCXX_THREADMODE must be set to one of: seq (default), par"
-  ;;
-esac
-
-UPCXX_NETWORK=\${UPCXX_NETWORK:-\$UPCXX_GASNET_CONDUIT} # backwards-compat
-case "\${UPCXX_NETWORK}" in
-'')
-  UPCXX_NETWORK="${conduit_default}"
-  ;;
-${conduits_pipes})
-  ;;
-*)
-  echo_and_die "UPCXX_NETWORK must be one of: ${conduits_commas}"
-  ;;
-esac
-
-case \${UPCXX_THREADMODE} in
-seq)
-  UPCXX_BACKEND=gasnet_seq
-  ;;
-par)
-  UPCXX_BACKEND=gasnet_par
-  ;;
-esac
-
-${install_to}/upcxx.\${UPCXX_CODEMODE}.\${UPCXX_BACKEND}.\${UPCXX_NETWORK}/bin/upcxx-meta \$*
-EOF
-  chmod 755 "${install_to}/bin/upcxx-meta"
-  cat <<EOF >| "${install_to}/bin/upcxx"
-#!/bin/bash
-UPCXX_META="${install_to}/bin/upcxx-meta"
-export UPCXX_META
-exec "${install_to}/bin/upcxx.sh" "\$@"
-EOF
-  chmod 755 "${install_to}/bin/upcxx"
-  cp ./utils/upcxx.sh "${install_to}/bin/upcxx.sh"
-  chmod 755 "${install_to}/bin/upcxx.sh"
-  cp ./utils/upcxx-run "${install_to}/bin/upcxx-run"
-  chmod 755 "${install_to}/bin/upcxx-run"
-  # install documentation
-  docdir="${install_to}/share/doc/upcxx"
-  mkdir -p $docdir
-  cp -f -R README.md ChangeLog.md LICENSE.txt docs $docdir
-  chmod -R a+rX $docdir
-  # install cmake module
-  cmakedir="${install_to}/share/cmake/UPCXX"
-  mkdir -p $cmakedir
-  cp -f -R utils/cmake/FindUPCXX.cmake $cmakedir
-  cp -f -R utils/cmake/UPCXXConfig.cmake $cmakedir
-  chmod -R a+rX $cmakedir
-fi
-
-echo "UPC++ successfully installed"
+echo 'UPC++ successfully installed'
+big_warning

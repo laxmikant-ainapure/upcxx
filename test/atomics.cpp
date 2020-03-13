@@ -34,13 +34,13 @@ std::vector<atomic_op> fp_ops;
 constexpr int ITERS = 10;
 
 // let's all hit the same rank
-upcxx::intrank_t target_rank(team &tm) {
+upcxx::intrank_t target_rank(const team &tm) {
   return 0xbeef % tm.rank_n();
 }
 
 template <typename T>
-void test_fetch_add(team &tm, global_ptr<T> target_counter,
-                    upcxx::atomic_domain<T> &dom) {
+void test_fetch_add(const team &tm, global_ptr<T> target_counter,
+                    const upcxx::atomic_domain<T> &dom) {
   T expected_val = static_cast<T>(tm.rank_n() * ITERS);
   if (tm.rank_me() == 0) {
     cout << "Test fetch_add: atomics, expect value " << expected_val << endl;
@@ -97,7 +97,7 @@ void test_fetch_add(team &tm, global_ptr<T> target_counter,
 }
 
 template <typename T>
-void test_put_get(team &tm, global_ptr<T> target_counter, upcxx::atomic_domain<T> &dom) {
+void test_put_get(const team &tm, global_ptr<T> target_counter, const upcxx::atomic_domain<T> &dom) {
   if (tm.rank_me() == 0) {
     cout << "Test puts and gets: expect a random rank number" << endl;
     // always use atomics to access or modify counter
@@ -133,7 +133,7 @@ void test_put_get(team &tm, global_ptr<T> target_counter, upcxx::atomic_domain<T
 #define CHECK_ATOMIC_VAL(v, V) UPCXX_ASSERT_ALWAYS(v == V, "expected " << V << ", got " << v);
 
 template <typename T>
-void test_all_ops(team &tm, global_ptr<T> target_counter, upcxx::atomic_domain<T> &dom) {
+void test_all_ops(const team &tm, global_ptr<T> target_counter, const upcxx::atomic_domain<T> &dom) {
   if (tm.rank_me() == 0) {
     dom.store(target_counter, (T)42, memory_order_relaxed).wait();
     T v = dom.load(target_counter, memory_order_relaxed).wait();
@@ -159,7 +159,7 @@ void test_all_ops(team &tm, global_ptr<T> target_counter, upcxx::atomic_domain<T
 }
 
 template <typename T>
-void test_team_t(upcxx::team &tm, std::vector<atomic_op> ops) {
+void test_team_t(const upcxx::team &tm, std::vector<atomic_op> ops) {
   upcxx::atomic_domain<T> ad_all( ops, tm);
 
   // get the global pointer to the target counter
@@ -175,16 +175,44 @@ void test_team_t(upcxx::team &tm, std::vector<atomic_op> ops) {
   // of technically breaking atomicity semantics. See spec 13.1-2
 }
 
-void test_team(upcxx::team &tm) {
+template<typename T, size_t sz>
+struct _test_type {
+  void operator()(const char *TN, const upcxx::team &tm, std::vector<atomic_op> const &ops) {
+    if (!upcxx::rank_me()) 
+      std::cout << " --- SKIPPING atomic_domain<" << TN << "> --- (" << (sz*8) << "-bit)" << std::endl;
+    upcxx::barrier();
+  }
+};
+template<typename T>
+struct _test_type<T,4> {
+  void operator()(const char *TN, const upcxx::team &tm, std::vector<atomic_op> const &ops) {
+    if (!upcxx::rank_me()) 
+      std::cout << " --- Testing atomic_domain<" << TN << "> --- (32-bit)" << std::endl;
+    upcxx::barrier();
+    test_team_t<T>(tm,ops);
+  }
+};
+template<typename T>
+struct _test_type<T,8> {
+  void operator()(const char *TN, const upcxx::team &tm, std::vector<atomic_op> const &ops) {
+    if (!upcxx::rank_me()) 
+      std::cout << " --- Testing atomic_domain<" << TN << "> --- (64-bit)" << std::endl;
+    upcxx::barrier();
+    test_team_t<T>(tm,ops);
+  }
+};
+#define TEST_TYPE(T,ops) _test_type<T, sizeof(T)>()(#T, tm, ops)
+
+
+void test_team(const upcxx::team &tm) {
 
   upcxx::atomic_domain<int32_t> ad_i({atomic_op::store, atomic_op::fetch_add}, tm);
-  upcxx::atomic_domain<int32_t> ad; 
 
   // uncomment to evaluate error checking
   //upcxx::atomic_domain<const int> ad_cint({upcxx::atomic_op::load});
   // will fail with an error message about no move/copy assignment or copy constructor
-  //ad = std::move(ad_i);
-  //ad = ad_i;
+  //upcxx::atomic_domain<int32_t> ad = std::move(ad_i);
+  //upcxx::atomic_domain<int32_t> ad = ad_i;
   //upcxx::atomic_domain<int32_t> ad2 = ad_i; 
   // this will fail with an error message about an unsupported domain
   //ad_i.load(upcxx::allocate<int32_t>(1), memory_order_relaxed).wait();
@@ -197,17 +225,34 @@ void test_team(upcxx::team &tm) {
   ad_i.destroy();
 
   // test operation for all supported types
-  #define TEST_TYPE(T,ops) \
-    if (!upcxx::rank_me()) \
-      std::cout << " --- Testing atomic_domain<" #T "> --- " << std::endl; \
-    upcxx::barrier(); \
-    test_team_t<T>(tm,ops);
+
+  // Fixed-width integers
   TEST_TYPE(int32_t,  all_ops);
   TEST_TYPE(uint32_t, all_ops);
   TEST_TYPE(int64_t,  all_ops);
   TEST_TYPE(uint64_t, all_ops);
+
+  // Floating-point
   TEST_TYPE(float,    fp_ops);
   TEST_TYPE(double,   fp_ops);
+
+  // General integer types
+  TEST_TYPE(short,              all_ops);
+  TEST_TYPE(unsigned short,     all_ops);
+  TEST_TYPE(int,                all_ops);
+  TEST_TYPE(unsigned int,       all_ops);
+  TEST_TYPE(long,               all_ops);
+  TEST_TYPE(unsigned long,      all_ops);
+  TEST_TYPE(long long,          all_ops);
+  TEST_TYPE(unsigned long long, all_ops);
+  TEST_TYPE(ptrdiff_t,          all_ops);
+  TEST_TYPE(size_t,             all_ops);
+  TEST_TYPE(intptr_t,           all_ops);
+  TEST_TYPE(uintptr_t,          all_ops);
+
+  TEST_TYPE(intmax_t,  all_ops);
+  TEST_TYPE(uintmax_t, all_ops);
+
   upcxx::barrier();
   if (!upcxx::rank_me()) std::cout << "PASSED" << std::endl;
 }

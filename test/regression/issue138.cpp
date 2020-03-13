@@ -10,6 +10,8 @@
 
 #include "../util.hpp"
 
+static const char *alphabet = "abcdefghijklmnopqrstuvwxyz";
+
 template<typename T>
 struct the_hasher {
   std::size_t operator()(T const &x) const {
@@ -114,33 +116,40 @@ struct each_map {
 
 template<typename Fn>
 void each_elt_for_seq(Fn fn) {
+#if !MINIMAL
   fn.template operator()<char>(
-    [](int i) { return "abcd"[i % 4]; }
+    [](int i) { return alphabet[i % 4]; }
   );
   fn.template operator()<std::uint8_t>(
     [](unsigned i) { return std::uint8_t(i*i); }
   );
+#endif
   fn.template operator()<std::uint16_t>(
     [](unsigned i) { return std::uint16_t(i*i); }
   );
+#if !MINIMAL
   fn.template operator()<std::uint32_t>(
     [](unsigned i) { return std::uint32_t(i*i); }
   );
   fn.template operator()<std::uint64_t>(
     [](std::uint64_t i) { return i*i; }
   );
+#endif
   fn.template operator()<float>(
     [](int i) { return float(i) + 3; }
   );
+#if !MINIMAL
   fn.template operator()<double>(
     [](int i) { return double(i) - 301; }
   );
+#endif
 }
 
 template<typename Fn>
 void each_elt_for_set(Fn fn) {
+#if !MINIMAL
   fn.template operator()<char>(
-    [](int i) { return "abcd"[i % 4]; },
+    [](int i) { return alphabet[i % 4]; },
     [](char x) { return 'a' <= x && x <= 'd'; }
   );
   fn.template operator()<std::uint8_t>(
@@ -155,6 +164,7 @@ void each_elt_for_set(Fn fn) {
     [](unsigned i) { return std::uint32_t(i*i)<<1; },
     [](std::uint32_t x) { return 0 == (x & 1); }
   );
+#endif
   fn.template operator()<std::uint64_t>(
     [](std::uint64_t i) { return i*i<<1; },
     [](std::uint64_t x) { return 0 == (x & 1); }
@@ -163,13 +173,13 @@ void each_elt_for_set(Fn fn) {
     [](int i)->std::string {
       int n = i % 100;
       char hdr[2] = {char('0' + n%10), char('0' + n/10)};
-      return std::string(hdr, 2) + std::string(n, "abcdef"[n%6]);
+      return std::string(hdr, 2) + std::string(n, alphabet[n%6]);
     },
     [](std::string const &s)->bool {
       int n = int(s[0]-'0') + 10*int(s[1]-'0');
       bool ok = (int)s.size() == 2 + n;
       for(int i=0; i < n; i++)
-        ok &= s[2+i] == "abcdef"[n%6];
+        ok &= s[2+i] == alphabet[n%6];
       return ok;
     }
   );
@@ -177,9 +187,10 @@ void each_elt_for_set(Fn fn) {
 
 template<typename Fn>
 void each_elt_for_map(Fn fn) {
+#if !MINIMAL
   {
     using keyval = std::pair<unsigned,char>;
-    auto key2val = [](unsigned k) { return "abcd"[k%4]; };
+    auto key2val = [](unsigned k) { return alphabet[k%4]; };
     fn.template operator()<keyval>(
       [=](int i) { return std::make_pair(unsigned(i), key2val(i)); },
       [=](keyval x) { return x.second == key2val(x.first); }
@@ -209,6 +220,7 @@ void each_elt_for_map(Fn fn) {
       [=](keyval x) { return x.second == key2val(x.first); }
     );
   }
+#endif
   {
     using keyval = std::pair<unsigned,std::uint64_t>;
     auto key2val = [](unsigned k) { return std::uint64_t(k*k); };
@@ -221,7 +233,7 @@ void each_elt_for_map(Fn fn) {
     using keyval = std::pair<std::string,std::string>;
     fn.template operator()<keyval>(
       [](int i)->keyval {
-        return std::make_pair(std::to_string(i), std::string(i, "abcdef"[i%6]));
+        return std::make_pair(std::to_string(i), std::string(i, alphabet[i%6]));
       },
       [](keyval const &xy)->bool {
         int n = 0;
@@ -231,7 +243,7 @@ void each_elt_for_map(Fn fn) {
         }
         bool ok = (int)xy.second.size() == n;
         for(char c: xy.second)
-          ok &= c == "abcdef"[n%6];
+          ok &= c == alphabet[n%6];
         return ok;
       }
     );

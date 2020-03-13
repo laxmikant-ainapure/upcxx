@@ -14,6 +14,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <memory>
+#include <iomanip>
 
 #include <unistd.h>
 
@@ -46,18 +47,16 @@ using namespace std;
 
 ////////////////////////////////////////////////////////////////////////
 
-#if !NOBS_DISCOVERY
-  #if UPCXX_BACKEND_GASNET_SEQ && !GASNET_SEQ
+#if UPCXX_BACKEND_GASNET_SEQ && !GASNET_SEQ
     #error "This backend is gasnet-seq only!"
-  #endif
+#endif
 
-  #if UPCXX_BACKEND_GASNET_PAR && !GASNET_PAR
+#if UPCXX_BACKEND_GASNET_PAR && !GASNET_PAR
     #error "This backend is gasnet-par only!"
-  #endif
+#endif
 
-  #if GASNET_SEGMENT_EVERYTHING
+#if GASNET_SEGMENT_EVERYTHING
     #error "Segment-everything not supported."
-  #endif
 #endif
 
 static_assert(
@@ -231,12 +230,15 @@ namespace {
     return reinterpret_cast<T*>(i);
   }
 
+  GASNETT_USED // avoid an unused warning from (at least) PGI
   gex_AM_Arg_t am_arg_encode_i64_lo(int64_t i) {
     return gex_AM_Arg_t(i & 0xffffffffu);
   }
+  GASNETT_USED // avoid an unused warning from (at least) PGI
   gex_AM_Arg_t am_arg_encode_i64_hi(int64_t i) {
     return gex_AM_Arg_t(i >> 31 >> 1);
   }
+  GASNETT_USED // avoid an unused warning from (at least) PGI
   int64_t am_arg_decode_i64(gex_AM_Arg_t lo, gex_AM_Arg_t hi) {
     return (int64_t(hi)<<31<<1) | (int64_t(lo) & 0xffffffffu);
   }
@@ -503,7 +505,7 @@ void upcxx::init() {
     segment_size = szval;
   }
   // page align: page size should always be a power of 2
-  segment_size = (segment_size + GASNET_PAGESIZE-1) & -GASNET_PAGESIZE;
+  segment_size = (segment_size + GASNET_PAGESIZE-1) & (size_t)-GASNET_PAGESIZE;
 
   // now adjust the segment size if it's less than the GASNET_MAX_SEGSIZE
   if (segment_size > gasnet_max_segsize) {
@@ -693,7 +695,17 @@ void upcxx::init() {
   init_localheap_tables();
 
   noise.show();
-  
+
+  if(backend::verbose_noise) {
+    // output process identity information, for validating job layout matches user intent
+    ostringstream oss;
+    oss << "UPCXX: Process " 
+        << setw(to_string(backend::rank_n-1).size()) << backend::rank_me << "/" << backend::rank_n
+        << " (local_team: " << setw(to_string(peer_n-1).size()) << peer_me << "/" << peer_n << ") on "
+        << gasnett_gethostname() << " (" << gasnett_cpu_count() << " processors)" << "\n";
+    std::cerr << oss.str() << std::flush;
+  }
+
   //////////////////////////////////////////////////////////////////////////////
   // Exit barrier
   
@@ -1009,7 +1021,7 @@ void gasnet::deallocate(void *p, sheap_footprint_t *foot) {
 //////////////////////////////////////////////////////////////////////
 // from: upcxx/backend.hpp
 
-void backend::quiesce(team &tm, upcxx::entry_barrier eb) {
+void backend::quiesce(const team &tm, upcxx::entry_barrier eb) {
   switch(eb) {
   case entry_barrier::none:
     break;
@@ -1092,26 +1104,123 @@ tuple<intrank_t/*rank*/, uintptr_t/*raw*/>  backend::globalize_memory(
     return otherwise;
 }
 
-intrank_t backend::team_rank_from_world(team &tm, intrank_t rank) {
+intrank_t backend::team_rank_from_world(const team &tm, intrank_t rank) {
   gex_Rank_t got = gex_TM_TranslateJobrankToRank(gasnet::handle_of(tm), rank);
   UPCXX_ASSERT(got != GEX_RANK_INVALID);
   return got;
 }
 
-intrank_t backend::team_rank_from_world(team &tm, intrank_t rank, intrank_t otherwise) {
+intrank_t backend::team_rank_from_world(const team &tm, intrank_t rank, intrank_t otherwise) {
   gex_Rank_t got = gex_TM_TranslateJobrankToRank(gasnet::handle_of(tm), rank);
   return got == GEX_RANK_INVALID ? otherwise : (intrank_t)got;
 }
 
-intrank_t backend::team_rank_to_world(team &tm, intrank_t peer) {
+intrank_t backend::team_rank_to_world(const team &tm, intrank_t peer) {
   return gex_TM_TranslateRankToJobrank(gasnet::handle_of(tm), peer);
+}
+
+void backend::validate_global_ptr(bool allow_null, intrank_t rank, void *raw_ptr, std::int32_t device,
+                                  memory_kind KindSet, size_t T_align, const char *T_name, const char *context) {
+  if_pf (!upcxx::initialized()) return; // don't perform checking before init
+  if_pf (!T_name) T_name = "";
+
+  // system sanity checks
+  UPCXX_ASSERT_ALWAYS(backend::rank_n > 0);
+  UPCXX_ASSERT_ALWAYS(backend::rank_me < backend::rank_n);
+
+  auto pretty_type = [&]() {
+    std::string s("global_ptr<");
+    s = s + T_name + ", ";
+    switch (KindSet) {
+      case memory_kind::host:        s += "host"; break;
+      case memory_kind::cuda_device: s += "cuda_device"; break;
+      case memory_kind::any:         s += "any"; break;
+      default:                       s = s + "unknown_kind(" + std::to_string((int)KindSet) + ")";
+    }
+    return s + ">";
+  };
+
+  bool error = false;
+  std::stringstream ss;
+
+  do { // run diagnostics
+    bool is_null = !raw_ptr;
+
+    if (is_null) {
+      if_pf(device != -1 || rank != 0) {
+        ss << pretty_type() << " representation corrupted, bad null\n";
+        error = true; break;
+      }
+
+      if_pf (!allow_null) {
+        ss << pretty_type() << " may not be null";
+        error = true; break;
+      }
+      break; // end of null pointer checks
+    }
+
+    if_pf ((uint64_t)rank >= (uint64_t)backend::rank_n) {
+      ss << pretty_type() << " representation corrupted, bad rank\n";
+      error = true; break;
+    }
+
+    #if UPCXX_CUDA_ENABLED
+      const int max_cuda_device = upcxx::cuda::max_devices - 1;
+    #else
+      const int max_cuda_device = -1;
+    #endif
+
+    if_pf (
+        (KindSet == memory_kind::host && device != -1) // host should always be device -1
+     || ((int(KindSet) & int(memory_kind::host)) == 0 && device == -1) // non-host gptr cannot ref host device
+     || (device < -1) // currently never use other negative devices
+     || (KindSet == memory_kind::cuda_device && device > max_cuda_device) // invalid cuda device
+      ) {
+      ss << pretty_type() << " representation corrupted, bad device\n";
+      error = true; break;
+    }
+
+    #ifndef UPCXX_GPTR_CHECK_SCALE
+    #define UPCXX_GPTR_CHECK_SCALE 1024 // job size limit where we stop bounds-checking remote segs
+    #endif
+    if (device == -1 && // host memory segment bounds-check
+        (rank_is_local(rank) || backend::rank_n <= UPCXX_GPTR_CHECK_SCALE)) {
+      void *owner_vbase;
+      uintptr_t size;
+
+      gex_Segment_QueryBound(world_tm, rank,
+                             &owner_vbase, nullptr, &size);
+      UPCXX_ASSERT_ALWAYS(owner_vbase && size);
+      void *owner_vlim = (void *)(((char*)owner_vbase) + size - 1);
+      if_pf (raw_ptr < owner_vbase || raw_ptr > owner_vlim) {
+        ss << pretty_type() << " out-of-bounds of host segment [" 
+           << owner_vbase << ", " << owner_vlim << "]\n";
+        error = true; break;
+      }
+    }
+
+    if (T_align > 1) {
+      if_pf ((uintptr_t)raw_ptr % T_align != 0) {
+        ss << pretty_type() << " is not properly aligned to a " 
+           << T_align << "-byte boundary\n";
+        error = true; break;
+      }
+    }
+
+  } while (0);
+
+  if_pf (error) {
+    if (context && *context) ss << " in " << context << "\n";
+    ss << "  rank = " << rank << ", raw_ptr = " << raw_ptr << ", device = " << device;
+    fatal_error(ss.str(), "fatal global_ptr error");
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////
 // from: upcxx/backend/gasnet/runtime.hpp
 
 void gasnet::send_am_eager_restricted(
-    team &tm,
+    const team &tm,
     intrank_t recipient,
     void *buf,
     std::size_t buf_size,
@@ -1130,7 +1239,7 @@ void gasnet::send_am_eager_restricted(
 
 void gasnet::send_am_eager_master(
     progress_level level,
-    team &tm,
+    const team &tm,
     intrank_t recipient,
     void *buf,
     std::size_t buf_size,
@@ -1149,16 +1258,13 @@ void gasnet::send_am_eager_master(
 
 void gasnet::send_am_eager_persona(
     progress_level level,
-    team &tm,
+    const team &tm,
     intrank_t recipient_rank,
     persona *recipient_persona,
     void *buf,
     std::size_t buf_size,
     std::size_t buf_align
   ) {
-
-  gex_AM_Arg_t per_lo = reinterpret_cast<intptr_t>(recipient_persona) & 0xffffffffu;
-  gex_AM_Arg_t per_hi = reinterpret_cast<intptr_t>(recipient_persona) >> 31 >> 1;
 
   gex_AM_RequestMedium3(
     handle_of(tm), recipient_rank,
@@ -1199,7 +1305,7 @@ namespace {
 
 void gasnet::send_am_rdzv(
     progress_level level,
-    team &tm,
+    const team &tm,
     intrank_t rank_d,
     persona *persona_d,
     void *buf_s,
@@ -1254,7 +1360,7 @@ void gasnet::send_am_rdzv(
 
 void gasnet::bcast_am_master_eager(
     progress_level level,
-    upcxx::team &tm,
+    const upcxx::team &tm,
     intrank_t rank_d_ub, // in range [0, 2*rank_n-1)
     bcast_payload_header *payload,
     size_t cmd_size, size_t cmd_align
@@ -1295,7 +1401,7 @@ void gasnet::bcast_am_master_eager(
 
 void gasnet::bcast_am_master_rdzv(
     progress_level level,
-    upcxx::team &tm,
+    const upcxx::team &tm,
     intrank_t rank_d_ub, // in range [0, 2*rank_n-1)
     intrank_t wrank_owner, // self or a local peer (in world)
     bcast_payload_header *payload_owner, // in owner address space
@@ -1615,9 +1721,9 @@ void gasnet::after_gasnet() {
       
       #if UPCXX_BACKEND_GASNET_SEQ
         if(&p == &backend::master)
-          exec_n += gasnet::master_hcbs.burst(4);
+          exec_n += gasnet::master_hcbs.burst(/*spinning=*/false);
       #elif UPCXX_BACKEND_GASNET_PAR
-        exec_n += p.backend_state_.hcbs.burst(4);
+        exec_n += p.backend_state_.hcbs.burst(/*spinning=*/false);
       #endif
       
       exec_n += tls.burst_internal(p);
@@ -1662,9 +1768,9 @@ void upcxx::progress(progress_level level) {
       
       #if UPCXX_BACKEND_GASNET_SEQ
         if(&p == &backend::master)
-          exec_n += gasnet::master_hcbs.burst(4);
+          exec_n += gasnet::master_hcbs.burst(/*spinning=*/true);
       #elif UPCXX_BACKEND_GASNET_PAR
-        exec_n += p.backend_state_.hcbs.burst(4);
+        exec_n += p.backend_state_.hcbs.burst(/*spinning=*/true);
       #endif
       
       exec_n += tls.burst_internal(p);
@@ -1835,7 +1941,7 @@ namespace {
 
 template<gasnet::rma_put_then_am_sync sync_lb, bool packed_protocol>
 gasnet::rma_put_then_am_sync gasnet::rma_put_then_am_master_protocol(
-    team &tm, intrank_t rank_d,
+    const team &tm, intrank_t rank_d,
     void *buf_d, void const *buf_s, std::size_t buf_size,
     progress_level am_level, void *am_cmd, std::size_t am_size, std::size_t am_align,
     gasnet::handle_cb *src_cb,
@@ -1945,7 +2051,7 @@ gasnet::rma_put_then_am_sync gasnet::rma_put_then_am_master_protocol(
   template \
   gasnet::rma_put_then_am_sync \
   gasnet::rma_put_then_am_master_protocol<sync_lb, packed_protocol>( \
-      team &tm, intrank_t rank_d, \
+      const team &tm, intrank_t rank_d, \
       void *buf_d, void const *buf_s, std::size_t buf_size, \
       progress_level am_level, void *am_cmd, std::size_t am_size, std::size_t am_align, \
       gasnet::handle_cb *src_cb, \
@@ -2133,11 +2239,46 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////
 
-inline int handle_cb_queue::burst(int burst_n) {
+inline int handle_cb_queue::burst(bool maybe_spinning) {
+  // Gasnet present's its asynchrony through pollable handles which is
+  // problematic for us since we need to guess a good strategy for choosing
+  // handles to poll which minimizes time wasted polling non-ready handles.
+  // A simple heuristic is that handles retire approximately in injection order,
+  // thus we ought to focus our time polling the front of the queue as that's
+  // where ready handles are likely to be clustered. Our default strategy is to
+  // begin at the front of the queue and keep polling until we hit N consecutive
+  // non-ready handles, after which we abort. If our heuristic is accurate and
+  // N is good, then after N handles are observed non-ready we can assume that
+  // all handles that follow are probably also non-ready, justifying our abort.
+  //
+  // If the `maybe_spinning` flag is set, then we assume the CPU has no better
+  // work to do than finding ready handles, and so we dynamically modify our abort
+  // criteria to compsensate for the case when there are ready handles following
+  // an unfortunate N-cluster of non-ready ones. If an invocation of burst()
+  // finds no ready handles and exits via the abort path, we increment the
+  // aborted_burst_n_ counter. Upon beginning a burst() scan, we set our N value
+  // to linearly increase with the abort counter so that a recent history of
+  // repeated failure motivates us to look harder for ready handles.
+
   int exec_n = 0;
   handle_cb **pp = &this->head_;
+
+  int aborted_burst_n = this->aborted_burst_n_;
+  // If we aren't in a progress() spin, just ignore the abort counter.
+  int aborted_burst_n_and_spinning = maybe_spinning ? aborted_burst_n : 0;
   
-  while(burst_n-- && *pp != nullptr) {
+  // This is N, the number of consecutive non-ready handles which will trigger
+  // an abort.
+  int miss_limit = 4 + aborted_burst_n_and_spinning;
+
+  // Our current tally of consecutive non-ready handles as we scan the queue.
+  // A negative initial value has the effect of polling that many non-ready
+  // handles without contributing to the abort-triggering condition. As a
+  // history of aborted burst()'s pile up, this grows in negativity to allow us
+  // to see beyond the nefarious N-cluster which may have percolated to the front.
+  int miss_n = -4*aborted_burst_n_and_spinning;
+  
+  while(*pp != nullptr) {
     handle_cb *p = *pp;
     gex_Event_t ev = reinterpret_cast<gex_Event_t>(p->handle);
     
@@ -2151,10 +2292,30 @@ inline int handle_cb_queue::burst(int burst_n) {
       p->execute_and_delete(handle_cb_successor{this, pp});
       
       exec_n += 1;
+      
+      // Break the miss streak. Intentionally clobber negative values since now
+      // that the app has learned of completed communication, it may have more
+      // productive work to do outside of progress(), so we should feel pressure
+      // to abort.
+      miss_n = 0;
+      
+      aborted_burst_n = 0; // Reset abort history.
     }
-    else
+    else {
+      miss_n += 1;
+      if(miss_n == miss_limit) { // Miss streak triggered abort.
+        // Only increase abort history if we are spinning and this burst() was
+        // entirely fruitless.
+        if(maybe_spinning && exec_n == 0)
+          aborted_burst_n = std::min<int>(aborted_burst_n + 1, 1024);
+        break;
+      }
+      
       pp = &p->next_;
+    }
   }
+
+  this->aborted_burst_n_ = aborted_burst_n;
   
   return exec_n;
 }
@@ -2163,7 +2324,6 @@ inline int handle_cb_queue::burst(int burst_n) {
 // from: upcxx/os_env.hpp
 
 namespace upcxx {
-
   template<>
   bool os_env(const std::string &name, const bool &otherwise) {
     return !!gasnett_getenv_yesno_withdefault(name.c_str(), otherwise);
@@ -2190,9 +2350,42 @@ GASNETT_IDENT(UPCXX_IdentString_LibraryVersion, "$UPCXXLibraryVersion: " _STRING
 GASNETT_IDENT(UPCXX_IdentString_GitVersion, "$UPCXXGitVersion: " _STRINGIFY(UPCXX_GIT_VERSION) " $");
 #endif
 
+GASNETT_IDENT(UPCXX_IdentString_Network, "$UPCXXNetwork: " _STRINGIFY(GASNET_CONDUIT_NAME) " $");
+
+#if UPCXX_BACKEND_GASNET_SEQ
+GASNETT_IDENT(UPCXX_IdentString_ThreadMode, "$UPCXXThreadMode: SEQ $");
+#elif UPCXX_BACKEND_GASNET_PAR
+GASNETT_IDENT(UPCXX_IdentString_ThreadMode, "$UPCXXThreadMode: PAR $");
+#endif
+
+#if GASNET_DEBUG
+GASNETT_IDENT(UPCXX_IdentString_CodeMode, "$UPCXXCodeMode: debug $");
+#else
+GASNETT_IDENT(UPCXX_IdentString_CodeMode, "$UPCXXCodeMode: opt $");
+#endif
+
+GASNETT_IDENT(UPCXX_IdentString_GASNetVersion, "$UPCXXGASNetVersion: " 
+              _STRINGIFY(GASNET_RELEASE_VERSION_MAJOR) "."
+              _STRINGIFY(GASNET_RELEASE_VERSION_MINOR) "."
+              _STRINGIFY(GASNET_RELEASE_VERSION_PATCH) " $");
+
 #if UPCXX_CUDA_ENABLED
   GASNETT_IDENT(UPCXX_IdentString_CUDAEnabled, "$UPCXXCUDAEnabled: 1 $");
 #else
   GASNETT_IDENT(UPCXX_IdentString_CUDAEnabled, "$UPCXXCUDAEnabled: 0 $");
 #endif
+
+GASNETT_IDENT(UPCXX_IdentString_AssertEnabled, "$UPCXXAssertEnabled: " _STRINGIFY(UPCXX_ASSERT_ENABLED) " $");
+
+#if UPCXX_MPSC_QUEUE_ATOMIC
+  GASNETT_IDENT(UPCXX_IdentString_MPSCQueue, "$UPCXXMPSCQueue: atomic $");
+#elif UPCXX_MPSC_QUEUE_BIGLOCK
+  GASNETT_IDENT(UPCXX_IdentString_MPSCQueue, "$UPCXXMPSCQueue: biglock $");
+#endif
+
+GASNETT_IDENT(UPCXX_IdentString_CompilerID, "$UPCXXCompilerID: " PLATFORM_COMPILER_IDSTR " $");
+
+GASNETT_IDENT(UPCXX_IdentString_CompilerStd, "$UPCXXCompilerStd: " _STRINGIFY(__cplusplus) " $");
+
+GASNETT_IDENT(UPCXX_IdentString_BuildTimestamp, "$UPCXXBuildTimestamp: " __DATE__ " " __TIME__ " $");
 

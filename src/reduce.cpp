@@ -1,9 +1,7 @@
 #include <upcxx/reduce.hpp>
 #include <upcxx/backend/gasnet/runtime.hpp>
 #include <upcxx/backend/gasnet/runtime_internal.hpp>
-#if !NOBS_DISCOVERY
-  #include <gasnet_coll.h>
-#endif
+#include <gasnet_coll.h>
 
 using namespace upcxx;
 using namespace std;
@@ -34,7 +32,7 @@ namespace upcxx {
 }
 
 void upcxx::detail::reduce_one_or_all_trivial_erased(
-    team &tm, intrank_t root_or_all,
+    const team &tm, intrank_t root_or_all,
     const void *src, void *dst,
     std::size_t elt_sz, std::size_t elt_n,
     std::uintptr_t ty_id,

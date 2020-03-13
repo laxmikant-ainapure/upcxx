@@ -5,7 +5,7 @@ int main() {
   upcxx::init();
   print_test_header();
 
-  upcxx::team &tm = upcxx::world();
+  upcxx::team const &tm = upcxx::world();
   upcxx::dist_object<int> dobj1(47, tm);
   upcxx::dist_object<int> dobj2(tm, 47);
 

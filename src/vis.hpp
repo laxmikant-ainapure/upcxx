@@ -422,8 +422,9 @@ namespace upcxx
 
     using T = typename std::tuple_element<0,typename std::iterator_traits<DestIter>::value_type>::type::element_type;
     using S = typename std::tuple_element<0,typename std::iterator_traits<SrcIter>::value_type>::type;
-    static_assert(is_definitely_trivially_serializable<T>::value,
-      "RMA operations only work on DefinitelyTriviallySerializable types.");
+
+    static_assert(is_trivially_serializable<T>::value,
+      "RMA operations only work on TriviallySerializable types.");
     
     static_assert(std::is_convertible<S, const T*>::value,
                   "SrcIter and DestIter need to be over same base T type");
@@ -455,6 +456,7 @@ namespace upcxx
     if(dest.size()!=0) gpdrank = std::get<0>(*dst_runs_begin).rank_; //hoist gpdrank assign out of loop
     for(DestIter d=dst_runs_begin; !(d==dst_runs_end); ++d,++dv)
       {
+        UPCXX_GPTR_CHK(std::get<0>(*d));
 	UPCXX_ASSERT(std::get<0>(*d), "pointer arguments to rput_irregular may not be null");
         UPCXX_ASSERT(gpdrank==std::get<0>(*d).rank_, "pointer arguments to rput_irregular must all target the same affinity");
         dv->gex_addr=(std::get<0>(*d)).raw_ptr_;
@@ -513,8 +515,8 @@ namespace upcxx
     using T = typename std::tuple_element<0,typename std::iterator_traits<SrcIter>::value_type>::type::element_type;
     using D = typename std::tuple_element<0,typename std::iterator_traits<DestIter>::value_type>::type;
 
-    static_assert(is_definitely_trivially_serializable<T>::value,
-      "RMA operations only work on DefinitelyTriviallySerializable types.");
+    static_assert(is_trivially_serializable<T>::value,
+      "RMA operations only work on TriviallySerializable types.");
     
     static_assert(std::is_convertible<D, const T*>::value,
                   "SrcIter and DestIter need to be over same base T type");
@@ -557,6 +559,7 @@ namespace upcxx
     if(src.size()!=0) rank_s = std::get<0>(*src_runs_begin).rank_; // hoist rank_s assign out of loop
     for(SrcIter s=src_runs_begin; !(s==src_runs_end); ++s,++sv)
       {
+        UPCXX_GPTR_CHK(std::get<0>(*s));
 	UPCXX_ASSERT(std::get<0>(*s), "pointer arguments to rget_irregular may not be null");
         UPCXX_ASSERT(rank_s==std::get<0>(*s).rank_,
                      "pointer arguments to rget_irregular must all target the same affinity");
@@ -603,8 +606,8 @@ namespace upcxx
     using T = typename std::iterator_traits<DestIter>::value_type::element_type;
     
     static_assert(
-                  is_definitely_trivially_serializable<T>::value,
-                  "RMA operations only work on DefinitelyTriviallySerializable types."
+                  is_trivially_serializable<T>::value,
+                  "RMA operations only work on TriviallySerializable types."
                   );
     
     UPCXX_ASSERT_ALWAYS((
@@ -643,6 +646,7 @@ namespace upcxx
     intrank_t dst_rank = upcxx::rank_me(); // default for empty sequence is self
     if(dst_ptrs.capacity() !=0) dst_rank = (*dst_runs_begin).rank_;
     for(DestIter d=dst_runs_begin; !(d == dst_runs_end); ++d) {
+      UPCXX_GPTR_CHK(*d);
       UPCXX_ASSERT(*d, "pointer arguments to rput_regular may not be null");
       UPCXX_ASSERT(dst_rank==(*d).rank_, "pointer arguments to rput_regular must all target the same affinity");
       dst_rank = (*d).rank_;
@@ -706,8 +710,8 @@ namespace upcxx
     static_assert(std::is_convertible</*from*/D, /*to*/const T*>::value,
                   "Destination iterator's value type not convertible to T*." );
 
-    static_assert(is_definitely_trivially_serializable<T>::value,
-                  "RMA operations only work on DefinitelyTriviallySerializable types.");
+    static_assert(is_trivially_serializable<T>::value,
+                  "RMA operations only work on TriviallySerializable types.");
     
     UPCXX_ASSERT_ALWAYS((detail::completions_has_event<Cxs, operation_cx_event>::value |
                   detail::completions_has_event<Cxs, remote_cx_event>::value),
@@ -716,8 +720,8 @@ namespace upcxx
                  "safe to read or write again.");
     
 
-    static_assert( is_definitely_trivially_serializable<T>::value,
-                   "RMA operations only work on DefinitelyTriviallySerializable types.");
+    static_assert( is_trivially_serializable<T>::value,
+                   "RMA operations only work on TriviallySerializable types.");
     
     using cxs_here_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_here,
@@ -748,6 +752,7 @@ namespace upcxx
     intrank_t src_rank = upcxx::rank_me(); // default for empty sequence is self
     if(src_ptrs.capacity() != 0) src_rank = (*src_runs_begin).rank_;
     for(SrcIter s=src_runs_begin; !(s == src_runs_end); ++s) {
+      UPCXX_GPTR_CHK(*s);
       UPCXX_ASSERT((*s), "pointer arguments to rget_regular may not be null");
       UPCXX_ASSERT(src_rank==(*s).rank_, "pointer arguments to rget_regular must all target the same affinity");
       src_ptrs.push_back((*s).raw_ptr_);
@@ -794,8 +799,8 @@ namespace upcxx
        Cxs cxs=completions<future_cx<operation_cx_event>>{{}})
   {
     static_assert(
-      is_definitely_trivially_serializable<T>::value,
-      "RMA operations only work on DefinitelyTriviallySerializable types."
+      is_trivially_serializable<T>::value,
+      "RMA operations only work on TriviallySerializable types."
     );
     
     UPCXX_ASSERT_ALWAYS((
@@ -806,6 +811,7 @@ namespace upcxx
       "safe to read or write again."
                          );
     
+    UPCXX_GPTR_CHK(dest_base);
     UPCXX_ASSERT(src_base && dest_base, "pointer arguments to rput_strided may not be null");
 
     using cxs_here_t = detail::completions_state<
@@ -871,8 +877,8 @@ namespace upcxx
                std::size_t const *extents,
                Cxs cxs=completions<future_cx<operation_cx_event>>{{}})
   {
-    static_assert(is_definitely_trivially_serializable<T>::value,
-      "RMA operations only work on DefinitelyTriviallySerializable types.");
+    static_assert(is_trivially_serializable<T>::value,
+      "RMA operations only work on TriviallySerializable types.");
     
     UPCXX_ASSERT_ALWAYS((detail::completions_has_event<Cxs, operation_cx_event>::value |
                   detail::completions_has_event<Cxs, remote_cx_event>::value),
@@ -880,6 +886,7 @@ namespace upcxx
                  "error. You'll have know way of ever knowing when the target memory is "
                  "safe to read or write again.");
  
+    UPCXX_GPTR_CHK(src_base);
     UPCXX_ASSERT(src_base && dest_base, "pointer arguments to rget_strided may not be null");
 
     using cxs_here_t = detail::completions_state<

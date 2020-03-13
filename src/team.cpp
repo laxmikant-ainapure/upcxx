@@ -34,6 +34,7 @@ team::team(team &&that):
   me_(that.me_) {
   
   UPCXX_ASSERT(backend::master.active_with_caller());
+  UPCXX_ASSERT((that.id_ != digest{~0ull, ~0ull}));
   
   that.id_ = digest{~0ull, ~0ull}; // the tombstone id value
   
@@ -51,7 +52,7 @@ team::~team() {
   }
 }
 
-team team::split(intrank_t color, intrank_t key) {
+team team::split(intrank_t color, intrank_t key) const {
   UPCXX_ASSERT(backend::master.active_with_caller());
   UPCXX_ASSERT(color >= 0 || color == color_none);
   
@@ -82,9 +83,9 @@ team team::split(intrank_t color, intrank_t key) {
   return team(
       detail::internal_only(),
       backend::team_base{reinterpret_cast<uintptr_t>(sub_tm)},
-      this->next_collective_id(detail::internal_only()),
-      p_sub_tm ? gex_TM_QuerySize(sub_tm) : 0,
-      p_sub_tm ? gex_TM_QueryRank(sub_tm) : -1
+      const_cast<team*>(this)->next_collective_id(detail::internal_only()),
+      p_sub_tm ? (intrank_t)gex_TM_QuerySize(sub_tm) : 0,
+      p_sub_tm ? (intrank_t)gex_TM_QueryRank(sub_tm) : -1
     );
 }
 

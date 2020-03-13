@@ -263,3 +263,9 @@ the given directory to the executable's RPATH.
 ```
 set LOCALCOMPLIB=/usr/local/gcc/6.4.0/lib64;
 ```
+
+Alternatively, other sources recommend the following:
+
+```
+append USRRPATH=-rpath /usr/local/gcc/6.4.0/lib64;
+```

@@ -47,21 +47,29 @@ namespace gasnet {
     friend struct handle_cb_successor;
     
     handle_cb *head_;
-    // handle_cb **tailp_ = &this->head_;
+    //handle_cb **tailp_;
     std::uintptr_t tailp_xor_head_;
-  
+
+    // Tracks number of consecutive burst()'s that were fruitless and aborted
+    // due to too many handle test failures ("misses").
+    int aborted_burst_n_;
+    
   private:
     handle_cb** get_tailp() const {
-      return reinterpret_cast<handle_cb**>(tailp_xor_head_ ^ reinterpret_cast<std::uintptr_t>(&head_));
+      return reinterpret_cast<handle_cb**>(
+        this->tailp_xor_head_ ^ reinterpret_cast<std::uintptr_t>(&this->head_)
+      );
     }
-    void set_tailp(handle_cb **val) {
-      tailp_xor_head_ = reinterpret_cast<std::uintptr_t>(val) ^ reinterpret_cast<std::uintptr_t>(&head_);
+    void set_tailp(handle_cb **tailp) {
+      this->tailp_xor_head_ = reinterpret_cast<std::uintptr_t>(&this->head_)
+                            ^ reinterpret_cast<std::uintptr_t>(tailp);
     }
     
   public:
     constexpr handle_cb_queue():
       head_(),
-      tailp_xor_head_() {
+      tailp_xor_head_(),
+      aborted_burst_n_() {
     }
     handle_cb_queue(handle_cb_queue const&) = delete;
     
@@ -72,7 +80,7 @@ namespace gasnet {
     template<typename Cb>
     void execute_outside(Cb *cb);
     
-    int burst(int burst_n); // defined in runtime.cpp
+    int burst(bool spinning); // defined in runtime.cpp
   };
   
   //////////////////////////////////////////////////////////////////////////////

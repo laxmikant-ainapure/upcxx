@@ -124,7 +124,7 @@ differ based on which GASNet conduit your UPC++ application was compiled for
 (via `$UPCXX_NETWORK` or the default value determined at installation
 time).
 
-#### aries-conduit and gemini-conduit for Cray XC/XE/XK systems
+#### aries-conduit for Cray XC systems
 
 The native GASNet conduits on Cray are fully compatible with the PMI-based ALPS
 and SLURM spawners used at most sites. Run your job using the normal `aprun` or
@@ -212,7 +212,7 @@ here are some things to consider:
     2.  Use UDP for communication in UPC++  
         Set `export UPCXX_NETWORK=udp` when compiling UPC++ app code
     3.  Use MPI for communication in UPC++  
-        Set `export UPCXX_NETWORK=mpi` when compling UPC++ app code
+        Set `export UPCXX_NETWORK=mpi` when compiling UPC++ app code
 
 2.  The Aries network adapter on the Cray XC platform has approximately 120
     hardware contexts for communications.  With MPI and UPC++ each consuming one

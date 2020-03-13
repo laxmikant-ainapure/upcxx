@@ -119,46 +119,6 @@ links:
   [ltalloc.cc](https://raw.githubusercontent.com/r-lyeh-archived/ltalloc/master/ltalloc.cc)
 
 
-## Build & Run: With nobs (internal build-system)
-
-Make sure nobs is loaded into bash context by "sourcing" it in the top-level
-upcxx directory:
-
-```
-#!bash
-
-cd upcxx
-. sourceme
-```
-
-Then any benchmark can be compiled and executed in one step with:
-
-`RANKS=<num-ranks> nobs run <path-to-bench>`
-
-Though for an HPC machine you will usually want to break compile and execute
-into separate steps:
-
-```
-#!bash
-
-# build
-the_bench=$(nobs exe <path-to-bench>)
-
-# (possibly switch from login to compute node?)
-
-# run
-RANKS=<num-ranks> <upcxx-top-level>/utils/upcxx-run ${the_bench}
-```
-
-The following environment variables will direct nobs to use the preprocessor
-defines that affect benchmark behavior:
-
-`opnew={ std | ltalloc | insane }`
-`opnew_inline={ 0 | 1 }`
-
-If `opnew=ltalloc`, then nobs will automatically download the allocator's source
-code into `./common/ltalloc.{h,cc}` (we do not ship with its code at this time).
-
 
 # Report File Analysis
 

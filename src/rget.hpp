@@ -179,8 +179,8 @@ namespace upcxx {
     namespace gasnet = upcxx::backend::gasnet;
     
     static_assert(
-      is_definitely_trivially_serializable<T>::value,
-      "RMA operations only work on DefinitelyTriviallySerializable types."
+      is_trivially_serializable<T>::value,
+      "RMA operations only work on TriviallySerializable types."
     );
 
     UPCXX_ASSERT_ALWAYS(
@@ -189,7 +189,8 @@ namespace upcxx {
       "way of ever knowing when then the source or target memory are safe to "
       "access again without incurring a data race."
     );
-
+   
+    UPCXX_GPTR_CHK(gp_s);
     UPCXX_ASSERT(gp_s, "pointer arguments to rget may not be null");
     
     using cxs_here_t = detail::completions_state<
@@ -252,8 +253,8 @@ namespace upcxx {
     namespace gasnet = upcxx::backend::gasnet;
     
     static_assert(
-      is_definitely_trivially_serializable<T>::value,
-      "RMA operations only work on DefinitelyTriviallySerializable types."
+      is_trivially_serializable<T>::value,
+      "RMA operations only work on TriviallySerializable types."
     );
 
     UPCXX_ASSERT_ALWAYS(
@@ -263,6 +264,7 @@ namespace upcxx {
       "access again without incurring a data race."
     );
     
+    UPCXX_GPTR_CHK(gp_s);
     UPCXX_ASSERT(buf_d && gp_s, "pointer arguments to rget may not be null");
 
     using cxs_here_t = detail::completions_state<

@@ -51,7 +51,7 @@ namespace gasnet {
   
   // Send AM (packed command), receiver executes in handler.
   void send_am_eager_restricted(
-    team &tm,
+    const team &tm,
     intrank_t recipient,
     void *command_buf,
     std::size_t buf_size,
@@ -60,12 +60,12 @@ namespace gasnet {
   
   // Send fully bound callable, receiver executes in handler.
   template<typename Fn>
-  void send_am_restricted(team &tm, intrank_t recipient, Fn &&fn);
+  void send_am_restricted(const team &tm, intrank_t recipient, Fn &&fn);
   
   // Send AM (packed command), receiver executes in `level` progress.
   void send_am_eager_master(
     progress_level level,
-    team &tm,
+    const team &tm,
     intrank_t recipient,
     void *command_buf,
     std::size_t buf_size,
@@ -73,7 +73,7 @@ namespace gasnet {
   );
   void send_am_eager_persona(
     progress_level level,
-    team &tm,
+    const team &tm,
     intrank_t recipient_rank,
     persona *recipient_persona, // if low-bit set then this is a persona** to be dereferenced remotely
     void *command_buf,
@@ -84,7 +84,7 @@ namespace gasnet {
   // Send AM (packed command) via rendezvous, receiver executes druing `level`.
   void send_am_rdzv(
     progress_level level,
-    team &tm,
+    const team &tm,
     intrank_t recipient_rank,
     persona *recipient_persona, // nullptr == master, or, if low-bit set then this is a persona** to be dereferenced remotely
     void *command_buf,
@@ -95,7 +95,7 @@ namespace gasnet {
   
   void bcast_am_master_eager(
     progress_level level,
-    team &tm,
+    const team &tm,
     intrank_t rank_d_ub, // in range [0, 2*rank_n-1)
     bcast_payload_header *payload,
     size_t cmd_size,
@@ -103,7 +103,7 @@ namespace gasnet {
   );
   void bcast_am_master_rdzv(
     progress_level level,
-    team &tm,
+    const team &tm,
     intrank_t rank_d_ub, // in range [0, 2*rank_n-1)
     intrank_t wrank_owner, // world team coordinates
     bcast_payload_header *payload_owner, // owner address of payload
@@ -123,7 +123,7 @@ namespace gasnet {
 
   template<rma_put_then_am_sync sync_lb/*src_cb,src_now*/, typename AmFn>
   rma_put_then_am_sync rma_put_then_am_master(
-    team &tm, intrank_t rank_d,
+    const team &tm, intrank_t rank_d,
     void *buf_d, void const *buf_s, std::size_t buf_size,
     progress_level am_level, AmFn &&am_fn,
     backend::gasnet::handle_cb *src_cb,
@@ -412,7 +412,7 @@ namespace backend {
   }
 
   template<typename AmBuf>
-  void send_prepared_am_master(progress_level level, team &tm, intrank_t recipient, AmBuf &&am) {
+  void send_prepared_am_master(progress_level level, const team &tm, intrank_t recipient, AmBuf &&am) {
     UPCXX_ASSERT(!UPCXX_BACKEND_GASNET_SEQ || backend::master.active_with_caller());
 
     if(am.is_eager)
@@ -422,7 +422,7 @@ namespace backend {
   }
   
   template<upcxx::progress_level level, typename Fn>
-  void send_am_master(team &tm, intrank_t recipient, Fn &&fn) {
+  void send_am_master(const team &tm, intrank_t recipient, Fn &&fn) {
     #if 0
       UPCXX_ASSERT(!UPCXX_BACKEND_GASNET_SEQ || backend::master.active_with_caller());
 
@@ -458,7 +458,7 @@ namespace backend {
 
   template<typename AmBuf>
   void send_prepared_am_persona(
-      upcxx::progress_level level, team &tm,
+      upcxx::progress_level level, const team &tm,
       intrank_t recipient_rank, persona *recipient_persona,
       AmBuf &&am
     ) {
@@ -472,7 +472,7 @@ namespace backend {
   
   template<upcxx::progress_level level, typename Fn>
   void send_am_persona(
-      team &tm,
+      const team &tm,
       intrank_t recipient_rank,
       persona *recipient_persona,
       Fn &&fn
@@ -510,7 +510,7 @@ namespace backend {
   }
 
   template<typename ...T>
-  void send_awaken_lpc(team &tm, intrank_t recipient, detail::lpc_dormant<T...> *lpc, std::tuple<T...> &&vals) {
+  void send_awaken_lpc(const team &tm, intrank_t recipient, detail::lpc_dormant<T...> *lpc, std::tuple<T...> &&vals) {
     auto am_buf(prepare_am(
       upcxx::bind([=](std::tuple<T...> &&vals) {
           lpc->awaken(std::move(vals));
@@ -533,14 +533,12 @@ namespace backend {
   }
   
   template<progress_level level, typename Fn1>
-  void bcast_am_master(team &tm, Fn1 &&fn) {
+  void bcast_am_master(const team &tm, Fn1 &&fn) {
     UPCXX_ASSERT(!UPCXX_BACKEND_GASNET_SEQ || backend::master.active_with_caller());
     
     using gasnet::am_send_buffer;
     using gasnet::bcast_as_lpc;
     using gasnet::bcast_payload_header;
-    
-    using Fn = typename std::decay<Fn1>::type;
     
     auto ub = detail::command<detail::lpc_base*>::ubound(
       empty_storage_size.cat_size_of<bcast_payload_header>(),
@@ -612,7 +610,7 @@ namespace gasnet {
   // send_am_restricted
   
   template<typename Fn>
-  void send_am_restricted(team &tm, intrank_t recipient, Fn &&fn) {
+  void send_am_restricted(const team &tm, intrank_t recipient, Fn &&fn) {
     UPCXX_ASSERT(!UPCXX_BACKEND_GASNET_SEQ || backend::master.active_with_caller());
 
     auto am_buf(prepare_am(
@@ -649,7 +647,7 @@ namespace gasnet {
   
   template<rma_put_then_am_sync sync_lb, bool packed_protocol>
   rma_put_then_am_sync rma_put_then_am_master_protocol(
-    team &tm, intrank_t rank_d,
+    const team &tm, intrank_t rank_d,
     void *buf_d, void const *buf_s, std::size_t buf_size,
     progress_level am_level, void *am_cmd, std::size_t am_size, std::size_t am_align,
     handle_cb *src_cb, reply_cb *rem_cb
@@ -657,7 +655,7 @@ namespace gasnet {
   
   template<rma_put_then_am_sync sync_lb, typename AmFn>
   rma_put_then_am_sync rma_put_then_am_master(
-      team &tm, intrank_t rank_d,
+      const team &tm, intrank_t rank_d,
       void *buf_d, void const *buf_s, std::size_t buf_size,
       progress_level am_level, AmFn &&am_fn,
       handle_cb *src_cb, reply_cb *rem_cb

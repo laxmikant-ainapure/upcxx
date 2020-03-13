@@ -85,6 +85,7 @@ namespace upcxx {
 
     template<typename T>
     void deallocate(global_ptr<T,Device::kind> p) {
+      UPCXX_GPTR_CHK(p);
       if(p) {
         UPCXX_ASSERT(p.device_ == this->device_ && p.rank_ == upcxx::rank_me());
         lock_.lock();
@@ -119,6 +120,7 @@ namespace upcxx {
     
     template<typename T>
     static typename Device::id_type device_id(global_ptr<T,Device::kind> gp) {
+      UPCXX_GPTR_CHK(gp);
       return Device::invalid_device_id == -1 // this is true statically so faster case will always be taken
         ? gp.device_
         : gp ? gp.device_ : Device::invalid_device_id;
@@ -126,6 +128,7 @@ namespace upcxx {
     
     template<typename T>
     static typename Device::template pointer<T> local(global_ptr<T,Device::kind> gp) {
+      UPCXX_GPTR_CHK(gp);
       UPCXX_ASSERT(gp.where() == upcxx::rank_me());
       return gp.raw_ptr_;
     }

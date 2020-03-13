@@ -19,7 +19,7 @@ int main() {
   {
     print_test_header();
 
-    upcxx::team &locals = upcxx::local_team();
+    upcxx::team const &locals = upcxx::local_team();
 
     if(upcxx::rank_me() == 0)
       std::cout<<"local_team.rank_n() = "<<locals.rank_n()<<'\n';
@@ -56,13 +56,25 @@ int main() {
     dist_object<global_ptr<int>> dp(upcxx::allocate<int>(peer_n));
 
     for(int i=0; i < peer_n; i++) {
-      global_ptr<int> p = upcxx::rpc(
+      upcxx::future<global_ptr<int>> f;
+      if (i&1) {
+        f = upcxx::rpc(
+          locals, (peer_me + i) % peer_n,
+          [=](dist_object<global_ptr<int>> &dp) {
+            return upcxx::to_global_ptr<int>(dp->local() + i);
+          },
+          dp
+        );
+      } else {
+        f = upcxx::rpc(
           locals[(peer_me + i) % peer_n],
           [=](dist_object<global_ptr<int>> &dp) {
             return upcxx::to_global_ptr<int>(dp->local() + i);
           },
           dp
-        ).wait();
+        );
+      }
+      global_ptr<int> p = f.wait();
 
       UPCXX_ASSERT_ALWAYS(p == upcxx::to_global_ptr(p.local()));
       UPCXX_ASSERT_ALWAYS(p == upcxx::try_global_ptr(p.local()));

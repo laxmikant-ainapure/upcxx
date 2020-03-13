@@ -1,9 +1,7 @@
 #include <upcxx/broadcast.hpp>
 #include <upcxx/backend/gasnet/runtime.hpp>
 #include <upcxx/backend/gasnet/runtime_internal.hpp>
-#if !NOBS_DISCOVERY
-  #include <gasnet_coll.h>
-#endif
+#include <gasnet_coll.h>
 
 using namespace upcxx;
 using namespace std;
@@ -11,7 +9,7 @@ using namespace std;
 namespace gasnet = upcxx::backend::gasnet;
 
 void detail::broadcast_trivial(
-    team &tm, intrank_t root, void *buf, size_t size,
+    const team &tm, intrank_t root, void *buf, size_t size,
     backend::gasnet::handle_cb *cb
   ) {
   UPCXX_ASSERT(backend::master.active_with_caller());

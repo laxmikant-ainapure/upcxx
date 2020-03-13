@@ -18,20 +18,23 @@ namespace upcxx {
         int dev_s, void const *buf_s, std::size_t size,
         cuda::event_cb *cb
       );
-  }
-  
-  template<typename T, memory_kind Ks, memory_kind Kd,
-           typename Cxs = completions<future_cx<operation_cx_event>>>
-  typename detail::completions_returner<
+
+    constexpr int host_device = -1;
+
+    template<typename Cxs>
+    typename detail::completions_returner<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::rput_event_values,
       Cxs
     >::return_t
-  copy(global_ptr<T,Ks> src, global_ptr<T,Kd> dest, std::size_t n,
-       Cxs cxs=completions<future_cx<operation_cx_event>>{{}});
-
+    copy(const int dev_s, const intrank_t rank_s, void *const buf_s,
+         const int dev_d, const intrank_t rank_d, void *const buf_d,
+         const std::size_t size, Cxs cxs);
+  }
+  
   template<typename T, memory_kind Ks,
            typename Cxs = completions<future_cx<operation_cx_event>>>
+  inline
   typename detail::completions_returner<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::rput_event_values,
@@ -39,20 +42,16 @@ namespace upcxx {
     >::return_t
   copy(global_ptr<T,Ks> src, T *dest, std::size_t n,
        Cxs cxs=completions<future_cx<operation_cx_event>>{{}}) {
-    return upcxx::copy(
-      src,
-      // Hack! The dest pointer may be to non-shared local memory, so a global_ptr
-      // of that is not valid. But, the copy overload we're dispatching to will
-      // tear-down the global_ptr and hand the addresses to gasnet which does
-      // support non-shared memory for put/get.
-      global_ptr<T>(detail::internal_only(), upcxx::rank_me(), dest),
-      n,
-      std::move(cxs)
-    );
+    UPCXX_GPTR_CHK(src);
+    UPCXX_ASSERT(src && dest, "pointer arguments to copy may not be null");
+    return detail::copy( src.device_, src.rank_, src.raw_ptr_,
+                         detail::host_device, upcxx::rank_me(), dest,
+                         n * sizeof(T), std::move(cxs) );
   }
 
   template<typename T, memory_kind Kd,
            typename Cxs = completions<future_cx<operation_cx_event>>>
+  inline
   typename detail::completions_returner<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::rput_event_values,
@@ -60,35 +59,42 @@ namespace upcxx {
     >::return_t
   copy(T const *src, global_ptr<T,Kd> dest, std::size_t n,
        Cxs cxs=completions<future_cx<operation_cx_event>>{{}}) {
-    return upcxx::copy(
-      // Hack! The src pointer may be to non-shared local memory, so a global_ptr
-      // of that is not valid. But, the copy overload we're dispatching to will
-      // tear-down the global_ptr and hand the addresses to gasnet which does
-      // support non-shared memory for put/get.
-      global_ptr<T>(detail::internal_only(), upcxx::rank_me(), const_cast<T*>(src)),
-      dest, n,
-      std::move(cxs)
-    );
+    UPCXX_GPTR_CHK(dest);
+    UPCXX_ASSERT(src && dest, "pointer arguments to copy may not be null");
+    return detail::copy( detail::host_device, upcxx::rank_me(), const_cast<void*>(src),
+                         dest.device_, dest.rank_, dest.raw_ptr_,
+                         n * sizeof(T), std::move(cxs) );
   }
   
-  template<typename T, memory_kind Ks, memory_kind Kd, typename Cxs>
+  template<typename T, memory_kind Ks, memory_kind Kd,
+           typename Cxs = completions<future_cx<operation_cx_event>>>
+  inline
   typename detail::completions_returner<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::rput_event_values,
       Cxs
     >::return_t
-  copy(global_ptr<T,Ks> src, global_ptr<T,Kd> dest, std::size_t n, Cxs cxs) {
-    const int dev_s = src.device_;
-    const int dev_d = dest.device_;
-    const intrank_t rank_s = src.rank_;
-    const intrank_t rank_d = dest.rank_;
-    void *const buf_s = src.raw_ptr_;
-    void *const buf_d = dest.raw_ptr_;
-    const std::size_t size = n*sizeof(T);
-
-    constexpr int host_device = -1;
-
+  copy(global_ptr<T,Ks> src, global_ptr<T,Kd> dest, std::size_t n,
+       Cxs cxs=completions<future_cx<operation_cx_event>>{{}}) {
+    UPCXX_GPTR_CHK(src); UPCXX_GPTR_CHK(dest);
     UPCXX_ASSERT(src && dest, "pointer arguments to copy may not be null");
+    return detail::copy(
+      src.device_, src.rank_, src.raw_ptr_,
+      dest.device_, dest.rank_, dest.raw_ptr_,
+      n*sizeof(T), std::move(cxs)
+    );
+  }
+
+ namespace detail {
+  template<typename Cxs>
+  typename detail::completions_returner<
+      /*EventPredicate=*/detail::event_is_here,
+      /*EventValues=*/detail::rput_event_values,
+      Cxs
+  >::return_t
+  copy(const int dev_s, const intrank_t rank_s, void *const buf_s,
+       const int dev_d, const intrank_t rank_d, void *const buf_d,
+       const std::size_t size, Cxs cxs) {
     
     using cxs_here_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_here,
@@ -118,7 +124,9 @@ namespace upcxx {
         [=]() {
           auto operation_cx_as_internal_future = upcxx::completions<upcxx::future_cx<upcxx::operation_cx_event, progress_level::internal>>{{}};
           
-          upcxx::copy(src, dest, n, operation_cx_as_internal_future)
+          detail::copy( dev_s, rank_s, buf_s,
+                        dev_d, rank_d, buf_d,
+                        size, operation_cx_as_internal_future )
           .then([=]() {
             const_cast<cxs_remote_t&>(cxs_remote).template operator()<remote_cx_event>();
             
@@ -271,5 +279,6 @@ namespace upcxx {
 
     return returner();
   }
+ } // namespace detail
 }
 #endif

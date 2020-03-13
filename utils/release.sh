@@ -6,7 +6,7 @@ REPO=${REPO:-origin}
 BRANCH=${BRANCH:-master}
 
 REPOURL=$(git remote get-url $REPO)
-RELEASE=$(git describe ${REPO}/${BRANCH})
+RELEASE=${RELEASE:-$(git describe ${REPO}/${BRANCH})}
 
 if [[ -e ${RELEASE} ]]; then
   echo "ERROR: refusing to overwrite ${RELEASE}."
@@ -16,11 +16,9 @@ fi
 # Indirection to deal w/ Linux vs macOS differences
 if [[ $(uname -s) = 'Darwin' ]]; then
   MD5_CMD='md5 -r'
-  B64_CMD='base64 -D'
   WWW_CMD='curl -LOsS'
 else
   MD5_CMD='md5sum'
-  B64_CMD='base64 -d'
   WWW_CMD='wget -q'
 fi
 
@@ -38,7 +36,7 @@ fi
 UPCXX_HASH=$(zcat ${RELEASE_TGZ} | git get-tar-commit-id)
 
 # Extract GASNet-EX URL:
-GASNET_URL=$(tar xOfz ${RELEASE_TGZ} ${RELEASE}/nobsrule.py | grep -m1 'GASNet-.*\.tar\.gz' | cut -d\' -f2)
+GASNET_URL=$(tar xOfz ${RELEASE_TGZ} ${RELEASE}/configure | grep -m1 'http.*GASNet-.*\.tar\.gz' | cut -d\' -f2)
 GASNET=$(basename "${GASNET_URL}" .tar.gz)
 
 # Downoad GEX and extract info
@@ -50,7 +48,7 @@ if ! gzip -t $GASNET_TGZ; then
   echo 'ERROR: GASNet-EX tarball failed "gzip -t"' >&2
   exit 1
 fi
-# Rename GEX tarball to full version name (undo patch obfuscation)
+# Rename GEX tarball to full version name
 GASNET=$(tar tf $GASNET_TGZ | head -1 | cut -d/ -f1)
 GASNET_TGZ_NEW=${RELEASE}/src/${GASNET}.tar.gz
 if test "$GASNET_TGZ" != "$GASNET_TGZ_NEW" ; then

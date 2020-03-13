@@ -110,7 +110,6 @@ void obtain_mesh_remote(mesh_t &m) {
     
   for(int i=0; i < (int)m.out_nebrs.size(); i++) {
     intrank_t origin = upcxx::rank_me();
-    global_ptr<char> buf = m.local_buf;
     
     upcxx::rpc(m.out_nebrs[i].rank,
       [](upcxx::dist_object<mesh_t*> &dm) {
@@ -217,9 +216,7 @@ std::size_t exchange_via_rdzv(mesh_t &m) {
 
 #include <upcxx/upcxx_internal.hpp>
 
-#if !NOBS_DISCOVERY
-  #include <gasnet.h>
-#endif
+#include <gasnet.h>
 
 unordered_map<unsigned,int> amlong_acks_in;
 unsigned amlong_epoch = 0;
@@ -248,7 +245,6 @@ void setup_exchange_via_amlong() {
 }
 
 std::size_t exchange_via_amlong(mesh_t &m) {
-  int acks_out = 0;
   const size_t buf_size = m.buf_size;
   char *const local_buf = m.local_buf.local();
   

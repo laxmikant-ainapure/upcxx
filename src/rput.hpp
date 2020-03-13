@@ -75,8 +75,8 @@ namespace upcxx {
       template<typename T>
       static void assert_sane() {
         static_assert(
-          is_definitely_trivially_serializable<T>::value,
-          "RMA operations only work on DefinitelyTriviallySerializable types."
+          is_trivially_serializable<T>::value,
+          "RMA operations only work on TriviallySerializable types."
         );
         
         UPCXX_ASSERT_ALWAYS((want_op | want_remote),
@@ -324,7 +324,6 @@ namespace upcxx {
           RemoteFn &&remote
         ) {
         //upcxx::say()<<"amlong without reply";
-        auto *o = static_cast<Obj*>(this);
         auto sync_out = backend::gasnet::template rma_put_then_am_master<sync_lb1>(
           upcxx::world(), rank_d, buf_d, buf_s, buf_size,
           progress_level::user, std::move(remote),
@@ -436,6 +435,7 @@ namespace upcxx {
     
     traits_t::template assert_sane<T>();
 
+    UPCXX_GPTR_CHK(gp_d);
     UPCXX_ASSERT(gp_d, "pointer arguments to rput may not be null");
     
     object_t *o = new object_t(std::move(cxs));
@@ -468,6 +468,7 @@ namespace upcxx {
     
     traits_t::template assert_sane<T>();
 
+    UPCXX_GPTR_CHK(gp_d);
     UPCXX_ASSERT(buf_s && gp_d, "pointer arguments to rput may not be null");
     
     object_t *o = new object_t(std::move(cxs));

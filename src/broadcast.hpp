@@ -41,7 +41,7 @@ namespace upcxx {
     >::return_t
   broadcast_nontrivial(
       T1 &&value, intrank_t root,
-      team &tm = upcxx::world(),
+      const team &tm = upcxx::world(),
       Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
     ) {
 
@@ -70,7 +70,7 @@ namespace upcxx {
       }
     };
     
-    digest id = tm.next_collective_id(detail::internal_only());
+    digest id = const_cast<team*>(&tm)->next_collective_id(detail::internal_only());
 
     broadcast_state *s = detail::template registered_state<broadcast_state>(id);
 
@@ -109,7 +109,7 @@ namespace upcxx {
   namespace detail {
     // Calls GEX broadcast
     void broadcast_trivial(
-      team &tm, intrank_t root, void *buf, std::size_t size,
+      const team &tm, intrank_t root, void *buf, std::size_t size,
       backend::gasnet::handle_cb *cb
     );
   }
@@ -123,13 +123,14 @@ namespace upcxx {
     >::return_t
   broadcast(
       T *buf, std::size_t n, intrank_t root,
-      team &tm = upcxx::world(),
+      const team &tm = upcxx::world(),
       Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
     ) {
     static_assert(
-      upcxx::is_definitely_trivially_serializable<T>::value,
+      upcxx::is_trivially_serializable<T>::value,
       "Only TriviallySerializable types permitted for `upcxx::broadcast`. "
-      "Consider `upcxx::broadcast_nontrivial` instead."
+      "Consider `upcxx::broadcast_nontrivial` instead (experimental feature, "
+      "use at own risk)."
     );
     
     struct broadcast_cb final: backend::gasnet::handle_cb {
@@ -168,15 +169,16 @@ namespace upcxx {
       Cxs
     >::return_t
   broadcast(
-      T1 &&value, intrank_t root,
-      team &tm = upcxx::world(),
+      T1 value, intrank_t root,
+      const team &tm = upcxx::world(),
       Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
     ) {
     
     static_assert(
-      upcxx::is_definitely_trivially_serializable<T>::value,
+      upcxx::is_trivially_serializable<T>::value,
       "Only TriviallySerializable types permitted for `upcxx::broadcast`. "
-      "Consider `upcxx::broadcast_nontrivial` instead."
+      "Consider `upcxx::broadcast_nontrivial` instead (experimental feature, "
+      "use at own risk)."
     );
 
     struct broadcast_cb final: backend::gasnet::handle_cb {
