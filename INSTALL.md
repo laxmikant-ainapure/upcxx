@@ -6,47 +6,42 @@ For information on using UPC++, see: [README.md](README.md)
 
 ## System Requirements
 
+### Supported Platforms
+
 UPC++ makes aggressive use of template meta-programming techniques, and requires
 a modern C++11/14 compiler and corresponding STL implementation.
 
 The current release is known to work on the following configurations:
 
-* macOS 10.11-10.15 (El Capitan, Sierra, High Sierra, Mojave or Catalina)
-  with the most recent Xcode releases for each, though it is
-  suspected that any Xcode (ie Apple clang) release 8.0 or newer will work. 
-  Free Software Foundation GCC (e.g., as installed by Homebrew or Fink)
-  version 6.4.0 or newer should also work (smp and udp conduits)
-
-    In order to use a debugger on macOS, we advise you to enable "Developer
-    Mode".  This is a system setting, not directly related to UPC\+\+.
-    Developer Mode may already be enabled, for instance if one granted Xcode
-    permission when it asked to enable it.  If not, then an Administrator must
-    run `DevToolsSecurity -enable` in Terminal.  This mode allows *all* users to
-    use development tools, including the `lldb` debugger.  If that is not
-    desirable, then use of debuggers will be limited to members of the
-    `_developer` group.  An internet search for `macos _developer group` will
-    provide additional information.
+* Apple macOS/x86\_64 (smp and udp conduits):
+    - The most recent Xcode release for each macOS release is well-tested
+        + It is suspected that any Xcode (ie Apple clang) release 8.0 or newer will work
+    - Free Software Foundation g++ (e.g., as installed by Homebrew or Fink)
+      version 6.4.0 or newer should also work
 
 * Linux/x86\_64 with one of the following compilers:
-    - Gnu g++ 6.4.0 or newer    
-    - clang 4.0.0 or newer (with libstdc++ from gcc-6.4.0 or newer)    
-    - Intel C++ 17.0.2 or newer (with libstdc++ from gcc-6.4.0 or newer)    
-    - PGI C++ 19.1 or newer (with libstdc++ from gcc-6.4.0 or newer)    
+    - g++ 6.4.0 or newer    
+    - clang++ 4.0.0 or newer (with libstdc++ from g++ 6.4.0 or newer)    
+    - Intel C++ 17.0.2 or newer (with libstdc++ from g++ 6.4.0 or newer)    
+    - PGI C++ 19.1 or newer (with libstdc++ from g++ 6.4.0 or newer)    
 
-    See "Linux Compiler Notes", below, if `/usr/bin/g++` is older than 6.4.0.
+    If `/usr/bin/g++` is older than 6.4.0 (even if using another compiler),
+    see [Linux Compiler Notes](#markdown-header-linux-compiler-notes), below.
 
-* Linux/ppc64le with one of the following compilers:
-    - gcc-6.4.0 or newer
-    - clang 5.0.0 or newer (with libstdc++ from gcc-6.4.0 or newer)    
-    - PGI C++ 18.10 or newer (with libstdc++ from gcc-6.4.0 or newer)    
+* Linux/ppc64le (aka IBM POWER little-endian) with one of the following compilers:
+    - g++ 6.4.0 or newer
+    - clang++ 5.0.0 or newer (with libstdc++ from g++ 6.4.0 or newer)    
+    - PGI C++ 18.10 or newer (with libstdc++ from g++ 6.4.0 or newer)    
 
-    See "Linux Compiler Notes", below, if `/usr/bin/g++` is older than 6.4.0.
+    If `/usr/bin/g++` is older than 6.4.0 (even if using another compiler),
+    see [Linux Compiler Notes](#markdown-header-linux-compiler-notes), below.
 
 * Linux/aarch64 (aka "arm64" or "armv8") with one of the following compilers:
-    - gcc-6.4.0 or newer
-    - clang 4.0.0 or newer (with libstdc++ from gcc-6.4.0 or newer)   
+    - g++ 6.4.0 or newer
+    - clang++ 4.0.0 or newer (with libstdc++ from g++ 6.4.0 or newer)   
 
-    See "Linux Compiler Notes", below, if `/usr/bin/g++` is older than 6.4.0.
+    If `/usr/bin/g++` is older than 6.4.0 (even if using another compiler),
+    see [Linux Compiler Notes](#markdown-header-linux-compiler-notes), below.
 
     Note that gcc- and clang-based toolchains from Arm Ltd. exist, but have
     not been tested with UPC++.
@@ -55,8 +50,8 @@ The current release is known to work on the following configurations:
     For more information, please see
     [GASNet bug 3997](https://gasnet-bugs.lbl.gov/bugzilla/show_bug.cgi?id=3997).
 
-* Cray XC x86\_64 with one of the following PrgEnv environment modules and
-  its dependencies.  (smp and aries conduits)
+* Cray XC/x86\_64 with one of the following PrgEnv environment modules and
+  its dependencies (smp and aries conduits):
     - PrgEnv-gnu with gcc/6.4.0 (or later) loaded.
     - PrgEnv-intel with gcc/6.4.0 (or later) loaded.
     - PrgEnv-cray with cce/9.0.0 (or later) loaded.
@@ -65,18 +60,10 @@ The current release is known to work on the following configurations:
     ALCF's PrgEnv-llvm is also supported on the Cray XC.  Unlike Cray's
     PrgEnv-\* modules, PrgEnv-llvm is versioned to match the llvm toolchain
     it includes, rather than the Cray PE version.  UPC++ has been tested
-    against PrgEnv-llvm/4.0 (clang 4.0) and newer.  When using PrgEnv-llvm,
+    against PrgEnv-llvm/4.0 (clang++ 4.0) and newer.  When using PrgEnv-llvm,
     it is recommended to `module unload xalt` to avoid a large volume of
     verbose linker output in this configuration.  Mixing with OpenMP in this
     configuration is not currently supported.  (smp and aries conduits).
-
-### Linux Compiler Notes:
-
-* If /usr/bin/g++ is older than 6.4.0 (even if using a different C++
-  compiler for UPC++) please read [docs/local-gcc.md](docs/local-gcc.md).
-
-* If using a non-GNU compiler with /usr/bin/g++ older than 6.4.0, please also
-  read [docs/alt-compilers.md](docs/alt-compilers.md).
 
 ### Miscellaneous software requirements:
 
@@ -89,6 +76,14 @@ The current release is known to work on the following configurations:
 * GNU Make 3.80 or newer
 
 * The following standard Unix tools: 'awk', 'sed', 'env', 'basename', 'dirname'
+
+### Linux Compiler Notes:
+
+* If /usr/bin/g++ is older than 6.4.0 (even if using a different C++
+  compiler for UPC++) please read [docs/local-gcc.md](docs/local-gcc.md).
+
+* If using a non-GNU compiler with /usr/bin/g++ older than 6.4.0, please also
+  read [docs/alt-compilers.md](docs/alt-compilers.md).
 
 ## Installation Instructions
 
@@ -357,6 +352,16 @@ xcode-select --install
 
 Alternatively, the `--with-cc=...` and `--with-cxx=...` options to `configure`
 may be used to specify different compilers.
+
+In order to use a debugger on macOS, we advise you to enable "Developer
+Mode".  This is a system setting, not directly related to UPC\+\+.
+Developer Mode may already be enabled, for instance if one granted Xcode
+permission when it asked to enable it.  If not, then an Administrator must
+run `DevToolsSecurity -enable` in Terminal.  This mode allows *all* users to
+use development tools, including the `lldb` debugger.  If that is not
+desirable, then use of debuggers will be limited to members of the
+`_developer` group.  An internet search for `macos _developer group` will
+provide additional information.
 
 After running `configure`, return to
 [Step 2: Compiling UPC\+\+](#markdown-header-2-compiling-upc4343), above.
