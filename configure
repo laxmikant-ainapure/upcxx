@@ -210,18 +210,25 @@ trap exit ERR  # so exit in get_arg_val exits from top-level
 # DO NOT simplify 'FOO="$(get_arg_val $1)"; export FOO;' to a single command, or get_arg_val can't fatal-exit
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    # Passed explicitly to GASNet's configure:
     ?(-)-prefix?(=*))               PREFIX="$(get_arg_val $1)";;
 
+    # Used to find and run GASNet's configure:
     ?(-)-with-gasnet?(=*))          GASNET="$(get_arg_val $1)";         export GASNET;;
-    ?(-)-with-default-network?(=*)) GASNET_CONDUIT="$(get_arg_val $1)"; export GASNET_CONDUIT;;
-
-    ?(-)-with-cc?(=*))              CC="$(get_arg_val $1)";    export CC;;
-    ?(-)-with-cxx?(=*))             CXX="$(get_arg_val $1)";   export CXX;;
     ?(-)-with-cross?(=*))           CROSS="$(get_arg_val $1)"; export CROSS;;
 
-    ?(-)-with-gmake?(=*))           GMAKE="$(get_arg_val $1)"; export GMAKE;;
+    # Not relevant to GASNet's configure:
+    ?(-)-with-default-network?(=*)) GASNET_CONDUIT="$(get_arg_val $1)"; export GASNET_CONDUIT;;
     ?(-)-with-python?(=*))          UPCXX_PYTHON="$(get_arg_val $1)"; export UPCXX_PYTHON;;
 
+    # Passed explicitly to GASNet's configure, potentially after some processing:
+    ?(-)-with-cc?(=*))              CC="$(get_arg_val $1)";    export CC;;
+    ?(-)-with-cxx?(=*))             CXX="$(get_arg_val $1)";   export CXX;;
+
+    # Passed to GASNet's configure implicitly via environment:
+    ?(-)-with-gmake?(=*))           GMAKE="$(get_arg_val $1)"; export GMAKE;;
+
+    # Not yet relevant to GASNet's configure (but might move there later):
     ?(-)-with-cuda)                 UPCXX_CUDA=1; export UPCXX_CUDA;;
     ?(-)-without-cuda)              UPCXX_CUDA=0; export UPCXX_CUDA;;
     ?(-)-with-nvcc?(=*))            UPCXX_CUDA_NVCC="$(get_arg_val $1)";     export UPCXX_CUDA_NVCC;;
