@@ -5,6 +5,22 @@ This is the ChangeLog for public releases of [UPC++](https://upcxx.lbl.gov).
 For information on using UPC++, see: [README.md](README.md)    
 For information on installing UPC++, see: [INSTALL.md](INSTALL.md)
 
+### 20XX.YY.ZZ: PENDING
+
+New features/enhancements: (see specification and programmer's guide for full details)
+
+* ...
+
+Notable bug fixes:
+
+* issue #344: poor handling for `make install prefix=relative-path`
+* issue #345: configure with single-dash arguments
+* issue #346: `configure --cross=cray*` ignores `--with-cc/--with-cxx`
+
+Breaking changes:
+
+* ...
+
 ### 2020.03.12: Release 2020.3.0
 
 Infrastructure and requirements changes:
@@ -58,7 +74,7 @@ Notable bug fixes:
 * [spec issue #155](https://bitbucket.org/berkeleylab/upcxx-spec/issues/155): value argument type to value collectives is changed to a simple by-value T
 
 This library release mostly conforms to the
-[UPC++ v1.0 Specification, Revision 2020.3.0](docs/spec.pdf).
+[UPC++ v1.0 Specification, Revision 2020.3.0](https://bitbucket.org/berkeleylab/upcxx/downloads/upcxx-spec-2020.3.0.pdf).
 The following features from that specification are not yet implemented:
 
 * view buffer lifetime extension for `remote_cx::as_rpc` (issue #262)
