@@ -38,25 +38,32 @@ MIN_GNU_MINOR=4
 MIN_GNU_PATCH=0
 MIN_GNU_STRING='6.4'
 
-# Run $CXX to determine what __GNUC__,__GNUC_MINOR__,__GNUC_PATCHLEVEL__ it reports.
-# Results are in gnu_version and gnu_{major,minor,patch} upon sucessful return.
+# Run CC or CXX to determine what __GNUC__,__GNUC_MINOR__,__GNUC_PATCHLEVEL__ it reports.
+# First argument is CC or CXX (literal)
+# Second (optional) argument is an actual compiler command to use in place of CC or CXX
+# Results are in gnu_version and gnu_{major,minor,patch} upon return.
 # Returns:
 #   0 - success
 #   1 - identified too-low version
 #   other - failed to identify version
 check_gnu_version() {
-    trap "rm -f conftest.cpp" RETURN
-    local TOKEN1='MKkiiTv4jDk8Tmw6_before'
-    local TOKEN2='SDPECv3TjARP7xiZ_after'
-    cat >conftest.cpp <<_EOF
-      #undef  _APPEND3
-      #undef  _APPEND3_HELPER
-      #define _APPEND3(a,b,c) _APPEND3_HELPER(a,b,c)
-      #define _APPEND3_HELPER(a,b,c) a ## _ ## b ## _ ## c
-      _APPEND3($TOKEN1,_APPEND3(__GNUC__,__GNUC_MINOR__,__GNUC_PATCHLEVEL__),$TOKEN2)
+    case $1 in
+         CC) local suffix=c   compiler="${2:-$CC $CFLAGS}" ;;
+        CXX) local suffix=cpp compiler="${2:-$CXX $CXXFLAGS}";;
+          *) echo Internal error; exit 1;;
+    esac
+    trap "rm -f conftest.$suffix" RETURN
+    local TOKEN1='_MKkiiTv4jDk8Tmw6_'
+    local TOKEN2='_SDPECv3TjARP7xiZ_'
+    cat >conftest.$suffix <<_EOF
+      #undef  _REPORT
+      #undef  _REPORT_HELPER
+      #define _REPORT(a,b,c) _REPORT_HELPER(a,b,c)
+      #define _REPORT_HELPER(a,b,c) $TOKEN1 ## a ## _ ## b ## _ ## c ## $TOKEN2
+      _REPORT(__GNUC__,__GNUC_MINOR__,__GNUC_PATCHLEVEL__)
 _EOF
-    if ! [[ $(eval ${CXX} -E conftest.cpp) =~ ${TOKEN1}_([0-9]+)_([0-9]+)_([0-9]+)_${TOKEN2} ]]; then
-        echo 'ERROR: regex match failed probing C++ compiler for GNUC version'
+    if ! [[ $(eval $compiler -E conftest.$suffix) =~ ${TOKEN1}([0-9]+)_([0-9]+)_([0-9]+)${TOKEN2} ]]; then
+        echo "ERROR: regex match failed probing \$$1 for GNUC version"
         return 2
     fi
     gnu_major=${BASH_REMATCH[1]}
@@ -69,7 +76,7 @@ _EOF
 
 # checks specific to Intel compilers:
 check_intel_compiler() {
-    check_gnu_version
+    check_gnu_version CXX
     case $? in
         0)  # OK
             ;;
