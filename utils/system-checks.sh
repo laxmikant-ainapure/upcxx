@@ -74,6 +74,73 @@ _EOF
                (MIN_GNU_MAJOR*1000000 + MIN_GNU_MINOR*1000 + MIN_GNU_PATCH) ))
 }
 
+# extract gcc-name or gxx-name from an Intel compiler
+# on success, returns zero and yields the string value on stdout
+#             may emit warning(s) on stderr
+# on failure, returns non-zero and yields an error message on stdout
+#
+# precondition: $gnu_version must be set as by a preceeding 'check_gnu_version CXX'
+get_intel_name_option() {
+    case $1 in
+         CC) local suffix=c   option=-gcc-name exe=gcc compiler="$CC $CFLAGS" ;;
+        CXX) local suffix=cpp option=-gxx-name exe=g++ compiler="$CXX $CXXFLAGS";;
+          *) echo Internal error; exit 1;;
+    esac
+    trap "rm -f conftest.$suffix conftest.o" RETURN
+    echo >conftest.$suffix
+    local output result
+    output="$(eval $compiler -v -o conftest.o -c conftest.$suffix 2>&1)"
+    if [[ $? -ne 0 ]]; then
+        echo "could not run $1 to extract verbose output"
+        return 1
+    fi
+    # The greediness of '.*' ensures we find the last match
+    if [[ $output =~ (.*[ \'\"=]$option=([^ \'\"]+)) ]]; then
+        match="${BASH_REMATCH[2]}"
+        if [[ $match =~ ^/ ]]; then
+            # absolute path
+            result="$match"
+        elif [[ $match =~ / ]]; then
+            # relative path
+            result=$(cd $(dirname "$match") && pwd -P)/$(basename "$match")
+        else
+            # bare name to search in $PATH
+            result=$(type -p $match)
+        fi
+        if [[ ! $result =~ ^/ || ! -x "$result" ]]; then
+            echo "failed to convert '$match' to an absolute path to a compiler executable"
+            return 1
+        fi
+    else
+        result="$(type -p $exe 2>/dev/null)"
+        if [[ $? -ne 0 ]]; then
+            echo "failed to locate $exe in \$PATH"
+            return 1
+        fi
+    fi
+    local want_gnu_version=$gnu_version
+    check_gnu_version CXX "$result"
+    if [[ $? -gt 1 ]]; then
+        echo "could not run $result to extract GNU version"
+        return 1
+    elif [[ $want_gnu_version != $gnu_version ]]; then
+        local msg="$result did not report expected version $want_gnu_version (got $gnu_version)"
+        if [[ -n "$CRAY_PRGENVINTEL" && $result = "/usr/bin/$exe" ]]; then
+            # Ick!  seen to sometimes misreport GNUC info for /usr/bin/{gcc,g++}
+            echo -e "WARNING: $msg\n" >&2
+        else
+            echo "$msg"
+            return 1
+        fi
+    fi
+    if [[ -n "$CRAY_PRGENVINTEL" ]]; then
+        # Ick!  need -gcc-name not -gxx-name
+        option='-gcc-name'
+        result=${result/%g++/gcc}
+    fi
+    echo "$option=$result"
+}
+
 # checks specific to Intel compilers:
 check_intel_compiler() {
     check_gnu_version CXX
@@ -83,13 +150,49 @@ check_intel_compiler() {
         1)  # Too low
             echo "ERROR: UPC++ with Intel compilers requires use of g++ version $MIN_GNU_STRING or newer, but version $gnu_version was detected."
             echo 'Please do `module load gcc`, or otherwise ensure a new-enough g++ is used by the Intel C++ compiler.'
+            if [[ -z "$CRAY_PRGENVINTEL" ]]; then
+                echo 'An explicit `-gxx-name=...` option in the value of $CXX or $CXXFLAGS may be necessary.  Information on this option is available from Intel'\''s documentation, such as `man icpc`.'
+            fi
             return 1
             ;;
         *)  # Probe failed
             return 1
             ;;
     esac
-    # TODO: find the actual g++ in use and encode in a '-gxx-name=...' argument to preserve it
+
+    # Find the actual g++ in use
+    # Append to CXXFLAGS unless already present there, or in CXX
+    local gxx_name # do not merge w/ assignment or $? is lost!
+    gxx_name=$(get_intel_name_option CXX)
+    if [[ $? -ne 0 ]]; then
+        echo "ERROR: $gxx_name"
+        if [[ -z "$CRAY_PRGENVINTEL" ]]; then
+          echo 'Unable to determine the g++ in use by $CXX.  Please configure with an explicit `-gxx-name=...` option in the value of $CXX or $CXXFLAGS.  Information on this option is available from Intel'\''s documentation, such as `man icpc`.'
+        fi
+        return 1
+    fi
+    if [[ -n $gxx_name && ! "$CXX $CXXFLAGS " =~ " $gxx_name " ]]; then
+        CXXFLAGS+="${CXXFLAGS+ }$gxx_name"
+    fi
+
+    # same for C compiler, allowing (gasp) that it might be different
+    # note that no floor is imposed ($? = 0,1 both considered success)
+    check_gnu_version CC
+    if [[ $? -gt 1 ]]; then
+        return 1   # error was already printed
+    fi
+    local gcc_name # do not merge w/ assignment or $? is lost!
+    gcc_name=$(get_intel_name_option CC)
+    if [[ $? -ne 0 ]]; then
+        echo "ERROR: $gcc_name"
+        if [[ -z "$CRAY_PRGENVINTEL" ]]; then
+          echo 'Unable to determine the gcc in use by $CC.  Please configure with an explicit `-gcc-name=...` option in the value of $CC or $CFLAGS.  Information on this option is available from Intel'\''s documentation, such as `man icc`.'
+        fi
+        return 1
+    fi
+    if [[ -n $gcc_name && ! "$CC $CFLAGS " =~ " $gcc_name " ]]; then
+        CFLAGS+="${CFLAGS+ }$gcc_name"
+    fi
 }
 
 # platform_sanity_checks(): defaults $CC and $CXX if they are unset
