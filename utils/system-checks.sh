@@ -32,6 +32,59 @@ sys_info() {
     ) fi
 }
 
+# For probing for lowest acceptable (for its libstdc++) g++ version:
+MIN_GNU_MAJOR=6
+MIN_GNU_MINOR=4
+MIN_GNU_PATCH=0
+MIN_GNU_STRING='6.4'
+
+# Run $CXX to determine what __GNUC__,__GNUC_MINOR__,__GNUC_PATCHLEVEL__ it reports.
+# Results are in gnu_version and gnu_{major,minor,patch} upon sucessful return.
+# Returns:
+#   0 - success
+#   1 - identified too-low version
+#   other - failed to identify version
+check_gnu_version() {
+    trap "rm -f conftest.cpp" RETURN
+    local TOKEN1='MKkiiTv4jDk8Tmw6_before'
+    local TOKEN2='SDPECv3TjARP7xiZ_after'
+    cat >conftest.cpp <<_EOF
+      #undef  _APPEND3
+      #undef  _APPEND3_HELPER
+      #define _APPEND3(a,b,c) _APPEND3_HELPER(a,b,c)
+      #define _APPEND3_HELPER(a,b,c) a ## _ ## b ## _ ## c
+      _APPEND3($TOKEN1,_APPEND3(__GNUC__,__GNUC_MINOR__,__GNUC_PATCHLEVEL__),$TOKEN2)
+_EOF
+    if ! [[ $(eval ${CXX} -E conftest.cpp) =~ ${TOKEN1}_([0-9]+)_([0-9]+)_([0-9]+)_${TOKEN2} ]]; then
+        echo 'ERROR: regex match failed probing C++ compiler for GNUC version'
+        return 2
+    fi
+    gnu_major=${BASH_REMATCH[1]}
+    gnu_minor=${BASH_REMATCH[2]}
+    gnu_patch=${BASH_REMATCH[3]}
+    gnu_version="$gnu_major.$gnu_minor.$gnu_patch"
+    return $(( (    gnu_major*1000000 +     gnu_minor*1000 +     gnu_patch) <
+               (MIN_GNU_MAJOR*1000000 + MIN_GNU_MINOR*1000 + MIN_GNU_PATCH) ))
+}
+
+# checks specific to Intel compilers:
+check_intel_compiler() {
+    check_gnu_version
+    case $? in
+        0)  # OK
+            ;;
+        1)  # Too low
+            echo "ERROR: UPC++ with Intel compilers requires use of g++ version $MIN_GNU_STRING or newer, but version $gnu_version was detected."
+            echo 'Please do `module load gcc`, or otherwise ensure a new-enough g++ is used by the Intel C++ compiler.'
+            return 1
+            ;;
+        *)  # Probe failed
+            return 1
+            ;;
+    esac
+    # TODO: find the actual g++ in use and encode in a '-gxx-name=...' argument to preserve it
+}
+
 # platform_sanity_checks(): defaults $CC and $CXX if they are unset
 #   validates the compiler and system versions for compatibility
 #   setting UPCXX_INSTALL_NOCHECK=1 disables this function completely
@@ -50,10 +103,6 @@ platform_sanity_checks() {
             exit 1
         elif test -n "$CRAY_PRGENVPGI" ; then
             echo 'ERROR: UPC++ on Cray XC currently requires PrgEnv-gnu, intel or cray. Please do: `module switch PrgEnv-pgi PrgEnv-FAMILY` for your preferred compiler FAMILY'
-            exit 1
-        elif test -n "$CRAY_PRGENVINTEL" &&
-             g++ --version | head -1 | egrep ' +\([^\)]+\) +([1-5]\.|6\.[0-3])' 2>&1 > /dev/null ; then
-            echo 'ERROR: UPC++ on Cray XC with PrgEnv-intel requires g++ version 6.4 or newer in \$PATH. Please do: `module load gcc`, or otherwise ensure a new-enough `g++` is available.'
             exit 1
         elif test -n "$CRAY_PRGENVGNU$CRAY_PRGENVINTEL$CRAY_PRGENVCRAY" ; then
             CC=${CC:-cc}
@@ -137,9 +186,20 @@ platform_sanity_checks() {
             COMPILER_BAD=1
         elif echo "$CXXVERS" | egrep ' +\(ICC\) +(17\.0\.[2-9]|1[89]\.|2[0-9]\.)' 2>&1 > /dev/null ; then
 	    # Ex: icpc (ICC) 18.0.1 20171018
+            check_intel_compiler || exit 1
             COMPILER_GOOD=1
         elif echo "$CXXVERS" | egrep ' +\(ICC\) ' 2>&1 > /dev/null ; then
-	    :
+            check_intel_compiler
+            if [[ $? -ne 0 ]]; then
+              if [[ -n $CRAY_PRGENVINTEL ]]; then
+                echo 'WARNING: Your Intel compiler is too old, please `module swap intel intel` (or simlar) to load a supported version'
+                exit 1
+              else
+                # continue past messages for a too-old libstdc++ and proceed to
+                # warning about unsupported compiler, with a line break between
+                echo
+              fi
+            fi
         elif echo "$CXXVERS" | egrep 'Free Software Foundation' 2>&1 > /dev/null &&
              echo "$CXXVERS" | head -1 | egrep ' +\([^\)]+\) +([6-9]\.|[1-9][0-9])' 2>&1 > /dev/null ; then
             # Ex: g++ (Ubuntu 5.4.0-6ubuntu1~16.04.4) 5.4.0 20160609
