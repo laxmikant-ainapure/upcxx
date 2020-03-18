@@ -224,6 +224,8 @@ while [[ $# -gt 0 ]]; do
     # Passed explicitly to GASNet's configure, potentially after some processing:
     ?(-)-with-cc?(=*))              CC="$(get_arg_val $1)";    export CC;;
     ?(-)-with-cxx?(=*))             CXX="$(get_arg_val $1)";   export CXX;;
+    ?(-)-with-cflags?(=*))          CFLAGS="$(get_arg_val $1)";   export CFLAGS;;  # NOT documented in usage
+    ?(-)-with-cxxflags?(=*))        CXXFLAGS="$(get_arg_val $1)"; export CXXFLAGS;;# NOT documented in usage
 
     # Passed to GASNet's configure implicitly via environment:
     ?(-)-with-gmake?(=*))           GMAKE="$(get_arg_val $1)"; export GMAKE;;
@@ -260,6 +262,8 @@ while [[ $# -gt 0 ]]; do
     # These are not in the usage message, but autoconf-familiar users may expect these to work:
     CC?(=*))   CC="$(get_arg_val $1)";    export CC;;
     CXX?(=*))  CXX="$(get_arg_val $1)";   export CXX;;
+    CFLAGS?(=*))   CFLAGS="$(get_arg_val $1)";    export CFLAGS;;
+    CXXFLAGS?(=*)) CXXFLAGS="$(get_arg_val $1)";  export CXXFLAGS;;
 
     # These are to remain undocumented
     -v|?(-)-verbose) set -x ;;
@@ -571,8 +575,16 @@ check_known_path "$fpy" "Python interpreter '$fpy' $python_whence."
 install_to="$PREFIX" sys_info
 platform_sanity_checks
 platform_settings
+
+#
+# Ensure Makefile captures any env vars that platform_sanity_checks may have set/modified
+#
 export CC
 export CXX
+# Quoting is believed sufficient for space, tab, single-quote and double-quote.
+# Do not make these conditional on non-empty values.  We want to preserve empty values too.
+GASNET_CONFIGURE_ARGS+=" --with-cflags=\"${CFLAGS//\"/\\\"}\""
+GASNET_CONFIGURE_ARGS+=" --with-cxxflags=\"${CXXFLAGS//\"/\\\"}\""
 
 #
 # Find a usable GNU Make
