@@ -308,6 +308,41 @@ function check_known_path {
   esac
 }
 
+# check_tool_path()
+#
+# input: the path or filename to check
+# accepts full paths
+# searches for bare names (no /) in $PATH
+# rejects relative paths and bare names not found in $PATH
+# also rejects any input which is missing or not executable
+# on success returns zero with absolute path on stdout
+# returns non-zero on failure with (partial) error message on stdout
+check_tool_path() {
+  local exe="${1%% *}"
+  local args="${1/$exe}"
+  if [[ $exe =~ ^/ ]]; then
+    # full path: check that it exists and is executable
+    if [[ ! -x $exe ]]; then
+      echo 'does not exist or is not executable'
+      return 1
+    fi
+    echo "$exe$args"
+  elif [[ ! $exe =~ / ]]; then
+    # bare tool name: search in $PATH
+    local output=$(type -p "$exe" 2>/dev/null || true)
+    if [[ -z $output || ! -x $output ]]; then
+      echo 'was not found in $PATH'
+      return 1
+    fi
+    echo "$output$args"
+  else
+    # relative path: prohibited
+    echo 'is a relative path (not permitted)'
+    return 1
+  fi
+  return 0
+}
+
 #
 # Default GASNet source
 # Enable offline installers with an embedded GASNet-EX tarball
