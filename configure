@@ -542,31 +542,18 @@ fi
 # Second check version
 #
 UPCXX_PYTHON_MIN=2.7.5
-if [[ "$UPCXX_PYTHON" =~ ^/ ]]; then
-  # Verify user-provided full path exists and is executable
-  if [[ ! -x "$UPCXX_PYTHON" ]]; then
-    echo_and_die "ERROR: Python interpreter '$UPCXX_PYTHON' not found."
-  fi
-  fpy="$UPCXX_PYTHON"
-  python_whence="specified by full path"
-elif [[ -n "$UPCXX_PYTHON" ]]; then
-  # Verify user-provided value exists in $PATH and is executable
-  fpy=$(type -p $UPCXX_PYTHON || true)
-  if [[ -x "$fpy" ]]; then
-    UPCXX_PYTHON="$fpy"
-  else
-    echo_and_die "ERROR: Python interpreter '$UPCXX_PYTHON' not found in \$PATH."
-  fi
-  python_whence="found in \$PATH"
+fpy=$(check_tool_path "${UPCXX_PYTHON:-python}") && :  # "&& :" prevents ERR trap but preserves $?
+if [[ $? -ne 0 ]]; then
+  echo "ERROR: Python interpreter '${UPCXX_PYTHON:-python}' $fpy." >&2
+  echo_and_die "Use '--with-python=...' to specify a Python interpreter."
+elif [[ $UPCXX_PYTHON =~ ^/ ]]; then
+  python_whence='specified by full path'
 else
-  # Confirm presence of 'python' in $PATH
-  # We leave UPCXX_PYTHON unset to prevent rewrite of upcxx-run at install
-  fpy=$(type -p python || true)
-  if [[ ! -x "$fpy" ]]; then
-    echo "ERROR: No 'python' found in \$PATH."  >&2
-    echo_and_die "ERROR: Use '--with-python=...' to specify a Python interpreter."
-  fi
-  python_whence="found in \$PATH"
+  python_whence='found in $PATH'
+fi
+# If UPCXX_PYTHON unset, leave it so to prevent rewrite of upcxx-run at install
+if [[ -n $UPCXX_PYTHON ]]; then
+  UPCXX_PYTHON="$fpy"
 fi
 if ! $fpy -c "import sys; sys.exit(sys.version_info < (${UPCXX_PYTHON_MIN//./,}));" &> /dev/null; then
   echo "ERROR: Python interpreter '$fpy' reports version '$($fpy --version 2>&1)'" >&2
@@ -597,13 +584,15 @@ GMAKE_NEED_MAJ=3
 GMAKE_NEED_MIN=80
 function bad_gmake {
   echo Error: $* >&2
-  echo_and_die "Please set GMAKE (or pass --with-gmake=...) to the path to GNU Make $GMAKE_MIN_VER or newer."
+  echo_and_die "Please set GMAKE (or pass --with-gmake=...) to the path to GNU Make $GMAKE_NEED_MAJ.$GMAKE_NEED_MIN or newer."
 }
 GMAKE_SHORT="$GMAKE"
 if [[ -n "$GMAKE" ]]; then
-  if [[ -z $(type -p "$GMAKE") ]] ; then
-    bad_gmake "'$GMAKE' not found."
+  fgm=$(check_tool_path "$GMAKE") && :  # "&& :" prevents ERR trap but preserves $?
+  if [[ $? -ne 0 ]]; then
+    bad_gmake "--with-gmake='$GMAKE' $fgm"
   fi
+  GMAKE="$fgm"
 else
   for x in gmake make; do
     tmp="$(type -p $x)" || true
