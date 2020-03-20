@@ -295,7 +295,7 @@ platform_sanity_checks() {
         elif echo "$CXXVERS" | egrep 'IBM XL'  > /dev/null ; then
             COMPILER_BAD=1
         elif echo "$CXXVERS" | egrep 'Free Software Foundation' 2>&1 > /dev/null &&
-	     echo "$CXXVERS" | head -1 | egrep ' +\([^\)]+\) +([1-5]\.|6\.[0-3])' 2>&1 > /dev/null ; then
+             ! check_gnu_version CXX &> /dev/null; then
             COMPILER_BAD=1
         elif echo "$CXXVERS" | egrep ' +\(ICC\) +(17\.0\.[2-9]|1[89]\.|2[0-9]\.)' 2>&1 > /dev/null ; then
 	    # Ex: icpc (ICC) 18.0.1 20171018
@@ -314,10 +314,7 @@ platform_sanity_checks() {
               fi
             fi
         elif echo "$CXXVERS" | egrep 'Free Software Foundation' 2>&1 > /dev/null &&
-             echo "$CXXVERS" | head -1 | egrep ' +\([^\)]+\) +([6-9]\.|[1-9][0-9])' 2>&1 > /dev/null ; then
-            # Ex: g++ (Ubuntu 5.4.0-6ubuntu1~16.04.4) 5.4.0 20160609
-            #     g++-7 (Homebrew GCC 7.2.0) 7.2.0
-            #     foo (GCC) 7.2.0
+             check_gnu_version CXX &> /dev/null; then
             COMPILER_GOOD=1
             # Arm Ltd's gcc not yet tested
             if test aarch64 = "$ARCH" && echo "$CXXVERS" | head -1 | egrep ' +\(ARM' 2>&1 > /dev/null ; then
