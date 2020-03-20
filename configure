@@ -412,8 +412,14 @@ elif expr "$GASNET" : '.*\.tar\.gz' >/dev/null; then
       [[ $? -eq 0 && -r "$gex_tmp" ]] || bad_gasnet_fetch "Failed to fetch '$GASNET'"
       GASNET="$gex_tmp"
     else
-      [ -e "$GASNET" ] || echo_and_die "File '$GASNET' does not exist"
-      [ -r "$GASNET" ] || echo_and_die "Cannot read file '$GASNET'"
+      if [[ ! -r "$GASNET" ]]; then
+        if [[ ! -e "$GASNET" ]]; then
+          failure='does not exist'
+        else
+          failure='cannot be read'
+        fi
+        echo_and_die "GASNET='$GASNET' specifies a file which $failure. Please unset \`GASNET\` in your environment to use the default, or provide a correct value using \`--with-gasnet=...\`"
+      fi
     fi
     echo Unpacking $GASNET
     gzip -cd "$GASNET" | ( cd bld && tar xf - )
@@ -428,7 +434,7 @@ elif expr "$GASNET" : '.*\.tar\.gz' >/dev/null; then
   fi
   export GASNET="$gex_dir"
 else
-  echo_and_die "GASNET must point to local tarball file, tarball url, or gasnet source tree."
+  echo_and_die "GASNET='$GASNET' is not a valid value.  GASNET must name local tarball file, tarball url, or gasnet source tree.  Please unset \`GASNET\` in your environment to use the default, or provide a correct value using \`--with-gasnet=...\`"
 fi
 
 if [[ "$GASNET_TYPE" == 'build' ]]; then
