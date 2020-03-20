@@ -175,6 +175,15 @@ single=''
 # Each distinct warning added should start with a newline
 warnings=''
 
+# Preserve env vars which options processing may clobber
+UPCXX_CONFIG_ENVVARS=( CC CFLAGS CXX CXXFLAGS CPPFLAGS LDFLAGS LIBS\
+                       GASNET GASNET_CONFIGURE_ARGS CROSS \
+                       GMAKE UPCXX_PYTHON \
+                       UPCXX_CUDA{,_NVCC,_CPPFLAGS,_LIBFLAGS} )
+for var in ${UPCXX_CONFIG_ENVVARS[*]} ; do
+    eval ORIG_$var=\'${!var}\'
+done
+
 unset gasnet_help
 
 #
@@ -365,7 +374,6 @@ function bad_gasnet_fetch {
   echo Error: $* >&2
   echo_and_die "Please correct the URL or point --with-gasnet=... at a manually downloaded GASNet source .tar.gz file ($GASNET_DEFAULT is the recommended version)"
 }
-ORIG_GASNET="$GASNET"
 GASNET_UNPACKED=""
 GASNET_TYPE=source  # default
 if [[ -n "$single" && -r "$GASNET/gasnet_config.h" ]] ; then
@@ -544,6 +552,24 @@ else
 fi
 
 #
+# system-checks
+#
+. $UPCXX_SRC/utils/system-checks.sh
+sys_info
+platform_sanity_checks
+platform_settings
+
+#
+# Ensure Makefile captures any env vars that platform_sanity_checks may have set/modified
+#
+export CC
+export CXX
+# Quoting is believed sufficient for space, tab, single-quote and double-quote.
+# Do not make these conditional on non-empty values.  We want to preserve empty values too.
+GASNET_CONFIGURE_ARGS+=" --with-cflags=\"${CFLAGS//\"/\\\"}\""
+GASNET_CONFIGURE_ARGS+=" --with-cxxflags=\"${CXXFLAGS//\"/\\\"}\""
+
+#
 # UPCXX_PYTHON
 # First expand full path or validating existence
 # Second check version
@@ -562,29 +588,15 @@ fi
 if [[ -n $UPCXX_PYTHON ]]; then
   UPCXX_PYTHON="$fpy"
 fi
+fpy_ver="$($fpy --version 2>&1)"
 if ! $fpy -c "import sys; sys.exit(sys.version_info < (${UPCXX_PYTHON_MIN//./,}));" &> /dev/null; then
-  echo "ERROR: Python interpreter '$fpy' reports version '$($fpy --version 2>&1)'" >&2
+  echo "ERROR: Python interpreter '$fpy' reports version '$fpy_ver'" >&2
   echo_and_die "ERROR: Python interpreter is older than the minimum of $UPCXX_PYTHON_MIN."
 fi
+if test -z "$UPCXX_INSTALL_QUIET"; then
+  echo "$fpy: $fpy_ver"; echo
+fi
 check_known_path "$fpy" "Python interpreter '$fpy' $python_whence."
-
-#
-# system-checks
-#
-. $UPCXX_SRC/utils/system-checks.sh
-install_to="$PREFIX" sys_info
-platform_sanity_checks
-platform_settings
-
-#
-# Ensure Makefile captures any env vars that platform_sanity_checks may have set/modified
-#
-export CC
-export CXX
-# Quoting is believed sufficient for space, tab, single-quote and double-quote.
-# Do not make these conditional on non-empty values.  We want to preserve empty values too.
-GASNET_CONFIGURE_ARGS+=" --with-cflags=\"${CFLAGS//\"/\\\"}\""
-GASNET_CONFIGURE_ARGS+=" --with-cxxflags=\"${CXXFLAGS//\"/\\\"}\""
 
 #
 # Find a usable GNU Make

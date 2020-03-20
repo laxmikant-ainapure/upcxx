@@ -13,21 +13,15 @@ sys_info() {
         echo " "
         echo Date: `date 2>&1`
         echo Current directory: `pwd 2>&1`
-        echo Install directory: $install_to
+        echo Install directory: $PREFIX
+        echo "Configure command$fullcmd" # fullcmd starts w/ a colon
         local SETTINGS=
-        for var in CC CXX GASNET GASNET_CONFIGURE_ARGS CROSS OPTLEV DBGSYM \
-	           UPCXX_BACKEND GASNET_INSTALL_TO \
-		   UPCXX_CODEMODE UPCXX_THREADMODE \
-		   UPCXX_CUDA \
-		   ; do
+        for var in ${UPCXX_CONFIG_ENVVARS[*]/#/ORIG_} ; do
             if test "${!var:+set}" = set; then
-                SETTINGS="$SETTINGS $var='${!var}'"
+                SETTINGS+="    ${var#ORIG_}='${!var}'\n"
             fi
         done
-        echo "Settings:$SETTINGS"
-        echo " "
-        fpy=${UPCXX_PYTHON:-$(type -p python)}
-        echo "$fpy: " $($fpy --version 2>&1)
+        echo -n -e "Configure environment:\n$SETTINGS"
         echo " "
     ) fi
 }
