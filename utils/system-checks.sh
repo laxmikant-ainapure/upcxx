@@ -218,8 +218,13 @@ platform_sanity_checks() {
             echo 'ERROR: UPC++ on Cray XC currently requires PrgEnv-gnu, intel or cray. Please do: `module switch PrgEnv-pgi PrgEnv-FAMILY` for your preferred compiler FAMILY'
             exit 1
         elif test -n "$CRAY_PRGENVGNU$CRAY_PRGENVINTEL$CRAY_PRGENVCRAY" ; then
-            CC=${CC:-cc}
-            CXX=${CXX:-CC}
+            if [[ -n "$CROSS" ]]; then
+              CC=${CC:-cc}
+              CXX=${CXX:-CC}
+            else
+              CC=${CC:-gcc}
+              CXX=${CXX:-g++}
+            fi
 	    # second condition eliminates build warnings in CI for: GASNET=build_or_inst_dir install -single
 	    if [[ -z "$CROSS" && ( -z "$GASNET" || -f "$GASNET" || -f "$GASNET"/configure ) ]] ; then
 	      echo 'WARNING: To build for Cray XC compute nodes, you should set the CROSS variable (e.g. CROSS=cray-aries-slurm)'
