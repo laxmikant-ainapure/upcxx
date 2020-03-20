@@ -290,7 +290,8 @@ trap failure_and_die ERR  # errors after arg parsing are fatal
 
 # Warn if a prog was found outside a whitelist of paths
 function check_known_path {
-  case $(dirname "$1") in
+  local exe="${1%% *}"
+  case $(dirname "$exe") in
     /bin|/usr/bin|/usr/local/bin|/usr/pkg/bin|/opt/csw/bin)
       # OK
       ;;
@@ -298,6 +299,8 @@ function check_known_path {
       warnings+="${2+\nWARNING: $2\n}"
       warnings+='WARNING: This full path will be encoded in installed scripts.\n'
       warnings+='WARNING: Please ensure it is valid for all users and on all nodes.\n'
+      warnings+="WARNING: Alternatively, configuring with '/usr/bin/env $(basename $exe)'\n"
+      warnings+='WARNING: can be used to defer the $PATH search until run time.\n'
   esac
 }
 
