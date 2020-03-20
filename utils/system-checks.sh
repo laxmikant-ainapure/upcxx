@@ -87,18 +87,18 @@ platform_sanity_checks() {
         fi
 
         # absify compilers, checking they exist
-        cxx_exec=$(type -p ${CXX%% *})
-        if [[ -z "$cxx_exec" ]]; then
-            echo "ERROR: could not find CXX='${CXX%% *}' in \$PATH"
+        cxx_exec=$(check_tool_path "$CXX")
+        if [[ $? -ne 0 ]]; then
+            echo "ERROR: CXX='${CXX%% *}' $cxx_exec"
             exit 1
         fi
-        CXX=$cxx_exec${CXX/${CXX%% *}/}
-        cc_exec=$(type -p ${CC%% *})
-        if [[ -z "$cc_exec" ]]; then
-            echo "ERROR: could not find CC='${CC%% *}' in \$PATH"
+        CXX=$cxx_exec
+        cc_exec=$(check_tool_path "$CC")
+        if [[ $? -ne 0 ]]; then
+            echo "ERROR: CC='${CC%% *}' $cc_exec"
             exit 1
         fi
-        CC=$cc_exec${CC/${CC%% *}/}
+        CC=$cc_exec
         if test -z "$UPCXX_INSTALL_QUIET" ; then
             echo $CXX
             $CXX --version 2>&1 | grep -v 'warning #10315'
