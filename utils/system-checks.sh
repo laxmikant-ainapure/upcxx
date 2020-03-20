@@ -197,7 +197,10 @@ check_intel_compiler() {
 
 # platform_sanity_checks(): defaults $CC and $CXX if they are unset
 #   validates the compiler and system versions for compatibility
-#   setting UPCXX_INSTALL_NOCHECK=1 disables this function completely
+#   setting UPCXX_INSTALL_NOCHECK=1 disables this function *completely*.
+#   That includes disabling many side-effects such as platform-specific
+#   defaults, conversion of CC and CXX to full paths, and addition of
+#   certain options to {C,CXX}FLAGS.
 platform_sanity_checks() {
     if test -z "$UPCXX_INSTALL_NOCHECK" ; then
         local KERNEL=`uname -s 2> /dev/null`
