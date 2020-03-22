@@ -112,27 +112,29 @@ get_intel_name_option() {
             return 1
         fi
     fi
-    local want_gnu_version=$gnu_version
+    local icpc_gnu_version=$gnu_version
     check_gnu_version CXX "$result"
     if [[ $? -gt 1 ]]; then
         echo "could not run $result to extract GNU version"
         return 1
-    elif [[ $want_gnu_version != $gnu_version ]]; then
-        local msg="$result did not report expected version $want_gnu_version (got $gnu_version)"
-        if [[ -n "$CRAY_PRGENVINTEL" && $result = "/usr/bin/$exe" ]]; then
-            # Ick!  seen to sometimes misreport GNUC info for /usr/bin/{gcc,g++}
-            echo -e "WARNING: $msg\n" >&2
-        else
+    elif [[ $icpc_gnu_version != $gnu_version ]]; then
+        local msg="$result did not report expected version $icpc_gnu_version (got $gnu_version)"
+        # Ick!  Older icpc seen to sometimes misreport GNUC info for /usr/bin/{gcc,g++}
+        # So, error-out only if not testing the system compiler or the major versions dont't match
+        if [[ $result != "/usr/bin/$exe" || ${icpc_gnu_version%%.*} != ${gnu_version%%.*} ]]; then
             echo "$msg"
             return 1
+        else
+            echo -e "WARNING: $msg\n" >&2
         fi
     fi
-    if [[ -n "$CRAY_PRGENVINTEL" ]]; then
-        # Ick!  need -gcc-name not -gxx-name
-        option='-gcc-name'
-        result=${result/%g++/gcc}
-    fi
-    echo "$option=$result"
+    case $1 in
+         CC) echo "-gcc-name=$result";;
+        CXX) # Ick!  Need both -gcc-name and -gxx-name to be completely effective on some systems.
+             # Note we do not xform g++ to gcc in $result, since icpc doesn't seem to care.
+             # That is a good thing, since such a transformation would be fragile.
+             echo "-gxx-name=$result -gcc-name=$result";;
+    esac
 }
 
 # checks specific to Intel compilers:
@@ -144,8 +146,8 @@ check_intel_compiler() {
         1)  # Too low
             echo "ERROR: UPC++ with Intel compilers requires use of g++ version $MIN_GNU_STRING or newer, but version $gnu_version was detected."
             echo 'Please do `module load gcc`, or otherwise ensure a new-enough g++ is used by the Intel C++ compiler.'
-            if [[ -z "$CRAY_PRGENVINTEL" ]]; then
-                echo 'An explicit `-gxx-name=...` option in the value of $CXX or $CXXFLAGS may be necessary.  Information on this option is available from Intel'\''s documentation, such as `man icpc`.'
+            if [[ ! -d /opt/cray ]]; then # not assured of trustworthy intel environment module(s)
+                echo 'An explicit `-gxx-name=...` and/or `-gcc-name=...` option in the value of $CXX or $CXXFLAGS may be necessary.  Information on these options is available from Intel'\''s documentation, such as `man icpc`.'
             fi
             return 1
             ;;
@@ -160,8 +162,8 @@ check_intel_compiler() {
     gxx_name=$(get_intel_name_option CXX)
     if [[ $? -ne 0 ]]; then
         echo "ERROR: $gxx_name"
-        if [[ -z "$CRAY_PRGENVINTEL" ]]; then
-          echo 'Unable to determine the g++ in use by $CXX.  Please configure with an explicit `-gxx-name=...` option in the value of $CXX or $CXXFLAGS.  Information on this option is available from Intel'\''s documentation, such as `man icpc`.'
+        if [[ ! -d /opt/cray ]]; then # not assured of trustworthy intel environment module(s)
+          echo 'Unable to determine the g++ in use by $CXX.  An explicit `-gxx-name=...` and/or `-gcc-name=...` option in the value of $CXX or $CXXFLAGS may be necessary.  Information on these options is available from Intel'\''s documentation, such as `man icpc`.'
         fi
         return 1
     fi
@@ -179,8 +181,8 @@ check_intel_compiler() {
     gcc_name=$(get_intel_name_option CC)
     if [[ $? -ne 0 ]]; then
         echo "ERROR: $gcc_name"
-        if [[ -z "$CRAY_PRGENVINTEL" ]]; then
-          echo 'Unable to determine the gcc in use by $CC.  Please configure with an explicit `-gcc-name=...` option in the value of $CC or $CFLAGS.  Information on this option is available from Intel'\''s documentation, such as `man icc`.'
+        if [[ ! -d /opt/cray ]]; then # not assured of trustworthy intel environment module(s)
+            echo 'Unable to determine the gcc in use by $CC.  An explicit `-gcc-name=...` option in the value of $CC or $CFLAGS may be necessary.  Information on this option is available from Intel'\''s documentation, such as `man icc`.'
         fi
         return 1
     fi
@@ -303,8 +305,8 @@ platform_sanity_checks() {
         elif echo "$CXXVERS" | egrep ' +\(ICC\) ' 2>&1 > /dev/null ; then
             check_intel_compiler
             if [[ $? -ne 0 ]]; then
-              if [[ -n $CRAY_PRGENVINTEL ]]; then
-                echo 'WARNING: Your Intel compiler is too old, please `module swap intel intel` (or simlar) to load a supported version'
+              if [[ -d /opt/cray ]]; then
+                echo 'ERROR: Your Intel compiler is too old, please `module swap intel intel` (or similar) to load a supported version'
                 exit 1
               else
                 # continue past messages for a too-old libstdc++ and proceed to
