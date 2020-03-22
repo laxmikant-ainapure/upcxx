@@ -55,13 +55,9 @@ platform_sanity_checks() {
              g++ --version | head -1 | egrep ' +\([^\)]+\) +([1-5]\.|6\.[0-3])' 2>&1 > /dev/null ; then
             echo 'ERROR: UPC++ on Cray XC with PrgEnv-intel requires g++ version 6.4 or newer in \$PATH. Please do: `module load gcc`, or otherwise ensure a new-enough `g++` is available.'
             exit 1
-        elif test -n "$CRAY_PRGENVGNU$CRAY_PRGENVINTEL$CRAY_PRGENVCRAY" ; then
+        elif test -n "$CRAY_PRGENVGNU$CRAY_PRGENVINTEL$CRAY_PRGENVCRAY" && test -n "$UPCXX_CROSS"; then
             CC=${CC:-cc}
             CXX=${CXX:-CC}
-	    # second condition eliminates build warnings in CI for: GASNET=build_or_inst_dir install -single
-	    if [[ -z "$CROSS" && ( -z "$GASNET" || -f "$GASNET" || -f "$GASNET"/configure ) ]] ; then
-	      echo 'WARNING: To build for Cray XC compute nodes, you should set the CROSS variable (e.g. CROSS=cray-aries-slurm)'
-	    fi
         elif test "$KERNEL" = "Darwin" ; then # default to XCode clang
             CC=${CC:-/usr/bin/clang}
             CXX=${CXX:-/usr/bin/clang++}

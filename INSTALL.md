@@ -281,8 +281,10 @@ installation.
 
 ### Configuration: Cray XC
 
-To run on the compute nodes of a Cray XC, the `--with-cross=...` option must be
-passed to the `configure` script.  Use the appropriate value for your system:
+By default, on a Cray XC logic in `configure` will automatically detect either
+the SLURM or Cray ALPS job scheduler and will cross-configure for the
+appropriate one.  If this auto-detection fails, you may need to explicitly
+pass the appropriate value for your system:
 
 * `--with-cross=cray-aries-slurm`: Cray XC systems using the SLURM job scheduler (srun)
 * `--with-cross=cray-aries-alps`: Cray XC systems using the Cray ALPS job scheduler (aprun)
@@ -434,6 +436,8 @@ options:
 * `--with-cc=...` and `--with-cxx=...`: The C and C\+\+ compilers to use.
 * `--with-cross=...`: The cross-configure settings script to pull from the
   GASNet-EX source tree (`<gasnet>/other/contrib/cross-configure-${VALUE}`).
+* `--without-cross`: Disable automatic cross-compilation, for instance to
+  compile for the front-end of a Cray XC system.
 * `--with-default-network=...`: Sets the default network to be used by the
   `upcxx` compiler wrapper.  Valid values are listed under "UPC\+\+ Backends" in
   [README.md](README.md).  The default is `aries` when cross-compiling for a
