@@ -144,10 +144,14 @@ check_intel_compiler() {
         0)  # OK
             ;;
         1)  # Too low
-            echo "ERROR: UPC++ with Intel compilers requires use of g++ version $MIN_GNU_STRING or newer, but version $gnu_version was detected."
-            echo 'Please do `module load gcc`, or otherwise ensure a new-enough g++ is used by the Intel C++ compiler.'
+            echo "ERROR: UPC++ with Intel compilers requires use of g++ version $MIN_GNU_STRING or" \
+                 "newer, but version $gnu_version was detected."
+            echo 'Please do `module load gcc`, or otherwise ensure a new-enough g++ is used by the' \
+                 'Intel C++ compiler.'
             if [[ ! -d /opt/cray ]]; then # not assured of trustworthy intel environment module(s)
-                echo 'An explicit `-gxx-name=...` and/or `-gcc-name=...` option in the value of $CXX or $CXXFLAGS may be necessary.  Information on these options is available from Intel'\''s documentation, such as `man icpc`.'
+                echo 'An explicit `-gxx-name=...` and/or `-gcc-name=...` option in the value of' \
+                     '$CXX or $CXXFLAGS may be necessary.  Information on these options is available' \
+                     'from Intel'\''s \ documentation, such as `man icpc`.'
             fi
             return 1
             ;;
@@ -163,7 +167,9 @@ check_intel_compiler() {
     if [[ $? -ne 0 ]]; then
         echo "ERROR: $gxx_name"
         if [[ ! -d /opt/cray ]]; then # not assured of trustworthy intel environment module(s)
-          echo 'Unable to determine the g++ in use by $CXX.  An explicit `-gxx-name=...` and/or `-gcc-name=...` option in the value of $CXX or $CXXFLAGS may be necessary.  Information on these options is available from Intel'\''s documentation, such as `man icpc`.'
+          echo 'Unable to determine the g++ in use by $CXX.  An explicit `-gxx-name=...` and/or' \
+               '`-gcc-name=...` option in the value of $CXX or $CXXFLAGS may be necessary.  Information'\
+               'on these options is available from Intel'\''s documentation, such as `man icpc`.'
         fi
         return 1
     fi
@@ -182,7 +188,9 @@ check_intel_compiler() {
     if [[ $? -ne 0 ]]; then
         echo "ERROR: $gcc_name"
         if [[ ! -d /opt/cray ]]; then # not assured of trustworthy intel environment module(s)
-            echo 'Unable to determine the gcc in use by $CC.  An explicit `-gcc-name=...` option in the value of $CC or $CFLAGS may be necessary.  Information on this option is available from Intel'\''s documentation, such as `man icc`.'
+            echo 'Unable to determine the gcc in use by $CC.  An explicit `-gcc-name=...` option' \
+                 'in the value of $CC or $CFLAGS may be necessary.  Information on this option is' \
+                 'available from Intel'\''s documentation, such as `man icc`.'
         fi
         return 1
     fi
@@ -208,10 +216,12 @@ platform_sanity_checks() {
             echo 'ERROR: UPC++ on Cray XC with PrgEnv-cray requires cce/9.0 or newer.'
             exit 1
         elif test -n "$CRAY_PRGENVCRAY" && expr x"$CRAY_PE_CCE_VARIANT" : "xCC=Classic" > /dev/null; then
-            echo 'ERROR: UPC++ on Cray XC with PrgEnv-cray does not support the "-classic" compilers such as' $(grep -o 'cce/[^:]*' <<<$LOADEDMODULES)
+            echo 'ERROR: UPC++ on Cray XC with PrgEnv-cray does not support the "-classic" compilers such as' \
+                 $(grep -o 'cce/[^:]*' <<<$LOADEDMODULES)
             exit 1
         elif test -n "$CRAY_PRGENVPGI" ; then
-            echo 'ERROR: UPC++ on Cray XC currently requires PrgEnv-gnu, intel or cray. Please do: `module switch PrgEnv-pgi PrgEnv-FAMILY` for your preferred compiler FAMILY'
+            echo 'ERROR: UPC++ on Cray XC currently requires PrgEnv-gnu, intel or cray. ' \
+                 'Please do: `module switch PrgEnv-pgi PrgEnv-FAMILY` for your preferred compiler FAMILY'
             exit 1
         elif test -n "$CRAY_PRGENVGNU$CRAY_PRGENVINTEL$CRAY_PRGENVCRAY" ; then
             if [[ -n "$CROSS" ]]; then
@@ -223,7 +233,8 @@ platform_sanity_checks() {
             fi
 	    # second condition eliminates build warnings in CI for: GASNET=build_or_inst_dir install -single
 	    if [[ -z "$CROSS" && ( -z "$GASNET" || -f "$GASNET" || -f "$GASNET"/configure ) ]] ; then
-	      echo 'WARNING: To build for Cray XC compute nodes, you should pass `--with-cross` to configure (e.g. `--with-cross=cray-aries-slurm` or `--with-cross=cray-aries-alps`)'
+	      echo 'WARNING: To build for Cray XC compute nodes, you should pass `--with-cross` to' \
+                   'configure (e.g. `--with-cross=cray-aries-slurm` or `--with-cross=cray-aries-alps`)'
 	    fi
         elif test "$KERNEL" = "Darwin" ; then # default to XCode clang
             CC=${CC:-/usr/bin/clang}
@@ -306,7 +317,8 @@ platform_sanity_checks() {
             check_intel_compiler
             if [[ $? -ne 0 ]]; then
               if [[ -d /opt/cray ]]; then
-                echo 'ERROR: Your Intel compiler is too old, please `module swap intel intel` (or similar) to load a supported version'
+                echo 'ERROR: Your Intel compiler is too old, please `module swap intel intel` (or' \
+                     'similar) to load a supported version'
                 exit 1
               else
                 # continue past messages for a too-old libstdc++ and proceed to
