@@ -129,8 +129,11 @@ $ icpc -v -E -x c++ /dev/null 2>&1 | grep '^ .*/include'
 
 To use a non-default C++ standard library, `icpc` provides the `-gxx-name`
 command line option.  The argument to this option is the full path to a
-suitable `g++`.  For instance, one might configure UPC++ using
-`CXX="icpc -gxx-name=/usr/local/gcc/6.4.0/bin/g++"`.
+suitable `g++`.  It has been observed, however, that some installations
+of the Intel compilers use mismatched paths for the C++ headers and libraries
+unless `-gcc-name` is passed.  Therefore, we advise use of both options.
+For instance, one might configure UPC++ using
+`CXX="icpc -gxx-name=/usr/local/gcc/6.4.0/bin/g++ -gcc-name=/usr/local/gcc/6.4.0/bin/gcc"`.
 
 Alternatively, one can consult the vendor-provided documentation for
 information on "Using Response Files".  A response file, prefixed by `@`, can
@@ -139,6 +142,7 @@ For example, one might set `CXX="icpc @$HOME/etc/icpc_upcxx.txt"` and place
 the following in `$HOME/etc/icpc_upcxx.txt`:
 ```
 -gxx-name=/usr/local/gcc/6.4.0/bin/g++
+-gcc-name=/usr/local/gcc/6.4.0/bin/gcc
 -Wl,-rpath=/usr/local/gcc/6.4.0/lib64
 ```
 
@@ -149,13 +153,8 @@ compiler suite, the reader is advised to consult the vendor-provided
 documentation, where one should look for information on "Using
 Configuration Files".  As described there, one can create an `icpc.cfg`
 file containing options to be processes as if they appear on the command
-line before any explicit options.  Taking into consideration the desire
-to encode an `RPATH` in executables, a example `icpc.cfg` to use a local
-build of GCC 6.4.0 might look like the following:
-```
--gxx-name=/usr/local/gcc/6.4.0/bin/g++
--Wl,-rpath=/usr/local/gcc/6.4.0/lib64
-```
+line before any explicit options.  The content is precisely the same
+as for a response file, shown immediately above.
 
 If one has administrative privilege, a _global_ `icpc.cfg` can be placed in
 the same directory as the `icpc` executable.  However, any user may create a
