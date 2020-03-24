@@ -146,6 +146,12 @@ report it as a bug.
   Adding `UPCXX_VERBOSE=1` to `make {check,tests,test_install}` will echo
   compilation commands as they are executed.
 
+* `COLOR` {unset or `1`} on command line only (not environment):  
+  Adding `COLOR=1` to `make {check,tests,test_install,run,exe}` or any make
+  command building the UPC\+\+ libraries will pass `-fdiagnostics-color=always`
+  to compilers which support it.  This can be used to ensure colorized output
+  even when piping to a pager or saving the output to a file.
+
 ## Internal-Only Configuration Options
 
 This serves as the place to document configure options that aren't hardened

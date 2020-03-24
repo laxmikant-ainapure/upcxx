@@ -14,6 +14,13 @@ MAKEFLAGS += --no-print-directory
 # Echo an arbitrary make/environment variable
 echovar: force; @echo $(VARNAME)=\"$($(VARNAME))\"
 
+COLOR = 0 # environment is ignored but command line is honored
+# Anything other than COLOR=1 "bleaches" the corresponding flags
+ifneq ($(strip $(COLOR)),1)
+UPCXX_COLOR_CFLAGS =
+UPCXX_COLOR_CXXFLAGS =
+endif
+
 # To prevent application of pass-through rule upon 'include':
 Makefile $(upcxx_src)/bld/Makefile.rules $(upcxx_src)/bld/Makefile.tests: ; @: # empty rule
 $(upcxx_src)/bld/%.mak: ; @: # empty rule
