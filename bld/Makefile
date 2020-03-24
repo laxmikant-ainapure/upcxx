@@ -85,7 +85,7 @@ force:
 
 #
 # On-demand configure of a GASNet build directory (opt or debug)
-# PARAMS: OPTLEV, DBGSYM, GASNET, CROSS
+# PARAMS: OPTLEV, DBGSYM, GASNET, UPCXX_CROSS
 #
 configure_opt=--disable-debug
 configure_debug=--enable-debug
@@ -93,8 +93,8 @@ do-gasnet-configure: force
 	@dir=$(GASNETDIR);                                                            \
 	 if test \! -f "$$dir/gasnet_config.h" ; then                                 \
 	   echo "Configuring $(GASNET_CODEMODE)-mode build of GASNet";                \
-	   if test -n "$(CROSS)"; then                                                \
-	     cmd="SRCDIR=$(GASNET) $(GASNET)/other/contrib/cross-configure-$(CROSS)"; \
+	   if test -n "$(UPCXX_CROSS)"; then                                                \
+	     cmd="SRCDIR=$(GASNET) $(GASNET)/other/contrib/cross-configure-$(UPCXX_CROSS)"; \
 	   else                                                                       \
 	     cmd="$(GASNET)/configure";                                               \
 	   fi;                                                                        \
@@ -110,7 +110,7 @@ do-gasnet-configure: force
 
 #
 # On-demand compile of a single instance of libgasnet
-# PARAMS: OPTLEV, DBGSYM, UPCXX_BACKEND, GASNET_CONDUIT, GASNET, CROSS
+# PARAMS: OPTLEV, DBGSYM, UPCXX_BACKEND, GASNET_CONDUIT, GASNET, UPCXX_CROSS
 #
 
 # If given a GASNet build directory in --single mode, treat it as read-only
@@ -393,7 +393,7 @@ do-libupcxx: force
 
 #
 # On-demand compile of a single instance of libupcxx and required libgasnet
-# PARAMS: ASSERT, OPTLEV, DBGSYM, UPCXX_BACKEND, GASNET_CONDUIT, GASNET, CROSS
+# PARAMS: ASSERT, OPTLEV, DBGSYM, UPCXX_BACKEND, GASNET_CONDUIT, GASNET, UPCXX_CROSS
 #
 do-upcxx-single: force
 	@dir=$(UPCXXDIR);                                     \
