@@ -19,7 +19,8 @@ Notable bug fixes:
 
 Breaking changes:
 
-* ...
+* Configure-time envvar `CROSS` has been renamed to `UPCXX_CROSS`.
+  For backwards compat, the former is still accepted when the latter is unset.
 
 ### 2020.03.12: Release 2020.3.0
 

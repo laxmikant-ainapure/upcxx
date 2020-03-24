@@ -14,7 +14,7 @@ function echo_and_die {
 }
 
 # Validate the cross-compile Cray CPU target, if any
-UPCXX_CRAY_CPU_TARGET=${CROSS:+$CRAY_CPU_TARGET}
+UPCXX_CRAY_CPU_TARGET=${UPCXX_CROSS:+$CRAY_CPU_TARGET}
 if test -n "\$UPCXX_CRAY_CPU_TARGET" && test "\$UPCXX_CRAY_CPU_TARGET" != "\$CRAY_CPU_TARGET"; then
   echo "WARNING: This UPC++ installation was built for \$UPCXX_CRAY_CPU_TARGET CPUs, but you are currently compiling for \$CRAY_CPU_TARGET"
   echo "WARNING: This can lead to non-working executables and/or serious performance degradation."

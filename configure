@@ -71,10 +71,16 @@ Usage:
         Specify the C and C++ compilers to use.
         Override the values of $CC and $CXX, if any.
         The (platform dependent) default is usually appropriate.
-  --with-cross=...
-        Specifies the cross-compilation target name.
-        Overrides the value of $CROSS, if any.
-        The (empty) default is appropriate unless cross-compiling.
+  --with-cross(=...)
+  --without-cross
+        Control cross-compilation.
+        Passing `--with-cross` (without a value) requests the default
+        auto-detection behavior, while providing a value requests a
+        specific cross-compilation target.
+        Passing `--without-cross` disables cross-compilation.
+        Overrides the value of $UPCXX_CROSS, if any.
+        The default behavior (auto-detection) is appropriate unless
+        auto-detection is making the wrong choice.
 
   --with-cuda
   --without-cuda
@@ -175,9 +181,15 @@ single=''
 # Each distinct warning added should start with a newline
 warnings=''
 
+# backwards compat: CROSS
+# must preserve both unset and set-but-empty, which have significance
+if [[ ${UPCXX_CROSS-unset}${CROSS+set} == 'unsetset' ]]; then
+  export UPCXX_CROSS=${CROSS}
+fi
+
 # Preserve env vars which options processing may clobber
 UPCXX_CONFIG_ENVVARS=( CC CFLAGS CXX CXXFLAGS CPPFLAGS LDFLAGS LIBS\
-                       GASNET GASNET_CONFIGURE_ARGS CROSS \
+                       GASNET GASNET_CONFIGURE_ARGS UPCXX_CROSS \
                        GMAKE UPCXX_PYTHON \
                        UPCXX_CUDA{,_NVCC,_CPPFLAGS,_LIBFLAGS} )
 for var in ${UPCXX_CONFIG_ENVVARS[*]} ; do
@@ -224,7 +236,9 @@ while [[ $# -gt 0 ]]; do
 
     # Used to find and run GASNet's configure:
     ?(-)-with-gasnet?(=*))          GASNET="$(get_arg_val $1)";         export GASNET;;
-    ?(-)-with-cross?(=*))           CROSS="$(get_arg_val $1)"; export CROSS;;
+    ?(-)-with-cross)                unset UPCXX_CROSS;                  export UPCXX_CROSS;;
+    ?(-)-with-cross?(=*))           UPCXX_CROSS="$(get_arg_val $1)";    export UPCXX_CROSS;;
+    ?(-)-without-cross)             UPCXX_CROSS='';                     export UPCXX_CROSS;;
 
     # Not relevant to GASNet's configure:
     ?(-)-with-default-network?(=*)) GASNET_CONDUIT="$(get_arg_val $1)"; export GASNET_CONDUIT;;
@@ -558,6 +572,47 @@ else
 fi
 
 #
+# Cross-compilation
+#
+cross_aries() {  # auto-detection for partial or empty target
+    local srun=$(type -p srun)
+    local aprun=$(type -p aprun)
+    local fullauto="${UPCXX_CROSS-y}"
+    if [[ ( -z $srun && -z $aprun ) || ( -n $srun && -n $aprun ) ]]; then
+        echo_and_die 'ERROR: Unable to determine Cray XC job scheduler.  Please pass either' \
+                     '`--with-cross=cray-aries-slurm` or `--with-cross=cray-aries-alps`.'
+    elif [[ -n $srun ]]; then
+       UPCXX_CROSS='cray-aries-slurm'
+    else
+       UPCXX_CROSS='cray-aries-alps'
+    fi
+    warnings+="\nINFO: Cross-compiling for target '$UPCXX_CROSS' based on current environment.\n"
+    if [[ $fullauto == 'y' ]]; then
+        warnings+='INFO: You may pass `--without-cross` to disable cross-compilation.\n'
+    fi
+}
+if [[ ${UPCXX_CROSS-unset} == 'unset' ]]; then
+    # attempt to auto-detect from environment
+    if [[ $CRAYPE_NETWORK_TARGET == aries ]]; then
+        echo 'INFO: Cray aries network software detected.  Will cross-compile.'
+        cross_aries # auto-detect job scheduler
+    else
+        UPCXX_CROSS=''
+    fi
+else
+    case $UPCXX_CROSS in
+      ''|cray-aries-slurm|cray-aries-alps)
+        # disabled or known/supported: nothing to do
+        ;;
+      *)
+        # explicit but unknown
+        warnings+="\nWARNING: Unrecognized (thus unsupported) cross-compilation target '$UPCXX_CROSS'\n"
+        ;;
+    esac
+fi
+export UPCXX_CROSS
+
+#
 # system-checks
 #
 . $UPCXX_SRC/utils/system-checks.sh
@@ -821,7 +876,7 @@ fi
 #
 case $GASNET_CONDUIT in
   '')
-    if [[ "$CROSS" =~ -aries- ]]; then
+    if [[ "$UPCXX_CROSS" =~ -aries- ]]; then
       GASNET_CONDUIT=aries
     else
       GASNET_CONDUIT=smp
@@ -866,7 +921,7 @@ export CONFIG_CC=$CC
 export CONFIG_CXX=$CXX
 export GASNET=$GASNET
 export GASNET_TYPE=$GASNET_TYPE
-export CROSS=$CROSS
+export UPCXX_CROSS=$UPCXX_CROSS
 export UPCXX_COLOR_CFLAGS=$UPCXX_COLOR_CFLAGS
 export UPCXX_COLOR_CXXFLAGS=$UPCXX_COLOR_CXXFLAGS
 export UPCXX_CSUMCMD=$UPCXX_CSUMCMD

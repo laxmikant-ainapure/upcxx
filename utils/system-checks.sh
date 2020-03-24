@@ -212,30 +212,20 @@ platform_sanity_checks() {
         if test Linux = "$KERNEL" || test Darwin = "$KERNEL" ; then
             KERNEL_GOOD=1
         fi
-        if test -n "$CRAY_PRGENVCRAY" && expr "$CRAY_CC_VERSION" : "^[78]" > /dev/null; then
-            echo 'ERROR: UPC++ on Cray XC with PrgEnv-cray requires cce/9.0 or newer.'
-            exit 1
-        elif test -n "$CRAY_PRGENVCRAY" && expr x"$CRAY_PE_CCE_VARIANT" : "xCC=Classic" > /dev/null; then
-            echo 'ERROR: UPC++ on Cray XC with PrgEnv-cray does not support the "-classic" compilers such as' \
-                 $(grep -o 'cce/[^:]*' <<<$LOADEDMODULES)
-            exit 1
-        elif test -n "$CRAY_PRGENVPGI" ; then
-            echo 'ERROR: UPC++ on Cray XC currently requires PrgEnv-gnu, intel or cray. ' \
-                 'Please do: `module switch PrgEnv-pgi PrgEnv-FAMILY` for your preferred compiler FAMILY'
-            exit 1
-        elif test -n "$CRAY_PRGENVGNU$CRAY_PRGENVINTEL$CRAY_PRGENVCRAY" ; then
-            if [[ -n "$CROSS" ]]; then
-              CC=${CC:-cc}
-              CXX=${CXX:-CC}
-            else
-              CC=${CC:-gcc}
-              CXX=${CXX:-g++}
+        if [[ $UPCXX_CROSS =~ ^cray-aries- ]]; then
+            if test -n "$CRAY_PRGENVCRAY" && expr "$CRAY_CC_VERSION" : "^[78]" > /dev/null; then
+                echo 'ERROR: UPC++ on Cray XC with PrgEnv-cray requires cce/9.0 or newer.'
+                exit 1
+            elif test -n "$CRAY_PRGENVCRAY" && expr x"$CRAY_PE_CCE_VARIANT" : "xCC=Classic" > /dev/null; then
+                echo 'ERROR: UPC++ on Cray XC with PrgEnv-cray does not support the "-classic" compilers such as' \
+                     $(grep -o 'cce/[^:]*' <<<$LOADEDMODULES)
+                exit 1
+            elif test -z "$CRAY_PRGENVGNU$CRAY_PRGENVINTEL$CRAY_PRGENVCRAY"; then
+                echo 'ERROR: UPC++ on Cray XC currently requires PrgEnv-gnu, intel or cray. ' \
+                     'Please do: `module switch PrgEnv-pgi PrgEnv-FAMILY` for your preferred compiler FAMILY'
             fi
-	    # second condition eliminates build warnings in CI for: GASNET=build_or_inst_dir install -single
-	    if [[ -z "$CROSS" && ( -z "$GASNET" || -f "$GASNET" || -f "$GASNET"/configure ) ]] ; then
-	      echo 'WARNING: To build for Cray XC compute nodes, you should pass `--with-cross` to' \
-                   'configure (e.g. `--with-cross=cray-aries-slurm` or `--with-cross=cray-aries-alps`)'
-	    fi
+            CC=${CC:-cc}
+            CXX=${CXX:-CC}
         elif test "$KERNEL" = "Darwin" ; then # default to XCode clang
             CC=${CC:-/usr/bin/clang}
             CXX=${CXX:-/usr/bin/clang++}
