@@ -37,6 +37,9 @@ int main() {
                   assert(u.x == 42); 
                 }, t).wait();
 
+  static_assert(std::is_same<U, upcxx::deserialized_type_t<T>>::value, "oops");
+  static_assert(std::is_same<upcxx::view<T>, 
+                upcxx::deserialized_type_t<upcxx::view<T,std::vector<T>::iterator>>>::value, "oops");
 
   std::vector<T> vt;
   for (int i=0; i < 10; i++) vt.push_back(T{42,43,44});
