@@ -29,7 +29,7 @@ extern int volatile ctr;
 int volatile ctr = 0;
 void direct_inc(void) __attribute__((noinline));
 void direct_inc(void) {
-  ctr++;
+  ctr = 1 + ctr; // C++20 deprecates ++ and += on volatile
 }
 
 void noop0(void) {
@@ -107,7 +107,7 @@ int main(int argc, char **argv) {
 }
 // artificially split up into separate functions to get better default behavior from the optimizer
 void doit() {
-    TIME_OPERATION("measurement overhead",{ ctr++; });
+    TIME_OPERATION("measurement overhead",{ ctr = 1 + ctr; }); // C++20 deprecates ++ and += on volatile
     TIME_OPERATION("direct function call",direct_inc());
 
     upcxx::global_ptr<char> gpb1 = upcxx::new_array<char>(4096);
