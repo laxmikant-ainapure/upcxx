@@ -221,8 +221,11 @@ platform_sanity_checks() {
                      $(grep -o 'cce/[^:]*' <<<$LOADEDMODULES)
                 exit 1
             elif test -z "$CRAY_PRGENVGNU$CRAY_PRGENVINTEL$CRAY_PRGENVCRAY"; then
-                echo 'ERROR: UPC++ on Cray XC currently requires PrgEnv-gnu, intel or cray. ' \
-                     'Please do: `module switch PrgEnv-pgi PrgEnv-FAMILY` for your preferred compiler FAMILY'
+                echo 'WARNING: Unsupported PrgEnv.' \
+                     'UPC++ on Cray XC currently supports PrgEnv-gnu, intel or cray. ' \
+                     'Please do: `module switch PrgEnv-[CURRENT] PrgEnv-[FAMILY]`' \
+                     'for your preferred compiler FAMILY.'
+                # currently neither GOOD nor BAD
             fi
             CC=${CC:-cc}
             CXX=${CXX:-CC}
@@ -280,7 +283,9 @@ platform_sanity_checks() {
         elif echo "$CXXVERS" | egrep 'Apple LLVM version ([8-9]\.|[1-9][0-9])' 2>&1 > /dev/null ; then
             COMPILER_GOOD=1
         elif echo "$CXXVERS" | egrep 'PGI Compilers and Tools'  > /dev/null ; then
-            if [[ "$ARCH,$KERNEL" = 'x86_64,Linux' ]] &&
+            if [[ $UPCXX_CROSS =~ ^cray-aries- ]]; then
+               : # PrgEnv-pgi: currently neither GOOD nor BAD
+            elif [[ "$ARCH,$KERNEL" = 'x86_64,Linux' ]] &&
                  egrep ' +(19|[2-9][0-9])\.[0-9]+-' <<<"$CXXVERS" 2>&1 >/dev/null ; then
                # Ex: "pgc++ 19.7-0 LLVM 64-bit target on x86-64 Linux -tp nehalem"
                # 19.1 and newer "GOOD"
