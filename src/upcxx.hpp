@@ -36,4 +36,22 @@ namespace upcxx {
 #include <upcxx/view.hpp>
 #include <upcxx/memberof.hpp>
 
+// UPCXX_THREADMODE
+//   Undefined for SEQ
+//   Non-zero for PAR
+#undef UPCXX_THREADMODE
+#if UPCXX_BACKEND_GASNET_PAR
+  // One must NOT depend on the specific non-zero value
+  #define UPCXX_THREADMODE 1
+#endif
+
+// UPCXX_CODEMODE
+//   Undefined for debug
+//   Non-zero for "O3" (production)
+#undef UPCXX_CODEMODE
+#if !UPCXX_ASSERT_ENABLED
+  // One must NOT depend on the specific non-zero value
+  #define UPCXX_CODEMODE 1
+#endif
+
 #endif
