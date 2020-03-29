@@ -3,7 +3,7 @@
 This document describes stable features supported by this implementation that
 go beyond the requirements of the UPC++ Specification.
 
-## Version Identification ##
+## Version Identification and Compilation Settings ##
 
 The following macro definitions are provided by `upcxx/upcxx.hpp`:
 
@@ -14,6 +14,20 @@ The following macro definitions are provided by `upcxx/upcxx.hpp`:
     An integer literal providing the revision of the UPC++ specification
     to which this implementation adheres. See the specification for the specified value.
 
+  * `UPCXX_THREADMODE`:
+    This is either undefined (for the default "seq" threadmode) or defined to
+    an unspecified non-zero integer value for the "par" threadmode.
+    Recommended usage is `#if UPCXX_THREADMODE` to identify the need for
+    thread-safty constructs, such as locks.
+  * `UPCXX_CODEMODE`:
+    This is either undefined (for the "debug" codemode) or defined to an
+    unspecified non-zero integer value for the "O3" (production) codemode.
+  * `UPCXX_NETWORK_*`:
+    The network being targeted is indicated by a preprocessor identifier with a
+    `UPCXX_NETWORK_` prefix followed by the network name in capitals, which is
+    defined to a non-zero integer value.  Identifiers corresponding to other
+    networks are undefined.  Examples include `UPCXX_NETWORK_IBV` and
+    `UPCXX_NETWORK_ARIES`.
 
 ## UPCXX_THREADMODE=seq Restrictions ##
 
