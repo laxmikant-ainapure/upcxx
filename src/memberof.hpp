@@ -122,6 +122,8 @@ auto memberof_general_helper(global_ptr<Obj,Kind> gptr, Get getter)
 }} // namespace upcxx::detail
 
 #define upcxx_memberof_general(gp, FIELD) ( \
+  UPCXX_STATIC_ASSERT(!::std::is_reference<decltype(::std::declval<UPCXX_ETYPE(gp)>().FIELD)>::value, \
+    "upcxx_memberof_general may not be used on fields with reference type."), \
   ::upcxx::detail::memberof_general_helper((gp), \
     [](UPCXX_ETYPE(gp) *lptr) { return ::std::addressof(lptr->FIELD); } \
   ) \
