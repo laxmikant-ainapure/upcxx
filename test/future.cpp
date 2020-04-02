@@ -181,7 +181,7 @@ int main() {
     (void)ans0.member;\
     static_assert(std::is_same<int const&, decltype(when_all(ans0).member)>::value, "Uh-oh");\
     (void)when_all(ans0).member;\
-    static_assert(std::is_same<tuple<int const&,int const&,float const&,int const&>, decltype(when_all(ans0, ans1, make_future<float>(3.14), ans2).member)>::value, "Uh-oh");\
+    static_assert(std::is_same<tuple<int const&,int const&,float&&,int const&>, decltype(when_all(ans0, ans1, make_future<float>(3.14), ans2).member)>::value, "Uh-oh");\
     (void)when_all(ans0, ans1, make_future<float>(3.14), ans2).member;\
     static_assert(std::is_same<tuple<int const&,int&,int const&,int&&,int const&&>, decltype(std::declval<future<int,int&,int const&,int&&,int const&&>>().member)>::value, "Uh-oh");\
     static_assert(std::is_same<int&, decltype(std::declval<future<int&>>().member)>::value, "Uh-oh");\
@@ -194,7 +194,7 @@ int main() {
   
   static_assert(std::is_same<float, decltype(make_future(true,1,3.14f).result<2>())>::value, "Uh-oh");
   static_assert(std::is_same<float const&, decltype(std::declval<future<bool,float> const&>().result_reference<1>())>::value, "Uh-oh");
-  static_assert(std::is_same<float const&, decltype(make_future(true,3.14f).result_reference<1>())>::value, "Uh-oh");
+  static_assert(std::is_same<float &&, decltype(make_future(true,3.14f).result_reference<1>())>::value, "Uh-oh");
   static_assert(std::is_same<float, decltype(make_future(true,1,3.14f).wait<2>(nop))>::value, "Uh-oh");
   static_assert(std::is_same<float const&, decltype(std::declval<future<bool,int,float> const&>().wait_reference<2>(nop))>::value, "Uh-oh");
   

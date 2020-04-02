@@ -63,47 +63,6 @@ namespace upcxx {
   
   //////////////////////////////////////////////////////////////////////
   // future1: The actual type users get (aliased as future<>).
-
-  namespace detail {
-    // These ought to live in utility.hpp, but since this is going away when
-    // we refactor future reference management, it'll just stay here.
-    
-    template<typename T>
-    struct rref_to_clref { using type = T; };
-    template<typename T>
-    struct rref_to_clref<T&&> { using type = T const&; };
-    
-    template<typename Tup>
-    struct tuple_rrefs_to_clrefs_return;
-    template<typename ...T>
-    struct tuple_rrefs_to_clrefs_return<std::tuple<T...>> {
-      using type = std::tuple<typename rref_to_clref<T>::type...>;
-    };
-
-    template<typename ...T, int ...i>
-    typename tuple_rrefs_to_clrefs_return<std::tuple<T...>>::type
-    tuple_rrefs_to_clrefs_help(std::tuple<T...> &&t, index_sequence<i...>) {
-      return std::tuple<typename rref_to_clref<T>::type...>(
-        static_cast<typename rref_to_clref<T>::type>(
-          std::template get<i>(t)
-        )...
-      );
-    }
-
-    template<typename ...T>
-    typename tuple_rrefs_to_clrefs_return<std::tuple<T...>>::type
-    tuple_rrefs_to_clrefs(std::tuple<T...> &&t) {
-      return tuple_rrefs_to_clrefs_help(
-        static_cast<std::tuple<T...>&&>(t),
-        make_index_sequence<sizeof...(T)>()
-      );
-    }
-    
-    static_assert(std::is_same<
-      tuple_rrefs_to_clrefs_return<std::tuple<int&&,int>>::type,
-      std::tuple<int const&, int>
-    >::value,"Uhoh");
-  }
   
   template<typename Kind, typename ...T>
   struct future1 {
@@ -164,11 +123,9 @@ namespace upcxx {
       return;
     }
     template<typename Tup, int i>
-    static typename detail::tuple_element_or_void<i,Tup>::type
-    get_at_(Tup const &tup, std::integral_constant<int,i>) {
-      // Very odd that we need this cast since its exactly the same as the
-      // return type, but we need it.
-      return static_cast<typename std::tuple_element<i,Tup>::type>(std::get<i>(tup));
+    static typename detail::tuple_element_or_void<i, typename std::decay<Tup>::type>::type
+    get_at_(Tup &&tup, std::integral_constant<int,i>) {
+      return std::template get<i>(static_cast<Tup&&>(tup));
     }
   
   public:
@@ -178,9 +135,27 @@ namespace upcxx {
           results_type,
           typename detail::tuple_element_or_void<(i<0 ? 0 : i), results_type>::type
       >::type
-    result() const {
+    result() const& {
       return get_at_(
           impl_.result_refs_or_vals(),
+          std::integral_constant<int, (
+              i >= (int)sizeof...(T) ? (int)sizeof...(T) :
+              i >= 0 ? i :
+              sizeof...(T) > 1 ? -1 :
+              0
+            )>()
+        );
+    }
+
+    template<int i=-1>
+    typename std::conditional<
+        (i<0 && sizeof...(T) > 1),
+          results_type,
+          typename detail::tuple_element_or_void<(i<0 ? 0 : i), results_type>::type
+      >::type
+    result() && {
+      return get_at_(
+          std::move(impl_).result_refs_or_vals(),
           std::integral_constant<int, (
               i >= (int)sizeof...(T) ? (int)sizeof...(T) :
               i >= 0 ? i :
@@ -196,7 +171,7 @@ namespace upcxx {
           clref_results_refs_or_vals_type,
           typename detail::tuple_element_or_void<(i<0 ? 0 : i), clref_results_refs_or_vals_type>::type
       >::type
-    result_reference() const {
+    result_reference() const& {
       return get_at_(
           impl_.result_refs_or_vals(),
           std::integral_constant<int, (
@@ -207,13 +182,37 @@ namespace upcxx {
             )>()
         );
     }
-    
-    results_type result_tuple() const {
-      return impl_.result_refs_or_vals();
+
+    template<int i=-1>
+    typename std::conditional<
+        (i<0 && sizeof...(T) > 1),
+          rref_results_refs_or_vals_type,
+          typename detail::tuple_element_or_void<(i<0 ? 0 : i), rref_results_refs_or_vals_type>::type
+      >::type
+    result_reference() && {
+      return get_at_(
+          std::move(impl_).result_refs_or_vals(),
+          std::integral_constant<int, (
+              i >= (int)sizeof...(T) ? (int)sizeof...(T) :
+              i >= 0 ? i :
+              sizeof...(T) > 1 ? -1 :
+              0
+            )>()
+        );
     }
     
-    clref_results_refs_or_vals_type result_reference_tuple() const {
+    results_type result_tuple() const& {
       return impl_.result_refs_or_vals();
+    }
+    results_type result_tuple() && {
+      return std::move(impl_).result_refs_or_vals();
+    }
+    
+    clref_results_refs_or_vals_type result_reference_tuple() const& {
+      return impl_.result_refs_or_vals();
+    }
+    rref_results_refs_or_vals_type result_reference_tuple() && {
+      return std::move(impl_).result_refs_or_vals();
     }
     
     template<typename Fn>
@@ -262,10 +261,10 @@ namespace upcxx {
 
     #ifdef UPCXX_BACKEND
     template<int i=-1, typename Fn=detail::future_wait_upcxx_progress_user>
-    auto wait(Fn &&progress = detail::future_wait_upcxx_progress_user{}) const
+    auto wait(Fn &&progress = detail::future_wait_upcxx_progress_user{}) const&
     #else
     template<int i=-1, typename Fn>
-    auto wait(Fn &&progress) const
+    auto wait(Fn &&progress) const&
     #endif
       -> typename std::conditional<
         (i<0 && sizeof...(T) > 1),
@@ -280,11 +279,30 @@ namespace upcxx {
     }
     
     #ifdef UPCXX_BACKEND
+    template<int i=-1, typename Fn=detail::future_wait_upcxx_progress_user>
+    auto wait(Fn &&progress = detail::future_wait_upcxx_progress_user{}) &&
+    #else
+    template<int i=-1, typename Fn>
+    auto wait(Fn &&progress) &&
+    #endif
+      -> typename std::conditional<
+        (i<0 && sizeof...(T) > 1),
+          results_type,
+          typename detail::tuple_element_or_void<(i<0 ? 0 : i), results_type>::type
+      >::type {
+      
+      while(!impl_.ready())
+        progress();
+      
+      return std::move(*this).template result<i>();
+    }
+    
+    #ifdef UPCXX_BACKEND
     template<typename Fn=detail::future_wait_upcxx_progress_user>
-    results_type wait_tuple(Fn &&progress = detail::future_wait_upcxx_progress_user{}) const
+    results_type wait_tuple(Fn &&progress = detail::future_wait_upcxx_progress_user{}) const&
     #else
     template<typename Fn>
-    results_type wait_tuple(Fn &&progress) const
+    results_type wait_tuple(Fn &&progress) const&
     #endif
     {
       while(!impl_.ready())
@@ -292,13 +310,27 @@ namespace upcxx {
       
       return this->result_tuple();
     }
+
+    #ifdef UPCXX_BACKEND
+    template<typename Fn=detail::future_wait_upcxx_progress_user>
+    results_type wait_tuple(Fn &&progress = detail::future_wait_upcxx_progress_user{}) &&
+    #else
+    template<typename Fn>
+    results_type wait_tuple(Fn &&progress) &&
+    #endif
+    {
+      while(!impl_.ready())
+        progress();
+      
+      return std::move(*this).result_tuple();
+    }
     
     #ifdef UPCXX_BACKEND
     template<int i=-1, typename Fn=detail::future_wait_upcxx_progress_user>
-    auto wait_reference(Fn &&progress = detail::future_wait_upcxx_progress_user{}) const
+    auto wait_reference(Fn &&progress = detail::future_wait_upcxx_progress_user{}) const&
     #else
     template<int i=-1, typename Fn>
-    auto wait_reference(Fn &&progress) const
+    auto wait_reference(Fn &&progress) const&
     #endif
       -> typename std::conditional<
         (i<0 && sizeof...(T) > 1),
@@ -310,6 +342,25 @@ namespace upcxx {
         progress();
       
       return this->template result_reference<i>();
+    }
+
+    #ifdef UPCXX_BACKEND
+    template<int i=-1, typename Fn=detail::future_wait_upcxx_progress_user>
+    auto wait_reference(Fn &&progress = detail::future_wait_upcxx_progress_user{}) &&
+    #else
+    template<int i=-1, typename Fn>
+    auto wait_reference(Fn &&progress) &&
+    #endif
+      -> typename std::conditional<
+        (i<0 && sizeof...(T) > 1),
+          rref_results_refs_or_vals_type,
+          typename detail::tuple_element_or_void<(i<0 ? 0 : i), rref_results_refs_or_vals_type>::type
+      >::type {
+      
+      while(!impl_.ready())
+        progress();
+      
+      return std::move(*this).template result_reference<i>();
     }
   };
 }
