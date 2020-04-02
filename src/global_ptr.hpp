@@ -26,6 +26,9 @@ namespace upcxx {
     static_assert(!std::is_const<T>::value && !std::is_volatile<T>::value,
                   "global_ptr<T> does not support cv qualification on T");
 
+    static_assert(!std::is_reference<T>::value, // spec issue #158
+                  "global_ptr<T> does not support reference types as T");
+
     using element_type = T;
     static constexpr memory_kind kind = KindSet;
 
