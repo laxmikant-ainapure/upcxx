@@ -781,6 +781,10 @@ namespace upcxx {
       } \
       struct upcxx_serialization { \
         template<typename T> \
+        static T* default_construct(void *spot) { \
+          return ::new(spot) T; \
+        } \
+        template<typename T> \
         struct supply_type_please: ::upcxx::detail::serialization_fields<T> {}; \
       };
 
@@ -905,7 +909,8 @@ namespace upcxx {
       
       template<typename Reader>
       static deserialized_type* deserialize(Reader &r, void *raw) {
-        T *rec = ::new(raw) T;
+        T *rec = T::upcxx_serialization::template default_construct<T>(raw);
+        //T *rec = ::new(raw) T;
         refs_tup_type refs_tup(rec->upcxx_serialized_fields());
         
         // Deserialization happens in two phases: 1) destruct, 2) read.
@@ -948,6 +953,10 @@ namespace upcxx {
         return ::upcxx::detail::forward_as_tuple_decay_rrefs(__VA_ARGS__); \
       } \
       struct upcxx_serialization { \
+        template<typename T, typename ...Arg> \
+        static T* construct(void *spot, Arg &&...arg) { \
+          return ::new(spot) T(static_cast<Arg&&>(arg)...); \
+        } \
         template<typename T> \
         struct supply_type_please: ::upcxx::detail::serialization_values<T> {}; \
       };
@@ -1015,7 +1024,8 @@ namespace upcxx {
 
       template<typename Obj, typename Reader, typename ...Ptrs>
       static Obj* deserialize(Reader &r, void *spot, Ptrs ...ptrs) {
-        return ::new(spot) Obj(static_cast<typename std::remove_pointer<Ptrs>::type&&>(*ptrs)...);
+        //return ::new(spot) Obj(static_cast<typename std::remove_pointer<Ptrs>::type&&>(*ptrs)...);
+        return Obj::upcxx_serialization::template construct<Obj>(spot, static_cast<typename std::remove_pointer<Ptrs>::type&&>(*ptrs)...);
       }
       
       static constexpr bool skip_is_fast = true;
