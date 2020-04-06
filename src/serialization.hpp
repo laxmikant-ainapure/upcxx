@@ -777,7 +777,7 @@ namespace upcxx {
     private: /* this macro requires "public" protection so we know what to restore */ \
       template<typename> \
       friend struct ::upcxx::detail::serialization_fields; \
-      template<typename upcxx_reserved_prefix_fields_not_values = std::true_type> \
+      template<typename upcxx_reserved_prefix_fields_not_values = ::std::true_type> \
       auto upcxx_reserved_prefix_serialized_fields() \
         UPCXX_RETURN_DECLTYPE(::std::forward_as_tuple(__VA_ARGS__)) { \
         return ::std::forward_as_tuple(__VA_ARGS__); \
@@ -958,7 +958,7 @@ namespace upcxx {
     private: /* macro requires "public" protection so we know what to restore */ \
       template<typename> \
       friend struct ::upcxx::detail::serialization_values; \
-      template<typename upcxx_reserved_prefix_fields_not_values = std::false_type> \
+      template<typename upcxx_reserved_prefix_fields_not_values = ::std::false_type> \
       auto upcxx_reserved_prefix_serialized_values() const \
         UPCXX_RETURN_DECLTYPE(::upcxx::detail::forward_as_tuple_decay_rrefs(__VA_ARGS__)) { \
         return ::upcxx::detail::forward_as_tuple_decay_rrefs(__VA_ARGS__); \
