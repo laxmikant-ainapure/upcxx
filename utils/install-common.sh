@@ -37,7 +37,7 @@ fi
 
 case \${UPCXX_CODEMODE} in
 ""|opt|O3)
-  UPCXX_CODEMODE=O3
+  UPCXX_CODEMODE=opt
   ;;
 debug)
   ;;

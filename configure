@@ -948,7 +948,7 @@ vars=\$(env UPCXX_META=BUILDDIR $BASH $UPCXX_SRC/utils/upcxx.sh "\$@")
 [[ \$? -ne 0 ]] && die 'pre-parse of command line failed'
 vars=\${vars/UPCXX_NETWORK/GASNET_CONDUIT}
 vars=\${vars/UPCXX_THREADMODE=/UPCXX_BACKEND=gasnet_}
-vars=\${vars/UPCXX_CODEMODE=O3/ASSERT=0 OPTLEV=3 DBGSYM=0}
+vars=\${vars/UPCXX_CODEMODE=opt/ASSERT=0 OPTLEV=3 DBGSYM=0}
 vars=\${vars/UPCXX_CODEMODE=debug/ASSERT=1 OPTLEV=0 DBGSYM=1}
 [[ -z "\$UPCXX_QUIET" ]] && echo 'INFO: may need to build the required runtime.  Please be patient.' >&2
 tmp=\$($GMAKE --no-print-directory -f '$PWD/Makefile' upcxx \$vars 2>&1)
