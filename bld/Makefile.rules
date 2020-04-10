@@ -35,7 +35,7 @@ install-hook: force
 	@CONDUITS='$(CONDUITS)';                             \
 	 cd $(upcxx_src) &&                                  \
 	 . utils/install-common.sh &&                        \
-	 conduit_default="$$GASNET_CONDUIT" &&               \
+	 conduit_default="$(UPCXX_DEFAULT_NETWORK)" &&       \
 	 install_to="$(prefix)" install_common
 
 install install-opt install-debug: force
@@ -115,7 +115,7 @@ gasnet: force
 	codemode=$(firstword $(UPCXX_CODEMODE) $(UPCXX_DBGOPT)) \
 	 set -x;                                       \
 	 $(MAKE) "$${DO_WHAT:-all}"                    \
-	         -C "$(BLDDIR)/gasnet.$$codemode/$${NETWORK:-$(GASNET_CONDUIT)}-conduit"
+	         -C "$(BLDDIR)/gasnet.$$codemode/$${NETWORK:-$(UPCXX_DEFAULT_NETWORK)}-conduit"
 PHONY: gasnet
 
 

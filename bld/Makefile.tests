@@ -33,7 +33,7 @@ include $(upcxx_src)/bld/tests.mak
 # public-facing targets don't use GASNet "conduit" terminology
 # using "target-specific variable values" for the defaults
 tests test_install run-tests : NETWORKS ?= $(filter-out $(UNOFFICIAL_CONDUITS),$(CONDUITS))
-check              : NETWORKS ?= $(GASNET_CONDUIT)
+check              : NETWORKS ?= $(UPCXX_DEFAULT_NETWORK)
 export NETWORKS
 
 # Pick 'debug' for building tests, unless --enable-single=opt
@@ -55,7 +55,7 @@ do-test-prereqs: force
 # Compile and run tests for default conduit
 check: force
 	@$(MAKE) $(MAKE_HERE) -s do-test-prereqs
-	@if [[ '$(strip $(NETWORKS))' = '$(strip $(GASNET_CONDUIT))' ]]; \
+	@if [[ '$(strip $(NETWORKS))' = '$(strip $(UPCXX_DEFAULT_NETWORK))' ]]; \
 	   then scope='the default network,';                            \
 	   else scope='specified';                                       \
 	 fi;                                                             \
@@ -100,8 +100,8 @@ UPCXX_TESTS ?= $(addsuffix -seq,$(testprograms_seq)) $(addsuffix -par,$(testprog
 #
 # Summary is provided if NOT building in parallel
 do-tests: force
-	@for network in $(filter-out $(GASNET_CONDUIT),$(NETWORKS)) \
-	                $(filter $(GASNET_CONDUIT),$(NETWORKS)); do \
+	@for network in $(filter-out $(UPCXX_DEFAULT_NETWORK),$(NETWORKS)) \
+	                $(filter $(UPCXX_DEFAULT_NETWORK),$(NETWORKS)); do \
 	   for test in $(UPCXX_TESTS); do                    \
 	     targets+=" do-build-$${test/\//..}-$$network";  \
 	   done;                                             \

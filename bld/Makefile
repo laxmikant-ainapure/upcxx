@@ -22,7 +22,7 @@ ASSERT ?= 1
 OPTLEV ?= 0
 DBGSYM ?= 1
 UPCXX_BACKEND ?= gasnet_seq
-GASNET_CONDUIT ?= smp
+GASNET_CONDUIT ?= $(UPCXX_DEFAULT_NETWORK)
 
 # Derived
 builddir = $(top_builddir)/bld
