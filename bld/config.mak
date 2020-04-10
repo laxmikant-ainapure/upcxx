@@ -21,7 +21,7 @@ UPCXX_CONFIG_VARS = \
 	UPCXX_DBGSYM='$(DBGSYM)'                      \
 	UPCXX_NETWORK='$(GASNET_CONDUIT)'             \
 	UPCXX_CODEMODE='$(GASNET_CODEMODE)'           \
-	UPCXX_THREADMODE='$(GASNET_THRADMODE)'        \
+	UPCXX_THREADMODE='$(GASNET_THREADMODE)'       \
 	UPCXX_CROSS='$(UPCXX_CROSS)'
 
 # Make variables (w/o their GASNET_ prefix) to be extracted from the
