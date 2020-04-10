@@ -22,6 +22,8 @@ Breaking changes:
 
 * Configure-time envvar `CROSS` has been renamed to `UPCXX_CROSS`.
   For backwards compat, the former is still accepted when the latter is unset.
+* Build-time UPCXX_CODEMODE/-codemode value "O3" has been renamed to "opt".
+  For backwards compat, the former is still accepted.
 
 ### 2020.03.12: Release 2020.3.0
 
