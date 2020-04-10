@@ -36,13 +36,13 @@ if [[ \$FAIL == true ]]; then
 fi
 
 case \${UPCXX_CODEMODE} in
-"")
+""|opt|O3)
   UPCXX_CODEMODE=O3
   ;;
-debug|O3)
+debug)
   ;;
 *)
-  echo_and_die "UPCXX_CODEMODE must be set to one of: O3 (default), debug"
+  echo_and_die "UPCXX_CODEMODE must be set to one of: opt (default), debug"
   ;;
 esac
 

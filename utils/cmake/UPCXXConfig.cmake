@@ -52,7 +52,7 @@ if( UPCXX_META_EXECUTABLE )
     if (uc_CMAKE_BUILD_TYPE STREQUAL "DEBUG")
       set(ENV{UPCXX_CODEMODE} "debug" )
     else()
-      set(ENV{UPCXX_CODEMODE} "O3" )
+      set(ENV{UPCXX_CODEMODE} "O3" ) # O3 is compatible with any version
     endif()
     unset(uc_CMAKE_BUILD_TYPE)
   endif()

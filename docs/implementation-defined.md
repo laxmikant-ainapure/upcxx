@@ -21,7 +21,7 @@ The following macro definitions are provided by `upcxx/upcxx.hpp`:
     thread-safty constructs, such as locks.
   * `UPCXX_CODEMODE`:
     This is either undefined (for the "debug" codemode) or defined to an
-    unspecified non-zero integer value for the "O3" (production) codemode.
+    unspecified non-zero integer value for the "opt" (production) codemode.
   * `UPCXX_NETWORK_*`:
     The network being targeted is indicated by a preprocessor identifier with a
     `UPCXX_NETWORK_` prefix followed by the network name in capitals, which is

@@ -148,10 +148,13 @@ influence which backend `upcxx-meta` selects:
   lower library-internal overhead. See [docs/implementation-defined.md](docs/implementation-defined.md)
   for detailed requirements. The default value is always `seq`.
   
-* `UPCXX_CODEMODE=[O3|debug]`: `O3` is for highly compiler-optimized
-  code. `debug` produces unoptimized code, includes extra error checking
-  assertions, and is annotated with the symbol tables needed by debuggers. The
-  default value is always `O3`.
+* `UPCXX_CODEMODE=[opt|debug]`: `opt` is for highly compiler-optimized
+  code and is recommended for performance measurement and production runs.
+  `debug` produces unoptimized code, includes extra error checking
+  assertions to validate the correctness of application calls to UPC++, 
+  and is annotated with the symbol tables needed by debuggers; 
+  `debug` mode is recommended for all development/debugging of applications.
+  The default value is `opt`.
 
 # Running UPC\+\+ Programs
 
