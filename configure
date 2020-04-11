@@ -946,6 +946,13 @@ cat >| bin/upcxx <<EOF
 function die { echo "upcxx: ERROR: \$*" >&2; exit 1; }
 vars=\$(env UPCXX_META=BUILDDIR $BASH $UPCXX_SRC/utils/upcxx.sh "\$@")
 [[ \$? -ne 0 ]] && die 'pre-parse of command line failed'
+if [[ \$vars =~ UPCXX_THREADMODE=([^\$IFS]*) ]]; then
+  value="\${BASH_REMATCH[1]}"
+  case \$value in
+    seq|par) ;;
+    *) die "invalid UPCXX_THREADMODE='\$value' (valid values: 'seq' or 'par')"
+  esac
+fi
 vars=\${vars/UPCXX_NETWORK/GASNET_CONDUIT}
 vars=\${vars/UPCXX_THREADMODE=/UPCXX_BACKEND=gasnet_}
 vars=\${vars/UPCXX_CODEMODE=opt/ASSERT=0 OPTLEV=3 DBGSYM=0}
