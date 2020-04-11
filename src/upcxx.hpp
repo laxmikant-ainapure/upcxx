@@ -47,7 +47,7 @@ namespace upcxx {
 
 // UPCXX_CODEMODE
 //   Undefined for debug
-//   Non-zero for "O3" (production)
+//   Non-zero for "opt" (production)
 #undef UPCXX_CODEMODE
 #if !UPCXX_ASSERT_ENABLED
   // One must NOT depend on the specific non-zero value

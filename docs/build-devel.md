@@ -119,7 +119,7 @@ Additional make targets:
   also trigger regeneration).
   However, `make clean` is also sufficient.
 
-* `make gasnet [DO_WHAT=sub_target] [NETWORK=xyz] [UPCXX_CODEMODE={O3,debug}]`  
+* `make gasnet [DO_WHAT=sub_target] [NETWORK=xyz] [UPCXX_CODEMODE={opt,debug}]`  
   This is a shortcut for `make -C <CONDUIT_DIR> sub_target`, where the value of
   `<CONDUIT_DIR>` is computed from the `NETWORK` and `UPCXX_CODEMODE`, which
   default to the default network and `debug`, respectively.  The default
@@ -138,9 +138,9 @@ report it as a bug.
   
 ## Internal-Only Make Options
 
-* `UPCXX_CODEMODE={debug,O3}`:  
+* `UPCXX_CODEMODE={debug,opt}`:  
   The default behavior of `make check` and `make tests` is to only build for
-  the 'debug' codemode.  One may `make check UPCXX_CODEMODE=O3` to override.
+  the 'debug' codemode.  One may `make check UPCXX_CODEMODE=opt` to override.
 
 * `UPCXX_VERBOSE` {unset or `1`}:  
   Adding `UPCXX_VERBOSE=1` to `make {check,tests,test_install}` will echo

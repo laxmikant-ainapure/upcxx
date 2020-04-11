@@ -427,7 +427,7 @@ $(all_libupcxx): force
 
 ##
 ## Standard (not incremental) targets for upcxx install
-## Note that these just cover UPCXX_CODEMODE of O3 or debug
+## Note that these just cover UPCXX_CODEMODE of opt or debug
 ##
 .PHONY: upcxx-all upcxx-install upcxx-clean upcxx-distclean
 .PHONY: do-upcxx-all do-upcxx-install-one do-upcxx-install-all
@@ -496,7 +496,7 @@ do-upcxx-all-debug: force
 	@$(MAKE) do-upcxx-all ASSERT=1 OPTLEV=0 DBGSYM=1
 do-upcxx-install-opt: do-upcxx-all-opt
 	@$(MAKE) do-upcxx-install-all \
-	         ASSERT=0 OPTLEV=3 DBGSYM=0 UPCXX_CODEMODE=O3    \
+	         ASSERT=0 OPTLEV=3 DBGSYM=0 UPCXX_CODEMODE=opt    \
 	         UPCXX_FRAGMENTS="$(DESTDIR)$(prefix)/gasnet.opt/include"
 do-upcxx-install-debug: do-upcxx-all-debug
 	@$(MAKE) do-upcxx-install-all \

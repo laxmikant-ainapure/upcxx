@@ -28,9 +28,9 @@ function set_upcxx_var {
     UPCXX_CODEMODE)
       # apply some (deliberately undocumented) "fuzzy" leniency to value spelling
       case $val in
-        opt|o|o[1-9]) val=O3 ; ;;
+        opt|o|o[1-9]) val=opt ; ;;
         debug|g|o0) val=debug ;;
-        *) error "Unrecognized -codemode value, must be 'O3' or 'debug'" ;; 
+        *) error "Unrecognized -codemode value, must be 'opt' or 'debug'" ;; 
       esac
       codemode_override=1
     ;;
@@ -96,8 +96,18 @@ for ((i = 1 ; i <= $# ; i++)); do
       dohelp=1
     ;;
     -g0) dodebug='' ;; # -g0 negates -g
+    -g)  dodebug=1
+      # swallow bare -g to avoid overriding the debug level in our default flags
+      set -- "${@:1:i-1}" "${@:i+1}" 
+      i=$((i-1))
+    ;;
     -g*) dodebug=1 ;;
     -O0) doopt='' ;; # -O0 negates -O
+    -O)  doopt=1
+      # swallow bare -O to avoid overriding the opt level in our default flags
+      set -- "${@:1:i-1}" "${@:i+1}" 
+      i=$((i-1))
+    ;;
     -O*) doopt=1 ;;
     *.c) docc=1 ;;
     *.cxx|*.cpp|*.cc|*.c++|*.C++) docxx=1 ;;
@@ -111,11 +121,11 @@ if [[ $codemode_override ]] ; then
 elif [[ $dodebug && ! $doopt ]] ; then
   UPCXX_CODEMODE=debug
 elif [[ ( $doopt && ! $dodebug ) || $doversion || $dohelp ]] ; then
-  UPCXX_CODEMODE=O3
+  UPCXX_CODEMODE=opt
 elif [[ $UPCXX_CODEMODE ]] ; then
   : # last resort : user environment
 else
-  error "please specify exactly one of -O or -g, otherwise pass -codemode={O3,debug} or set UPCXX_CODEMODE={O3,debug}"
+  error "please specify one of the -O or -g options supported by your C++ compiler, otherwise pass -codemode={opt,debug} or set UPCXX_CODEMODE={opt,debug} to select the production or development version of the library."
 fi
 
 if [[ $docxx && $docc ]] ; then
@@ -154,7 +164,7 @@ upcxx Wrapper Options:
   -network={ibv|aries|smp|udp|mpi}
                    Use the indicated GASNet network backend for communication.
 		   The default and availability of backends is system-dependent.
-  -codemode={O3|debug}
+  -codemode={opt|debug}
                    Select the optimized or debugging variant of the UPC++ library.
   -threadmode={seq|par}
                    Select the single-threaded or thread-safe variant of the UPC++ library.

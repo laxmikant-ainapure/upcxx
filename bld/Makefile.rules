@@ -107,16 +107,12 @@ $(TEST_TARGETS): force; @$(MAKE) -f $(upcxx_src)/bld/Makefile.tests $@
 .PHONY: $(TEST_TARGETS)
 
 ## GASNet pass-through
-# usage: make gasnet [DO_WHAT=target] [NETWORK=xyz] [UPCXX_CODEMODE={O3,debug}]
+# usage: make gasnet [DO_WHAT=target] [NETWORK=xyz] [UPCXX_CODEMODE={opt,debug}]
 #   DO_WHAT defaults to 'all'
 #   NETWORK defaults to the default network
 #   UPCXX_CODEMODE defaults to 'debug' (unless `--enable-single=opt`)
 gasnet: force
-	@case '$(UPCXX_CODEMODE)' in                   \
-           '') codemode=$(firstword $(UPCXX_DBGOPT));; \
-           O3) codemode=opt;;                          \
-	    *) codemode=$(UPCXX_CODEMODE);;            \
-	 esac;                                         \
+	codemode=$(firstword $(UPCXX_CODEMODE) $(UPCXX_DBGOPT)) \
 	 set -x;                                       \
 	 $(MAKE) "$${DO_WHAT:-all}"                    \
 	         -C "$(BLDDIR)/gasnet.$$codemode/$${NETWORK:-$(GASNET_CONDUIT)}-conduit"

@@ -38,18 +38,16 @@ export NETWORKS
 
 # Pick 'debug' for building tests, unless --enable-single=opt
 ifeq ($(strip $(UPCXX_DBGOPT)),opt)
-UPCXX_CODEMODE       = O3
-UPCXX_TESTS_GASNET   = opt
+UPCXX_CODEMODE       = opt
 else
 UPCXX_CODEMODE       = debug
-UPCXX_TESTS_GASNET   = debug
 endif
 
 # Compile prerequisites for 'check' or 'tests'
 # Build is restricted to single codemode and the networks in $(NETWORKS)
 do-test-prereqs: force
 	@echo 'Building dependencies...'; \
-	 $(MAKE) -C $(BLDDIR) GASNET_CONDUITS="$(NETWORKS)" do-upcxx-all-$(UPCXX_TESTS_GASNET) || \
+	 $(MAKE) -C $(BLDDIR) GASNET_CONDUITS="$(NETWORKS)" do-upcxx-all-$(UPCXX_CODEMODE) || \
          $(MAKE) failure TARGET=build
 
 .PHONY: do-test-prereqs
@@ -199,7 +197,7 @@ do-post-install-test-script: force
 	 echo '  return 0;';                                              \
 	 echo '}';                                                        \
 	 echo '_EOF';                                                     \
-	 echo 'for codemode in $(subst opt,O3,$(UPCXX_DBGOPT)); do';      \
+	 echo 'for codemode in $(UPCXX_DBGOPT); do';                      \
 	 echo '  for threadmode in seq par; do';                          \
 	 echo '    for network in $(filter-out $(UNOFFICIAL_CONDUITS),$(CONDUITS)); do'; \
 	 echo '      (set -x; $$UPCXX -codemode=$$codemode \';            \
