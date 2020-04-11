@@ -960,6 +960,12 @@ if [[ \$vars =~ UPCXX_THREADMODE=([^\$IFS]*) ]]; then
     *) die "invalid UPCXX_THREADMODE='\$value' (valid values: 'seq' or 'par')"
   esac
 fi
+if [[ \$vars =~ UPCXX_NETWORK=([^\$IFS]*) ]]; then
+  value="\${BASH_REMATCH[1]}"
+  if [[ ! " $ALL_CONDUITS " =~ " \$value " ]]; then
+    die "invalid UPCXX_NETWORK='\$value'.  Valid networks include:$OFFICIAL_CONDUITS."
+  fi
+fi
 vars=\${vars/UPCXX_NETWORK/GASNET_CONDUIT}
 vars=\${vars/UPCXX_THREADMODE=/UPCXX_BACKEND=gasnet_}
 vars=\${vars/UPCXX_CODEMODE=opt/ASSERT=0 OPTLEV=3 DBGSYM=0}
@@ -994,7 +1000,10 @@ case \$tmode in
   seq|par) export UPCXX_BACKEND=gasnet_\$tmode;;
   *)       die "invalid UPCXX_THREADMODE='\$UPCXX_THREADMODE' (valid values: 'seq' or 'par')";;
 esac
-export GASNET_CONDUIT=\${UPCXX_NETWORK:-\${UPCXX_GASNET_CONDUIT:-$GASNET_CONDUIT}}
+export GASNET_CONDUIT=\$(tr '[A-Z]' '[a-z]' <<<\${UPCXX_NETWORK:-\${UPCXX_GASNET_CONDUIT:-$GASNET_CONDUIT}})
+if [[ ! " $ALL_CONDUITS " =~ " \$GASNET_CONDUIT " ]]; then
+  die "invalid UPCXX_NETWORK='\$GASNET_CONDUIT'.  Valid networks include:$OFFICIAL_CONDUITS."
+fi
 [[ -z "\$UPCXX_QUIET" ]] && echo 'INFO: may need to build the required runtime.  Please be patient.' >&2
 tmp=\$($GMAKE --no-print-directory -f '$PWD/Makefile' upcxx-meta 2>&1)
 [[ \$? -ne 0 ]] && echo "\$tmp" >&2 && die 'build of the required runtime failed.'
