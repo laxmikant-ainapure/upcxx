@@ -969,6 +969,18 @@ EOF
 cat >| bin/upcxx-meta <<EOF
 #!$BASH
 function die { echo "upcxx-meta: ERROR: \$*" >&2; exit 1; }
+cmode=\$(tr '[A-Z]' '[a-z]' <<<\${UPCXX_CODEMODE:-opt})
+case \$cmode in
+  debug)   export DBGSYM=1 ASSERT=1 OPTLEV=0;;
+  o3|opt)  export DBGSYM=0 ASSERT=0 OPTLEV=3;;
+  *) die "invalid UPCXX_CODEMODE='\$UPCXX_CODEMODE' (valid values: 'debug' or 'opt')";;
+esac
+tmode=\$(tr '[A-Z]' '[a-z]' <<<\${UPCXX_THREADMODE:=seq})
+case \$tmode in
+  seq|par) export UPCXX_BACKEND=gasnet_\$tmode;;
+  *)       die "invalid UPCXX_THREADMODE='\$UPCXX_THREADMODE' (valid values: 'seq' or 'par')";;
+esac
+export GASNET_CONDUIT=\${UPCXX_NETWORK:-\${UPCXX_GASNET_CONDUIT:-$GASNET_CONDUIT}}
 [[ -z "\$UPCXX_QUIET" ]] && echo 'INFO: may need to build the required runtime.  Please be patient.' >&2
 tmp=\$($GMAKE --no-print-directory -f '$PWD/Makefile' upcxx-meta 2>&1)
 [[ \$? -ne 0 ]] && echo "\$tmp" >&2 && die 'build of the required runtime failed.'
