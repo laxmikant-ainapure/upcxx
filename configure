@@ -874,23 +874,30 @@ fi
 #
 # Default conduit
 #
-case $GASNET_CONDUIT in
-  '')
-    if [[ "$UPCXX_CROSS" =~ -aries- ]]; then
-      GASNET_CONDUIT=aries
-    else
-      GASNET_CONDUIT=smp
-    fi
-    ;;
-  udp|smp|ibv|aries)
-    ;;
-  mpi|ucx)
-    echo -e "WARNING: $GASNET_CONDUIT is not an officially supported network.\n"
-    ;;
-  *)
-    echo_and_die "ERROR: --with-default-network='$GASNET_CONDUIT' is not a valid network"
-    ;;
-esac
+ALL_CONDUITS='smp udp mpi ibv aries ucx'
+UNOFFICIAL_CONDUITS='mpi ucx'
+##
+unset OFFICIAL_CONDUITS
+# Set difference:
+for net in $ALL_CONDUITS; do
+  if [[ ! " $UNOFFICIAL_CONDUITS " =~ " $net " ]]; then
+    OFFICIAL_CONDUITS+=" $net"
+  fi
+done
+if [[ -z $GASNET_CONDUIT ]]; then
+  if [[ "$UPCXX_CROSS" =~ -aries- ]]; then
+    GASNET_CONDUIT=aries
+  else
+    GASNET_CONDUIT=smp
+  fi
+elif [[ " $UNOFFICIAL_CONDUITS " =~ " $GASNET_CONDUIT " ]]; then
+  warnings+="\nWARNING: $GASNET_CONDUIT is not an officially supported network.\n"
+  warnings+="Officially supported networks:$OFFICIAL_CONDUITS\n"
+elif [[ " $ALL_CONDUITS " =~ " $GASNET_CONDUIT " ]]; then
+  : OK
+else
+  echo_and_die "ERROR: --with-default-network='$GASNET_CONDUIT' is not a valid network.\nValid networks include:$OFFICIAL_CONDUITS"
+fi
 
 #
 # Generate bld/Makefile if needed
