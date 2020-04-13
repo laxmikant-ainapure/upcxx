@@ -13,7 +13,7 @@ function verbose {
 }
 
 function set_upcxx_var {
-  local var="UPCXX_$1"
+  local var="$1"
   local val="$2"
   if [[ ${BASH_VERSINFO[0]} -ge 4 ]] ; then 
     # use case modification operators when avail, for efficiency
@@ -69,7 +69,7 @@ for ((i = 1 ; i <= $# ; i++)); do
       var="${arg%%=*}"
       var="${var##+(-)}"
       val="${arg#*=}"
-      eval set_upcxx_var "$var" "$val"
+      eval set_upcxx_var UPCXX_"$var" "$val"
       # swallow current arg
       set -- "${@:1:i-1}" "${@:i+1}"
       i=$((i-1))
@@ -77,7 +77,7 @@ for ((i = 1 ; i <= $# ; i++)); do
     +(-)network|+(-)threadmode|+(-)codemode)
       var="${arg##+(-)}"
       val="${@:i+1:1}"
-      eval set_upcxx_var "$var" "$val"
+      eval set_upcxx_var UPCXX_"$var" "$val"
       # swallow current and next arg
       set -- "${@:1:i-1}" "${@:i+2}"
       i=$((i-1))
@@ -124,9 +124,14 @@ elif [[ ( $doopt && ! $dodebug ) || $doversion || $dohelp ]] ; then
   UPCXX_CODEMODE=opt
 elif [[ $UPCXX_CODEMODE ]] ; then
   : # last resort : user environment
+  eval set_upcxx_var UPCXX_CODEMODE "$UPCXX_CODEMODE"
 else
   error "please specify one of the -O or -g options supported by your C++ compiler, otherwise pass -codemode={opt,debug} or set UPCXX_CODEMODE={opt,debug} to select the production or development version of the library."
 fi
+
+for var in UPCXX_NETWORK UPCXX_THREADMODE ; do
+  eval "[[ -n \"\$$var\" ]] && set_upcxx_var $var \"\$$var\""
+done
 
 if [[ $docxx && $docc ]] ; then
   error "please do not specify a mix of C and C++ source files on the same invocation"
