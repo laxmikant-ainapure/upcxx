@@ -884,6 +884,8 @@ for net in $ALL_CONDUITS; do
     OFFICIAL_CONDUITS+=" $net"
   fi
 done
+# tolower()
+GASNET_CONDUIT=$(tr '[A-Z]' '[a-z]' <<<$GASNET_CONDUIT)
 if [[ -z $GASNET_CONDUIT ]]; then
   if [[ "$UPCXX_CROSS" =~ -aries- ]]; then
     GASNET_CONDUIT=aries
