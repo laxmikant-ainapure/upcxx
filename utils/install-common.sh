@@ -35,11 +35,16 @@ if [[ \$FAIL == true ]]; then
     echo_and_die "Error: parameter passed to upcxx-meta must be one of \$PARAMS"
 fi
 
+###################################################################
+# validate and normalize inputs
+shopt -s nocasematch # ensure case-insensitive match below
+
 case \${UPCXX_CODEMODE} in
-""|opt|O3)
+""|opt|o[1-9])
   UPCXX_CODEMODE=opt
   ;;
-debug)
+debug|g|o0)
+  UPCXX_CODEMODE=debug
   ;;
 *)
   echo_and_die "UPCXX_CODEMODE must be set to one of: opt (default), debug"
@@ -47,10 +52,13 @@ debug)
 esac
 
 case \${UPCXX_THREADMODE} in
-"")
+""|seq)
   UPCXX_THREADMODE=seq
+  UPCXX_BACKEND=gasnet_seq
   ;;
-seq|par)
+par)
+  UPCXX_THREADMODE=par
+  UPCXX_BACKEND=gasnet_par
   ;;
 *)
   echo_and_die "UPCXX_THREADMODE must be set to one of: seq (default), par"
@@ -58,6 +66,12 @@ seq|par)
 esac
 
 UPCXX_NETWORK=\${UPCXX_NETWORK:-\$UPCXX_GASNET_CONDUIT} # backwards-compat
+if [[ \${BASH_VERSINFO[0]} -ge 4 ]] ; then
+  # use case modification operators when avail, for efficiency
+  UPCXX_NETWORK="\${UPCXX_NETWORK,,}"
+else
+  UPCXX_NETWORK=\$(tr '[A-Z]' '[a-z]' <<<\$UPCXX_NETWORK)
+fi
 case "\${UPCXX_NETWORK}" in
 '')
   UPCXX_NETWORK="${conduit_default}"
@@ -69,14 +83,8 @@ ${conduits_pipes})
   ;;
 esac
 
-case \${UPCXX_THREADMODE} in
-seq)
-  UPCXX_BACKEND=gasnet_seq
-  ;;
-par)
-  UPCXX_BACKEND=gasnet_par
-  ;;
-esac
+shopt -u nocasematch # end validation
+###################################################################
 
 meta="${install_to}/upcxx.\${UPCXX_CODEMODE}.\${UPCXX_BACKEND}.\${UPCXX_NETWORK}/bin/upcxx-meta"
 
