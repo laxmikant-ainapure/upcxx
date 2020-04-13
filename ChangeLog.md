@@ -12,6 +12,7 @@ New features/enhancements:
 Notable bug fixes:
 
 * issue #353: configure: automatically cross-compile on Cray XC
+* issue #356: `SERIALIZED_{FIELDS|VALUES}` incorrectly require public constructors
 
 Breaking changes:
 
