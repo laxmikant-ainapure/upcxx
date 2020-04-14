@@ -137,6 +137,29 @@ Additional make targets:
   Use of `make gasnet-single list-networks` is sufficient to ensure one
   always gets the list of detected conduits.
 
+* `make dev-tests` and `make dev-check`  
+  These are developer versions of `tests` and `check` which operate on nearly
+  all tests and examples in the repo in both for both seq and par threadmode,
+  and with the supported codemodes (both, unless `--enable-single` mode).
+  Tests requiring CUDA are included conditionally.
+  See "To add tests or examples", below, for information on how to control
+  which tests and examples are included.  Additionally, the variables
+  `TEST_EXCLUDE_ALL`, `TEST_EXCLUDE_SEQ` and `TEST_EXCLUDE_PAR` are
+  whitespace-separated lists of manual exclusions which can be set in the
+  environment or on the make command line.  For instance, since the current
+  (as this is written) PGI compilers are crashing on `future.cpp`, one might
+  run with the following to skip that specific test:
+    `make dev-check TEST_EXCLUDE_ALL=test/future.cpp`
+  By default, `dev-test-*` compiles all tests for all detected networks and
+  `dev-check-*` compiles *and runs* all tests for only the default network.
+  One can set `NETWORKS` to override these defaults.
+
+* `make dev-{tests,check}-{opt,debug}`  
+  These are versions of `dev-tests` and `dev-check` for a single codemode.
+
+* `make dev-run-tests` and `make dev-tests-clean`  
+  Runs or removes tests build by `dev-{tests,check}{,-opt,-debug}` targets.
+
 All make targets described here (as well as those documented for the end-user
 in [INSTALL.md](../INSTALL.md)) are intended to be parallel-make-safe (Eg `make
 -j<N> ...`).  Should you experience a failure with a parallel make, please
@@ -207,6 +230,20 @@ Adding a configure probe only requires writing a bash script taking a set of
 pre-defined environment variables as input, and generating content on `stdout`
 to be included in the generated `upcxx_config.hpp` files.  More details are
 provided in [utils/config/README.md](../utils/config/README.md).
+
+#### To add tests or examples
+
+By default, `make check-dev` and `make tests-dev` will build all `.cpp` files
+found (non-recursively) in directories enumerated in the `test_dirs` variable
+defined in `bld/tests.mak` (excluding untracked files when in a git clone).
+The variables with a `test_exclude_` prefix will exclude certain `.cpp` files
+or limit their build to specific conditions (such as `test_exclude_par` for
+seq-only tests).
+
+Additionally, `TEST_FLAGS_*` variables in `bld/tests.mak` can be used to
+provide test-specific compiler flags, such as for OpenMP.
+
+See the comments in `bld/tests.mak` for all the details.
 
 #### To add tests to `make check` and `make tests`
 

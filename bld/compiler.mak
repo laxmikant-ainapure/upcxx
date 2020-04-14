@@ -106,3 +106,13 @@ ifeq ($(GASNET_CXX_SUBFAMILY),NVIDIA)
 # NOTE: this is known to be insufficient if nvcc's backend is PGI
 UPCXX_DEP_GEN = $(1) -E -Xcompiler "-M -MT '$(2) $(3)'" $(4) $(5)
 endif
+
+#
+# UPCXX_OPENMP_FLAGS
+# TODO: logic in configure to replace or supplement these
+#
+ifeq ($(GASNET_CXX_FAMILY),PGI)
+UPCXX_OPENMP_FLAGS = -mp
+else
+UPCXX_OPENMP_FLAGS = -fopenmp
+endif

@@ -23,16 +23,17 @@ BLDDIR = $(upcxx_bld)/bld
 
 ## GASNet ##
 include $(upcxx_src)/bld/gasnet.mak
-GASNET_BLDDIR = $(BLDDIR)/gasnet.$(firstword $(UPCXX_DBGOPT))
+GASNET_BLDDIR = $(BLDDIR)/gasnet.$(firstword $(UPCXX_CODEMODE) $(UPCXX_DBGOPT))
 CONDUITS  = $(call GASNET_VAR,$(GASNET_BLDDIR),CONDUITS)
 EXESUFFIX = $(call GASNET_VAR,$(GASNET_BLDDIR),EXESUFFIX)
-
-## Tests ##
-include $(upcxx_src)/bld/tests.mak
+GASNET_CC_FAMILY  := $(call GASNET_VAR,$(GASNET_BLDDIR),CC_FAMILY)
+GASNET_CXX_FAMILY := $(call GASNET_VAR,$(GASNET_BLDDIR),CXX_FAMILY)
+GASNET_CC_SUBFAMILY  := $(call GASNET_VAR,$(GASNET_BLDDIR),CC_SUBFAMILY)
+GASNET_CXX_SUBFAMILY := $(call GASNET_VAR,$(GASNET_BLDDIR),CXX_SUBFAMILY)
 
 # public-facing targets don't use GASNet "conduit" terminology
 # using "target-specific variable values" for the defaults
-check : NETWORKS ?= $(UPCXX_DEFAULT_NETWORK)
+check dev-check dev-check-debug dev-check-opt: NETWORKS ?= $(UPCXX_DEFAULT_NETWORK)
 NETWORKS ?= $(filter-out $(UNOFFICIAL_CONDUITS),$(CONDUITS))
 ifneq ($(strip $(NETWORKS)),)
 export NETWORKS
@@ -44,6 +45,12 @@ UPCXX_CODEMODE       = opt
 else
 UPCXX_CODEMODE       = debug
 endif
+
+## Compiler features ##
+include $(upcxx_src)/bld/compiler.mak
+
+## Tests ##
+include $(upcxx_src)/bld/tests.mak
 
 # Compile prerequisites for 'check' or 'tests'
 # Build is restricted to single codemode and the networks in $(NETWORKS)
@@ -71,22 +78,26 @@ check: force
 	 echo '************'; \
 	 echo ; sleep 5
 	@$(MAKE) $(MAKE_HERE) do-tests UPCXX_BINDIR=$(upcxx_bld)/bin UPCXX_QUIET=1 UPCXX_SKIP_REBUILD=1
-	@$(MAKE) $(MAKE_HERE) do-run-tests UPCXX_BINDIR=$(upcxx_bld)/bin UPCXX_QUIET=1 UPCXX_SKIP_REBUILD=1
+	@$(MAKE) $(MAKE_HERE) do-run-tests UPCXX_QUIET=1 UPCXX_SKIP_REBUILD=1
 	@echo 'Recommended next steps:';  \
 	 echo "  If you have not already, you may now '$(GMAKE_SHORT) install'"
 
 .PHONY: check
 
+TEST_EXE_PATTERN ?= test-$$(basename $$src .cpp)-$$network
+
 # We encode '/' as '..' to allow this pattern rule to work
 do-build-%: force
 	@IFS=+ read name threadmode network <<<$*;       \
 	 src=$${name//..//};                             \
-	 exe="test-$$(basename $$src .cpp)-$$network";   \
+	 exe="$(TEST_EXE_PATTERN)";                      \
+	 flags=TEST_FLAGS_$$(basename $$src .cpp | tr '[a-z]-' '[A-Z]_'); \
 	 ( if [[ '$(UPCXX_VERBOSE)' == 1 ]]; then set -x; fi;  \
 	   UPCXX_CODEMODE=$(UPCXX_CODEMODE)              \
 	   UPCXX_THREADMODE=$$threadmode                 \
 	   UPCXX_NETWORK=$$network                       \
 	   $(UPCXX_BINDIR)/upcxx $(upcxx_src)/$$src      \
+	                         $${!flags}              \
 	                         $(UPCXX_COLOR_CXXFLAGS) \
 	                         -o $$exe$(EXESUFFIX) ); \
 	 if [[ $$? == 0 ]]; then                         \
@@ -257,7 +268,22 @@ do-run-tests: force
 	 for test in $(call ALL_TESTS,$(NETWORKS)); do                  \
 	   [[ -x $$test ]] || continue;                                 \
 	   echo "Running $$test"; : $$((++total));                      \
-	   $(UPCXX_BINDIR)/upcxx-run -np $$ranks ./$$test &> $$tmpfile; \
+	   if [[ -n '$(UPCXX_BINDIR)' ]]; then                          \
+	     runcmd='$(UPCXX_BINDIR)/upcxx-run';                        \
+	   else                                                         \
+	     : Amortize cost of upcxx-run lookups;                      \
+	     conduit=$${test##*-}; runvar=runcmd_$$conduit;             \
+	     if [[ -z $${!runvar} ]]; then                              \
+	       case $(UPCXX_CODEMODE) in                                \
+	        opt) vars='DBGSYM=0 ASSERT=0 OPTLEV=3 GASNET_CODEMODE=opt';;   \
+	          *) vars='DBGSYM=1 ASSERT=1 OPTLEV=0 GASNET_CODEMODE=debug';; \
+	       esac;                                                    \
+	       vars+=" GASNET_CONDUIT=$$conduit";                       \
+	       eval $$runvar=\"$$($(MAKE) -C $(BLDDIR) $$vars upcxx-run)\"; \
+	     fi;                                                        \
+	     runcmd=$${!runvar};                                        \
+	   fi;                                                          \
+	   $$runcmd -np $$ranks ./$$test &> $$tmpfile;                  \
 	   if [[ $$? != 0 ]] || grep -q ERROR $$tmpfile; then           \
 	     echo FAILED; : $$((++failed));                             \
 	   fi;                                                          \
@@ -273,9 +299,44 @@ do-run-tests: force
 	 [[ $$failed = 0 ]] # exit code
 
 run-tests: force
-	@$(MAKE) $(MAKE_HERE) do-run-tests UPCXX_BINDIR=$(upcxx_bld)/bin UPCXX_QUIET=1
+	@$(MAKE) $(MAKE_HERE) do-run-tests UPCXX_QUIET=1
 
 run-tests-installed: force
 	@$(MAKE) $(MAKE_HERE) do-run-tests UPCXX_BINDIR=$(prefix)/bin
 
 .PHONY: do-run-tests run-tests run-tests-installed
+
+
+# dev- prefixed targets which leverage the un-prefixed targets by replacing appropriate variables
+# TODO: better generalization of the un-prefixed targets *might* make this simpler
+
+do-dev-target: force
+	@echo "========";                                 \
+	 echo "Running developer-mode $(TARGET) target";  \
+	 echo "   UPCXX_CODEMODE=$(UPCXX_CODEMODE)";      \
+	 echo "   NETWORKS: $(NETWORKS)";                 \
+	 echo "========"; sleep 2
+	@$(MAKE) $(MAKE_HERE) $(TARGET) \
+	    TEST_EXE_PATTERN='test-$$$$(basename $$$$src .cpp)-$$$$threadmode-$(UPCXX_CODEMODE)-$$$$network' \
+	    UPCXX_TESTS='$(addsuffix +seq,$(testprograms_dev_seq)) $(addsuffix +par,$(testprograms_dev_par))' \
+	    testprograms_seq='$(subst .cpp,-seq-$(UPCXX_CODEMODE),$(testprograms_dev_seq))' \
+	    testprograms_par='$(subst .cpp,-par-$(UPCXX_CODEMODE),$(testprograms_dev_par))'
+
+DEV_TARGETS = dev-tests-debug dev-tests-opt dev-check-debug dev-check-opt
+$(DEV_TARGETS): force
+	@target=$$(cut -d- -f2 <<<$@) cmode=$$(cut -d- -f3 <<<$@); \
+	 $(MAKE) $(MAKE_HERE) do-dev-target TARGET=$$target UPCXX_CODEMODE=$$cmode
+
+DEV_MUX_TARGETS = dev-tests dev-check
+$(DEV_MUX_TARGETS): force
+	@for cmode in $(UPCXX_DBGOPT); do \
+	   $(MAKE) $(MAKE_HERE) $@-$$cmode || exit $$?; \
+	 done
+
+DEV_AUX_TARGETS = dev-run-tests dev-tests-clean
+$(DEV_AUX_TARGETS): force
+	@$(MAKE) $(MAKE_HERE) $$(cut -d- -f2- <<<$@) \
+	 testprograms_seq='$(foreach cmode,$(UPCXX_DBGOPT),$(subst .cpp,-seq-$(cmode),$(testprograms_dev_seq)))' \
+	 testprograms_par='$(foreach cmode,$(UPCXX_DBGOPT),$(subst .cpp,-par-$(cmode),$(testprograms_dev_par)))'
+
+.PHONY: $(DEV_TARGETS) $(DEV_MUX_TARGETS) $(DEV_AUX_TARGETS)
