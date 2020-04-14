@@ -131,6 +131,12 @@ Additional make targets:
   Example: `make gasnet DO_WHAT=run-tests-seq` will build and run all of the
   GASNet tests of the default network in debug mode.
 
+* `make list-networks`  
+  This prints a human-readable list of the detected conduits *if* the GASNet
+  configure step has run, or the list of all supported conduits otherwise.
+  Use of `make gasnet-single list-networks` is sufficient to ensure one
+  always gets the list of detected conduits.
+
 All make targets described here (as well as those documented for the end-user
 in [INSTALL.md](../INSTALL.md)) are intended to be parallel-make-safe (Eg `make
 -j<N> ...`).  Should you experience a failure with a parallel make, please
