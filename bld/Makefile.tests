@@ -79,7 +79,7 @@ check: force
 
 # We encode '/' as '..' to allow this pattern rule to work
 do-build-%: force
-	@IFS=- read name threadmode network <<<$*;       \
+	@IFS=+ read name threadmode network <<<$*;       \
 	 src=$${name/..//};                              \
 	 exe="test-$$(basename $$src .cpp)-$$network";   \
 	 ( if [[ '$(UPCXX_VERBOSE)' == 1 ]]; then set -x; fi;  \
@@ -97,7 +97,7 @@ do-build-%: force
 	 fi
 
 # UPCXX_TESTS defaults to all, but test_install (for instance) may override
-UPCXX_TESTS ?= $(addsuffix -seq,$(testprograms_seq)) $(addsuffix -par,$(testprograms_par))
+UPCXX_TESTS ?= $(addsuffix +seq,$(testprograms_seq)) $(addsuffix +par,$(testprograms_par))
 
 # Build UPCXX_TESTS (default all)
 # UPCXX_CODEMODE is 'debug' if supported
@@ -108,7 +108,7 @@ do-tests: force
 	@for network in $(filter-out $(UPCXX_DEFAULT_NETWORK),$(NETWORKS)) \
 	                $(filter $(UPCXX_DEFAULT_NETWORK),$(NETWORKS)); do \
 	   for test in $(UPCXX_TESTS); do                    \
-	     targets+=" do-build-$${test/\//..}-$$network";  \
+	     targets+=" do-build-$${test/\//..}+$$network";  \
 	   done;                                             \
 	 done;                                               \
 	 if [[ -n '$(filter -j%,$(MAKEFLAGS))' ]]; then      \
@@ -144,7 +144,7 @@ test_install: force
 	     echo "========";                                   \
 	     $(MAKE) $(MAKE_HERE) do-tests                      \
 	             UPCXX_BINDIR=$(prefix)/bin                 \
-	             UPCXX_TESTS=hello_upcxx.cpp-$$threadmode   \
+	             UPCXX_TESTS=hello_upcxx.cpp+$$threadmode   \
 	             UPCXX_TEST_CODEMODE=$$codemode;            \
 	     if [[ $$? != 0 ]]; then                            \
 	       $(MAKE) failure TARGET=test_install;             \
