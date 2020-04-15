@@ -86,7 +86,7 @@ do-build-%: force
 	   UPCXX_CODEMODE=$(UPCXX_CODEMODE)              \
 	   UPCXX_THREADMODE=$$threadmode                 \
 	   UPCXX_NETWORK=$$network                       \
-	   $(UPCXX_BINDIR)/upcxx $(upcxx_src)/test/$$src \
+	   $(UPCXX_BINDIR)/upcxx $(upcxx_src)/$$src      \
 	                         $(UPCXX_COLOR_CXXFLAGS) \
 	                         -o $$exe$(EXESUFFIX) ); \
 	 if [[ $$? == 0 ]]; then                         \
@@ -144,7 +144,7 @@ test_install: force
 	     echo "========";                                   \
 	     $(MAKE) $(MAKE_HERE) do-tests                      \
 	             UPCXX_BINDIR=$(prefix)/bin                 \
-	             UPCXX_TESTS=hello_upcxx.cpp+$$threadmode   \
+	             UPCXX_TESTS=test/hello_upcxx.cpp+$$threadmode \
 	             UPCXX_TEST_CODEMODE=$$codemode;            \
 	     if [[ $$? != 0 ]]; then                            \
 	       $(MAKE) failure TARGET=test_install;             \

@@ -1,22 +1,22 @@
 #
-# Lists of test files relative to $(top_srcdir)/test
+# Lists of test files relative to $(top_srcdir)
 #
 
 testprograms_seq = \
-	hello_upcxx.cpp \
-	atomics.cpp \
-	collectives.cpp \
-	dist_object.cpp \
-	local_team.cpp \
-	barrier.cpp \
-	rpc_barrier.cpp \
-	rpc_ff_ring.cpp \
-	rput.cpp \
-	vis.cpp \
-	vis_stress.cpp \
-	uts/uts_ranks.cpp
+	test/hello_upcxx.cpp \
+	test/atomics.cpp \
+	test/collectives.cpp \
+	test/dist_object.cpp \
+	test/local_team.cpp \
+	test/barrier.cpp \
+	test/rpc_barrier.cpp \
+	test/rpc_ff_ring.cpp \
+	test/rput.cpp \
+	test/vis.cpp \
+	test/vis_stress.cpp \
+	test/uts/uts_ranks.cpp
 
 testprograms_par = \
-	rput_thread.cpp \
-	uts/uts_hybrid.cpp \
-	view.cpp
+	test/rput_thread.cpp \
+	test/uts/uts_hybrid.cpp \
+	test/view.cpp
