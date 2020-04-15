@@ -80,7 +80,7 @@ check: force
 # We encode '/' as '..' to allow this pattern rule to work
 do-build-%: force
 	@IFS=+ read name threadmode network <<<$*;       \
-	 src=$${name/..//};                              \
+	 src=$${name//..//};                             \
 	 exe="test-$$(basename $$src .cpp)-$$network";   \
 	 ( if [[ '$(UPCXX_VERBOSE)' == 1 ]]; then set -x; fi;  \
 	   UPCXX_CODEMODE=$(UPCXX_CODEMODE)              \
@@ -108,7 +108,7 @@ do-tests: force
 	@for network in $(filter-out $(UPCXX_DEFAULT_NETWORK),$(NETWORKS)) \
 	                $(filter $(UPCXX_DEFAULT_NETWORK),$(NETWORKS)); do \
 	   for test in $(UPCXX_TESTS); do                    \
-	     targets+=" do-build-$${test/\//..}+$$network";  \
+	     targets+=" do-build-$${test//\//..}+$$network";  \
 	   done;                                             \
 	 done;                                               \
 	 if [[ -n '$(filter -j%,$(MAKEFLAGS))' ]]; then      \
