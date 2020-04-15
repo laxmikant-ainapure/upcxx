@@ -72,13 +72,13 @@ endif
 
 ## Human-readable GASNet conduit list on stdout, for use in error reporting
 # If GASNet configure has not yet run, list supported conduits
-gasnet-conduits: force
+list-networks: force
 	@if [[ -n '$(GASNET_CONDUITS)' ]]; then           \
 	   echo "Available networks: $(GASNET_CONDUITS)"; \
 	 else                                      \
 	   echo "Supported networks include a system-specific subset of: $(filter-out $(UNOFFICIAL_CONDUITS),$(ALL_CONDUITS))"; \
 	 fi
-.PHONY: gasnet-conduits
+.PHONY: list-networks
 
 dummy:
 	@echo NO DEFAULT TARGET

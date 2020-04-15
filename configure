@@ -965,7 +965,7 @@ fi
 if [[ \$vars =~ UPCXX_NETWORK=([^\$IFS]*) ]]; then
   value="\${BASH_REMATCH[1]}"
   if [[ ! " $ALL_CONDUITS " =~ " \$value " ]]; then
-    die "invalid UPCXX_NETWORK='\$value'.\n\$($GMAKE --no-print-directory -s -f '$PWD/Makefile' gasnet-conduits 2>&1)"
+    die "invalid UPCXX_NETWORK='\$value'.\n\$($GMAKE --no-print-directory -s -f '$PWD/Makefile' list-networks 2>&1)"
   fi
 fi
 vars=\${vars/UPCXX_NETWORK/GASNET_CONDUIT}
@@ -1004,7 +1004,7 @@ case \$tmode in
 esac
 export GASNET_CONDUIT=\$(tr '[A-Z]' '[a-z]' <<<\${UPCXX_NETWORK:-\${UPCXX_GASNET_CONDUIT:-$GASNET_CONDUIT}})
 if [[ ! " $ALL_CONDUITS " =~ " \$GASNET_CONDUIT " ]]; then
-  die "invalid UPCXX_NETWORK='\$GASNET_CONDUIT'.\n\$($GMAKE --no-print-directory -s -f '$PWD/Makefile' gasnet-conduits 2>&1)"
+  die "invalid UPCXX_NETWORK='\$GASNET_CONDUIT'.\n\$($GMAKE --no-print-directory -s -f '$PWD/Makefile' list-networks 2>&1)"
 fi
 [[ -z "\$UPCXX_QUIET" ]] && echo 'INFO: may need to build the required runtime.  Please be patient.' >&2
 tmp=\$($GMAKE --no-print-directory -f '$PWD/Makefile' upcxx-meta 2>&1)
