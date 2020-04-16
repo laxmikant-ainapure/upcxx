@@ -32,9 +32,11 @@ include $(upcxx_src)/bld/tests.mak
 
 # public-facing targets don't use GASNet "conduit" terminology
 # using "target-specific variable values" for the defaults
-tests test_install run-tests : NETWORKS ?= $(filter-out $(UNOFFICIAL_CONDUITS),$(CONDUITS))
-check              : NETWORKS ?= $(UPCXX_DEFAULT_NETWORK)
+check : NETWORKS ?= $(UPCXX_DEFAULT_NETWORK)
+NETWORKS ?= $(filter-out $(UNOFFICIAL_CONDUITS),$(CONDUITS))
+ifneq ($(strip $(NETWORKS)),)
 export NETWORKS
+endif
 
 # Pick 'debug' for building tests, unless --enable-single=opt
 ifeq ($(strip $(UPCXX_DBGOPT)),opt)
@@ -45,9 +47,12 @@ endif
 
 # Compile prerequisites for 'check' or 'tests'
 # Build is restricted to single codemode and the networks in $(NETWORKS)
+# We take care in case $(NETWORKS) is empty (when GASNet has not been configured)
 do-test-prereqs: force
-	@echo 'Building dependencies...'; \
-	 $(MAKE) -C $(BLDDIR) GASNET_CONDUITS="$(NETWORKS)" do-upcxx-all-$(UPCXX_CODEMODE) || \
+	@echo 'Building dependencies...'
+	@$(MAKE) -C $(BLDDIR) do-gasnet-configure-$(UPCXX_CODEMODE) || \
+	 $(MAKE) failure TARGET=build
+	@$(MAKE) -C $(BLDDIR) $${NETWORKS:+GASNET_CONDUITS='$(NETWORKS)'} do-upcxx-all-$(UPCXX_CODEMODE) || \
          $(MAKE) failure TARGET=build
 
 .PHONY: do-test-prereqs
@@ -218,6 +223,9 @@ do-post-install-test-script: force
 tests: force
 	@$(MAKE) $(MAKE_HERE) do-test-prereqs
 	@$(MAKE) $(MAKE_HERE) do-tests UPCXX_BINDIR=$(upcxx_bld)/bin UPCXX_QUIET=1 UPCXX_SKIP_REBUILD=1
+	@$(MAKE) $(MAKE_HERE) do-tests-success
+
+do-tests-success: force
 	@echo ' '; \
 	 echo '       ==== UPC++ TESTS SUCCESSFULLY COMPILED ===='; \
 	 echo ' '; \
