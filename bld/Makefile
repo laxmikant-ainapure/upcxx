@@ -70,6 +70,12 @@ GASNET_CC_SUBFAMILY  := $(call GASNET_VAR,$(builddir)/$(GASNETDIR),CC_SUBFAMILY)
 GASNET_CXX_SUBFAMILY := $(call GASNET_VAR,$(builddir)/$(GASNETDIR),CXX_SUBFAMILY)
 endif
 
+dummy:
+	@echo NO DEFAULT TARGET
+force:
+
+.PHONY: dummy force
+
 ## Human-readable GASNet conduit list on stdout, for use in error reporting
 # If GASNet configure has not yet run, list supported conduits
 list-networks: force
@@ -79,12 +85,6 @@ list-networks: force
 	   echo "Supported networks include a system-specific subset of: $(filter-out $(UNOFFICIAL_CONDUITS),$(ALL_CONDUITS))"; \
 	 fi
 .PHONY: list-networks
-
-dummy:
-	@echo NO DEFAULT TARGET
-force:
-
-.PHONY: dummy force
 
 
 ##
