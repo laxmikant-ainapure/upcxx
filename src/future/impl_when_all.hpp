@@ -62,8 +62,9 @@ namespace upcxx {
       }
       
     public:
-      future_impl_when_all(FuArg ...args):
-        args_(std::move(args)...) {
+      template<typename ...FuArg1>
+      future_impl_when_all(FuArg1 &&...args):
+        args_(static_cast<FuArg1&&>(args)...) {
       }
       
       bool ready() const {
@@ -103,12 +104,13 @@ namespace upcxx {
     template<int i, typename Arg>
     struct future_dependency_when_all_arg {
       future_dependency<Arg> dep_;
-      
+
+      template<typename Arg1>
       future_dependency_when_all_arg(
           future_header_dependent *suc_hdr,
-          Arg arg
+          Arg1 &&arg
         ):
-        dep_{suc_hdr, std::move(arg)} {
+        dep_{suc_hdr, std::forward<Arg1>(arg)} {
       }
     };
     
@@ -127,14 +129,15 @@ namespace upcxx {
           future1<future_kind_when_all<Arg...>, T...>,
           detail::index_sequence<i...>
         > this_t;
-      
+
+      template<typename FuArg1>
       future_dependency_when_all_base(
           future_header_dependent *suc_hdr,
-          future1<future_kind_when_all<Arg...>, T...> all_args
+          /*future1<future_kind_when_all<Arg...>, T...>*/FuArg1 &&all_args
         ):
         future_dependency_when_all_arg<i,Arg>(
           suc_hdr,
-          std::move(std::get<i>(all_args.impl_.args_))
+          std::get<i>(std::forward<FuArg1>(all_args).impl_.args_)
         )... {
       }
       
@@ -185,15 +188,16 @@ namespace upcxx {
         future1<future_kind_when_all<Arg...>, T...>,
         detail::make_index_sequence<sizeof...(Arg)>
       > {
-      
+
+      template<typename Arg1>
       future_dependency(
           future_header_dependent *suc_hdr,
-          future1<future_kind_when_all<Arg...>, T...> arg
+          /*future1<future_kind_when_all<Arg...>, T...>*/Arg1 &&arg
         ):
         future_dependency_when_all_base<
             future1<future_kind_when_all<Arg...>, T...>,
             detail::make_index_sequence<sizeof...(Arg)>
-          >{suc_hdr, std::move(arg)} {
+          >{suc_hdr, std::forward<Arg1>(arg)} {
       }
       
       future_header* cleanup_ready_get_header() {

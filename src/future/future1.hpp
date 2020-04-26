@@ -79,13 +79,13 @@ namespace upcxx {
     future1() = default;
     ~future1() = default;
     
-    future1(impl_type impl): impl_(std::move(impl)) {}
-    
+    future1(impl_type &&impl): impl_(std::move(impl)) {}
+
     template<typename impl_type1,
-             // Prune from overload resolution if `impl_type1` is a
-             // future1 (and therefor not an actual impl type).
-             typename = typename std::enable_if<!detail::is_future1<impl_type1>::value>::type>
-    future1(impl_type1 impl): impl_(std::move(impl)) {}
+             // Prune from overload resolution if `impl_type1` is not a known
+             // future_impl_*** type.
+             typename = typename detail::future_impl_traits<impl_type1>::kind_type>
+    future1(impl_type1 &&impl): impl_(static_cast<impl_type1&&>(impl)) {}
     
     future1(future1 const&) = default;
     template<typename Kind1>
@@ -233,6 +233,26 @@ namespace upcxx {
       >::return_type
     then(Fn &&fn) && {
       return detail::future_then<future1<Kind,T...>, typename std::decay<Fn>::type>()(
+        std::move(*this), static_cast<Fn&&>(fn)
+      );
+    }
+
+    template<typename Fn>
+    typename detail::future_then<
+        future1<Kind,T...>, typename std::decay<Fn>::type, /*make_lazy=*/true
+      >::return_type
+    then_lazy(Fn &&fn) const& {
+      return detail::future_then<future1<Kind,T...>, typename std::decay<Fn>::type, /*make_lazy=*/true>()(
+        *this, static_cast<Fn&&>(fn)
+      );
+    }
+
+    template<typename Fn>
+    typename detail::future_then<
+        future1<Kind,T...>, typename std::decay<Fn>::type, /*make_lazy=*/true
+      >::return_type
+    then_lazy(Fn &&fn) && {
+      return detail::future_then<future1<Kind,T...>, typename std::decay<Fn>::type, /*make_lazy=*/true>()(
         std::move(*this), static_cast<Fn&&>(fn)
       );
     }

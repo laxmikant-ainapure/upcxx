@@ -35,7 +35,7 @@ namespace upcxx {
     struct future_header_ops_dependent;
     
     // future implementations
-    template<typename HeaderOps, typename ...T>
+    template<typename HeaderOps, bool unique, typename ...T>
     struct future_impl_shref;
     template<typename ...T>
     struct future_impl_result;
@@ -43,12 +43,14 @@ namespace upcxx {
     struct future_impl_when_all;
     template<typename FuArg, typename Fn, typename ...T>
     struct future_impl_mapped;
+    template<typename FuArg, typename Fn, typename ...T>
+    struct future_impl_then_lazy;
     
     // future1 implementation mappers
-    template<typename HeaderOps>
+    template<typename HeaderOps, bool unique=false>
     struct future_kind_shref {
       template<typename ...T>
-      using with_types = future_impl_shref<HeaderOps,T...>;
+      using with_types = future_impl_shref<HeaderOps,unique,T...>;
     };
     
     struct future_kind_result {
@@ -67,6 +69,12 @@ namespace upcxx {
       template<typename ...T>
       using with_types = future_impl_mapped<FuArg,Fn,T...>;
     };
+
+    template<typename FuArg, typename Fn>
+    struct future_kind_then_lazy {
+      template<typename ...T>
+      using with_types = future_impl_then_lazy<FuArg,Fn,T...>;
+    };
   }
   
   //////////////////////////////////////////////////////////////////////
@@ -75,6 +83,47 @@ namespace upcxx {
   
   template<typename Kind, typename ...T>
   struct future1;
+
+  //////////////////////////////////////////////////////////////////////////////
+  // future_impl_traits: given the impl type, determine other associated types
+  
+  namespace detail {
+    template<typename Impl>
+    struct future_impl_traits {
+      static constexpr bool is_impl = false;
+    };
+    template<typename Impl>
+    struct future_impl_traits<Impl&>: future_impl_traits<Impl> {};
+    template<typename Impl>
+    struct future_impl_traits<Impl&&>: future_impl_traits<Impl> {};
+    template<typename Impl>
+    struct future_impl_traits<Impl const>: future_impl_traits<Impl> {};
+    
+    template<typename ...T>
+    struct future_impl_traits<future_impl_result<T...>> {
+      static constexpr bool is_impl = true;
+      using kind_type = future_kind_result;
+      using future1_type = future1<kind_type, T...>;
+    };
+    template<typename ...FuArg, typename ...T>
+    struct future_impl_traits<future_impl_when_all<std::tuple<FuArg...>, T...>> {
+      static constexpr bool is_impl = true;
+      using kind_type = future_kind_when_all<FuArg...>;
+      using future1_type = future1<kind_type, T...>;
+    };
+    template<typename FuArg, typename Fn, typename ...T>
+    struct future_impl_traits<future_impl_then_lazy<FuArg, Fn, T...>> {
+      static constexpr bool is_impl = true;
+      using kind_type = future_kind_then_lazy<FuArg, Fn>;
+      using future1_type = future1<kind_type, T...>;
+    };
+    template<typename FuArg, typename Fn, typename ...T>
+    struct future_impl_traits<future_impl_mapped<FuArg, Fn, T...>> {
+      static constexpr bool is_impl = true;
+      using kind_type = future_kind_mapped<FuArg, Fn>;
+      using future1_type = future1<kind_type, T...>;
+    };
+  }
   
   //////////////////////////////////////////////////////////////////////
   // future: An alias for future1 using a shared reference implementation.
@@ -102,23 +151,34 @@ namespace upcxx {
   // implemented in: upcxx/future/apply.hpp
   
   namespace detail {
+    /* The following apply_xxx_as_future types are stateless callables intended
+     * to be specialized on all sorts of static properties of the types involved.
+     * The types "FnRef" & "ArgRef" are intended to be reference or value types
+     * reflecting exactly how the parameter is passed.
+     * 
+     * Defined in: future/apply.hpp
+     */
+
+    // Apply function to arguments lifting return to future.
+    template<typename FnRef, typename ...ArgRef>
+    struct apply_variadic_as_future/*{
+      typedef future1<Kind,U...> return_type;
+      return_type operator()(FnRef fn, ArgRef...);
+    }*/;
+
     // Apply function to tupled arguments lifting return to future.
-    // Defined in: future/apply.hpp
-    template<typename Fn, typename ArgTup>
+    template<typename FnRef, typename ArgRefTupRef/*=std::tuple<ArgRef...> {const} {&|&&}*/>
     struct apply_tupled_as_future/*{
       typedef future1<Kind,U...> return_type;
-      return_type operator()(Fn &&fn, std::tuple<T...> &&arg);
+      return_type operator()(FnRef fn, ArgRefTupRef args);
     }*/;
     
     // Apply function to results of future with return lifted to future.
-    template<typename Fn, typename Arg>
+    template<typename FnRef, typename ArgRef/*=future1<...> {const} {&|&&}*/>
     struct apply_futured_as_future/*{
       typedef future1<Kind,U...> return_type;
-      return_type operator()(Fn fn, future1<Kind,T...> arg);
+      return_type operator()(FnRef fn, ArgRef arg);
     }*/;
-    
-    template<typename Fn, typename Arg>
-    using apply_futured_as_future_return_t = typename apply_futured_as_future<Fn,Arg>::return_type;
   }
 
   //////////////////////////////////////////////////////////////////////
@@ -144,14 +204,14 @@ namespace upcxx {
   
   namespace detail {
     template<
-      typename Arg, typename Fn,
-      typename FnRet = apply_futured_as_future_return_t<Fn,Arg>,
+      typename Arg, typename Fn, bool return_lazy=false,
+      typename FnRet = typename apply_futured_as_future<Fn,Arg>::return_type,
       bool arg_trivial = future_is_trivially_ready<Arg>::value>
     struct future_then;
     
     template<
-      typename Arg, typename Fn,
-      typename FnRet = apply_futured_as_future_return_t<Fn,Arg>,
+      typename Arg, typename Fn, bool return_lazy=false,
+      typename FnRet = typename apply_futured_as_future<Fn,Arg>::return_type,
       bool arg_trivial = future_is_trivially_ready<Arg>::value,
       bool fnret_trivial = future_is_trivially_ready<FnRet>::value>
     struct future_then_pure;

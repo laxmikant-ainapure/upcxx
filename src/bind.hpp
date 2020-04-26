@@ -46,7 +46,7 @@ namespace upcxx {
     using stripped_type = T;
     using on_wire_type = T;
     using off_wire_type = deserialized_type_t<T>;
-    using off_wire_future_type = typename detail::make_future<off_wire_type>::return_type;
+    using off_wire_future_type = future1<detail::future_kind_result, off_wire_type>;
     static constexpr bool immediate = true;
     
     template<typename T1>
@@ -59,7 +59,7 @@ namespace upcxx {
     }
     template<typename T1>
     static off_wire_future_type off_wire_future(T1 &&x) {
-      return upcxx::make_future(static_cast<T1&&>(x));
+      return detail::make_fast_future(static_cast<T1&&>(x));
     }
   };
 

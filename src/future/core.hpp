@@ -359,7 +359,7 @@ namespace upcxx {
       }
       
       template<typename ...U>
-      future_header_result(bool not_ready, std::tuple<U...> values):
+      future_header_result(bool not_ready, std::tuple<U...> &&values):
         base_header{
           /*ref_n_*/1,
           /*status_*/not_ready ? status_results_yes : future_header::status_ready,

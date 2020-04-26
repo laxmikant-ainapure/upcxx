@@ -121,10 +121,22 @@ int main() {
 
   // important optimization: "then" callbacks can take args by && when its provable
   // the future value can be moved-out from
-  make_future(1).then([=](int &&x) {});
+  detail::make_fast_future(1).then([=](int &&x) {});
+  detail::make_fast_future(std::vector<int>{1,2,3}).then([=](std::vector<int> &&x) {});
+
+  auto foo1 = [](int x){ return float(x); };
+  auto foo2 = [](float x){ return 'x'; };
+  detail::future_then_composite_fn<decltype(foo1),decltype(foo2)>{foo1,foo2}(3);
+  //typename std::result_of<detail::future_then_composite_fn<decltype(foo1),decltype(foo2)>&&(int)>::type c = foo2(foo1(0));
+  
   // ensure when_all preserves this ability
-  when_all(make_future(1),when_all(make_future(.01f),make_future(.02f)))
+  when_all(detail::make_fast_future(1), when_all(detail::make_fast_future(.01f), detail::make_fast_future(.02f)))
     .then([](int &&a, float &&b, float &&) {}); 
+
+  ans0.then_lazy([](int x) { std::cout<<"lazy1="<<x<<std::endl; return x+1; })
+      .then_lazy([](int x) { std::cout<<"lazy2="<<x<<std::endl; return x+1; })
+      .then(     [](int x) { std::cout<<"lazy3="<<x<<std::endl; return x+1; })
+      .then_lazy([](int x) { std::cout<<"lazy4="<<x<<std::endl; return x+1; });
   
   when_all(
       // stress nested concatenation
@@ -133,17 +145,19 @@ int main() {
         ans0,
         when_all(ans1),
         ans1.then_pure([](int x) { return x*x; }),
+        ans1.then_lazy([](int x) { return x*x; }),
         make_future<const int&>(arg)
       ),
       make_future<vector<int>>({0*0, 1*1, 2*2, 3*3, 4*4})
     ).then(
-      [=](int ans0, int ans1, int ans1_sqr, int arg, const vector<int> &some_vec) {
+      [=](int ans0, int ans1, int ans1_sqr_pure, int ans1_sqr_lazy, int arg, const vector<int> &some_vec) {
         cout << "fib("<<arg <<") = "<<ans0<<'\n';
         UPCXX_ASSERT_ALWAYS(ans0 == 5, "expected 5, got " << ans0);
         cout << "fib("<<ans0+1<<") = "<<ans1<<'\n';
         UPCXX_ASSERT_ALWAYS(ans1 == 8, "expected 8, got " << ans1);
-        cout << "fib("<<ans0+1<<")**2 = "<<ans1_sqr<<'\n';
-        UPCXX_ASSERT_ALWAYS(ans1_sqr == 8*8, "expected 64, got " << ans1_sqr);
+        cout << "fib("<<ans0+1<<")**2 = "<<ans1_sqr_pure<<'\n';
+        UPCXX_ASSERT_ALWAYS(ans1_sqr_pure == 8*8, "expected 64, got " << ans1_sqr_pure);
+        UPCXX_ASSERT_ALWAYS(ans1_sqr_lazy == 8*8, "expected 64, got " << ans1_sqr_lazy);
         
         for(int i=0; i < 5; i++) {
             UPCXX_ASSERT_ALWAYS(some_vec[i] == i*i, "expected " << i*i << ", got " << some_vec[i]);
@@ -181,7 +195,7 @@ int main() {
     (void)ans0.member;\
     static_assert(std::is_same<int const&, decltype(when_all(ans0).member)>::value, "Uh-oh");\
     (void)when_all(ans0).member;\
-    static_assert(std::is_same<tuple<int const&,int const&,float&&,int const&>, decltype(when_all(ans0, ans1, make_future<float>(3.14), ans2).member)>::value, "Uh-oh");\
+    static_assert(std::is_same<tuple<int const&,int const&,float const&,int const&>, decltype(when_all(ans0, ans1, make_future<float>(3.14), ans2).member)>::value, "Uh-oh");\
     (void)when_all(ans0, ans1, make_future<float>(3.14), ans2).member;\
     static_assert(std::is_same<tuple<int const&,int&,int const&,int&&,int const&&>, decltype(std::declval<future<int,int&,int const&,int&&,int const&&>>().member)>::value, "Uh-oh");\
     static_assert(std::is_same<int&, decltype(std::declval<future<int&>>().member)>::value, "Uh-oh");\
@@ -194,7 +208,8 @@ int main() {
   
   static_assert(std::is_same<float, decltype(make_future(true,1,3.14f).result<2>())>::value, "Uh-oh");
   static_assert(std::is_same<float const&, decltype(std::declval<future<bool,float> const&>().result_reference<1>())>::value, "Uh-oh");
-  static_assert(std::is_same<float &&, decltype(make_future(true,3.14f).result_reference<1>())>::value, "Uh-oh");
+  static_assert(std::is_same<float const&, decltype(make_future(true,3.14f).result_reference<1>())>::value, "Uh-oh");
+  static_assert(std::is_same<float &&, decltype(detail::make_fast_future(true,3.14f).result_reference<1>())>::value, "Uh-oh");
   static_assert(std::is_same<float, decltype(make_future(true,1,3.14f).wait<2>(nop))>::value, "Uh-oh");
   static_assert(std::is_same<float const&, decltype(std::declval<future<bool,int,float> const&>().wait_reference<2>(nop))>::value, "Uh-oh");
   

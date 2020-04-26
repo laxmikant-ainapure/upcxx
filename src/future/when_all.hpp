@@ -26,21 +26,21 @@ namespace upcxx {
     template<typename ...Arg>
     using when_all_return_t = 
       future_from_tuple_t<
-        future_kind_when_all<Arg...>,
+        future_kind_when_all<typename std::decay<Arg>::type...>,
         #if 0
         decltype(std::tuple_cat(
-          std::declval<typename Arg::results_type>()...
+          std::declval<typename std::decay<Arg>::type::results_type>()...
         ))
         #else
-        typename tuple_cat_return<std::tuple<>, typename Arg::results_type...>::type
+        typename tuple_cat_return<std::tuple<>, typename std::decay<Arg>::type::results_type...>::type
         #endif
       >;
   }
   
   template<typename ...Arg>
-  detail::when_all_return_t<Arg...> when_all(Arg ...args) {
+  detail::when_all_return_t<Arg...> when_all(Arg &&...args) {
     return typename detail::when_all_return_t<Arg...>::impl_type{
-      std::move(args)...
+      static_cast<Arg&&>(args)...
     };
   }
 }

@@ -24,7 +24,7 @@ namespace upcxx {
       std::tuple<T...> results_;
       
     public:
-      future_impl_result(T ...values):
+      future_impl_result(T &&...values):
         results_{std::forward<T>(values)...} {
       }
       
@@ -71,9 +71,15 @@ namespace upcxx {
       
       future_dependency(
           future_header_dependent *suc_hdr,
-          future1<future_kind_result, T...> arg
+          future1<future_kind_result, T...> &&arg
         ):
-        results_{std::move(arg.impl_.results_)} {
+        results_(static_cast<std::tuple<T...>&&>(arg.impl_.results_)) {
+      }
+      future_dependency(
+          future_header_dependent *suc_hdr,
+          future1<future_kind_result, T...> const &arg
+        ):
+        results_(arg.impl_.results_) {
       }
       
       void cleanup_early() {}

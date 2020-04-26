@@ -36,7 +36,7 @@ namespace upcxx {
         return this->arg_.impl_.ready();
       }
       
-      using fn_return_t = apply_futured_as_future_return_t<Fn,FuArg>;
+      using fn_return_t = typename apply_futured_as_future<Fn,FuArg>::return_type;
       static_assert(future_is_trivially_ready<fn_return_t>::value, "Mapped futures must return trivially ready futures.");
       
       std::tuple<T...> result_refs_or_vals() const& {
