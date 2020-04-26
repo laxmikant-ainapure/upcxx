@@ -33,9 +33,11 @@ namespace detail {
       
       detail::raw_storage<typename serialization_traits<Fn>::deserialized_type> fn;
       serialization_traits<Fn>::deserialize(r, &fn);
-      
-      upcxx::apply_as_future(fn.value_and_destruct())
+
+      upcxx::apply_as_future(std::move(fn.value()))
         .then(after_execute<cleanup>{std::tuple<Arg...>(a...)});
+
+      fn.destruct();
     }
 
   public:

@@ -99,6 +99,12 @@ namespace upcxx {
     template<typename Impl>
     struct future_impl_traits<Impl const>: future_impl_traits<Impl> {};
     
+    template<typename HeaderOps, bool unique, typename ...T>
+    struct future_impl_traits<future_impl_shref<HeaderOps, unique, T...>> {
+      static constexpr bool is_impl = true;
+      using kind_type = future_kind_shref<HeaderOps, unique>;
+      using future1_type = future1<kind_type, T...>;
+    };
     template<typename ...T>
     struct future_impl_traits<future_impl_result<T...>> {
       static constexpr bool is_impl = true;

@@ -79,8 +79,6 @@ namespace upcxx {
     future1() = default;
     ~future1() = default;
     
-    future1(impl_type &&impl): impl_(std::move(impl)) {}
-
     template<typename impl_type1,
              // Prune from overload resolution if `impl_type1` is not a known
              // future_impl_*** type.
@@ -93,7 +91,9 @@ namespace upcxx {
     
     future1(future1&&) = default;
     template<typename Kind1>
-    future1(future1<Kind1,T...> &&that): impl_(std::move(that.impl_)) {}
+    future1(future1<Kind1,T...> &&that):
+      impl_(static_cast<future1<Kind1,T...>&&>(that).impl_) {
+    }
     
     future1& operator=(future1 const&) = default;
     template<typename Kind1>
@@ -105,7 +105,7 @@ namespace upcxx {
     future1& operator=(future1&&) = default;
     template<typename Kind1>
     future1& operator=(future1<Kind1,T...> &&that) {
-      this->impl_ = std::move(that.impl_);
+      this->impl_ = static_cast<future1<Kind1,T...>&&>(that).impl_;
       return *this;
     }
     
@@ -155,7 +155,7 @@ namespace upcxx {
       >::type
     result() && {
       return get_at_(
-          std::move(impl_).result_refs_or_vals(),
+          static_cast<impl_type&&>(impl_).result_refs_or_vals(),
           std::integral_constant<int, (
               i >= (int)sizeof...(T) ? (int)sizeof...(T) :
               i >= 0 ? i :
@@ -191,7 +191,7 @@ namespace upcxx {
       >::type
     result_reference() && {
       return get_at_(
-          std::move(impl_).result_refs_or_vals(),
+          static_cast<impl_type&&>(impl_).result_refs_or_vals(),
           std::integral_constant<int, (
               i >= (int)sizeof...(T) ? (int)sizeof...(T) :
               i >= 0 ? i :
@@ -205,14 +205,14 @@ namespace upcxx {
       return impl_.result_refs_or_vals();
     }
     results_type result_tuple() && {
-      return std::move(impl_).result_refs_or_vals();
+      return static_cast<impl_type&&>(impl_).result_refs_or_vals();
     }
     
     clref_results_refs_or_vals_type result_reference_tuple() const& {
       return impl_.result_refs_or_vals();
     }
     rref_results_refs_or_vals_type result_reference_tuple() && {
-      return std::move(impl_).result_refs_or_vals();
+      return static_cast<impl_type&&>(impl_).result_refs_or_vals();
     }
     
     template<typename Fn>
@@ -233,7 +233,7 @@ namespace upcxx {
       >::return_type
     then(Fn &&fn) && {
       return detail::future_then<future1<Kind,T...>, typename std::decay<Fn>::type>()(
-        std::move(*this), static_cast<Fn&&>(fn)
+        static_cast<future1&&>(*this), static_cast<Fn&&>(fn)
       );
     }
 
@@ -253,7 +253,7 @@ namespace upcxx {
       >::return_type
     then_lazy(Fn &&fn) && {
       return detail::future_then<future1<Kind,T...>, typename std::decay<Fn>::type, /*make_lazy=*/true>()(
-        std::move(*this), static_cast<Fn&&>(fn)
+        static_cast<future1&&>(*this), static_cast<Fn&&>(fn)
       );
     }
     
@@ -275,7 +275,7 @@ namespace upcxx {
       >::return_type
     then_pure(Fn &&pure_fn) && {
       return detail::future_then_pure<future1<Kind,T...>, typename std::decay<Fn>::type>()(
-        std::move(*this), static_cast<Fn&&>(pure_fn)
+        static_cast<future1&&>(*this), static_cast<Fn&&>(pure_fn)
       );
     }
 
@@ -314,7 +314,7 @@ namespace upcxx {
       while(!impl_.ready())
         progress();
       
-      return std::move(*this).template result<i>();
+      return static_cast<future1&&>(*this).template result<i>();
     }
     
     #ifdef UPCXX_BACKEND
@@ -342,7 +342,7 @@ namespace upcxx {
       while(!impl_.ready())
         progress();
       
-      return std::move(*this).result_tuple();
+      return static_cast<future1&&>(*this).result_tuple();
     }
     
     #ifdef UPCXX_BACKEND
@@ -380,7 +380,7 @@ namespace upcxx {
       while(!impl_.ready())
         progress();
       
-      return std::move(*this).template result_reference<i>();
+      return static_cast<future1&&>(*this).template result_reference<i>();
     }
   };
 }

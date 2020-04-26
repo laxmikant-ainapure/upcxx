@@ -176,7 +176,7 @@ namespace upcxx {
             typename binding<Fn>::off_wire_type,
             typename binding<B>::off_wire_type...
           >>()
-          .then(bound_function_applicator<
+          .then_lazy(bound_function_applicator<
               typename binding<Fn>::off_wire_type,
               typename binding<B>::off_wire_type...
             >()
@@ -185,7 +185,7 @@ namespace upcxx {
         return upcxx::when_all(
             binding<Fn>::off_wire_future(std::move(fn_)),
             binding<B>::off_wire_future(std::get<bi>(std::move(b_)))...
-          ).then(bound_function_applicator<
+          ).then_lazy(bound_function_applicator<
               typename binding<Fn>::off_wire_type,
               typename binding<B>::off_wire_type...
             >()
