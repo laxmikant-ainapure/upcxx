@@ -104,6 +104,7 @@ do-build-%: force
 	   printf 'Compiling %-30s SUCCESS\n' "$$exe";   \
 	 else                                            \
 	   printf 'Compiling %-30s FAILED\n' "$$exe";    \
+	   [[ -n "$$TEST_SENTINEL" ]] && touch $$TEST_SENTINEL; \
 	   exit 1;                                       \
 	 fi
 
@@ -114,7 +115,8 @@ UPCXX_TESTS ?= $(addsuffix +seq,$(testprograms_seq)) $(addsuffix +par,$(testprog
 # UPCXX_CODEMODE is 'debug' if supported
 # Default network (if included in NETWORKS) is built last to keep it on user's screen
 #
-# Summary is provided if NOT building in parallel
+# If building in parallel, only a qualitative pass/fail summary is provided.
+# Otherwise a quantitaive ("N of M") summary is printed.
 do-tests: force
 	@for network in $(filter-out $(UPCXX_DEFAULT_NETWORK),$(NETWORKS)) \
 	                $(filter $(UPCXX_DEFAULT_NETWORK),$(NETWORKS)); do \
@@ -123,8 +125,14 @@ do-tests: force
 	   done;                                             \
 	 done;                                               \
 	 if [[ -n '$(filter -j%,$(MAKEFLAGS))' ]]; then      \
-	   $(MAKE) $(MAKE_HERE) $$targets || exit $$?;       \
-	   echo;                                             \
+	   export TEST_SENTINEL=.tests_failed_$$$$;          \
+	   rm -f $$TEST_SENTINEL;                            \
+	   $(MAKE) $(MAKE_HERE) -k $$targets;                \
+	   if [[ $$? -ne 0 || -e $$TEST_SENTINEL ]]; then    \
+	     rm -f $$TEST_SENTINEL;                          \
+	     echo -e "\nFAILED to compile at least one test\n";\
+	     exit 1;                                         \
+	   fi;                                               \
 	 else                                                \
 	   total=0; failed=0;                                \
 	   for target in $$targets; do                       \
@@ -329,9 +337,17 @@ $(DEV_TARGETS): force
 
 DEV_MUX_TARGETS = dev-tests dev-check
 $(DEV_MUX_TARGETS): force
-	@for cmode in $(UPCXX_DBGOPT); do \
-	   $(MAKE) $(MAKE_HERE) $@-$$cmode || exit $$?; \
-	 done
+	@failed=0;                          \
+         for cmode in $(UPCXX_DBGOPT); do   \
+	   $(MAKE) $(MAKE_HERE) $@-$$cmode; \
+	   : $$((failed += ($$? != 0)));    \
+	 done;                              \
+	 if [[ $$failed = 0 ]]; then        \
+	   echo -e "\nPASSED $@\n";         \
+	 else                               \
+	   echo -e "\nFAILED $@\n";         \
+	   exit 1;                          \
+	 fi
 
 DEV_AUX_TARGETS = dev-run-tests dev-tests-clean
 $(DEV_AUX_TARGETS): force
