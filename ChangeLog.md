@@ -9,6 +9,8 @@ For information on installing UPC++, see: [INSTALL.md](INSTALL.md)
 
 New features/enhancements: (see specification and programmer's guide for full details)
 
+* Rpc's which return future values experience one less heap allocation and
+  virtual dispatch in the runtime's critical path.
 * ...
 
 Notable bug fixes:
@@ -19,6 +21,7 @@ Notable bug fixes:
 * [spec issue #158](https://bitbucket.org/berkeleylab/upcxx-spec/issues/158): prohibit reference types in global_ptr and upcxx_memberof_general
 * issue #356: `SERIALIZED_{FIELDS|VALUES}` incorrectly require public constructors
 * issue #364: Stray "-e" output on macOS and possibly elsewhere
+* issue #361: upcxx::rpc broken when mixing arguments of T&& and dist_object& 
 
 Breaking changes:
 
@@ -26,6 +29,7 @@ Breaking changes:
   For backwards compat, the former is still accepted when the latter is unset.
 * Build-time UPCXX_CODEMODE/-codemode value "O3" has been renamed to "opt".
   For backwards compat, the former is still accepted.
+* `future<T...>::{wait,result}_moved()`, deprecated since 2019.9.0, are now removed.
 
 ### 2020.03.12: Release 2020.3.0
 
