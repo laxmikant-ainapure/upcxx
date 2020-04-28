@@ -133,12 +133,13 @@ namespace upcxx {
   
   //////////////////////////////////////////////////////////////////////
   // future: An alias for future1 using a shared reference implementation.
+
+  namespace detail {
+    using future_kind_default = detail::future_kind_shref<detail::future_header_ops_general>;
+  }
   
   template<typename ...T>
-  using future = future1<
-    detail::future_kind_shref<detail::future_header_ops_general>,
-    T...
-  >;
+  using future = future1<detail::future_kind_default, T...>;
   
   template<typename ...T>
   class promise;
@@ -201,6 +202,23 @@ namespace upcxx {
     
     template<typename Kind, typename Tup>
     using future_from_tuple_t = typename future_from_tuple<Kind,Tup>::type;
+  }
+
+  //////////////////////////////////////////////////////////////////////
+  // detail::future_change_kind
+
+  namespace detail {
+    template<typename Fut, typename NewKind, bool condition=true>
+    struct future_change_kind;
+
+    template<typename OldKind, typename ...T, typename NewKind>
+    struct future_change_kind<future1<OldKind,T...>, NewKind, /*condition=*/true> {
+      using type = future1<NewKind,T...>;
+    };
+    template<typename OldKind, typename ...T, typename NewKind>
+    struct future_change_kind<future1<OldKind,T...>, NewKind, /*condition=*/false> {
+      using type = future1<OldKind,T...>;
+    };
   }
   
   //////////////////////////////////////////////////////////////////////

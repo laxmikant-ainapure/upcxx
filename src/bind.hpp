@@ -182,7 +182,7 @@ namespace upcxx {
             >()
           )
         ) {
-        return upcxx::when_all(
+        return detail::when_all_fast(
             binding<Fn>::off_wire_future(std::move(fn_)),
             binding<B>::off_wire_future(std::get<bi>(std::move(b_)))...
           ).then_lazy(bound_function_applicator<

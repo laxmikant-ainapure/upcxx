@@ -174,25 +174,17 @@ namespace upcxx {
         detail::promise_fulfill_result(this->header(), std::move(values));
       }
       
-      future1<
-          detail::future_kind_shref<detail::future_header_ops_general>,
-          T...
-        >
-      finalize() const {
+      future<T...> finalize() const {
         future_header_promise<T...> *hdr = this->header();
         hdr->fulfill(1);
         hdr->incref(1);
-        return detail::future_impl_shref<detail::future_header_ops_general, /*unique=*/false, T...>(&hdr->base_header_result.base_header);
+        return typename future<T...>::impl_type(&hdr->base_header_result.base_header);
       }
       
-      future1<
-          detail::future_kind_shref<detail::future_header_ops_general>,
-          T...
-        >
-      get_future() const {
+      future<T...> get_future() const {
         future_header_promise<T...> *hdr = this->header();
         hdr->incref(1);
-        return detail::future_impl_shref<detail::future_header_ops_general, /*unique=*/false, T...>(&hdr->base_header_result.base_header);
+        return typename future<T...>::impl_type(&hdr->base_header_result.base_header);
       }
     };
   }

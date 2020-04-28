@@ -214,29 +214,46 @@ namespace upcxx {
     rref_results_refs_or_vals_type result_reference_tuple() && {
       return static_cast<impl_type&&>(impl_).result_refs_or_vals();
     }
-    
+
+    // Return type is forced to the default kind (like future<T...>) if "this"
+    // is also the default kind so as not to surprise users with spooky types.
+    // The optimizations possible for knowing a future came from a (non-lazy)
+    // then as opposed to the default kind is minimal, see the difference between
+    // future_header_ops_dependent vs future_header_ops_general wrt delete1 &
+    // dropref.
     template<typename Fn>
-    typename detail::future_then<
-        future1<Kind,T...>,
-        typename std::decay<Fn>::type
-      >::return_type
+    typename detail::future_change_kind<
+        typename detail::future_then<
+          future1<Kind, T...>,
+          typename std::decay<Fn>::type
+        >::return_type,
+        /*NewKind=*/detail::future_kind_default,
+        /*condition=*/std::is_same<Kind, detail::future_kind_default>::value
+      >::type
     then(Fn &&fn) const& {
       return detail::future_then<future1<Kind,T...>, typename std::decay<Fn>::type>()(
         *this, static_cast<Fn&&>(fn)
       );
     }
 
+    // Return type is forced just like preceding "then" member.
     template<typename Fn>
-    typename detail::future_then<
-        future1<Kind,T...>,
-        typename std::decay<Fn>::type
-      >::return_type
+    typename detail::future_change_kind<
+        typename detail::future_then<
+          future1<Kind, T...>,
+          typename std::decay<Fn>::type
+        >::return_type,
+        /*NewKind=*/detail::future_kind_default,
+        /*condition=*/std::is_same<Kind, detail::future_kind_default>::value
+      >::type
     then(Fn &&fn) && {
       return detail::future_then<future1<Kind,T...>, typename std::decay<Fn>::type>()(
         static_cast<future1&&>(*this), static_cast<Fn&&>(fn)
       );
     }
 
+    // Hidden member: produce a then'd future lazily so that it can be used with
+    // later then's. Comes with restrictions, see "src/future/impl_then_lazy.hpp".
     template<typename Fn>
     typename detail::future_then<
         future1<Kind,T...>, typename std::decay<Fn>::type, /*make_lazy=*/true
@@ -247,6 +264,7 @@ namespace upcxx {
       );
     }
 
+    // Hidden member just like preceding "then_lazy"
     template<typename Fn>
     typename detail::future_then<
         future1<Kind,T...>, typename std::decay<Fn>::type, /*make_lazy=*/true
