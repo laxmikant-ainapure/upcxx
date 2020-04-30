@@ -164,6 +164,16 @@ All make targets described here (as well as those documented for the end-user
 in [INSTALL.md](../INSTALL.md)) are intended to be parallel-make-safe (Eg `make
 -j<N> ...`).  Should you experience a failure with a parallel make, please
 report it as a bug.
+
+## Testing Scripts for Developers
+
+In addition to the `dev-*` family of make targets, there exists a collection of
+scripts which combine them with additional logic including system-specific
+options for configure and logic for running tests on batch-scheduled systems.
+These are maintained to include representative coverage of the range of
+compilers and networks which we document as officially supported.
+
+For details see [utils/dev-ci/README.md](../utils/dev-ci/README.md).
   
 ## Internal-Only Make Options
 

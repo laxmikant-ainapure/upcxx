@@ -1,0 +1,40 @@
+#!/bin/bash
+
+## BOILERPLATE
+source $(dirname $0)/_ci-common
+
+## ENVIRONMENT
+for x in intel gnu cray; do module swap PrgEnv-$x PrgEnv-cray ; done 2>/dev/null
+for x in haswell mic-knl; do module swap craype-$x craype-haswell ; done 2>/dev/null
+module swap cce cce/9.0.0
+export COMPILER_PATH=/opt/cray/pe/cce/default/binutils/x86_64/bin
+export TMPDIR=/run/user/$(id -u)
+export UPCXX_HAVE_OPENMP=1
+
+export NETWORKS="${CI_NETWORKS:-aries}"
+export GMAKE="${CI_MAKE:-${GMAKE:-make}}"
+MAKE_CMD="$GMAKE ${CI_MAKE_PARALLEL:--j8}"
+
+## CONFIGURE
+if [[ $STAGES =~ ,configure, ]]; then
+  $UPCXX/configure ${GASNET:+ --with-gasnet=$GASNET}
+fi
+
+## BUILD
+if [[ $STAGES =~ ,build, ]]; then
+  time $MAKE_CMD all
+fi
+
+## TESTS
+if [[ $STAGES =~ ,tests, ]]; then
+  time $MAKE_CMD dev-tests
+fi
+
+## RUN
+if [[ $STAGES =~ ,run, ]]; then
+  unset TMPDIR
+  time salloc -C haswell -t 90 -q interactive -N 2 -- time $GMAKE dev-run-tests
+fi
+
+## DONE
+success
