@@ -102,7 +102,9 @@ failure: force
 .PHONY: exe run
 
 ## Check/tests targets pass-through to their own Makefile
-TEST_TARGETS = check tests tests-clean test_install run-tests run-tests-installed
+TEST_TARGETS = check tests tests-clean test_install run-tests run-tests-installed \
+	       dev-tests dev-tests-opt dev-tests-debug dev-run-tests \
+	       dev-check dev-check-opt dev-check-debug dev-tests-clean
 $(TEST_TARGETS): force; @$(MAKE) -f $(upcxx_src)/bld/Makefile.tests $@
 .PHONY: $(TEST_TARGETS)
 

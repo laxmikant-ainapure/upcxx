@@ -1,5 +1,9 @@
-#include <upcxx/serialization.hpp>
-#include <upcxx/utility.hpp>
+#if UPCXX_BACKEND
+  #include <upcxx/upcxx.hpp>
+#else
+  #include <upcxx/serialization.hpp>
+  #include <upcxx/utility.hpp>
+#endif
 #include "util.hpp"
 
 using namespace std;
@@ -309,6 +313,10 @@ struct noserz {
 };
 
 int main() {
+#if UPCXX_BACKEND
+  upcxx::init();
+#endif
+
   print_test_header();
 
   #if 0
@@ -466,5 +474,9 @@ int main() {
   }
 
   print_test_success();
+
+#if UPCXX_BACKEND
+  upcxx::finalize();
+#endif
   return 0;
 }
