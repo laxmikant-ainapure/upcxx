@@ -20,16 +20,13 @@ namespace upcxx {
       // future_body_then::leave_active calls this after lambda evaluation
       template<typename Kind, typename ...T>
       void leave_active_into_proxy(
-          bool pure,
           future_header_dependent *hdr,
           void *storage,
           future1<Kind,T...> &&proxied
         ) {
         
-        // drop one reference for lambda execution if impure,
-        // another for active queue.
-        if(0 == hdr->decref(pure ? 1 : 2)) {
-          // we died
+        if(1 == hdr->ref_n_) {
+          // only reference is the one for being not ready, so we die early
           operator delete(storage);
           delete hdr;
         }
@@ -37,6 +34,7 @@ namespace upcxx {
           future_header *proxied_hdr = static_cast<future1<Kind,T...>&&>(proxied).impl_.steal_header();
           
           if(Kind::template with_types<T...>::header_ops::is_trivially_ready_result) {
+            hdr->decref(1); // depedent becoming ready loses ref
             operator delete(storage); // body dead
             // we know proxied_hdr is its own result
             hdr->enter_ready(proxied_hdr);
@@ -62,23 +60,18 @@ namespace upcxx {
           FuArg1 &&arg, Fn1 &&fn
         ):
         future_body_then_base(storage),
-        dep_(hdr, std::forward<FuArg1>(arg)),
-        fn_(std::forward<Fn1>(fn)) {
+        dep_(hdr, static_cast<FuArg1&&>(arg)),
+        fn_(static_cast<Fn1&&>(fn)) {
       }
       
-      // then's can't be destructed early so we inherit the stub
-      //void destruct_early();
-      
       void leave_active(future_header_dependent *hdr) {
-        auto proxied = apply_futured_as_future<Fn&&, FuArg&&>()(std::move(this->fn_), std::move(this->dep_));
+        auto proxied = apply_futured_as_future<Fn&&, FuArg&&>()(static_cast<Fn&&>(this->fn_), static_cast<future_dependency<FuArg>&&>(this->dep_));
         
         void *me_mem = this->storage_;
         this->dep_.cleanup_ready();
         this->~future_body_then();
         
-        this->leave_active_into_proxy(
-          /*pure=*/false, hdr, me_mem, std::move(proxied)
-        );
+        this->leave_active_into_proxy(hdr, me_mem, std::move(proxied));
       }
     };
   } // namespace detail
@@ -149,7 +142,6 @@ namespace upcxx {
       template<typename Arg1, typename Fn1>
       future_header_dependent* make_header(Arg1 &&arg, Fn1 &&fn) {
         future_header_dependent *hdr = new future_header_dependent;
-        hdr->incref(1); // another for function execution
         
         union body_union_t {
           future_body_then<Arg,Fn> then;

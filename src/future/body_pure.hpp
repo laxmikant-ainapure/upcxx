@@ -16,21 +16,25 @@ namespace detail {
     future_body_pure(
         void *storage,
         future_header_dependent *suc_hdr,
-        future1<Kind, T...> arg
+        future1<Kind, T...> &&arg
       ):
       future_body{storage},
-      dep_{suc_hdr, std::move(arg)} {
+      dep_(suc_hdr, static_cast<future1<Kind, T...>&&>(arg)) {
     }
     
-    void destruct_early() {
-      this->dep_.cleanup_early();
-      this->~future_body_pure();
+    future_body_pure(
+        void *storage,
+        future_header_dependent *suc_hdr,
+        future1<Kind, T...> const &arg
+      ):
+      future_body{storage},
+      dep_(suc_hdr, arg) {
     }
     
     void leave_active(future_header_dependent *hdr) {
       void *storage = this->storage_;
       
-      if(0 == hdr->decref(1)) { // left active queue
+      if(0 == hdr->decref(1)) { // dependent becoming ready loses ref
         this->dep_.cleanup_ready();
         this->~future_body_pure();
         future_body::operator delete(storage);

@@ -223,11 +223,6 @@ namespace upcxx {
         ) {
       }
       
-      void cleanup_early() {
-        this->unlink_();
-        HeaderOps::template dropref<T...>(this->header_(), /*maybe_nil=*/std::true_type());
-      }
-      
       void cleanup_ready() {
         future_header_ops_result_ready::template dropref<T...>(this->header_(), /*maybe_nil*/std::false_type());
       }

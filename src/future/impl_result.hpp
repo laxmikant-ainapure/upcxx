@@ -82,8 +82,6 @@ namespace upcxx {
         results_(arg.impl_.results_) {
       }
       
-      void cleanup_early() {}
-      
       detail::tuple_refs_return_t<std::tuple<T...> const&>
       result_refs_or_vals() const& {
         return detail::tuple_refs(results_);
@@ -112,8 +110,6 @@ namespace upcxx {
           future1<future_kind_result> arg
         ) {
       }
-      
-      void cleanup_early() {}
       
       std::tuple<> result_refs_or_vals() const {
         return std::tuple<>();

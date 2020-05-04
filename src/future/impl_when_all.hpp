@@ -141,14 +141,6 @@ namespace upcxx {
         )... {
       }
       
-      void cleanup_early() {
-        // run cleanup_early on each base class
-        std::initializer_list<int>{(
-          static_cast<future_dependency_when_all_arg<i,Arg>*>(this)->dep_.cleanup_early(),
-          0
-        )...};
-      }
-      
       void cleanup_ready() {
         // run cleanup_ready on each base class
         std::initializer_list<int>{(
