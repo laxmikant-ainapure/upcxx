@@ -3,7 +3,6 @@
 
 #include <upcxx/future/core.hpp>
 #include <upcxx/future/apply.hpp>
-#include <upcxx/future/impl_mapped.hpp>
 #include <upcxx/future/impl_then_lazy.hpp>
 
 namespace upcxx {
@@ -79,43 +78,6 @@ namespace upcxx {
         
         this->leave_active_into_proxy(
           /*pure=*/false, hdr, me_mem, std::move(proxied)
-        );
-      }
-    };
-    
-    ////////////////////////////////////////////////////////////////////
-    // future_body_then_pure: Body type for then_pure's
-    
-    template<typename FuArg, typename Fn>
-    struct future_body_then_pure final: future_body_then_base {
-      future_dependency<FuArg> dep_;
-      Fn fn_;
-
-      template<typename FuArg1, typename Fn1>
-      future_body_then_pure(
-          void *storage, future_header_dependent *hdr,
-          FuArg1 &&arg, Fn1 &&fn
-        ):
-        future_body_then_base(storage),
-        dep_(hdr, std::forward<FuArg1>(arg)),
-        fn_(std::forward<Fn1>(fn)) {
-      }
-      
-      // then_pure's can be destructed early so we override stub
-      void destruct_early() {
-        this->dep_.cleanup_early();
-        this->~future_body_then_pure();
-      }
-      
-      void leave_active(future_header_dependent *hdr) {
-        auto proxied = apply_futured_as_future<Fn&&, FuArg&&>()(std::move(this->fn_), std::move(this->dep_));
-        
-        void *me_mem = this->storage_;
-        this->dep_.cleanup_ready();
-        this->~future_body_then_pure();
-        
-        this->leave_active_into_proxy(
-          /*pure=*/true, hdr, me_mem, std::move(proxied)
         );
       }
     };
@@ -273,73 +235,5 @@ namespace upcxx {
       return arg;
     }
   #endif
-    
-  namespace detail {
-    template<typename Arg, typename Fn, bool return_lazy, typename FnRetKind, typename ...FnRetT>
-    struct future_then_pure<
-        Arg, Fn, return_lazy, future1<FnRetKind, FnRetT...>,
-        /*arg_trivial=*/false,
-        /*fnret_trivial=*/false
-      > {
-
-      using return_type = future1<future_kind_shref<future_header_ops_dependent, /*unique=*/return_lazy>, FnRetT...>;
-      
-      template<typename Arg1, typename Fn1>
-      return_type operator()(Arg1 &&arg, Fn1 &&fn) {
-        future_header_dependent *hdr = new future_header_dependent;
-        
-        union body_union_t {
-          future_body_then_pure<Arg,Fn> then;
-          future_body_proxy<FnRetT...> proxy;
-        };
-        void *body_mem = future_body::operator new(sizeof(body_union_t));
-        
-        hdr->body_ = ::new(body_mem) future_body_then_pure<Arg,Fn>(
-          body_mem, hdr,
-          std::forward<Arg1>(arg),
-          std::forward<Fn1>(fn)
-        );
-        
-        if(hdr->status_ == future_header::status_active)
-          hdr->entered_active();
-        
-        return future_impl_shref<future_header_ops_dependent, /*unique=*/return_lazy, FnRetT...>(hdr);
-      }
-    };
-    
-    template<typename Arg, typename Fn, bool return_lazy, typename FnRetKind, typename ...FnRetT, bool fnret_trivial>
-    struct future_then_pure<
-        Arg, Fn, return_lazy, future1<FnRetKind, FnRetT...>,
-        /*arg_trivial=*/true,
-        fnret_trivial
-      > {
-      using return_type = future1<FnRetKind, FnRetT...> ;
-
-      template<typename Arg1, typename Fn1>
-      return_type operator()(Arg1 &&arg, Fn1 &&fn) {
-        return apply_futured_as_future<Fn1&&,Arg1&&>()(
-          std::forward<Fn1>(fn),
-          std::forward<Arg1>(arg)
-        );
-      }
-    };
-    
-    template<typename Arg, typename Fn, bool return_lazy, typename FnRetKind, typename ...FnRetT>
-    struct future_then_pure<
-        Arg, Fn, return_lazy, future1<FnRetKind, FnRetT...>,
-        /*arg_trivial=*/false,
-        /*fnret_trivial=*/true
-      > {
-      using return_type = future1<future_kind_mapped<Arg,Fn>, FnRetT...>;
-
-      template<typename Arg1, typename Fn1>
-      return_type operator()(Arg1 &&arg, Fn1 &&fn) {
-        return future_impl_mapped<Arg,Fn,FnRetT...>{
-          std::forward<Arg1>(arg),
-          std::forward<Fn1>(fn)
-        };
-      }
-    };
-  } // namespace detail
 }
 #endif

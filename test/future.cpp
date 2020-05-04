@@ -117,7 +117,7 @@ int main() {
   
   future<int> ans0 = fib(arg);
   future<int> ans1 = ans0.then([](int x) { return x+1; }).then(fib);
-  future<int> ans2 = /*future<int>*/(ans1.then_pure([](int x){return 2*x;})).then(fib);
+  future<int> ans2 = /*future<int>*/(ans1.then([](int x){return 2*x;})).then(fib);
 
   // important optimization: "then" callbacks can take args by && when its provable
   // the future value can be moved-out from
@@ -144,19 +144,19 @@ int main() {
         when_all(),
         ans0,
         when_all(ans1),
-        ans1.then_pure([](int x) { return x*x; }),
+        ans1.then([](int x) { return x*x; }),
         ans1.then_lazy([](int x) { return x*x; }),
         make_future<const int&>(arg)
       ),
       make_future<vector<int>>({0*0, 1*1, 2*2, 3*3, 4*4})
     ).then(
-      [=](int ans0, int ans1, int ans1_sqr_pure, int ans1_sqr_lazy, int arg, const vector<int> &some_vec) {
+      [=](int ans0, int ans1, int ans1_sqr, int ans1_sqr_lazy, int arg, const vector<int> &some_vec) {
         cout << "fib("<<arg <<") = "<<ans0<<'\n';
         UPCXX_ASSERT_ALWAYS(ans0 == 5, "expected 5, got " << ans0);
         cout << "fib("<<ans0+1<<") = "<<ans1<<'\n';
         UPCXX_ASSERT_ALWAYS(ans1 == 8, "expected 8, got " << ans1);
-        cout << "fib("<<ans0+1<<")**2 = "<<ans1_sqr_pure<<'\n';
-        UPCXX_ASSERT_ALWAYS(ans1_sqr_pure == 8*8, "expected 64, got " << ans1_sqr_pure);
+        cout << "fib("<<ans0+1<<")**2 = "<<ans1_sqr<<'\n';
+        UPCXX_ASSERT_ALWAYS(ans1_sqr == 8*8, "expected 64, got " << ans1_sqr);
         UPCXX_ASSERT_ALWAYS(ans1_sqr_lazy == 8*8, "expected 64, got " << ans1_sqr_lazy);
         
         for(int i=0; i < 5; i++) {

@@ -110,7 +110,7 @@ namespace upcxx {
           future_header_dependent *suc_hdr,
           Arg1 &&arg
         ):
-        dep_{suc_hdr, std::forward<Arg1>(arg)} {
+        dep_(suc_hdr, static_cast<Arg1&&>(arg)) {
       }
     };
     
@@ -137,7 +137,7 @@ namespace upcxx {
         ):
         future_dependency_when_all_arg<i,Arg>(
           suc_hdr,
-          std::get<i>(std::forward<FuArg1>(all_args).impl_.args_)
+          std::get<i>(static_cast<FuArg1&&>(all_args).impl_.args_)
         )... {
       }
       
@@ -197,13 +197,13 @@ namespace upcxx {
         future_dependency_when_all_base<
             future1<future_kind_when_all<Arg...>, T...>,
             detail::make_index_sequence<sizeof...(Arg)>
-          >{suc_hdr, std::forward<Arg1>(arg)} {
+          >(suc_hdr, static_cast<Arg1&&>(arg)) {
       }
       
       future_header* cleanup_ready_get_header() {
         future_header *hdr = &(new future_header_result<T...>(
             /*not_ready=*/false,
-            /*values=*/std::move(*this).result_refs_or_vals()
+            /*values=*/static_cast<future_dependency&&>(*this).result_refs_or_vals()
           ))->base_header;
         this->cleanup_ready();
         return hdr;

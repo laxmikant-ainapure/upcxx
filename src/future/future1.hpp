@@ -274,28 +274,6 @@ namespace upcxx {
         static_cast<future1&&>(*this), static_cast<Fn&&>(fn)
       );
     }
-    
-    template<typename Fn>
-    typename detail::future_then_pure<
-        future1<Kind,T...>,
-        typename std::decay<Fn>::type
-      >::return_type
-    then_pure(Fn &&pure_fn) const& {
-      return detail::future_then_pure<future1<Kind,T...>, typename std::decay<Fn>::type>()(
-        *this, static_cast<Fn&&>(pure_fn)
-      );
-    }
-
-    template<typename Fn>
-    typename detail::future_then_pure<
-        future1<Kind,T...>,
-        typename std::decay<Fn>::type
-      >::return_type
-    then_pure(Fn &&pure_fn) && {
-      return detail::future_then_pure<future1<Kind,T...>, typename std::decay<Fn>::type>()(
-        static_cast<future1&&>(*this), static_cast<Fn&&>(pure_fn)
-      );
-    }
 
     #ifdef UPCXX_BACKEND
     template<int i=-1, typename Fn=detail::future_wait_upcxx_progress_user>

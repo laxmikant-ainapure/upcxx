@@ -42,8 +42,6 @@ namespace upcxx {
     template<typename ArgTuple, typename ...T>
     struct future_impl_when_all;
     template<typename FuArg, typename Fn, typename ...T>
-    struct future_impl_mapped;
-    template<typename FuArg, typename Fn, typename ...T>
     struct future_impl_then_lazy;
     
     // future1 implementation mappers
@@ -64,12 +62,6 @@ namespace upcxx {
       using with_types = future_impl_when_all<std::tuple<FuArg...>, T...>;
     };
     
-    template<typename FuArg, typename Fn>
-    struct future_kind_mapped {
-      template<typename ...T>
-      using with_types = future_impl_mapped<FuArg,Fn,T...>;
-    };
-
     template<typename FuArg, typename Fn>
     struct future_kind_then_lazy {
       template<typename ...T>
@@ -121,12 +113,6 @@ namespace upcxx {
     struct future_impl_traits<future_impl_then_lazy<FuArg, Fn, T...>> {
       static constexpr bool is_impl = true;
       using kind_type = future_kind_then_lazy<FuArg, Fn>;
-      using future1_type = future1<kind_type, T...>;
-    };
-    template<typename FuArg, typename Fn, typename ...T>
-    struct future_impl_traits<future_impl_mapped<FuArg, Fn, T...>> {
-      static constexpr bool is_impl = true;
-      using kind_type = future_kind_mapped<FuArg, Fn>;
       using future1_type = future1<kind_type, T...>;
     };
   }
@@ -232,13 +218,6 @@ namespace upcxx {
       typename FnRet = typename apply_futured_as_future<Fn,Arg>::return_type,
       bool arg_trivial = future_is_trivially_ready<Arg>::value>
     struct future_then;
-    
-    template<
-      typename Arg, typename Fn, bool return_lazy=false,
-      typename FnRet = typename apply_futured_as_future<Fn,Arg>::return_type,
-      bool arg_trivial = future_is_trivially_ready<Arg>::value,
-      bool fnret_trivial = future_is_trivially_ready<FnRet>::value>
-    struct future_then_pure;
   }
 }
 #endif
