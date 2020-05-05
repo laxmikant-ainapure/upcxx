@@ -1,0 +1,84 @@
+# This is a simple build configuration for C++ + Make.
+# Check our guides at https://confluence.atlassian.com/x/5Q4SMw for more examples.
+# Only use spaces to indent your .yml configuration.
+# -----
+# You can specify a custom docker image from Docker Hub as your build environment.
+
+definitions:
+  steps:
+    - step: &build-test
+          name: Build and Test
+          artifacts: 
+            - Makefile
+            - config.log
+            - bld/gasnet.*/config.*
+          script:
+            - utils/pipeline.sh
+          after-script:
+            - echo "Status/Results " ; 
+              echo "Repo       "$BITBUCKET_REPO_FULL_NAME ; 
+              echo "Branch     "$BITBUCKET_BRANCH ; 
+              echo "Tag        "$BITBUCKET_TAG ; 
+              echo "Commit     "$BITBUCKET_COMMIT ; 
+              echo "PR         "$BITBUCKET_PR_ID ; 
+              echo " " ; 
+              echo "Exit code  "$BITBUCKET_EXIT_CODE
+
+    - step: &gcc-latest
+          <<: *build-test
+          name: Build and Test gcc:latest
+          image: gcc:latest
+
+    - step: &gcc-pedantic
+          <<: *build-test
+          name: Build and Test gcc:latest/pedantic
+          image: gcc:latest
+          script:
+            - CXXFLAGS='-Wextra -pedantic' utils/pipeline.sh
+
+    - step: &gcc-floor
+          <<: *build-test
+          name: Build and Test gcc:floor
+          image: gcc:6.4.0
+
+    - step: &clang-latest
+          <<: *build-test
+          name: Build and Test clang:latest on ubuntu:latest
+          image: ubuntu:latest
+          script:
+            - apt-get update && apt-get install -y wget clang python3 perl make # libopenmpi-dev 
+            - CONFIGURE_ARGS='CC=clang CXX=clang++ --with-python=python3' utils/pipeline.sh
+
+    - step: &clang-floor
+          <<: *build-test
+          name: Build and Test clang:floor on ubuntu:18.04
+          image: ubuntu:18.04
+          script:
+            - apt-get update && apt-get install -y wget clang-4.0 python perl make
+            - CONFIGURE_ARGS='CC=clang-4.0 CXX=clang++-4.0' utils/pipeline.sh
+
+pipelines:
+
+  default:
+    #- parallel:
+    #  - step: *gcc-floor
+      - step: *gcc-latest
+
+  custom: # on-demand configs
+
+    gcc-latest:
+      - step: *gcc-latest
+
+    gcc-floor:
+      - step: *gcc-floor
+
+    gcc-pedantic:
+      - step: *gcc-pedantic
+
+    clang-latest:
+      - step: *clang-latest
+
+    clang-floor:
+      - step: *clang-floor
+
+
