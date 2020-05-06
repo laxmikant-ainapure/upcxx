@@ -52,6 +52,19 @@ include $(upcxx_src)/bld/compiler.mak
 ## Tests ##
 include $(upcxx_src)/bld/tests.mak
 
+## Test output ##
+TEST_STAMP ?= $(shell hostname 2>/dev/null)_$(shell date +%Y-%m-%d_%H:%M:%S 2>/dev/null)
+ifeq ($(strip $(TEST_OUTPUT)),)
+TEST_OUTPUT := $(shell pwd -P)/test-results/$(TEST_STAMP)
+export TEST_OUTPUT
+endif
+# Limits on output lines to spam to console for compile/run:
+TEST_CERR_LIMIT ?= 20
+TEST_RERR_LIMIT ?= 100
+export TEST_CERR_LIMIT
+export TEST_RERR_LIMIT
+
+
 # Compile prerequisites for 'check' or 'tests'
 # Build is restricted to single codemode and the networks in $(NETWORKS)
 # We take care in case $(NETWORKS) is empty (when GASNet has not been configured)
@@ -86,12 +99,16 @@ check: force
 
 TEST_EXE_PATTERN ?= test-$$(basename $$src .cpp)-$$network
 
+export MAKE # $$MAKE in the rule below avoids a jobserver warning bug in make 4.3
+            # MAKEFLAGS override squashes a similar jobserver warning bug in make 4.2.1
 # We encode '/' as '..' to allow this pattern rule to work
 do-build-%: force
-	@IFS=+ read name threadmode network <<<$*;       \
+	@export MAKEFLAGS="--no-print-directory" ;       \
+	 IFS=+ read name threadmode network <<<$*;       \
 	 src=$${name//..//};                             \
 	 exe="$(TEST_EXE_PATTERN)";                      \
 	 flags=TEST_FLAGS_$$(basename $$src .cpp | tr '[a-z]-' '[A-Z]_'); \
+	 output=$(TEST_OUTPUT)/$${exe}-compile.out ;     \
 	 ( if [[ '$(UPCXX_VERBOSE)' == 1 ]]; then set -x; fi;  \
 	   UPCXX_CODEMODE=$(UPCXX_CODEMODE)              \
 	   UPCXX_THREADMODE=$$threadmode                 \
@@ -99,11 +116,15 @@ do-build-%: force
 	   $(UPCXX_BINDIR)/upcxx $(upcxx_src)/$$src      \
 	                         $${!flags}              \
 	                         $(UPCXX_COLOR_CXXFLAGS) \
-	                         -o $$exe$(EXESUFFIX) ); \
+	                         -o $$exe$(EXESUFFIX)    \
+				 2> $$output );          \
 	 if [[ $$? == 0 ]]; then                         \
+	   $$MAKE $(MAKE_HERE) do-test-xml RESULT=compile-pass OUTPUT=$$output ; \
 	   printf 'Compiling %-30s SUCCESS\n' "$$exe";   \
 	 else                                            \
+	   $$MAKE $(MAKE_HERE) do-test-xml RESULT=compile-fail OUTPUT=$$output ; \
 	   printf 'Compiling %-30s FAILED\n' "$$exe";    \
+	   head -n $(TEST_CERR_LIMIT) $$output ;         \
 	   [[ -n "$$TEST_SENTINEL" ]] && touch $$TEST_SENTINEL; \
 	   exit 1;                                       \
 	 fi
@@ -124,10 +145,12 @@ do-tests: force
 	     targets+=" do-build-$${test//\//..}+$$network";  \
 	   done;                                             \
 	 done;                                               \
+	 mkdir -p "$(TEST_OUTPUT)" ;                         \
 	 if [[ -n '$(filter -j%,$(MAKEFLAGS))' ]]; then      \
 	   export TEST_SENTINEL=.tests_failed_$$$$;          \
 	   rm -f $$TEST_SENTINEL;                            \
 	   $(MAKE) $(MAKE_HERE) -k $$targets;                \
+	   echo -e "\nResult reports: $(TEST_OUTPUT)";       \
 	   if [[ $$? -ne 0 || -e $$TEST_SENTINEL ]]; then    \
 	     rm -f $$TEST_SENTINEL;                          \
 	     echo -e "\nFAILED to compile at least one test\n";\
@@ -139,6 +162,7 @@ do-tests: force
 	     $(MAKE) $(MAKE_HERE) $$target;                  \
 	     : $$((failed += ($$? != 0))) $$((total += 1));  \
 	   done;                                             \
+	   echo -e "\nResult reports: $(TEST_OUTPUT)";       \
 	   if [[ $$failed = 0 ]]; then                       \
 	     echo -e "\nPASSED compiling $$total tests\n";   \
 	   else                                              \
@@ -269,7 +293,7 @@ tests-clean: force
 .PHONY: do-tests test_install tests tests-clean
 
 do-run-tests: force
-	@tmpfile=.testtmp_$$$$; rm -f $$tmpfile;                        \
+	@mkdir -p "$(TEST_OUTPUT)" ;                                    \
 	 if [[ -z "$(RANKS)" ]]; then ranks=4; else ranks=$(RANKS); fi; \
 	 total=0; failed=0;                                             \
 	 echo "Running tests with RANKS=$$ranks";                       \
@@ -291,13 +315,17 @@ do-run-tests: force
 	     fi;                                                        \
 	     runcmd=$${!runvar};                                        \
 	   fi;                                                          \
-	   $$runcmd -np $$ranks ./$$test &> $$tmpfile;                  \
-	   if [[ $$? != 0 ]] || grep -q ERROR $$tmpfile; then           \
+	   output=$(TEST_OUTPUT)/$$test-run.out ;                       \
+	   $$runcmd -np $$ranks ./$$test &> $$output;                   \
+	   if [[ $$? != 0 ]] || grep -q ERROR $$output; then            \
 	     echo FAILED; : $$((++failed));                             \
+	     $$MAKE $(MAKE_HERE) do-test-xml RESULT=run-fail OUTPUT=$$output ; \
+	   else                                                         \
+	     $$MAKE $(MAKE_HERE) do-test-xml RESULT=run-pass OUTPUT=$$output ; \
 	   fi;                                                          \
-	   grep -i -e "Test result: " -e SUCCESS $$tmpfile | sort -u;   \
+	   grep -i -e "Test result: " -e SUCCESS $$output | sort -u;    \
 	 done;                                                          \
-	 rm -f $$tmpfile;                                               \
+	 echo -e "\nResult reports: $(TEST_OUTPUT)";                    \
 	 if [[ $$failed = 0 ]]; then                                    \
 	   echo "PASSED running $$total tests";                         \
 	 else                                                           \
@@ -312,7 +340,34 @@ run-tests: force
 run-tests-installed: force
 	@$(MAKE) $(MAKE_HERE) do-run-tests UPCXX_BINDIR=$(prefix)/bin
 
-.PHONY: do-run-tests run-tests run-tests-installed
+.PHONY: do-run-tests run-tests run-tests-installed do-test-xml
+
+PERL ?= perl
+# Encode XML special characters
+XML_ENCODE = $(PERL) -p -e 'BEGIN {%chrmap=("<","lt",">","gt","&","amp","\x27","apos","\x22","quot");} { s/([<>&\x22\x27])/"&".$$chrmap{$$1}.";"/ge } '
+
+# Format test results into parsable formats
+do-test-xml: force
+	@output="$(OUTPUT)" ; \
+	 testname=$$(basename $${output%-[^-]*.out}) ; \
+	 testname=$${testname#test-} ; \
+	 target="$${output%.out}.xml" ; \
+	 suitename=$$(cut -d- -f1 <<<$(RESULT)); \
+	 errors=0 ; failures=0 ; outtype= ; \
+	 case "$(RESULT)" in \
+	   compile-fail) failures=1; outtype=failure ;; \
+	   run-fail)     errors=1;   outtype=error   ;; \
+	 esac; \
+	 echo -e '<?xml version="1.0" encoding="UTF-8"?>\n' \
+	         '<testsuite errors="'$$errors'" failures="'$$failures'" name="'$$suitename'" test-cases="1" tests="1">\n'\
+	         ' <testcase name="'"$$testname"'" skip="0" tests="1">' >$$target ; \
+	 if [[ -n "$$outtype" ]] ; then \
+	   echo "    <$$outtype>" >>$$target ; \
+	   cat $$output | $(XML_ENCODE) >>$$target ; \
+	   echo "    </$$outtype>" >>$$target ; \
+	 fi ; \
+	 echo -e '  </testcase>\n' \
+	         '</testsuite>' >>$$target
 
 
 # dev- prefixed targets which leverage the un-prefixed targets by replacing appropriate variables
