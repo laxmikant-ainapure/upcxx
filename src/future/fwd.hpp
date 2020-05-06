@@ -22,8 +22,6 @@ namespace upcxx {
     struct future_body_proxy_;
     template<typename ...T>
     struct future_body_proxy;
-    template<typename FuArg>
-    struct future_body_pure;
     template<typename FuArg, typename Fn>
     struct future_body_then;
     

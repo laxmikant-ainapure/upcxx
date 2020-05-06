@@ -325,7 +325,7 @@ namespace upcxx {
       future_header_promise<T...> *pro_; // holds ref
 
       cx_state(promise_cx<Event,T...> &&cx):
-        pro_(cx.pro_.steal_header()) {
+        pro_(static_cast<promise_cx<Event,T...>&&>(cx).pro_.steal_header()) {
         detail::promise_require_anonymous(pro_, 1);
       }
 
@@ -354,7 +354,7 @@ namespace upcxx {
       future_header_promise<T...> *pro_; // holds ref
 
       cx_state(promise_cx<Event,T...> &&cx):
-        pro_(cx.pro_.steal_header()) {
+        pro_(static_cast<promise_cx<Event,T...>&&>(cx).pro_.steal_header()) {
         detail::promise_require_anonymous(pro_, 1);
       }
       
@@ -379,7 +379,7 @@ namespace upcxx {
       future_header_promise<> *pro_; // holds ref
 
       cx_state(promise_cx<Event> &&cx):
-        pro_(cx.pro_.steal_header()) {
+        pro_(static_cast<promise_cx<Event>&&>(cx).pro_.steal_header()) {
         detail::promise_require_anonymous(pro_, 1);
       }
 

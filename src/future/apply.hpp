@@ -163,9 +163,11 @@ namespace detail {
       );
     }
     
+    #if 0
     return_type operator()(FnRef fn, future_dependency<future1<Kind,T...>> const &arg) {
       return tupled()(static_cast<FnRef>(fn), arg.result_refs_or_vals());
     }
+    #endif
 
     return_type operator()(FnRef fn, future_dependency<future1<Kind,T...>> &&arg) {
       return tupled()(static_cast<FnRef>(fn), static_cast<future_dependency<future1<Kind,T...>>&&>(arg).result_refs_or_vals());

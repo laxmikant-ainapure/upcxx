@@ -46,6 +46,11 @@ namespace upcxx {
         static_cast<ArgFu&&>(arg)...
       );
     }
+    // single component optimization
+    template<typename ArgFu>
+    ArgFu&& when_all_fast(ArgFu &&arg) {
+      return static_cast<ArgFu&&>(arg);
+    }
   }
 
 
@@ -65,5 +70,11 @@ namespace upcxx {
       static_cast<ArgFu&&>(arg)...
     );
   }
+  // single component optimization
+  template<typename ArgFu>
+  ArgFu&& when_all(ArgFu &&arg) {
+    return static_cast<ArgFu&&>(arg);
+  }
+  
 }
 #endif

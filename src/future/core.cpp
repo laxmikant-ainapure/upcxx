@@ -13,8 +13,6 @@ using upcxx::detail::future_body_proxy_;
 template<typename ...T>
 using future_header_result = upcxx::detail::future_header_result<T...>;
 
-int upcxx_opnew_live = 0;
-
 future_header future_header_result<>::the_always = {
   /*ref_n_*/-1,
   /*status_*/upcxx::detail::future_header::status_ready,

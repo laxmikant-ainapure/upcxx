@@ -68,10 +68,33 @@ namespace upcxx {
         auto proxied = apply_futured_as_future<Fn&&, FuArg&&>()(static_cast<Fn&&>(this->fn_), static_cast<future_dependency<FuArg>&&>(this->dep_));
         
         void *me_mem = this->storage_;
-        this->dep_.cleanup_ready();
         this->~future_body_then();
         
         this->leave_active_into_proxy(hdr, me_mem, std::move(proxied));
+      }
+
+      template<typename Arg1, typename Fn1, typename ...FnRetT>
+      static future_header_dependent* make_header(Arg1 &&arg, Fn1 &&fn) {
+        future_header_dependent *hdr = new future_header_dependent;
+        
+        union body_union_t {
+          future_body_then<FuArg,Fn> then;
+          future_body_proxy<FnRetT...> proxy;
+        };
+        void *storage = future_body::operator new(sizeof(body_union_t));
+        
+        future_body_then<FuArg,Fn> *body =
+          ::new(storage) future_body_then<FuArg,Fn>(
+            storage, hdr,
+            static_cast<Arg1&&>(arg),
+            static_cast<Fn1&&>(fn)
+          );
+        hdr->body_ = body;
+        
+        if(hdr->status_ == future_header::status_active)
+          hdr->entered_active();
+
+        return hdr;
       }
     };
   } // namespace detail
@@ -96,82 +119,55 @@ namespace upcxx {
       }
     };
 
-    template<typename ArgLazyArg, typename ArgLazyFn, typename ...ArgT,
+    template<typename ArgArg, typename ArgFn, typename ...ArgT,
              typename Fn,
              typename FnRetKind, typename ...FnRetT>
     struct future_then<
-        future1<future_kind_then_lazy<ArgLazyArg, ArgLazyFn>, ArgT...>,
+        future1<future_kind_then_lazy<ArgArg, ArgFn>, ArgT...>,
         Fn, /*return_lazy=*/true,
         future1<FnRetKind,FnRetT...>, /*arg_trivial=*/false
       > {
-      using return_type = typename future_impl_traits<
-          typename future_impl_then_lazy<ArgLazyArg, ArgLazyFn, ArgT...>::template compose_under_return_type<Fn, FnRetT...>
-        >::future1_type;
+      using return_type = typename future_impl_then_lazy<ArgArg,ArgFn,ArgT...>::template compose_under_return_type<Fn,FnRetT...>;
 
-      template<typename Fn1>
-      return_type operator()(future1<future_kind_then_lazy<ArgLazyArg, ArgLazyFn>, ArgT...> &&arg1, Fn1 &&fn1) {
-        return static_cast<future1<future_kind_then_lazy<ArgLazyArg, ArgLazyFn>, ArgT...>&&>(arg1)
-          .impl_.template compose_under<Fn1,FnRetT...>(static_cast<Fn1&&>(fn1));
+      template<typename Arg1, typename Fn1>
+      return_type operator()(Arg1 &&arg1, Fn1 &&fn1) {
+        return static_cast<Arg1&&>(arg1).impl_.template compose_under<Fn1, FnRetT...>(static_cast<Fn1&&>(fn1));
       }
     };
 
-    template<typename ArgLazyArg, typename ArgLazyFn, typename ...ArgT,
-             typename Fn,
-             typename FnRetKind, typename ...FnRetT>
-    struct future_then<
-        future1<future_kind_then_lazy<ArgLazyArg, ArgLazyFn>, ArgT...>,
-        Fn, /*return_lazy=*/false,
-        future1<FnRetKind,FnRetT...>, /*arg_trivial=*/false
-      > {
-      using return_type = future1<future_kind_shref<future_header_ops_dependent, /*unique=*/false>, FnRetT...>;
-      
-      template<typename Fn1>
-      return_type operator()(future1<future_kind_then_lazy<ArgLazyArg, ArgLazyFn>, ArgT...> &&arg1, Fn1 &&fn1) {
-        return static_cast<future1<future_kind_then_lazy<ArgLazyArg, ArgLazyFn>, ArgT...>&&>(arg1)
-          .impl_.template compose_under<Fn1,FnRetT...>(static_cast<Fn1&&>(fn1));
-      }
-    };
-    
     template<typename Arg, typename Fn,
              typename FnRetKind, typename ...FnRetT>
     struct future_then<
         Arg, Fn, /*return_lazy=*/false,
         future1<FnRetKind,FnRetT...>, /*arg_trivial=*/false
       > {
-
-      template<typename Arg1, typename Fn1>
-      future_header_dependent* make_header(Arg1 &&arg, Fn1 &&fn) {
-        future_header_dependent *hdr = new future_header_dependent;
-        
-        union body_union_t {
-          future_body_then<Arg,Fn> then;
-          future_body_proxy<FnRetT...> proxy;
-        };
-        void *storage = future_body::operator new(sizeof(body_union_t));
-        
-        future_body_then<Arg,Fn> *body =
-          ::new(storage) future_body_then<Arg,Fn>(
-            storage, hdr,
-            static_cast<Arg1&&>(arg),
-            static_cast<Fn1&&>(fn)
-          );
-        hdr->body_ = body;
-        
-        if(hdr->status_ == future_header::status_active)
-          hdr->entered_active();
-
-        return hdr;
-      }
-
       using return_type = future1<future_kind_shref<future_header_ops_dependent, /*unique=*/false>, FnRetT...>;
       
       template<typename Arg1, typename Fn1>
       return_type operator()(Arg1 &&arg, Fn1 &&fn) {
-        auto *hdr = this->make_header(static_cast<Arg1&&>(arg), static_cast<Fn1&&>(fn));
+        auto *hdr = future_body_then<Arg,Fn>::template make_header<Arg1,Fn1,FnRetT...>(static_cast<Arg1&&>(arg), static_cast<Fn1&&>(fn));
         return future_impl_shref<future_header_ops_dependent, /*unique=*/false, FnRetT...>(hdr);
       }
     };
     
+    template<typename ArgArg, typename ArgFn, typename ...ArgT,
+             typename Fn,
+             typename FnRetKind, typename ...FnRetT>
+    struct future_then<
+        future1<future_kind_then_lazy<ArgArg, ArgFn>, ArgT...>,
+        Fn, /*return_lazy=*/false,
+        future1<FnRetKind,FnRetT...>, /*arg_trivial=*/false
+      > {
+      using return_type = future1<future_kind_shref<future_header_ops_dependent, /*unique=*/false>, FnRetT...>;
+
+      template<typename Arg1, typename Fn1>
+      return_type operator()(Arg1 &&arg1, Fn1 &&fn1) {
+        return future_impl_shref<future_header_ops_dependent, /*unique=*/false, FnRetT...>(
+          static_cast<Arg1&&>(arg1).impl_.template compose_under<Fn1, FnRetT...>(static_cast<Fn1&&>(fn1)).impl_.steal_header()
+        );
+      }
+    };
+
     template<typename Arg, typename Fn, bool return_lazy,
              typename FnRetKind, typename ...FnRetT>
     struct future_then<
@@ -186,8 +182,8 @@ namespace upcxx {
       template<typename Arg1, typename Fn1>
       return_type operator()(Arg1 &&arg, Fn1 &&fn) {
         return apply_futured_as_future<Fn1&&, Arg1&&>()(
-          std::forward<Fn1>(fn),
-          std::forward<Arg1>(arg)
+          static_cast<Fn1&&>(fn),
+          static_cast<Arg1&&>(arg)
         );
       }
     };

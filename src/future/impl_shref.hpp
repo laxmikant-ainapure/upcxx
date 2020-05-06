@@ -135,7 +135,7 @@ namespace upcxx {
       
       typedef HeaderOps header_ops;
       
-      future_header* steal_header() {
+      future_header* steal_header() && {
         future_header *hdr = this->hdr_;
         this->hdr_ = future_header_nil::nil();
         return hdr;
@@ -158,7 +158,7 @@ namespace upcxx {
           future_header_dependent *suc_hdr,
           future_header *arg_hdr
         ) {
-        
+
         if(HeaderOps::is_possibly_dependent && (
            arg_hdr->status_ == future_header::status_proxying ||
            arg_hdr->status_ == future_header::status_proxying_active
@@ -167,6 +167,13 @@ namespace upcxx {
         }
         
         if(arg_hdr->status_ != future_header::status_ready) {
+          UPCXX_ASSERT(arg_hdr != &future_header_nil1<>::the_nil,
+            "You have created a future that is waiting on the never-ready future.\n"
+            "This is probably not what you intended as this future will never be\n"
+            "ready either. If this future was produced by 'then()', then the callback\n"
+            "will never be executed and the heap memory dedicated to hold that\n"
+            "callback is forever leaked.");
+
           this->link_.suc = suc_hdr;
           this->link_.dep = arg_hdr;
           this->link_.sucs_next = arg_hdr->sucs_head_;
@@ -181,8 +188,6 @@ namespace upcxx {
       future_dependency_shref_base(future_dependency_shref_base const&) = delete;
       future_dependency_shref_base(future_dependency_shref_base&&) = delete;
       
-      void unlink_() { this->link_.unlink(); }
-      
       future_header* header_() const { return link_.dep; }
     };
     
@@ -196,8 +201,6 @@ namespace upcxx {
         ) {
         hdr_ = arg_hdr;
       }
-      
-      inline void unlink_() {}
       
       future_header* header_() const { return hdr_; }
     };
@@ -223,17 +226,9 @@ namespace upcxx {
         ) {
       }
       
-      void cleanup_ready() {
-        future_header_ops_result_ready::template dropref<T...>(this->header_(), /*maybe_nil*/std::false_type());
-      }
-      
-      detail::tuple_refs_return_t<std::tuple<T...> const&>
-      result_refs_or_vals() const& {
-        return detail::tuple_refs(
-          static_cast<std::tuple<T...> const&>(
-            future_header_result<T...>::results_of(this->header_())
-          )
-        );
+      ~future_dependency() {
+        future_header *h = this->header_();
+        future_header_ops_result_ready::template dropref<T...>(h, /*maybe_nil*/std::false_type());
       }
 
       detail::tuple_refs_return_t<
@@ -245,10 +240,6 @@ namespace upcxx {
             future_header_result<T...>::results_of(this->header_())
           )
         );
-      }
-      
-      future_header* cleanup_ready_get_header() {
-        return this->header_(); // moving refcount to caller
       }
     };
   }

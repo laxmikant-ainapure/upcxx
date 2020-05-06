@@ -124,19 +124,32 @@ int main() {
   detail::make_fast_future(1).then([=](int &&x) {});
   detail::make_fast_future(std::vector<int>{1,2,3}).then([=](std::vector<int> &&x) {});
 
-  auto foo1 = [](int x){ return float(x); };
-  auto foo2 = [](float x){ return 'x'; };
-  detail::future_then_composite_fn<decltype(foo1),decltype(foo2)>{foo1,foo2}(3);
-  //typename std::result_of<detail::future_then_composite_fn<decltype(foo1),decltype(foo2)>&&(int)>::type c = foo2(foo1(0));
-  
   // ensure when_all preserves this ability
   when_all(detail::make_fast_future(1), when_all(detail::make_fast_future(.01f), detail::make_fast_future(.02f)))
     .then([](int &&a, float &&b, float &&) {}); 
 
-  ans0.then_lazy([](int x) { std::cout<<"lazy1="<<x<<std::endl; return x+1; })
-      .then_lazy([](int x) { std::cout<<"lazy2="<<x<<std::endl; return x+1; })
+  // use debugger to step through and ensure lazy1 and lazy2 happen in
+  // future_dependency<...>::result_refs_or_vals in lazy3's future_body_then::leave_active
+  // which is the case since both lambdas return trivially ready values
+  ans0.then_lazy([](int x) {
+        std::cout<<"lazy1="<<x<<std::endl; return x+1;
+      })
+      .then_lazy([](int x) {
+        std::cout<<"lazy2="<<x<<std::endl; return x+1;
+      })
       .then(     [](int x) { std::cout<<"lazy3="<<x<<std::endl; return x+1; })
       .then_lazy([](int x) { std::cout<<"lazy4="<<x<<std::endl; return x+1; });
+
+  ans0.then_lazy([=](int x) {
+        return fib(x+1).then_lazy([=](int y) {
+          // break here and ensure we are in a detail::future_composite_fn
+          return x + y;
+        });
+      })
+      .then([](int x_p_y) {
+        // break here and ensure we are in a detail::future_composite_fn
+        std::cout<<x_p_y<<'\n';
+      });
   
   when_all(
       // stress nested concatenation
@@ -145,7 +158,9 @@ int main() {
         ans0,
         when_all(ans1),
         ans1.then([](int x) { return x*x; }),
-        ans1.then_lazy([](int x) { return x*x; }),
+        ans1.then_lazy([](int x) {
+          return x*x;
+        }),
         make_future<const int&>(arg)
       ),
       make_future<vector<int>>({0*0, 1*1, 2*2, 3*3, 4*4})

@@ -32,7 +32,7 @@ namespace upcxx {
    *   // for this future. Leaves us in an undefined state (only safe
    *   // operations are (copy/move)-(construction/assignment), and
    *   // destruction).
-   *   detail::future_header* steal_header();
+   *   detail::future_header* steal_header() &&;
    *   
    *   // One of the header operations classes for working with the
    *   // header produced by steal_header().

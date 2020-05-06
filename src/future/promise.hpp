@@ -150,9 +150,9 @@ namespace upcxx {
         return reinterpret_cast<future_header_promise<T...>*>(this->hdr_);
       }
       
-      future_header_promise<T...>* steal_header() {
+      future_header_promise<T...>* steal_header() && {
         return reinterpret_cast<future_header_promise<T...>*>(
-          detail::future_impl_shref<detail::future_header_ops_promise, /*unique=*/false, T...>::steal_header()
+          static_cast<promise_shref&&>(*this).detail::future_impl_shref<detail::future_header_ops_promise, /*unique=*/false, T...>::steal_header()
         );
       }
 
