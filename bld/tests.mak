@@ -159,7 +159,6 @@ test_exclude_seq += \
 #
 # Section 2. Step 4.
 # Exclusion of tests which are "valid tests" but known to fail.
-# Conditional construction is possible but not currently used.
 #
 
 test_exclude_fail_all = \
@@ -170,6 +169,11 @@ test_exclude_fail_all = \
 test_exclude_fail_seq =
 
 test_exclude_fail_par =
+
+ifeq ($(strip $(GASNET_CXX_FAMILY)).$(strip $(UPCXX_CODEMODE)),PGI.debug)
+test_exclude_fail_all += \
+	test/regression/issue138.cpp
+endif
 
 # 
 # Section 3. 
