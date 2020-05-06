@@ -233,7 +233,7 @@ provided in [utils/config/README.md](../utils/config/README.md).
 
 #### To add tests or examples
 
-By default, `make check-dev` and `make tests-dev` will build all `.cpp` files
+By default, `make dev-check` and `make dev-tests` will build all `.cpp` files
 found (non-recursively) in directories enumerated in the `test_dirs` variable
 defined in `bld/tests.mak` (excluding untracked files when in a git clone).
 The variables with a `test_exclude_` prefix will exclude certain `.cpp` files
