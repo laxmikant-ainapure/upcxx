@@ -182,7 +182,8 @@ make all
 This will compile the UPC\+\+ runtime libraries, including the GASNet-EX
 communications runtime.  One may run, for instance, `make -j8 all` to build
 with eight concurrent processes.  This may significantly reduce the time
-required.
+required. However parallel make can also obscure error messages, so if you
+encounter a failure you should retry without a `-j` option.
 
 #### 3. Testing the UPC\+\+ build (optional)
 
