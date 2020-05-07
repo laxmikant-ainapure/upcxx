@@ -23,12 +23,6 @@ int T::moves = 0;
 void T::show_stats(const char *title, int expected_ctors, int expected_copies) {
   upcxx::barrier();
   
-  #if 1
-  UPCXX_ASSERT_ALWAYS(ctors == expected_ctors, title<<": ctors="<<ctors<<" expected="<<expected_ctors);
-  UPCXX_ASSERT_ALWAYS(copies == expected_copies, title<<": copies="<<ctors<<" expected="<<expected_copies);
-  UPCXX_ASSERT_ALWAYS(ctors+copies+moves == dtors, title<<": ctors - dtors != 0");
-  #endif
-  
   if(upcxx::rank_me() == 0) {
     std::cout<<title<<std::endl;
     std::cout<<"  T::ctors = "<<ctors<<std::endl;
@@ -38,7 +32,15 @@ void T::show_stats(const char *title, int expected_ctors, int expected_copies) {
     std::cout<<std::endl;
   }
 
+  #if 1
+  UPCXX_ASSERT_ALWAYS(ctors == expected_ctors, title<<": ctors="<<ctors<<" expected="<<expected_ctors);
+  UPCXX_ASSERT_ALWAYS(copies == expected_copies, title<<": copies="<<ctors<<" expected="<<expected_copies);
+  UPCXX_ASSERT_ALWAYS(ctors+copies+moves == dtors, title<<": ctors - dtors != 0");
+  #endif
+  
   ctors = copies = moves = dtors = 0;
+
+  upcxx::barrier();
 }
 
 int main() {
@@ -46,7 +48,7 @@ int main() {
   print_test_header();
 
   using upcxx::dist_object;
-  dist_object<int> dob(3);;
+  dist_object<int> dob(3);
 
   int target = (upcxx::rank_me() + 1) % upcxx::rank_n();
 
