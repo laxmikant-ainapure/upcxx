@@ -36,7 +36,15 @@ else
 fi
 
 ./configure --prefix="${install_to}" || failure_and_die
-${UPCXX_MAKE:-${GMAKE:-make} -j8} install || failure_and_die
+
+# Default to *serialized* configuration of GASNet to improve readability of
+# errors in the step where we think user-error is most likely to be reflected.
+UPCXX_MAKE_CONFIGURE=${UPCXX_MAKE:-${GMAKE:-make} -j1}
+$UPCXX_MAKE_CONFIGURE gasnet-configure || failure_and_die
+
+# Default to 8-way parallel make for the remainder of the build and install
+UPCXX_MAKE=${UPCXX_MAKE:-${GMAKE:-make} -j8}
+$UPCXX_MAKE install || failure_and_die
 
 echo 'UPC++ successfully installed'
 big_warning
