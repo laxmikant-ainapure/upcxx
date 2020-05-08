@@ -4,7 +4,13 @@
 # -----
 # You can specify a custom docker image from Docker Hub as your build environment.
 
+
 definitions:
+  variables: &variables
+    - name: _LEAVE_BLANK_FOR_DEFAULTS_
+    - name: CI_DEV_CHECK
+    - name: CI_NETWORKS
+    - name: CI_RANKS
   steps:
     - step: &build-test
           name: Build and Test
@@ -47,7 +53,7 @@ definitions:
           image: ubuntu:latest
           script:
             - apt-get update && apt-get install -y wget clang python3 perl make # libopenmpi-dev 
-            - CONFIGURE_ARGS='CC=clang CXX=clang++ --with-python=python3' utils/pipeline.sh
+            - CI_CONFIGURE_ARGS='CC=clang CXX=clang++ --with-python=python3' utils/pipeline.sh
 
     - step: &clang-floor
           <<: *build-test
@@ -55,7 +61,7 @@ definitions:
           image: ubuntu:18.04
           script:
             - apt-get update && apt-get install -y wget clang-4.0 python perl make
-            - CONFIGURE_ARGS='CC=clang-4.0 CXX=clang++-4.0' utils/pipeline.sh
+            - CI_CONFIGURE_ARGS='CC=clang-4.0 CXX=clang++-4.0' utils/pipeline.sh
 
 pipelines:
 
@@ -67,18 +73,23 @@ pipelines:
   custom: # on-demand configs
 
     gcc-latest:
+      - variables: *variables
       - step: *gcc-latest
 
     gcc-floor:
+      - variables: *variables
       - step: *gcc-floor
 
     gcc-pedantic:
+      - variables: *variables
       - step: *gcc-pedantic
 
     clang-latest:
+      - variables: *variables
       - step: *clang-latest
 
     clang-floor:
+      - variables: *variables
       - step: *clang-floor
 
 
