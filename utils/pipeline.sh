@@ -4,11 +4,17 @@
 
 # Optional Inputs: (shell or pipeline variables)
 #  CI_CONFIGURE_ARGS : extra arguments for the configure line
+#  CI_MAKE : make tool to use
 #  CI_MAKE_PARALLEL : argument to set build parallelism, eg "-j4"
 #  CI_DEV_CHECK : "1" to enable extra dev-mode tests
+#  CI_RUN_TESTS : "0" to disable running of tests
 #  CI_NETWORKS : override default network "smp udp"
 #  CI_RANKS : override default rank count
+#  CI_PREFIX : override default install prefix
+#  CI_SRCDIR : override location of source tree (default .)
+#  CI_BLDDIR : override location of source tree (default .)
 
+if test -n "$BITBUCKET_COMMIT" ; then
 echo "----------------------------------------------"
 echo "CI info:"
 echo "Repo       "$BITBUCKET_REPO_FULL_NAME ;
@@ -16,19 +22,33 @@ echo "Branch     "$BITBUCKET_BRANCH ;
 echo "Tag        "$BITBUCKET_TAG ;
 echo "Commit     "$BITBUCKET_COMMIT ;
 echo "PR         "$BITBUCKET_PR_ID ;
+fi
 echo "----------------------------------------------"
 echo "Inputs:"
 echo "CI_CONFIGURE_ARGS=$CI_CONFIGURE_ARGS"
+CI_DEV_CHECK="${CI_DEV_CHECK:-0}"
 echo "CI_DEV_CHECK=$CI_DEV_CHECK"
+CI_RUN_TESTS="${CI_RUN_TESTS:-1}"
+echo "CI_RUN_TESTS=$CI_RUN_TESTS"
+CI_MAKE=${CI_MAKE:-make}
+echo "CI_MAKE=$CI_MAKE"
 CI_MAKE_PARALLEL=${CI_MAKE_PARALLEL:--j8}
 echo "CI_MAKE_PARALLEL=$CI_MAKE_PARALLEL"
 CI_NETWORKS="${CI_NETWORKS:-smp udp}"
 echo "CI_NETWORKS=$CI_NETWORKS"
 CI_RANKS="${CI_RANKS:-4}"
 echo "CI_RANKS=$CI_RANKS"
+CI_SRCDIR="${CI_SRCDIR:-.}"
+CI_SRCDIR=$(cd "$CI_SRCDIR" && pwd -P || echo "$CI_SRCDIR")
+echo "CI_SRCDIR=$CI_SRCDIR"
+CI_BLDDIR="${CI_BLDDIR:-.}"
+CI_BLDDIR=$(mkdir -p "$CI_BLDDIR" && cd "$CI_BLDDIR" && pwd -P || echo "$CI_BLDDIR")
+echo "CI_BLDDIR=$CI_BLDDIR"
+CI_PREFIX="${CI_PREFIX:-$CI_BLDDIR/inst}"
+echo "CI_PREFIX=$CI_PREFIX"
 echo "----------------------------------------------"
 
-MAKE="make $CI_MAKE_PARALLEL"
+MAKE="$CI_MAKE $CI_MAKE_PARALLEL"
 if (( "$CI_DEV_CHECK" )) ; then
   DEV="dev-"
 else
@@ -38,7 +58,10 @@ fi
 set -e
 set -x
 
-time ./configure --prefix=/usr/local/upcxx $CI_CONFIGURE_ARGS
+cd "$CI_BLDDIR"
+rm -f .pipefail
+
+time "$CI_SRCDIR/configure" --prefix=$CI_PREFIX $CI_CONFIGURE_ARGS
 
 time $MAKE all
 
@@ -48,17 +71,16 @@ time $MAKE test_install || touch .pipe-fail
 
 time $MAKE ${DEV}tests NETWORKS="$CI_NETWORKS" || touch .pipe-fail      # compile tests
 
-# Run smp tests
-if expr " $CI_NETWORKS " : " smp " ; then
-  # Don't use parallel make for runners or we risk memory exhaustion
-  time make ${DEV}run-tests RANKS=$CI_RANKS NETWORKS=smp || touch .pipe-fail  
-fi
-
-# Run udp tests to simulate distributed memory
-if expr " $CI_NETWORKS " : " udp " ; then
-  export GASNET_SPAWNFN=L
+if (( "$CI_RUN_TESTS" )) ; then
+  # variables controlling (potentially simulated) distributed behavior
+  export GASNET_SPAWNFN=${GASNET_SPAWNFN:-L}
   export GASNET_SUPERNODE_MAXSIZE=${GASNET_SUPERNODE_MAXSIZE:-2}
-  time make ${DEV}run-tests RANKS=$CI_RANKS NETWORKS=udp || touch .pipe-fail  
+
+  # Run any other networks
+  # Deliberately avoid parallel make for runners to ensure we don't risk memory exhaustion
+  for network in $CI_NETWORKS ; do 
+    time $CI_MAKE ${DEV}run-tests RANKS=$CI_RANKS NETWORKS=$network || touch .pipe-fail  
+  done
 fi
 
 test ! -f .pipe-fail # propagate delayed failure
