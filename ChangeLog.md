@@ -18,6 +18,7 @@ Notable bug fixes:
 * issue #346: `configure --cross=cray*` ignores `--with-cc/--with-cxx`
 * [spec issue #158](https://bitbucket.org/berkeleylab/upcxx-spec/issues/158): prohibit reference types in global_ptr and upcxx_memberof_general
 * issue #356: `SERIALIZED_{FIELDS|VALUES}` incorrectly require public constructors
+* issue #364: Stray "-e" output on macOS and possibly elsewhere
 
 Breaking changes:
 

@@ -17,6 +17,15 @@ if test -z "$BASH_VERSION"; then
   fi
 fi
 
+# Issue 364: try to avoid /bin/sh that enables bash POSIX mode and is non-standard on Apple
+if test x"$BASH" = x"/bin/sh" && test -z "$UPCXX_REEXEC$UPCXX_REEXEC_SILENT" ; then
+  if test -x /bin/bash ; then
+    exec env UPCXX_REEXEC_SILENT=1 /bin/bash "$0" "$@"
+  fi
+  # on exec failure, try again in PATH
+  exec env UPCXX_REEXEC=1 bash "$0" "$@"
+fi
+
 # Minimum we claim to support is 3.2
 UPCXX_BASH_MAJ=3
 UPCXX_BASH_MIN=2
