@@ -22,6 +22,9 @@ Notable bug fixes:
 * issue #356: `SERIALIZED_{FIELDS|VALUES}` incorrectly require public constructors
 * issue #364: Stray "-e" output on macOS and possibly elsewhere
 * issue #361: upcxx::rpc broken when mixing arguments of T&& and dist_object& 
+* issue #288: *partial fix* future producing calls like `upcxx::make_future` now
+  return the type `future<T>` exactly (previously was `future1<???,T>`). Sole
+  remaining exception is `when_all`.
 
 Breaking changes:
 
