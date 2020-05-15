@@ -30,6 +30,7 @@ GASNET_CC_FAMILY  := $(call GASNET_VAR,$(GASNET_BLDDIR),CC_FAMILY)
 GASNET_CXX_FAMILY := $(call GASNET_VAR,$(GASNET_BLDDIR),CXX_FAMILY)
 GASNET_CC_SUBFAMILY  := $(call GASNET_VAR,$(GASNET_BLDDIR),CC_SUBFAMILY)
 GASNET_CXX_SUBFAMILY := $(call GASNET_VAR,$(GASNET_BLDDIR),CXX_SUBFAMILY)
+PERL := $(call GASNET_VAR,$(GASNET_BLDDIR),PERL)
 
 # public-facing targets don't use GASNet "conduit" terminology
 # using "target-specific variable values" for the defaults
@@ -342,7 +343,6 @@ run-tests-installed: force
 
 .PHONY: do-run-tests run-tests run-tests-installed do-test-xml
 
-PERL ?= perl
 # Encode XML special characters
 XML_ENCODE = $(PERL) -p -e 'BEGIN {%chrmap=("<","lt",">","gt","&","amp","\x27","apos","\x22","quot");} { s/([<>&\x22\x27])/"&".$$chrmap{$$1}.";"/ge } '
 

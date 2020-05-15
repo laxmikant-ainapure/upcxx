@@ -76,7 +76,7 @@ if (( "$CI_RUN_TESTS" )) ; then
   export GASNET_SPAWNFN=${GASNET_SPAWNFN:-L}
   export GASNET_SUPERNODE_MAXSIZE=${GASNET_SUPERNODE_MAXSIZE:-2}
 
-  # Run any other networks
+  # Run for each network as a separate test session, in the user-provided order
   # Deliberately avoid parallel make for runners to ensure we don't risk memory exhaustion
   for network in $CI_NETWORKS ; do 
     time $CI_MAKE ${DEV}run-tests RANKS=$CI_RANKS NETWORKS=$network || touch .pipe-fail  
