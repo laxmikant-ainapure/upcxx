@@ -25,6 +25,7 @@ Notable bug fixes:
 * issue #288: *partial fix* future producing calls like `upcxx::make_future` now
   return the type `future<T>` exactly (previously was `future1<???,T>`). Sole
   remaining exception is `when_all`.
+* issue #313: implement future::{result,wait}_reference.
 
 Breaking changes:
 
@@ -32,7 +33,6 @@ Breaking changes:
   For backwards compat, the former is still accepted when the latter is unset.
 * Build-time UPCXX_CODEMODE/-codemode value "O3" has been renamed to "opt".
   For backwards compat, the former is still accepted.
-* `future<T...>::{wait,result}_moved()`, deprecated since 2019.9.0, are now removed.
 
 ### 2020.03.12: Release 2020.3.0
 
