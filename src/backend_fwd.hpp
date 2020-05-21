@@ -22,6 +22,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <string>
 
 //////////////////////////////////////////////////////////////////////
 // Public API:
@@ -71,6 +72,9 @@ namespace upcxx {
   void* allocate(std::size_t size,
                  std::size_t alignment = alignof(std::max_align_t));
   void deallocate(void *p);
+  namespace detail {
+    std::string shared_heap_stats();
+  }
   
   void progress(progress_level level = progress_level::user);
   

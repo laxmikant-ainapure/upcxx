@@ -9,6 +9,8 @@ For information on installing UPC++, see: [INSTALL.md](INSTALL.md)
 
 New features/enhancements: (see specification and programmer's guide for full details)
 
+* Shared heap exhaustion in `upcxx::new_(array)` now throws `upcxx::bad_shared_alloc` (a type
+  derived from `std::bad_alloc`) which provides additional diagnostics about the failure.
 * Rpc's which return future values experience one less heap allocation and
   virtual dispatch in the runtime's critical path.
 * ...
