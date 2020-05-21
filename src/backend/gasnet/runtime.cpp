@@ -937,6 +937,21 @@ void* upcxx::allocate(size_t size, size_t alignment) {
 void  upcxx::deallocate(void *p) {
   gasnet::deallocate(p, &gasnet::sheap_footprint_user);
 }
+
+std::string upcxx::detail::shared_heap_stats() {
+  std::stringstream ss;
+  ss
+    <<"Local shared heap statistics:\n"
+    <<"  Shared heap size on process "<<rank_me()<<":             "
+    <<                       noise_log::size(shared_heap_sz) << '\n'
+    <<"  User allocations:      "<<setw(10)<<gasnet::sheap_footprint_user.count<<" objects, "
+    <<                       noise_log::size(gasnet::sheap_footprint_user.bytes)<<'\n'
+    <<"  Internal rdzv buffers: "<<setw(10)<<gasnet::sheap_footprint_rdzv.count<<" objects, "
+    <<                       noise_log::size(gasnet::sheap_footprint_rdzv.bytes)<<'\n'
+    <<"  Internal misc buffers: "<<setw(10)<<gasnet::sheap_footprint_misc.count<<" objects, "
+    <<                       noise_log::size(gasnet::sheap_footprint_misc.bytes)<<'\n';
+  return ss.str();
+}
   
 void* gasnet::allocate(size_t size, size_t alignment, sheap_footprint_t *foot) {
   UPCXX_ASSERT(shared_heap_isinit);
@@ -976,14 +991,7 @@ void* gasnet::allocate(size_t size, size_t alignment, sheap_footprint_t *foot) {
     "UPC++ could not allocate an internal buffer of\n"
     "size="<<size<<" from shared heap. Please increase\n"
     "the size of the shared heap (UPCXX_SHARED_HEAP_SIZE).\n\n"
-    
-    <<"Local shared heap statistics:\n"
-    <<"  User allocations:      count "<<gasnet::sheap_footprint_user.count
-    <<                       ", bytes "<<gasnet::sheap_footprint_user.bytes<<'\n'
-    <<"  Internal rdzv buffers: count "<<gasnet::sheap_footprint_rdzv.count
-    <<                       ", bytes "<<gasnet::sheap_footprint_rdzv.bytes<<'\n'
-    <<"  Internal misc buffers: count "<<gasnet::sheap_footprint_misc.count
-    <<                       ", bytes "<<gasnet::sheap_footprint_misc.bytes
+    << detail::shared_heap_stats(); 
   );
     
   //UPCXX_ASSERT(p != nullptr);

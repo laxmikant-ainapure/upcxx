@@ -21,12 +21,13 @@
 
 namespace upcxx {
   struct bad_shared_alloc : public std::bad_alloc {
-    bad_shared_alloc(const char *where=nullptr, size_t nbytes=0) : _what(_base) {
+    bad_shared_alloc(const char *where=nullptr, size_t nbytes=0) {
       std::stringstream ss;
       ss << _base << "UPC++ shared heap is out of memory on process " << rank_me();
-      if (where) ss << " inside upcxx::" << where;
+      if (where) ss << "\n inside upcxx::" << where;
       if (nbytes) ss << " while trying to allocate " << nbytes <<  " more bytes";
-      ss << ". You may need to request a larger heap with `upcxx-run -shared-heap`"
+      ss << "\n " << detail::shared_heap_stats();
+      ss << "\n You may need to request a larger shared heap with `upcxx-run -shared-heap`"
                " or $UPCXX_SHARED_HEAP_SIZE.";
       _what = ss.str();
     }
@@ -41,7 +42,7 @@ namespace upcxx {
      static constexpr const char *_base = "upcxx::bad_shared_alloc: ";
   };
   //////////////////////////////////////////////////////////////////////
-  /* Declared in: upcxx/backend.hpp
+  /* Declared in: upcxx/backend_fwd.hpp
   
   void* allocate(std::size_t size,
                  std::size_t alignment = alignof(std::max_align_t));
