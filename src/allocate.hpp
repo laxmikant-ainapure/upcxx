@@ -12,6 +12,7 @@
 #include <algorithm> // max
 #include <cmath> // ceil
 #include <cstdint>
+#include <sstream>
 #include <cstddef> // max_align_t
 #include <limits> // numeric_limits
 #include <new> // bad_alloc
@@ -19,6 +20,26 @@
                        // is_destructible, is_trivially_destructible
 
 namespace upcxx {
+  struct bad_shared_alloc : public std::bad_alloc {
+    bad_shared_alloc(const char *where=nullptr, size_t nbytes=0) : _what(_base) {
+      std::stringstream ss;
+      ss << _base << "UPC++ shared heap is out of memory on process " << rank_me();
+      if (where) ss << " inside upcxx::" << where;
+      if (nbytes) ss << " while trying to allocate " << nbytes <<  " more bytes";
+      ss << ". You may need to request a larger heap with `upcxx-run -shared-heap`"
+               " or $UPCXX_SHARED_HEAP_SIZE.";
+      _what = ss.str();
+    }
+    bad_shared_alloc(const std::string & reason) : _what(_base) {
+      _what += reason;
+    }
+    virtual const char* what() const noexcept {
+      return _what.c_str();
+    }
+    private:
+     std::string _what;
+     static constexpr const char *_base = "upcxx::bad_shared_alloc: ";
+  };
   //////////////////////////////////////////////////////////////////////
   /* Declared in: upcxx/backend.hpp
   
@@ -62,7 +83,7 @@ namespace upcxx {
       
       if (ptr == nullptr) {
         if (throws) {
-          throw std::bad_alloc();
+          throw bad_shared_alloc(__func__, std::max(sizeof(T), alignof(T)));
         }
         return nullptr;
       }
@@ -105,7 +126,8 @@ namespace upcxx {
       if(n > (std::numeric_limits<std::size_t>::max() - size) / sizeof(T)) {
         // more bytes required than can be represented by size_t
         if(throws)
-          throw std::bad_alloc();
+          throw bad_shared_alloc(std::string(__func__) + "(" + std::to_string(n) 
+                              + ") requested more bytes than can be represented by size_t!");
         return nullptr;
       }
 
@@ -115,8 +137,7 @@ namespace upcxx {
       void *ptr = upcxx::allocate(size, std::max(alignof(std::size_t), alignof(T)));
       
       if(ptr == nullptr) {
-        if(throws)
-          throw std::bad_alloc();
+        if(throws) throw bad_shared_alloc(__func__, size);
         return nullptr;
       }
       
