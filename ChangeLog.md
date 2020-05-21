@@ -9,6 +9,9 @@ For information on installing UPC++, see: [INSTALL.md](INSTALL.md)
 
 New features/enhancements:
 
+* Shared heap exhaustion in `upcxx::new_(array)` now throws `upcxx::bad_shared_alloc` (a type
+  derived from `std::bad_alloc`) which provides additional diagnostics about the failure.
+
 Notable bug fixes:
 
 * issue #353: configure: automatically cross-compile on Cray XC
