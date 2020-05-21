@@ -64,7 +64,7 @@ namespace upcxx {
   struct binding<team&> {
     using on_wire_type = team_id;
     using off_wire_type = team&;
-    using off_wire_future_type = typename detail::make_future<team&>::return_type;
+    using off_wire_future_type = future1<detail::future_kind_result, team&>;
     using stripped_type = team&;
     static constexpr bool immediate = true;
     
@@ -77,7 +77,7 @@ namespace upcxx {
     }
 
     static off_wire_future_type off_wire_future(team_id id) {
-      return upcxx::make_future<team&>(id.here());
+      return detail::make_fast_future<team&>(id.here());
     }
   };
   

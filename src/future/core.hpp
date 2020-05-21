@@ -171,7 +171,8 @@ namespace upcxx {
       future_header_dependent *active_next_;
       
       future_header_dependent() {
-        this->ref_n_ = 1;
+        // dependents carry an extra reference until they become ready
+        this->ref_n_ = 2;
         this->status_ = future_header::status_active;
         this->sucs_head_ = nullptr;
       }
@@ -301,11 +302,6 @@ namespace upcxx {
       
       future_body(void *storage): storage_(storage) {}
       
-      // Tell this body to destruct itself (but not delete storage) given
-      // that it hasn't had "leave_active" called. Default implementation
-      // should never be called.
-      virtual void destruct_early();
-      
       // Tell this body that its time to leave the "active" state by running
       // its specific action.
       virtual void leave_active(future_header_dependent *owner_hdr) = 0;
@@ -317,18 +313,29 @@ namespace upcxx {
       future_header::dependency_link link_;
       
       future_body_proxy_(void *storage): future_body(storage) {}
-      
-      void leave_active(future_header_dependent *owner_hdr);
     };
     
     template<typename ...T>
     struct future_body_proxy final: future_body_proxy_ {
       future_body_proxy(void *storage): future_body_proxy_(storage) {}
       
-      void destruct_early() {
-        this->link_.unlink();
-        future_header_ops_general::template dropref<T...>(this->link_.dep);
-        this->~future_body_proxy();
+      void leave_active(future_header_dependent *hdr) {
+        if(0 != hdr->decref(1)) { // dependent becoming ready loses ref
+          future_header *result = this->link_.dep; // link.dep replaced with result in dependency's enter_ready()
+          
+          // discard the body. no destructor needed since future_body_proxy<T...>
+          // is trivially destructible and we dont want to decref the proxied pointer.
+          operator delete(this->storage_);
+          
+          hdr->enter_ready(result);
+        }
+        else { // died early
+          void *storage = this->storage_;
+          future_header_ops_general::template dropref<T...>(this->link_.dep);
+          this->~future_body_proxy();
+          operator delete(storage);
+          delete hdr;
+        }
       }
     };
     
@@ -359,7 +366,7 @@ namespace upcxx {
       }
       
       template<typename ...U>
-      future_header_result(bool not_ready, std::tuple<U...> values):
+      future_header_result(bool not_ready, std::tuple<U...> &&values):
         base_header{
           /*ref_n_*/1,
           /*status_*/not_ready ? status_results_yes : future_header::status_ready,
@@ -696,20 +703,10 @@ namespace upcxx {
       }
       // Future dying prematurely.
       else {
-        if(hdr->result_ == hdr) {
-          // Not ready but is its own result, must be a promise.
-          // Don't need to cast to `future_header_promise` since `delete_me` covers this.
-          reinterpret_cast<future_header_result<T...>*>(hdr)->delete_me();
-        }
-        else {
-          // Only case that requires polymorphic destruction.
-          future_header_dependent *hdr1 = static_cast<future_header_dependent*>(hdr);
-          future_body *body = hdr1->body_;
-          void *storage = body->storage_;
-          body->destruct_early();
-          future_body::operator delete(storage);
-          delete hdr1;
-        }
+        UPCXX_ASSERT(hdr->result_ == hdr);
+        // Not ready but is its own result, must be a promise.
+        // Don't need to cast to `future_header_promise` since `delete_me` covers this.
+        reinterpret_cast<future_header_result<T...>*>(hdr)->delete_me();
       }
     }
 
@@ -790,23 +787,14 @@ namespace upcxx {
     
     template<typename ...T>
     void future_header_ops_dependent::delete1(future_header *hdr) {
-      // Common case is deleting a ready future.
-      if(hdr->status_ == future_header::status_ready) {
-        future_header *result = hdr->result_;
-        // Drop ref to our result.
-        future_header_ops_result_ready::dropref<T...>(result, /*maybe_nil=*/std::false_type());
-        // Since we're ready we have no body, just delete the header.
-        delete static_cast<future_header_dependent*>(hdr);
-      }
-      // Future dying prematurely.
-      else {
-        future_header_dependent *hdr1 = static_cast<future_header_dependent*>(hdr);
-        future_body *body = hdr1->body_;
-        void *storage = body->storage_;
-        body->destruct_early();
-        future_body::operator delete(storage);
-        delete hdr1;
-      }
+      // Dependent's can't die prematurely
+      UPCXX_ASSERT(hdr->status_ == future_header::status_ready);
+      
+      future_header *result = hdr->result_;
+      // Drop ref to our result.
+      future_header_ops_result_ready::dropref<T...>(result, /*maybe_nil=*/std::false_type());
+      // Since we're ready we have no body, just delete the header.
+      delete static_cast<future_header_dependent*>(hdr);
     }
     
     ////////////////////////////////////////////////////////////////////

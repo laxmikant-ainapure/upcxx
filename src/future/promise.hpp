@@ -116,7 +116,7 @@ namespace upcxx {
     promise_future_t<T...> promise_get_future(future_header_promise<T...> *hdr) {
       hdr->incref(1);
       return promise_future_t<T...>(
-        detail::future_impl_shref<detail::future_header_ops_promise, T...>(&hdr->base_header_result.base_header)
+        detail::future_impl_shref<detail::future_header_ops_promise, /*unique=*/false, T...>(&hdr->base_header_result.base_header)
       );
     }
   }
@@ -127,11 +127,11 @@ namespace upcxx {
   namespace detail {
     template<typename ...T>
     struct promise_shref:
-        detail::future_impl_shref<detail::future_header_ops_promise, T...> {
+        detail::future_impl_shref<detail::future_header_ops_promise, /*unique=*/false, T...> {
 
       promise_shref(detail::future_header_promise<T...> *hdr/*takes ref*/):
         detail::future_impl_shref<
-          detail::future_header_ops_promise, T...
+          detail::future_header_ops_promise, /*unique=*/false, T...
         >(&hdr->base_header_result) {
       }
 
@@ -150,9 +150,9 @@ namespace upcxx {
         return reinterpret_cast<future_header_promise<T...>*>(this->hdr_);
       }
       
-      future_header_promise<T...>* steal_header() {
+      future_header_promise<T...>* steal_header() && {
         return reinterpret_cast<future_header_promise<T...>*>(
-          detail::future_impl_shref<detail::future_header_ops_promise, T...>::steal_header()
+          static_cast<promise_shref&&>(*this).detail::future_impl_shref<detail::future_header_ops_promise, /*unique=*/false, T...>::steal_header()
         );
       }
 
@@ -174,25 +174,17 @@ namespace upcxx {
         detail::promise_fulfill_result(this->header(), std::move(values));
       }
       
-      future1<
-          detail::future_kind_shref<detail::future_header_ops_promise>,
-          T...
-        >
-      finalize() const {
-        this->header()->fulfill(1);
-        return static_cast<
-            detail::future_impl_shref<detail::future_header_ops_promise, T...> const&
-          >(*this);
+      future<T...> finalize() const {
+        future_header_promise<T...> *hdr = this->header();
+        hdr->fulfill(1);
+        hdr->incref(1);
+        return typename future<T...>::impl_type(&hdr->base_header_result.base_header);
       }
       
-      future1<
-          detail::future_kind_shref<detail::future_header_ops_promise>,
-          T...
-        >
-      get_future() const {
-        return static_cast<
-            detail::future_impl_shref<detail::future_header_ops_promise, T...> const&
-          >(*this);
+      future<T...> get_future() const {
+        future_header_promise<T...> *hdr = this->header();
+        hdr->incref(1);
+        return typename future<T...>::impl_type(&hdr->base_header_result.base_header);
       }
     };
   }

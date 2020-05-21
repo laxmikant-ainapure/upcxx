@@ -9,6 +9,8 @@ For information on installing UPC++, see: [INSTALL.md](INSTALL.md)
 
 New features/enhancements: (see specification and programmer's guide for full details)
 
+* Rpc's which return future values experience one less heap allocation and
+  virtual dispatch in the runtime's critical path.
 * ...
 
 Notable bug fixes:
@@ -19,6 +21,11 @@ Notable bug fixes:
 * [spec issue #158](https://bitbucket.org/berkeleylab/upcxx-spec/issues/158): prohibit reference types in global_ptr and upcxx_memberof_general
 * issue #356: `SERIALIZED_{FIELDS|VALUES}` incorrectly require public constructors
 * issue #364: Stray "-e" output on macOS and possibly elsewhere
+* issue #361: upcxx::rpc broken when mixing arguments of T&& and dist_object& 
+* issue #288: *partial fix* future producing calls like `upcxx::make_future` now
+  return the type `future<T>` exactly (previously was `future1<???,T>`). Sole
+  remaining exception is `when_all`.
+* issue #313: implement future::{result,wait}_reference.
 
 Breaking changes:
 

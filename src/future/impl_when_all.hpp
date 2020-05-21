@@ -2,8 +2,9 @@
 #define _3e3a0cc8_bebc_49a7_9f94_53f023c2bd53
 
 #include <upcxx/future/core.hpp>
-#include <upcxx/future/body_pure.hpp>
 #include <upcxx/utility.hpp>
+
+#include <initializer_list>
 
 namespace upcxx {
   //////////////////////////////////////////////////////////////////////
@@ -17,6 +18,14 @@ namespace upcxx {
   };
   
   namespace detail {
+    ////////////////////////////////////////////////////////////////////
+    // future_body_identity: Future body that holds a single dependency
+    // and whose `leave_active()` routine just returns that dependencies
+    // results as its own (like identity function).
+    
+    template<typename ArgFu>
+    struct future_body_identity;
+    
     ////////////////////////////////////////////////////////////////////
     // future_impl_when_all: Future implementation concatenating
     // results of multiple futures.
@@ -39,73 +48,54 @@ namespace upcxx {
       }
       
       template<int ...i>
-      struct result_lrefs_function {
-        typedef std::tuple<decltype(std::declval<FuArg>().impl_.result_lrefs_getter())...> getters_tuple;
-        
-        getters_tuple getters_;
-        
-        result_lrefs_function(std::tuple<FuArg...> const &args):
-          getters_{std::get<i>(args).impl_.result_lrefs_getter()...} {
-        }
-        
-        auto operator()() const
-          UPCXX_RETURN_DECLTYPE(std::tuple_cat(std::get<i>(getters_)()...)) {
-          return std::tuple_cat(std::get<i>(getters_)()...);
-        }
-      };
-      
-      template<int ...i>
-      result_lrefs_function<i...> result_lrefs_getter_(
-          detail::index_sequence<i...>
-        ) const {
-        return result_lrefs_function<i...>{this->args_};
-      }
-      
-      template<int ...i>
-      auto result_rvals_(detail::index_sequence<i...>)
+      auto result_refs_or_vals_(detail::index_sequence<i...>) const&
         UPCXX_RETURN_DECLTYPE(std::tuple_cat(
-            std::get<i>(this->args_).impl_.result_rvals()...
+            std::get<i>(this->args_).impl_.result_refs_or_vals()...
           )
         ) {
         return std::tuple_cat(
-          std::get<i>(this->args_).impl_.result_rvals()...
+          std::get<i>(this->args_).impl_.result_refs_or_vals()...
+        );
+      }
+      template<int ...i>
+      auto result_refs_or_vals_(detail::index_sequence<i...>) &&
+        UPCXX_RETURN_DECLTYPE(std::tuple_cat(
+            std::get<i>(std::move(this->args_)).impl_.result_refs_or_vals()...
+          )
+        ) {
+        return std::tuple_cat(
+          std::get<i>(std::move(this->args_)).impl_.result_refs_or_vals()...
         );
       }
       
     public:
-      future_impl_when_all(FuArg ...args):
-        args_{std::move(args)...} {
+      template<typename ...FuArg1>
+      future_impl_when_all(FuArg1 &&...args):
+        args_(static_cast<FuArg1&&>(args)...) {
       }
       
       bool ready() const {
         return this->ready_(detail::make_index_sequence<sizeof...(FuArg)>());
       }
       
-      auto result_lrefs_getter() const
-        UPCXX_RETURN_DECLTYPE(this->result_lrefs_getter_(detail::make_index_sequence<sizeof...(FuArg)>())) {
-        return this->result_lrefs_getter_(detail::make_index_sequence<sizeof...(FuArg)>());
+      auto result_refs_or_vals() const&
+        UPCXX_RETURN_DECLTYPE(this->result_refs_or_vals_(detail::make_index_sequence<sizeof...(FuArg)>())) {
+        return this->result_refs_or_vals_(detail::make_index_sequence<sizeof...(FuArg)>());
       }
-      
-      auto result_rvals()
-        UPCXX_RETURN_DECLTYPE(this->result_rvals_(detail::make_index_sequence<sizeof...(FuArg)>())) {
-        return this->result_rvals_(detail::make_index_sequence<sizeof...(FuArg)>());
+      auto result_refs_or_vals() &&
+        UPCXX_RETURN_DECLTYPE(std::move(*this).result_refs_or_vals_(detail::make_index_sequence<sizeof...(FuArg)>())) {
+        return std::move(*this).result_refs_or_vals_(detail::make_index_sequence<sizeof...(FuArg)>());
       }
-      
-      //////////////////////////////////////////////////////////////////
-      // *** Performance opportunity missed ***
-      // Given knowledge that all of our arguments are trivially ready,
-      // we could elide building a body just to see that it's immediately
-      // active.
       
       typedef future_header_ops_general header_ops;
       
-      future_header* steal_header() {
+      future_header* steal_header() && {
         future_header_dependent *hdr = new future_header_dependent;
         
-        typedef future_body_pure<future1<future_kind_when_all<FuArg...>,T...>> body_type;
+        using body_type = future_body_identity<future1<future_kind_when_all<FuArg...>,T...>>;
         void *body_mem = body_type::operator new(sizeof(body_type));
         
-        hdr->body_ = ::new(body_mem) body_type{body_mem, hdr, std::move(*this)};
+        hdr->body_ = ::new(body_mem) body_type(body_mem, hdr, static_cast<future_impl_when_all&&>(*this));
         
         if(hdr->status_ == future_header::status_active)
           hdr->entered_active();
@@ -121,12 +111,13 @@ namespace upcxx {
     template<int i, typename Arg>
     struct future_dependency_when_all_arg {
       future_dependency<Arg> dep_;
-      
+
+      template<typename Arg1>
       future_dependency_when_all_arg(
           future_header_dependent *suc_hdr,
-          Arg arg
+          Arg1 &&arg
         ):
-        dep_{suc_hdr, std::move(arg)} {
+        dep_(suc_hdr, static_cast<Arg1&&>(arg)) {
       }
     };
     
@@ -141,59 +132,26 @@ namespace upcxx {
       // variadically inherit from each future_dependency specialization
       private future_dependency_when_all_arg<i,Arg>... {
       
-      typedef future_dependency_when_all_base<
-          future1<future_kind_when_all<Arg...>, T...>,
-          detail::index_sequence<i...>
-        > this_t;
-      
+      template<typename FuArg1>
       future_dependency_when_all_base(
           future_header_dependent *suc_hdr,
-          future1<future_kind_when_all<Arg...>, T...> all_args
+          /*future1<future_kind_when_all<Arg...>, T...>*/FuArg1 &&all_args
         ):
         future_dependency_when_all_arg<i,Arg>(
           suc_hdr,
-          std::move(std::get<i>(all_args.impl_.args_))
+          std::get<i>(static_cast<FuArg1&&>(all_args).impl_.args_)
         )... {
       }
-      
-      template<typename ...U>
-      static void force_each_(U ...x) {}
-      
-      void cleanup_early() {
-        // run cleanup_early on each base class
-        force_each_((
-          static_cast<future_dependency_when_all_arg<i,Arg>*>(this)->dep_.cleanup_early(),
-          0
-        )...);
-      }
-      
-      void cleanup_ready() {
-        // run cleanup_ready on each base class
-        force_each_((
-          static_cast<future_dependency_when_all_arg<i,Arg>*>(this)->dep_.cleanup_ready(),
-          0
-        )...);
-      }
-      
-      struct result_lrefs_function {
-        std::tuple<
-            decltype(std::declval<future_dependency<Arg>>().result_lrefs_getter())...
-          > getters_;
-        
-        result_lrefs_function(this_t const *me):
-          getters_{
-            static_cast<future_dependency_when_all_arg<i,Arg> const*>(me)->dep_.result_lrefs_getter()...
-          } {
-        }
-        
-        auto operator()() const
-          UPCXX_RETURN_DECLTYPE(std::tuple_cat(std::get<i>(getters_)()...)) {
-          return std::tuple_cat(std::get<i>(getters_)()...);
-        }
-      };
-      
-      result_lrefs_function result_lrefs_getter() const {
-        return result_lrefs_function{this};
+
+      auto result_refs_or_vals() &&
+        UPCXX_RETURN_DECLTYPE(
+          std::tuple_cat(
+            static_cast<future_dependency_when_all_arg<i,Arg>&&>(*static_cast<future_dependency_when_all_arg<i,Arg>*>(this)).dep_.result_refs_or_vals()...
+          )
+        ) {
+        return std::tuple_cat(
+          static_cast<future_dependency_when_all_arg<i,Arg>&&>(*static_cast<future_dependency_when_all_arg<i,Arg>*>(this)).dep_.result_refs_or_vals()...
+        );
       }
     };
     
@@ -205,24 +163,64 @@ namespace upcxx {
         future1<future_kind_when_all<Arg...>, T...>,
         detail::make_index_sequence<sizeof...(Arg)>
       > {
-      
+
+      template<typename Arg1>
       future_dependency(
           future_header_dependent *suc_hdr,
-          future1<future_kind_when_all<Arg...>, T...> arg
+          /*future1<future_kind_when_all<Arg...>, T...>*/Arg1 &&arg
         ):
         future_dependency_when_all_base<
             future1<future_kind_when_all<Arg...>, T...>,
             detail::make_index_sequence<sizeof...(Arg)>
-          >{suc_hdr, std::move(arg)} {
+          >(suc_hdr, static_cast<Arg1&&>(arg)) {
+      }
+    };
+
+    ////////////////////////////////////////////////////////////////////////////
+    // future_body_identity
+    
+    template<typename Kind, typename ...T>
+    struct future_body_identity<future1<Kind, T...>> final: future_body {
+      future_dependency<future1<Kind, T...>> dep_;
+      
+    public:
+      future_body_identity(
+          void *storage,
+          future_header_dependent *suc_hdr,
+          future1<Kind,T...> &&arg
+        ):
+        future_body{storage},
+        dep_(suc_hdr, static_cast<future1<Kind,T...>&&>(arg)) {
       }
       
-      future_header* cleanup_ready_get_header() {
-        future_header *hdr = &(new future_header_result<T...>(
-            /*not_ready=*/false,
-            /*values=*/this->result_lrefs_getter()()
-          ))->base_header;
-        this->cleanup_ready();
-        return hdr;
+      future_body_identity(
+          void *storage,
+          future_header_dependent *suc_hdr,
+          future1<Kind,T...> const &arg
+        ):
+        future_body{storage},
+        dep_(suc_hdr, arg) {
+      }
+      
+      void leave_active(future_header_dependent *hdr) {
+        void *storage = this->storage_;
+        
+        if(0 == hdr->decref(1)) { // dependent becoming ready loses ref
+          this->~future_body_identity();
+          future_body::operator delete(storage);
+          delete hdr;
+        }
+        else {
+          future_header *result = &(new future_header_result<T...>(
+              /*not_ready=*/false,
+              /*values=*/static_cast<future_dependency<future1<Kind,T...>>&&>(this->dep_).result_refs_or_vals()
+            ))->base_header;
+
+          this->~future_body_identity();
+          future_body::operator delete(storage);
+          
+          hdr->enter_ready(result);
+        }
       }
     };
   }

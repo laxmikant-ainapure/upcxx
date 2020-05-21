@@ -34,7 +34,7 @@ namespace upcxx {
     // on_wire: Compute the value to be serialized on the wire.
     static on_wire_type on_wire(T);
     
-    // off_wire: Given a lvalue-reference to deserialized wire value,
+    // off_wire: Given a rvalue-reference to deserialized wire value,
     // produce the off-wire value or future of it.
     static off_wire_type off_wire(on_wire_type);
     // ** OR **
@@ -46,7 +46,7 @@ namespace upcxx {
     using stripped_type = T;
     using on_wire_type = T;
     using off_wire_type = deserialized_type_t<T>;
-    using off_wire_future_type = typename detail::make_future<off_wire_type>::return_type;
+    using off_wire_future_type = future1<detail::future_kind_result, off_wire_type>;
     static constexpr bool immediate = true;
     
     template<typename T1>
@@ -59,7 +59,7 @@ namespace upcxx {
     }
     template<typename T1>
     static off_wire_future_type off_wire_future(T1 &&x) {
-      return upcxx::make_future(static_cast<T1&&>(x));
+      return detail::make_fast_future(static_cast<T1&&>(x));
     }
   };
 
@@ -149,20 +149,13 @@ namespace upcxx {
     };
     
     template<typename Fn_off_wire, typename ...B_off_wire>
-    struct bound_function_rref_applicator {
+    struct bound_function_applicator {
       template<typename Fn1, typename ...B1>
-      typename std::result_of<
-          typename detail::add_rref_if_nonref<Fn_off_wire>::type(
-            typename detail::add_rref_if_nonref<B_off_wire>::type...
-          )
-        >::type
+      typename std::result_of<Fn_off_wire(B_off_wire...)>::type
       operator()(Fn1 &&fn, B1 &&...b) const {
-        return static_cast<typename detail::add_rref_if_nonref<Fn_off_wire>::type>(fn)
-          .operator()(static_cast<typename detail::add_rref_if_nonref<B_off_wire>::type>(b)...);
+        return static_cast<Fn1&&>(fn)(static_cast<B1&&>(b)...);
       }
     };
-    // TODO: struct bound_function_lref_applicator
-    // TODO: struct bound_function_clref_applicator
     
     template<typename Fn, typename ...B, int ...bi>
     struct bound_function_base<
@@ -183,23 +176,23 @@ namespace upcxx {
             typename binding<Fn>::off_wire_type,
             typename binding<B>::off_wire_type...
           >>()
-          .then(bound_function_rref_applicator<
+          .then_lazy(bound_function_applicator<
               typename binding<Fn>::off_wire_type,
               typename binding<B>::off_wire_type...
             >()
           )
         ) {
-        return upcxx::when_all(
+        return detail::when_all_fast(
             binding<Fn>::off_wire_future(std::move(fn_)),
             binding<B>::off_wire_future(std::get<bi>(std::move(b_)))...
-          ).then(bound_function_rref_applicator<
+          ).then_lazy(bound_function_applicator<
               typename binding<Fn>::off_wire_type,
               typename binding<B>::off_wire_type...
             >()
           );
       }
-      // TODO: operator()() &,      requiring bound_function_lref_applicator
-      // TODO: operator()() const&, requiring bound_function_clref_applicator
+      // TODO: operator()() &
+      // TODO: operator()() const&
     };
   }
   
