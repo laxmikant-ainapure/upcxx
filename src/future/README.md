@@ -1,4 +1,12 @@
-# Implementation of `upcxx::future` #
+# INTERNAL UPC++ MAINTAINER DOCUMENTATION #
+
+This document covers internal design details of the UPC++ runtime and is not
+intended for consumption by end users. In particular, all information herein is
+non-normative, may be out-of-date and is subject to change without notice. End
+users should NEVER rely on UPC++ types that are not documented in the formal
+[UPC++ specification](https://bitbucket.org/berkeleylab/upcxx/src/docs/spec.pdf)
+
+## Implementation of `upcxx::future` ##
 
 From reading our spec you might think `upcxx::future` is implemented with
 something like:
@@ -15,8 +23,8 @@ But things are comically more elaborate than that. Instead what we have is
 a small zoo of templated types similar to "c++ expression templates" (internet
 searchable term). Rationale for this approach claims two massive advantages:
 
-  1) Execution speed for expressions involving more than one future primitive.
-  2) Synchronous execution across asyncrhonous abstraction boundaries when
+  1. Execution speed for expressions involving more than one future primitive.
+  2. Synchronous execution across asynchronous abstraction boundaries when
      permissible (again for performance).
 
 These are the basic ways you can construct futures.
@@ -26,6 +34,9 @@ future<T...> promise<T...>::get_future();
 
 future<T...> upcxx::make_future(T...);
 
+future<T> upcxx::to_future(T);
+future<T> upcxx::to_future(future<T>);
+
 future<(T...)...> upcxx::when_all(future<T...>...);
 
 future<U> upcxx::future<T>::then(Callable<U(T&&)> &&fn);
@@ -33,7 +44,7 @@ future<U> upcxx::future<T>::then(Callable<U(T&&)> &&fn);
 
 The first, building from a promise, is the only way that builds a non-ready
 future without having to provide a non-ready future as input. This means the
-implementation cannot avoid allocating a dynamic object to track readieness.
+implementation cannot avoid allocating a dynamic object to track readiness.
 The others, though, do not demand such runtime overhead in all contexts.
 Obviously `make_future` never does, and `when_all` and `then` build immediately
 ready futures if given ready futures. By using expression templates we can
@@ -102,7 +113,7 @@ namespace detail {
   template<typename ...ArgFuture1s>
   struct future_kind_when_all; // detail::when_all_fast result
 
-  // generic heaped refcounted runtime node. all other kinds can be casted to
+  // generic heaped refcounted runtime node. all other kinds can be cast to
   // this one through materialization to a runtime node.
   struct future_kind_shref;
 
@@ -132,8 +143,8 @@ type: future1<
 ```
 
 The user-facing primitives don't actually return these *spooky* types. They
-cast to `future<T...>` with the default kind so as not to suprise users with
-rare but inscrutible type deduction errors. But the runtime has internal
+cast to `future<T...>` with the default kind so as not to surprise users with
+rare but inscrutable type deduction errors. But the runtime has internal
 analogs for each user primitive that does return the spooky typed object, and
 the runtime makes eager use of these operators to reap as much optimization
 as possible. (Note: currently `when_all` actually does return a future with
@@ -184,11 +195,11 @@ structures used are as follows. First there is a heap allocated header
 `detail::future_header` which contains:
 
   * a reference count
-  * a status integer maintaining how many oustanding dependencies it has (number
+  * a status integer maintaining how many outstanding dependencies it has (number
     of non-ready futures its waiting for)
   * a pointer to another header (which could be itself) that holds or will hold
     the ready value.
-  * a head-pointer to a list of sucessor headers, these are futures waiting for
+  * a head-pointer to a list of successor headers, these are futures waiting for
     this (non-ready) header to ready.
 
 `detail::future_header` is subclassed (without any polymorphism) to more
@@ -200,7 +211,7 @@ specialized header types depending what kind of future it is:
   * `detail::future_header_dependent`: adds pointer to a `detail::future_body`.
 
 `detail::future_body` base class for independently allocated polymorphic
-callbacks that are to be executed once all dependencies are satisified. Bodies
+callbacks that are to be executed once all dependencies are satisfied. Bodies
 are allocated separately so that they can be deallocated immediately after
 executing to free up that memory sooner than waiting for the header to be
 dropped by the user.
