@@ -28,6 +28,7 @@ Notable bug fixes:
   return the type `future<T>` exactly (previously was `future1<???,T>`). Sole
   remaining exception is `when_all`.
 * issue #313: implement future::{result,wait}_reference.
+* issue #343: Guarantee equality for default-constructed invalid upcxx::team_id
 
 Breaking changes:
 
@@ -35,6 +36,8 @@ Breaking changes:
   For backwards compat, the former is still accepted when the latter is unset.
 * Build-time UPCXX_CODEMODE/-codemode value "O3" has been renamed to "opt".
   For backwards compat, the former is still accepted.
+* Implementation of upcxx::team_id is no longer Trivial (was never guaranteed to be).
+  It remains DefaultConstructible, TriviallyCopyable, StandardLayoutType, EqualityComparable
 
 ### 2020.03.12: Release 2020.3.0
 
