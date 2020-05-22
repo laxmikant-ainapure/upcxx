@@ -31,8 +31,11 @@ namespace upcxx {
   struct team_id {
   //private:
     digest dig_;
+    team_id(digest id) : dig_(id) {}
     
   //public:
+    team_id() : dig_(digest::zero()) {} // issue 343: disable trivial default construction
+
     team& here() const {
       return *static_cast<team*>(detail::registry[dig_]);
     }
