@@ -16,11 +16,14 @@ Notable bug fixes:
 
 * issue #353: configure: automatically cross-compile on Cray XC
 * issue #356: `SERIALIZED_{FIELDS|VALUES}` incorrectly require public constructors
+* issue #343: Guarantee equality for default-constructed invalid upcxx::team_id
 
 Breaking changes:
 
 * Configure-time envvar `CROSS` has been renamed to `UPCXX_CROSS`.
   For backwards compat, the former is still accepted when the latter is unset.
+* Implementation of `upcxx::team_id` is no longer Trivial (was never guaranteed to be).
+  It remains DefaultConstructible, TriviallyCopyable, StandardLayoutType, EqualityComparable
 
 ### 2020.03.12: Release 2020.3.0
 
