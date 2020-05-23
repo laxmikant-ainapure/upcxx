@@ -50,24 +50,23 @@ definitions:
     - step: &clang-latest
           <<: *build-test
           name: Build and Test clang:latest on ubuntu:latest
-          image: ubuntu:latest
+          image: bonachea/clang-latest-ubu
           script:
-            - apt-get update && apt-get install -y wget clang python3 perl make # libopenmpi-dev 
             - CI_CONFIGURE_ARGS='CC=clang CXX=clang++ --with-python=python3' utils/pipeline.sh
 
     - step: &clang-floor
           <<: *build-test
           name: Build and Test clang:floor on ubuntu:18.04
-          image: ubuntu:18.04
+          image: bonachea/clang-floor-ubu18
           script:
-            - apt-get update && apt-get install -y wget clang-4.0 python perl make
-            - CI_CONFIGURE_ARGS='CC=clang-4.0 CXX=clang++-4.0' utils/pipeline.sh
+            - CI_CONFIGURE_ARGS='CC=clang CXX=clang++' utils/pipeline.sh
 
 pipelines:
 
   default:
     #- parallel:
     #  - step: *gcc-floor
+    #  - step: *clang-latest
       - step: *gcc-latest
 
   custom: # on-demand configs
