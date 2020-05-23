@@ -85,20 +85,25 @@ endif
 # the presence `-E` and lack support for `-MF`.  Meanwhile all supported
 # compilers send `-E` output to stdout by default.
 #
-# TODO: Options like `-MM` can save time (omitting numerous system headers from
-# the list of files to stat when building).  However, it is not currently used
-# because `nobs` documents the behavior of `-MM` as broken with PGI.
-# Compiler-family could be used to include/exclude such flags here.
-#
 # Some explanation of the default flags, extracted from gcc man page:
 #   -M
 #       Instead of outputting the result of preprocessing, output a rule
 #       suitable for make describing the dependencies [...]
+#   -MM
+#       [Same as -M but excluding headers in system directories, or included
+#        from them.  Greatly reduces `stat` calls.]
 #   -MT target
 #       Change the target of the rule emitted by dependency generation. [...]
 #
-UPCXX_DEP_GEN_FLAGS = -M -MT $(2)
+UPCXX_DEP_GEN_FLAGS = -MM -MT $(2)
 UPCXX_DEP_GEN = $(1) -E $(UPCXX_DEP_GEN_FLAGS) $(3) $(4)
+
+# With PGI we use `-M` in lieu of `-MM`.
+# The `-MM` flag is just plain broken with this compiler family
+# (emits the compiler's own pre-includes as the only dependencies).
+ifeq ($(GASNET_CXX_FAMILY),PGI)
+UPCXX_DEP_GEN_FLAGS = -M -MT $(2)
+endif
 
 # Special case for CXX=nvcc (not officially supported)
 ifeq ($(GASNET_CXX_SUBFAMILY),NVIDIA)
