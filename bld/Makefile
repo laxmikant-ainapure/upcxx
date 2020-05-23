@@ -319,25 +319,45 @@ LIBUPCXX_CXX_COMPILE := $(GASNET_CXX) $(LIBUPCXX_CXXFLAGS) \
                         $(UPCXX_STDCXX) $(UPCXX_DEFINES) \
                         -I$(UPCXX_DIR)/include -I$(UPCXX_DIR)/gen_include
 
+%.o: %.c   %.dep; $(LIBUPCXX_C_COMPILE)   $($*_EXTRA_FLAGS) $(UPCXX_COLOR_CFLAGS)   -c $< -o $@
+%.o: %.cpp %.dep; $(LIBUPCXX_CXX_COMPILE) $($*_EXTRA_FLAGS) $(UPCXX_COLOR_CXXFLAGS) -c $< -o $@
+
 #
 # Dependency tracking:
-# Use of a temporary file fixes race between include and partial generation
 #
 
-%.d: %.c   ; tmp=tmp$$$$; $(call UPCXX_DEP_GEN,$(LIBUPCXX_C_COMPILE),  $*.o,$@,$<,$($*_EXTRA_FLAGS)) > $$tmp && mv $$tmp $@
-%.d: %.cpp ; tmp=tmp$$$$; $(call UPCXX_DEP_GEN,$(LIBUPCXX_CXX_COMPILE),$*.o,$@,$<,$($*_EXTRA_FLAGS)) > $$tmp && mv $$tmp $@
-ifneq ($(wildcard *.d),)
-include $(wildcard *.d)
+# Rules to generate a dependency file
+# One cannot 'include' such a file if any depdendencies are broken/removed
+%.d: %.c  ; $(call UPCXX_DEP_GEN,$(LIBUPCXX_C_COMPILE),  $@,$<,$($*_EXTRA_FLAGS)) > $@
+%.d: %.cpp; $(call UPCXX_DEP_GEN,$(LIBUPCXX_CXX_COMPILE),$@,$<,$($*_EXTRA_FLAGS)) > $@
+
+# do-libupcxx-deps:
+# Generate up-to-date .dep files as copies of .d files
+# Care is taken to rebuild .d if missing, out-of-date OR its dependencies are broken
+libupcxx_deps = $(addsuffix .d_,$(notdir $(basename $(libupcxx_sources))) upcxx_headers)
+do-libupcxx-deps: $(libupcxx_deps)
+$(libupcxx_deps): force
+	@dot_dep=$(@:.d_=.dep) dot_d=$(@:.d_=.d) do_build=0;       \
+	 if [[ ! -f $$dot_dep ]]; then                             \
+	   do_build=1;                                             \
+	 elif ! $(MAKE) -s -f $(builddir)/Makefile $$dot_d; then   \
+	   echo "WARNING: forced rebuild of broken $$dot_d";       \
+	   rm -f $$dot_d;                                          \
+	   do_build=1;                                             \
+	 fi;                                                       \
+	 if (( $$do_build )); then                                 \
+	   $(MAKE) -f $(builddir)/Makefile $$dot_d UPCXX_NO_DEPS=1 || exit $$?; \
+	 fi;                                                       \
+	 if [[ $$dot_d -nt $$dot_dep ]]; then                      \
+	   cp $$dot_d tmp$$$$ && mv tmp$$$$ $$dot_dep || exit $$?; \
+	 fi
+
+# Include "clean" dependency files
+ifeq ($(UPCXX_NO_DEPS),)
+ifneq ($(wildcard *.dep),)
+include $(wildcard *.dep)
 endif
-
-# Pattern rules with dependency file as extra prerequisite
-%.o: %.c   %.d; $(LIBUPCXX_C_COMPILE)   $($*_EXTRA_FLAGS) $(UPCXX_COLOR_CFLAGS)   -c $< -o $@
-%.o: %.cpp %.d; $(LIBUPCXX_CXX_COMPILE) $($*_EXTRA_FLAGS) $(UPCXX_COLOR_CXXFLAGS) -c $< -o $@
-
-# Pattern rules for first build when dependency file is missing
-# Must be the second of these two rule pairs
-%.o: %.c  ; $(MAKE) -f $(builddir)/Makefile $*.d $@
-%.o: %.cpp; $(MAKE) -f $(builddir)/Makefile $*.d $@
+endif
 
 #
 # Generated configuration header
@@ -396,6 +416,7 @@ endif
 	ar rcs $@ $?
 do-libupcxx: force
 	@$(MAKE) -C $(UPCXX_DIR)/ -f "$(builddir)/Makefile" $(UPCXX_CONFIG_HEADER)
+	@$(MAKE) -C $(UPCXX_DIR)/lib -f "$(builddir)/Makefile" do-libupcxx-deps
 	@$(MAKE) -C $(UPCXX_DIR)/lib -f "$(builddir)/Makefile" libupcxx.a upcxx_headers.d
 	@$(MAKE) DST=$(UPCXX_DIR) UPCXX_META_GASNET='$(builddir)/$(GASNETDIR)' \
 	         do-upcxx-meta do-upcxx-run do-upcxx-script
@@ -571,7 +592,7 @@ do-exe: force
 	   echo "Developer targets 'exe' and 'run' are unavailable (missing or broken checksum utility)"; \
 	   exit 1;  \
 	 fi
-	@$(MAKE) $(UPCXXDIR)/libupcxx.a
+	@$(MAKE) upcxx-single
 	@$(MAKE) -C "$(STARTDIR)" -f $(top_srcdir)/bld/Makefile-exe.mak \
 		GASNET_CC_FAMILY='$(GASNET_CC_FAMILY)' GASNET_CC_SUBFAMILY='$(GASNET_CC_SUBFAMILY)' \
 		GASNET_CXX_FAMILY='$(GASNET_CXX_FAMILY)' GASNET_CXX_SUBFAMILY='$(GASNET_CXX_SUBFAMILY)' \
