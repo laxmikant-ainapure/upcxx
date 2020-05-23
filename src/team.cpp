@@ -83,7 +83,7 @@ team team::split(intrank_t color, intrank_t key) const {
   return team(
       detail::internal_only(),
       backend::team_base{reinterpret_cast<uintptr_t>(sub_tm)},
-      const_cast<team*>(this)->next_collective_id(detail::internal_only()),
+      const_cast<team*>(this)->next_collective_id(detail::internal_only()).eat(color),
       p_sub_tm ? (intrank_t)gex_TM_QuerySize(sub_tm) : 0,
       p_sub_tm ? (intrank_t)gex_TM_QueryRank(sub_tm) : -1
     );
