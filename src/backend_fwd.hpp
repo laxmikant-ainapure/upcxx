@@ -137,7 +137,18 @@ namespace backend {
   
   template<typename Fn>
   void during_user(Fn &&fn, persona &active_per = current_persona());
-  
+
+  /* fulfill_during: enlists a promise to be fulfilled in the given persona's
+   * lpc queue. Since persona headers are lpc's and thus store queue linkage
+   * intrusively, they must not be enlisted in multiple queues simultaneously.
+   * Being in the queues of multiple personas is a race condition on the promise
+   * so that shouldn't happen. Being in different progress-level queues of the
+   * same persona is not a race condition, so it is up to the runtime to ensure
+   * it doesn't use this mechanism for the same promise in different progress
+   * levels. Its not impossible to extend the logic to guard against multi-queue
+   * membership and handle it gracefully, but it would add cycles to what we
+   * consider a critical path and so we'll eat this tougher invariant.
+   */
   template<progress_level level, typename ...T>
   void fulfill_during(
       detail::future_header_promise<T...> *pro, // takes ref
