@@ -64,10 +64,11 @@ definitions:
 pipelines:
 
   default:
-    #- parallel:
-    #  - step: *gcc-floor
-    #  - step: *clang-latest
+    - parallel:
+      - step: *clang-latest
       - step: *gcc-latest
+    #  - step: *clang-floor
+    #  - step: *gcc-floor
 
   custom: # on-demand configs
 
