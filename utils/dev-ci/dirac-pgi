@@ -1,0 +1,46 @@
+#!/bin/bash
+
+## BOILERPLATE
+source $(dirname $0)/_ci-common
+
+## ENVIRONMENT
+module purge
+module load PrgEnv/pgi
+module load cuda/9.1
+module load gmake/4.2.1
+export TMPDIR=/dev/shm
+export GASNET_SPAWNFN=L
+export GASNET_SUPERNODE_MAXSIZE=2
+export UPCXX_HAVE_OPENMP=1
+
+export NETWORKS="${CI_NETWORKS:-udp}"
+export GMAKE="${CI_MAKE:-${GMAKE:-make}}"
+MAKE_CMD="$GMAKE ${CI_MAKE_PARALLEL:--j16}"
+
+# Issue #334
+export TEST_EXCLUDE_ALL=test/future.cpp
+
+## CONFIGURE
+if [[ $STAGES =~ ,configure, ]]; then
+  $UPCXX/configure ${GASNET:+ --with-gasnet=$GASNET} CC=pgcc CXX=pgc++ \
+        --without-mpicc --with-ibv-physmem-max=2/3 --without-ibv-odp --with-cuda
+fi
+
+## BUILD
+if [[ $STAGES =~ ,build, ]]; then
+  time $MAKE_CMD all
+fi
+
+## TESTS
+if [[ $STAGES =~ ,tests, ]]; then
+  time $MAKE_CMD dev-tests
+fi
+
+## RUN
+unset TMPDIR
+if [[ $STAGES =~ ,run, ]]; then
+  time $GMAKE dev-run-tests
+fi
+
+## DONE
+success

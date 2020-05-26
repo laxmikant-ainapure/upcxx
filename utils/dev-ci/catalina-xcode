@@ -1,0 +1,36 @@
+#!/bin/bash
+
+## BOILERPLATE
+source $(dirname $0)/_ci-common
+
+## ENVIRONMENT
+export GASNET_SPAWNFN=L
+export GASNET_SUPERNODE_MAXSIZE=2
+
+export NETWORKS="${CI_NETWORKS:-udp}"
+export GMAKE="${CI_MAKE:-${GMAKE:-make}}"
+MAKE_CMD="$GMAKE ${CI_MAKE_PARALLEL:--j4}"
+
+## CONFIGURE
+if [[ $STAGES =~ ,configure, ]]; then
+  $UPCXX/configure ${GASNET:+ --with-gasnet=$GASNET}
+fi
+
+## BUILD
+if [[ $STAGES =~ ,build, ]]; then
+  time $MAKE_CMD all
+fi
+
+## TESTS
+if [[ $STAGES =~ ,tests, ]]; then
+  time $MAKE_CMD dev-tests
+fi
+
+## RUN
+unset TMPDIR
+if [[ $STAGES =~ ,run, ]]; then
+  time $GMAKE dev-run-tests
+fi
+
+## DONE
+success

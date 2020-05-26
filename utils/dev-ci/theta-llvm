@@ -1,0 +1,59 @@
+#!/bin/bash
+
+## BOILERPLATE
+source $(dirname $0)/_ci-common
+
+## ENVIRONMENT
+for x in gnu cray intel llvm; do module swap PrgEnv-$x PrgEnv-llvm; done 2>/dev/null
+module load xalt
+export TMPDIR=$XDG_RUNTIME_DIR
+
+export NETWORKS="${CI_NETWORKS:-aries}"
+export GMAKE="${CI_MAKE:-${GMAKE:-make}}"
+MAKE_CMD="$GMAKE ${CI_MAKE_PARALLEL:--j8}"
+
+## CONFIGURE
+if [[ $STAGES =~ ,configure, ]]; then
+  $UPCXX/configure ${GASNET:+ --with-gasnet=$GASNET}
+fi
+module unload xalt
+
+## BUILD
+if [[ $STAGES =~ ,build, ]]; then
+  time $MAKE_CMD all
+fi
+
+## TEST
+if [[ $STAGES =~ ,tests, ]]; then
+  time $MAKE_CMD dev-tests
+  # split due to run time limit
+  for codemode in opt debug; do
+    rm -rf tests/$codemode
+    mkdir -p tests/$codemode
+    mv test-*-$codemode-[^-]* tests/$codemode/
+  done
+fi
+
+## RUN
+# split due to run time limit
+if [[ $STAGES =~ ,run, ]]; then
+  rm -f .run-failed
+  # split due to run time limit
+  for codemode in opt debug; do
+    rm -rf test-*-*
+    ln -s tests/$codemode/* .
+    for (( i = 15; i; --i )); do  # Retry every 2 minutes for up to 30 minutes total
+      (( i % 2 )) && QUEUE=debug-cache-quad || QUEUE=debug-flat-quad
+      time env -u TMPDIR qsub -q $QUEUE -t 60 -n 2 -A CSC250STPM17 -I \
+        <<<"cd $PWD && time $GMAKE dev-run-tests NETWORKS='$NETWORKS' || touch .run-failed" |& tee batch.log
+      if [[ ${PIPESTATUS[0]} -eq 0 ]]; then break; fi
+      if ! grep -q "jobs per user.*has been reached" batch.log; then failure; fi
+      sleep 120
+    done
+    [[ -e .run-failed || $i -eq 0 ]] && failure
+    (set +x; rm -f test-*-*)
+  done
+fi
+
+## DONE
+success
