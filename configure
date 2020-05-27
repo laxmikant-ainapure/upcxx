@@ -123,7 +123,9 @@ Usage:
   --with-python=...
         Specify the location of Python3 or Python2 version 2.7.5 or newer.
         Overrides the value of $UPCXX_PYTHON, if any.
-        Default is search for 'python' in $PATH dynamically at runtime.
+        Default is to search for common Python interpreter names in $PATH
+        at configure time for any meeting the version requirement.  The first
+        one thus identified is then located in $PATH dynamically at runtime.
 
   -h|--help|--usage
         Produces this message.
@@ -669,28 +671,54 @@ rm -f conftest.cpp conftest.c conftest.o
 # Second check version
 #
 UPCXX_PYTHON_MIN=2.7.5
-fpy=$(check_tool_path "${UPCXX_PYTHON:-python}") && :  # "&& :" prevents ERR trap but preserves $?
-if [[ $? -ne 0 ]]; then
-  echo "ERROR: Python interpreter '${UPCXX_PYTHON:-python}' $fpy." >&2
-  echo_and_die "Use '--with-python=...' to specify a Python interpreter."
-elif [[ $UPCXX_PYTHON =~ ^/ ]]; then
-  python_whence='specified by full path'
-else
-  python_whence='found in $PATH'
-fi
-# If UPCXX_PYTHON unset, leave it so to prevent rewrite of upcxx-run at install
+function check_py {
+  $1 -c "import sys; sys.exit(sys.version_info < (${UPCXX_PYTHON_MIN//./,}));" &> /dev/null;
+}
+unset py fpy # given/guessed value and its full path
 if [[ -n $UPCXX_PYTHON ]]; then
-  UPCXX_PYTHON="$fpy"
-fi
-fpy_ver="$($fpy --version 2>&1)"
-if ! $fpy -c "import sys; sys.exit(sys.version_info < (${UPCXX_PYTHON_MIN//./,}));" &> /dev/null; then
-  echo "ERROR: Python interpreter '$fpy' reports version '$fpy_ver'" >&2
-  echo_and_die "ERROR: Python interpreter is older than the minimum of $UPCXX_PYTHON_MIN."
+  py="$UPCXX_PYTHON"
+  fpy=$(check_tool_path "$UPCXX_PYTHON") && :  # "&& :" prevents ERR trap but preserves $?
+  if [[ $? -ne 0 ]]; then
+    echo "ERROR: Python interpreter '$UPCXX_PYTHON' $fpy." >&2
+    echo_and_die "Use '--with-python=...' to specify a different Python interpreter."
+  elif [[ $UPCXX_PYTHON =~ ^/ ]]; then
+    python_whence='specified by full path'
+  else
+    python_whence='found in $PATH'
+  fi
+  fpy_ver="$($fpy --version 2>&1)" && :
+  if [[ $? -ne 0 ]]; then
+    echo_and_die "ERROR: Requested python interpreter failed running '$UPCXX_PYTHON --version'"
+  fi
+  if ! check_py $fpy &> /dev/null; then
+    echo "ERROR: Requested python interpreter '$UPCXX_PYTHON' reports version '$fpy_ver'" >&2
+    echo_and_die "ERROR: Python interpreter is older than the minimum of $UPCXX_PYTHON_MIN."
+  fi
+else
+  for py in python python3 python3.{0..20} python2; do
+    tmp=$(type -p "$py" 2>/dev/null || true)
+    if [[ -n $tmp && -x $tmp ]] && check_py $tmp; then
+      fpy="$tmp"
+      break
+    fi
+  done
+  if [[ -z "$fpy" ]]; then
+    echo 'ERROR: No suitable Python interpreter was found in $PATH'
+    echo_and_die "Use '--with-python=...' to specify a Python interpreter ($UPCXX_PYTHON_MIN or newer)."
+  fi
+  python_whence='found in $PATH'
+  fpy_ver="$($fpy --version 2>&1)"
 fi
 if test -z "$UPCXX_INSTALL_QUIET"; then
   echo "$fpy: $fpy_ver"; echo
 fi
-check_known_path "$fpy" "Python interpreter '$fpy' $python_whence."
+if [[ -n $UPCXX_PYTHON ]]; then
+  UPCXX_PYTHON="$fpy"
+  check_known_path "$fpy" "Python interpreter '$fpy' $python_whence."
+else
+  # If UPCXX_PYTHON unset, then preserve run-time search of $PATH
+  UPCXX_PYTHON="/usr/bin/env $py"
+fi
 
 #
 # Find a usable GNU Make

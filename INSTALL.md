@@ -154,8 +154,8 @@ the following steps.  The final output from `configure` will provide the
 appropriate commands.
 
 Python3 or Python2 (version 2.7.5 or later) is required by UPC\+\+.  By
-default, a Python interpreter is located when needed by searching for `python`
-in `$PATH`.  If that does not produce a suitable interpreter, you may override
+default, `configure` searches `$PATH` for several common Python interpreter
+names.  If that does not produce a suitable interpreter, you may override
 this using `--with-python=...` to specify a python interpreter.  If you
 provide a full path, the value is used as given.  Otherwise, the `$PATH` at
 configure-time is searched to produce a full path.  Either way, the resulting
@@ -454,8 +454,8 @@ options:
   default behavior is to search `$PATH` for a `make` or `gmake` which meets this
   minimum version requirement.
 * `--with-python=...`: Python interpreter to use; must be Python3 or Python2
-  version 2.7.5 or newer.  The default behavior is to search `$PATH` for
-  `python` when `upcxx-run` is executed.  Use of this option results in the
+  version 2.7.5 or newer.  The default behavior is to search `$PATH` for a
+  suitable interpreter when `upcxx-run` is executed.  This option results in the
   use of a full path to the Python interpreter in `upcxx-run`.
 * Options for control of (optional) CUDA support are documented in the section
   [Configuration: CUDA GPU support](#markdown-header-configuration-cuda-gpu-support)
