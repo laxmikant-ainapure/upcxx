@@ -624,15 +624,30 @@ namespace upcxx {
     constexpr int user = (int)progress_level::user;
     
     promise_meta *meta = &pro_hdr->pro_meta;
+
+    #if UPCXX_ASSERT_ENABLED
+      void *target_queue = future_header_promise<T...>::is_trivially_deletable
+          ? (void*)&per.pros_deferred_trivial_
+          : (void*)&per.self_inbox_[user];
+
+      /* Reasons this assert may die:
+       * 1. Promise deferred into user-level and internal-level queues of same
+       *    persona simultaneously.
+       * 2. Promise deferred into different persona's lpc queues simultaneously.
+       */
+      UPCXX_ASSERT(meta->deferred_queue == nullptr ||
+                   meta->deferred_queue == target_queue);
+    #endif
     
     if(deps == (meta->deferred_decrements += deps)) { // ensure not already in the queue
-      pro_hdr->incref(1);
-      
+      // transfer given ref into queue
       if(future_header_promise<T...>::is_trivially_deletable)
         per.pros_deferred_trivial_.enqueue(&meta->base);
       else
         per.self_inbox_[user].enqueue(&meta->base);
     }
+    else
+      pro_hdr->dropref(); // given a ref we dont want
   }
   
   template<typename Fn, bool known_active>

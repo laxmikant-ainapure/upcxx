@@ -31,6 +31,7 @@ Notable bug fixes:
 * issue #343: Guarantee equality for default-constructed invalid upcxx::team_id
 * issue #371: `team_id`s are not "universal" as documented
 * issue #373: No `python` in `$PATH` in recent Linux distros
+* issue #369: `completion_cx::as_future()` typically leaks
 
 Breaking changes:
 

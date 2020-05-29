@@ -296,13 +296,13 @@ namespace upcxx {
     
     template<typename Event, progress_level level, typename ...T>
     struct cx_state<future_cx<Event,level>, std::tuple<T...>> {
-      future_header_promise<T...> *pro_; // holds ref
+      future_header_promise<T...> *pro_; // holds ref, no need to drop it in destructor since we move out it in either operator() ro to_lpc_dormant
 
       cx_state(future_cx<Event,level>):
         pro_(new future_header_promise<T...>) {
       }
 
-      detail::promise_future_t<T...> get_future() const {
+      future<T...> get_future() const {
         return detail::promise_get_future(pro_);
       }
       
@@ -828,9 +828,8 @@ namespace upcxx {
       > {
       
       using return_t = std::tuple<
-          future_from_tuple_t<
-            // kind for promise-built future
-            detail::future_kind_shref<detail::future_header_ops_promise>,
+          detail::future_from_tuple_t<
+            detail::future_kind_default,
             typename EventValues::template tuple_t<CxH_event>
           >,
           TailReturn_tuplees...
@@ -860,9 +859,8 @@ namespace upcxx {
       > {
       
       using return_t = std::tuple<
-          future_from_tuple_t<
-            // kind for promise-built future
-            detail::future_kind_shref<detail::future_header_ops_promise>,
+          detail::future_from_tuple_t<
+            detail::future_kind_default,
             typename EventValues::template tuple_t<CxH_event>
           >,
           TailReturn_not_tuple
@@ -890,9 +888,8 @@ namespace upcxx {
         void
       > {
       
-      using return_t = future_from_tuple_t<
-          // kind for promise-built future
-          detail::future_kind_shref<detail::future_header_ops_promise>,
+      using return_t = detail::future_from_tuple_t<
+          detail::future_kind_default,
           typename EventValues::template tuple_t<CxH_event>
         >;
       

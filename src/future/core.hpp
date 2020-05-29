@@ -560,6 +560,12 @@ namespace upcxx {
       // is executed as an lpc. This field is zero if and only if this promise
       // is not already linked in as an lpc somewhere.
       std::intptr_t deferred_decrements = 0;
+
+      #if UPCXX_ASSERT_ENABLED
+        // points to queue holding this as lpc so that we can assert promise
+        // isn't being registered in multiple intrusive queues simultaneously
+        void *deferred_queue = nullptr;
+      #endif
       
       promise_meta(promise_vtable const *vtbl) {
         base.vtbl = vtbl;

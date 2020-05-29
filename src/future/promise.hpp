@@ -21,13 +21,6 @@ namespace upcxx {
     };
     template<typename Fu>
     using promise_like_t = typename promise_like<Fu>::type;
-
-    // The type of future1 obtained from promise<T...>::get_future()
-    template<typename ...T>
-    using promise_future_t = future1<
-        detail::future_kind_shref<detail::future_header_ops_promise>,
-        T...
-      >;
   }
   
   //////////////////////////////////////////////////////////////////////
@@ -113,10 +106,10 @@ namespace upcxx {
     }
 
     template<typename ...T>
-    promise_future_t<T...> promise_get_future(future_header_promise<T...> *hdr) {
+    future<T...> promise_get_future(future_header_promise<T...> *hdr) {
       hdr->incref(1);
-      return promise_future_t<T...>(
-        detail::future_impl_shref<detail::future_header_ops_promise, /*unique=*/false, T...>(&hdr->base_header_result.base_header)
+      return future<T...>(
+        detail::future_impl_shref<detail::future_header_ops_general, /*unique=*/false, T...>(&hdr->base_header_result.base_header)
       );
     }
   }
