@@ -413,7 +413,7 @@ ifneq ($(strip $(upcxx_git_version_obj)),)
 	@rm -f $(UPCXX_DIR)/lib/$(upcxx_git_version_obj); \
 	 $(MAKE) -C $(UPCXX_DIR)/lib -f "$(builddir)/Makefile" $(upcxx_git_version_obj)
 endif
-	ar rcs $@ $?
+	ar rcs $@ $(sort $? $(upcxx_git_version_obj))
 do-libupcxx: force
 	@$(MAKE) -C $(UPCXX_DIR)/ -f "$(builddir)/Makefile" $(UPCXX_CONFIG_HEADER)
 	@$(MAKE) -C $(UPCXX_DIR)/lib -f "$(builddir)/Makefile" do-libupcxx-deps
