@@ -304,7 +304,7 @@ endif
 ifneq ($(wildcard $(top_srcdir)/.git),)
 UPCXX_GIT_VERSION := $(shell git --git-dir="$(top_srcdir)/.git" describe --always 2>/dev/null | grep '^upcxx-20[0-9][0-9]\.[0-9]')
 ifneq ($(strip $(UPCXX_GIT_VERSION)),)
-upcxx_git_version_file = backend/gasnet/runtime.cpp # consumes UPCXX_GIT_VERSION
+upcxx_git_version_file = backend/gasnet/watermark.cpp # consumes UPCXX_GIT_VERSION
 upcxx_git_version_obj = $(notdir $(basename $(upcxx_git_version_file))).o
 $(basename $(upcxx_git_version_obj))_EXTRA_FLAGS = -DUPCXX_GIT_VERSION='$(UPCXX_GIT_VERSION)'
 .INTERMEDIATE: $(upcxx_git_version_obj)

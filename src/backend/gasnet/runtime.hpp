@@ -329,6 +329,8 @@ namespace gasnet {
       this->cmd_align = that.cmd_align;
     }
   };
+
+  extern int watermark_init();
 }}}
 
 //////////////////////////////////////////////////////////////////////
