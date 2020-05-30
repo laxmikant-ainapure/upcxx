@@ -307,6 +307,7 @@ ifneq ($(strip $(UPCXX_GIT_VERSION)),)
 upcxx_git_version_file = backend/gasnet/runtime.cpp # consumes UPCXX_GIT_VERSION
 upcxx_git_version_obj = $(notdir $(basename $(upcxx_git_version_file))).o
 $(basename $(upcxx_git_version_obj))_EXTRA_FLAGS = -DUPCXX_GIT_VERSION='$(UPCXX_GIT_VERSION)'
+.INTERMEDIATE: $(upcxx_git_version_obj)
 endif
 endif
 
@@ -409,11 +410,7 @@ VPATH = $(addprefix $(top_srcdir)/src/, $(sort $(dir $(libupcxx_sources))))
 libupcxx_objs = $(addsuffix .o,$(notdir $(basename $(libupcxx_sources))))
 $(libupcxx_objs): $(makefiles)
 libupcxx.a: $(libupcxx_objs)
-ifneq ($(strip $(upcxx_git_version_obj)),)
-	@rm -f $(UPCXX_DIR)/lib/$(upcxx_git_version_obj); \
-	 $(MAKE) -C $(UPCXX_DIR)/lib -f "$(builddir)/Makefile" $(upcxx_git_version_obj)
-endif
-	ar rcs $@ $(sort $? $(upcxx_git_version_obj))
+	ar rcs $@ $?
 do-libupcxx: force
 	@$(MAKE) -C $(UPCXX_DIR)/ -f "$(builddir)/Makefile" $(UPCXX_CONFIG_HEADER)
 	@$(MAKE) -C $(UPCXX_DIR)/lib -f "$(builddir)/Makefile" do-libupcxx-deps
