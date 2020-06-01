@@ -2343,3 +2343,8 @@ namespace upcxx {
   }
 }
 
+////////////////////////////////////////////////////////////////////////
+// Other library ident strings live in watermark.cpp
+
+GASNETT_IDENT(UPCXX_IdentString_Network, "$UPCXXNetwork: " _STRINGIFY(GASNET_CONDUIT_NAME) " $");
+

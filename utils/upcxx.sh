@@ -181,7 +181,7 @@ EOF
   $CXX --help
   exit 0
 elif [[ $doversion ]] ; then
-  header="$prefix/upcxx.*/include/upcxx/upcxx.hpp $prefix/include/upcxx/upcxx.hpp" # installed or build-tree
+  header="$prefix/upcxx.*/include/upcxx/version.hpp $prefix/include/upcxx/version.hpp" # build-tree or installed
   version=$(grep "# *define  *UPCXX_VERSION " ${header} 2>/dev/null| head -1)
   if [[ "$version" =~ ([0-9]{4})([0-9]{2})([0-9]{2}) ]]; then
     version="${BASH_REMATCH[1]}.${BASH_REMATCH[2]#0}.${BASH_REMATCH[3]#0}"

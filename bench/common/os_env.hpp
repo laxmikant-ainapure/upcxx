@@ -1,7 +1,7 @@
 #ifndef _325f0701_4dd7_4cfe_9b01_996de4980b99
 #define _325f0701_4dd7_4cfe_9b01_996de4980b99
 
-#include <upcxx/diagnostic.hpp>
+#include <upcxx/upcxx.hpp>
 
 #include <cstdlib>
 #include <sstream>

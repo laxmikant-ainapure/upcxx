@@ -1,6 +1,10 @@
-#include <gasnet.h>
+// tools-lite mode, to minimize resources for recompiling this TU
+#undef GASNET_SEQ
+#undef GASNET_PAR
+#define GASNETT_LITE_MODE 1
+#include <gasnet_tools.h>
 
-#include <upcxx/upcxx.hpp> // for UPCXX_VERSION
+#include <upcxx/version.hpp>
 
 ////////////////////////////////////////////////////////////////////////
 // Library version watermarking
@@ -13,6 +17,10 @@
 #error  UPCXX_VERSION missing!
 #endif
 GASNETT_IDENT(UPCXX_IdentString_LibraryVersion, "$UPCXXLibraryVersion: " _STRINGIFY(UPCXX_VERSION) " $");
+#ifndef UPCXX_SPEC_VERSION
+#error  UPCXX_SPEC_VERSION missing!
+#endif
+GASNETT_IDENT(UPCXX_IdentString_SpecVersion, "$UPCXXSpecVersion: " _STRINGIFY(UPCXX_SPEC_VERSION) " $");
 
 #ifndef UPCXX_GIT_VERSION
 #include <upcxx/git_version.h>
@@ -20,8 +28,6 @@ GASNETT_IDENT(UPCXX_IdentString_LibraryVersion, "$UPCXXLibraryVersion: " _STRING
 #ifdef  UPCXX_GIT_VERSION
 GASNETT_IDENT(UPCXX_IdentString_GitVersion, "$UPCXXGitVersion: " _STRINGIFY(UPCXX_GIT_VERSION) " $");
 #endif
-
-GASNETT_IDENT(UPCXX_IdentString_Network, "$UPCXXNetwork: " _STRINGIFY(GASNET_CONDUIT_NAME) " $");
 
 #if UPCXX_BACKEND_GASNET_SEQ
 GASNETT_IDENT(UPCXX_IdentString_ThreadMode, "$UPCXXThreadMode: SEQ $");
@@ -60,6 +66,9 @@ GASNETT_IDENT(UPCXX_IdentString_CompilerStd, "$UPCXXCompilerStd: " _STRINGIFY(__
 
 GASNETT_IDENT(UPCXX_IdentString_BuildTimestamp, "$UPCXXBuildTimestamp: " __DATE__ " " __TIME__ " $");
 
+namespace upcxx { namespace backend { namespace gasnet {
+extern int watermark_init();
+}}}
 // this function exists to ensure this object gets linked into the executable
 int upcxx::backend::gasnet::watermark_init() {
   static volatile int dummy = 0;

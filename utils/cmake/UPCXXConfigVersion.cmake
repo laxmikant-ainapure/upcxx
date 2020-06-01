@@ -72,12 +72,17 @@ if( UPCXX_META_EXECUTABLE )
 endif()
 
 foreach( dir ${UPCXX_INCLUDE_DIRS} )
-  if( EXISTS ${dir}/upcxx/upcxx.hpp )
+  if( EXISTS         ${dir}/upcxx/version.hpp ) # > 2020.3.0
+    set(version_file ${dir}/upcxx/version.hpp ) 
+  elseif ( EXISTS    ${dir}/upcxx/upcxx.hpp ) # <= 2020.3.0
+    set(version_file ${dir}/upcxx/upcxx.hpp ) 
+  endif()
+  if ( version_file )
     set( version_pattern 
       "#[\t ]*define[\t ]+UPCXX_VERSION[\t ]+([0-9]+)"
       )
-    #UPCXX_VERB("checking ${dir}/upcxx/upcxx.hpp for ${version_pattern}" )
-    file( STRINGS ${dir}/upcxx/upcxx.hpp upcxx_version
+    #UPCXX_VERB("checking ${version_file} for ${version_pattern}" )
+    file( STRINGS ${version_file} upcxx_version
       REGEX ${version_pattern} )
     #UPCXX_VERB("upcxx_version ${upcxx_version}" )
 
@@ -85,6 +90,9 @@ foreach( dir ${UPCXX_INCLUDE_DIRS} )
       set(UPCXX_VERSION_STRING ${CMAKE_MATCH_1})
     endif()
 
+    unset( upcxx_version )
+    unset( version_file )
+    unset( version_pattern )
   endif()
 endforeach()
 
