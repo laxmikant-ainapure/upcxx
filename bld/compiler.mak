@@ -107,7 +107,7 @@ endif
 
 # Special case for CXX=nvcc (not officially supported)
 ifeq ($(GASNET_CXX_SUBFAMILY),NVIDIA)
-UPCXX_DEP_GEN_FLAGS = -Xcompiler '$(UPCXX_DEP_GEN_FLAGS)'
+UPCXX_DEP_GEN = $(1) -E -Xcompiler "$(UPCXX_DEP_GEN_FLAGS)" $(3) $(4)
 endif
 
 #
