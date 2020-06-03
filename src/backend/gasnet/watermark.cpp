@@ -22,6 +22,11 @@ GASNETT_IDENT(UPCXX_IdentString_LibraryVersion, "$UPCXXLibraryVersion: " _STRING
 #endif
 GASNETT_IDENT(UPCXX_IdentString_SpecVersion, "$UPCXXSpecVersion: " _STRINGIFY(UPCXX_SPEC_VERSION) " $");
 
+// UPCXX_GIT_VERSION is defined by the Makefile for this object on the command line,
+// when built from a git checkout (with a .git directory) and the git describe command succeeds.
+// Otherwise, the git_version.h header is included, which is empty in releases but in snapshots is
+// overwritten with a file containing a #define of UPCXX_GIT_VERSION by the snapshot-building script.
+// If none of these sources provide a UPCXX_GIT_VERSION (eg in a release) this ident string is omitted.
 #ifndef UPCXX_GIT_VERSION
 #include <upcxx/git_version.h>
 #endif
