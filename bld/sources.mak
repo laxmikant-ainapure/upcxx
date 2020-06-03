@@ -6,6 +6,7 @@ libupcxx_sources = \
 	backend/gasnet/noise_log.cpp \
 	backend/gasnet/runtime.cpp   \
 	backend/gasnet/upc_link.c    \
+	backend/gasnet/watermark.cpp \
 	future/core.cpp              \
 	atomic.cpp                   \
 	barrier.cpp                  \

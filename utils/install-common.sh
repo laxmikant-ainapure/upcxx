@@ -133,7 +133,7 @@ EOF
   # install environment module
   (
     modulefiles="${DESTDIR}${install_to}/share/modulefiles/upcxx"
-    header="${upcxx_src}/src/upcxx.hpp"
+    header="${upcxx_src}/src/version.hpp"
     [[ $(grep "#define UPCXX_VERSION" ${header} | head -1) =~ ([0-9]{4})([0-9]{2})([0-9]{2}) ]]
     VERSION="${BASH_REMATCH[1]}.${BASH_REMATCH[2]#0}.${BASH_REMATCH[3]#0}" # drop any leading 0 from MONTH and PATCH
     mkdir -p $modulefiles
