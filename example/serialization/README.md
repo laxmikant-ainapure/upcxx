@@ -33,6 +33,8 @@ description of each example is included below:
    using `UPCXX_SERIALIZED_FIELDS` on nested STL and user-defined classes.
 6. [upcxx_serialized_values_recursive.cpp](upcxx_serialized_values_recursive.cpp): Illustrates recursive serialization
    using `UPCXX_SERIALIZED_VALUES` on nested STL and user-defined classes.
+7. [serialize_abstract_base.cpp](serialize_abstract_base.cpp): Demonstrates custom serialization
+   on classes with abstract base classes.
 
 You must have at least UPC++ version 2020.3.0 installed to compile these
 examples. To build all code, make sure to first set the `UPCXX_INSTALL`
