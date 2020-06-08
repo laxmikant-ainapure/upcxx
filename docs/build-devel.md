@@ -191,6 +191,12 @@ For details see [utils/dev-ci/README.md](../utils/dev-ci/README.md).
   to compilers which support it.  This can be used to ensure colorized output
   even when piping to a pager or saving the output to a file.
 
+* `RUN_WRAPPER='$(VALGRIND_WRAPPER)'` on command line:
+  Make targets that run multiple tests (check, run-tests, etc) will wrap the 
+  runs in a valgrind leak check. This greatly slows execution time, and
+  also disables the normal test timeout mechanism. 
+  Requires a working valgrind tool.
+
 ## Internal-Only Configuration Options
 
 This serves as the place to document configure options that aren't hardened

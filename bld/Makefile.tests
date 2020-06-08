@@ -293,6 +293,9 @@ tests-clean: force
 
 .PHONY: do-tests test_install tests tests-clean
 
+# Variables for controlling run wrappers
+VALGRIND ?= valgrind
+VALGRIND_WRAPPER=$(VALGRIND) -q --error-exitcode=123 --error-markers=VALGRIND_ERROR: --leak-check=full --errors-for-leak-kinds=definite,indirect,possible
 TIMEOUT ?= timeout
 TIMEOUT_WRAPPER=$(TIMEOUT) --foreground -k 7m 5m
 RUN_WRAPPER=# default is to use $(TIMEOUT_WRAPPER), when available
@@ -336,7 +339,12 @@ do-run-tests: force
 	   else                                                         \
 	     $$MAKE $(MAKE_HERE) do-test-xml RESULT=run-pass OUTPUT=$$output ; \
 	   fi;                                                          \
-	   grep -i -e "Test result: " -e SUCCESS $$output -e ERROR | sort -u; \
+	   if expr "$$run_wrapper" : '.*valgrind' > /dev/null &&        \
+	    ( [[ $$exitcode = 123 ]] || grep -q VALGRIND_ERROR $$output ) ; then \
+	     cat $$output;                                              \
+	   else                                                         \
+	     grep -i -e "Test result: " -e SUCCESS -e ERROR $$output | sort -u; \
+	   fi;                                                          \
 	 done;                                                          \
 	 echo -e "\nResult reports: $(TEST_OUTPUT)";                    \
 	 if [[ $$failed = 0 ]]; then                                    \
