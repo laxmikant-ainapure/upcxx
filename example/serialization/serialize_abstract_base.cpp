@@ -18,6 +18,7 @@ class A { // abstract base class
     bool stubbool;
 
     virtual void act() = 0;
+    virtual ~A() = default;
 
     protected:
     // create some helpers to (de)serialize the state in this abstract class
