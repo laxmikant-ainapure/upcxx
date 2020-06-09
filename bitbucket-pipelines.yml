@@ -6,6 +6,8 @@
 
 
 definitions:
+  options:
+    max-time: 60
   variables: &variables
     - name: _LEAVE_BLANK_FOR_DEFAULTS_
     - name: CI_DEV_CHECK
