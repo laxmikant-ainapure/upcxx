@@ -114,7 +114,7 @@ $(TEST_TARGETS): force; @$(MAKE) -f $(upcxx_src)/bld/Makefile.tests $@
 #   NETWORK defaults to the default network
 #   UPCXX_CODEMODE defaults to 'debug' (unless `--enable-single=opt`)
 gasnet: force
-	codemode=$(firstword $(UPCXX_CODEMODE) $(UPCXX_DBGOPT)) \
+	@codemode=$(firstword $(UPCXX_CODEMODE) $(UPCXX_DBGOPT)); \
 	 set -x;                                       \
 	 $(MAKE) "$${DO_WHAT:-all}"                    \
 	         -C "$(BLDDIR)/gasnet.$$codemode/$${NETWORK:-$(UPCXX_DEFAULT_NETWORK)}-conduit"
