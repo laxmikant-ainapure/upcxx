@@ -399,6 +399,7 @@ function bad_gasnet_fetch {
   echo Error: $* >&2
   echo_and_die "Please correct the URL or point --with-gasnet=... at a manually downloaded GASNet source .tar.gz file ($GASNET_DEFAULT is the recommended version)"
 }
+ORIG_GASNET="$GASNET"
 GASNET_UNPACKED=""
 GASNET_TYPE=source  # default
 if [[ -n "$single" && -r "$GASNET/gasnet_config.h" ]] ; then
@@ -413,6 +414,8 @@ elif [ -r "$GASNET/gasnet_config.h.in" ]; then
   if ! expr "$GASNET" : ^/ >/dev/null; then
     export GASNET=$(cd "$GASNET" && pwd -P)
   fi
+elif [ -r "$GASNET/gasnetex.h" ]; then
+  echo_and_die "GASNET='$GASNET' appears to be an un-bootstraped source tree.  Please run '$GASNET/Bootstrap'"
 elif expr "$GASNET" : '.*\.tar\.gz' >/dev/null; then
   # Unpack tarball into bld/ unless already present
   gex_dir="$PWD/bld/`basename $GASNET .tar.gz`"
@@ -451,7 +454,7 @@ elif expr "$GASNET" : '.*\.tar\.gz' >/dev/null; then
     rc1=${PIPESTATUS[0]} rc2=${PIPESTATUS[1]}
     [ $rc1 -eq 0 ] || echo_and_die "Failed to gunzip '$GASNET' (corrupted or truncated?)"
     [ $rc2 -eq 0 ] || echo_and_die "Failed to untar '$GASNET' (corrupted or truncated?)"
-    [ -r "$gex_dir/gasnet_config.h.in" ] || echo_and_die "GASNET='$ORIG_GASNET' does not appear to contain GASNet"
+    [ -r "$gex_dir/gasnet.h" ] || echo_and_die "GASNET='$ORIG_GASNET' does not appear to contain GASNet"
     trap failure_and_die ERR  # restore error handler
     [ -n "$gex_tmp" ] && rm -f "$gex_tmp"
     GASNET_UNPACKED=$gex_dir
@@ -490,6 +493,10 @@ WANT_MAJ=${BASH_REMATCH[2]}
 WANT_MIN=${BASH_REMATCH[2]}
 [[ ($HAVE_MAJ -gt $WANT_MAJ) || (($HAVE_MAJ -eq $WANT_MAJ) && ($HAVE_MIN -ge $WANT_MIN)) ]] || \
     echo_and_die "GASNET='$ORIG_GASNET' does not contain GASNet-EX implementing specification version $WANT_MAJ.$WANT_MIN or newer"
+
+# verify that sources are bootstrapped
+[[ -r "$GASNET/gasnet_config.h.in" ]] || \
+    echo_and_die "GASNET='$ORIG_GASNET' appears to contain an un-bootstraped source tree.  If you wish to use these sources, please unpack the archive, run './Bootstrap' in its top-level directory, and then re-run this configure passing '--with-gasnet=...' pointing at the unpacked sources."
 
 #
 # GASNet's help message if requested
