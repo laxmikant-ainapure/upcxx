@@ -19,6 +19,7 @@ int main() {
     }
 
     dist_object<int> dobj(rank_me());
+    persona_scope *ps = nullptr;
     if (rank_me() == 0) {
       liberate_master_persona(); // drop master persona
 
@@ -31,12 +32,13 @@ int main() {
       }
       assert(check == sum);
 
-      persona_scope *ps = new persona_scope(master_persona());  // re-acquire master
+      ps = new persona_scope(master_persona());  // re-acquire master
     }
 
     barrier();
 
     print_test_success(true);
     upcxx::finalize();
+    delete ps;
     return 0;
 } 

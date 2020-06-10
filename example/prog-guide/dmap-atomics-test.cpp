@@ -59,6 +59,7 @@ int main(int argc, char *argv[])
   // wait for all the conjoined futures to complete
   fut_all.wait();
   upcxx::barrier(); // wait for finds to complete globally
+  ad.destroy(); // optional, but recommended
   if (!upcxx::rank_me()) cout << "SUCCESS" << endl;
   upcxx::finalize();
   return 0;

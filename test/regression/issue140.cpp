@@ -28,6 +28,7 @@ int main() {
     static future<> done;
     dist_object<global_ptr<int>> dobj(new_array<int>(rank_n()));
     global_ptr<int> gptr = *dobj;
+    persona_scope *ps = nullptr;
     if (rank_me() == 0) {
       #if !KEEP_MASTER
         liberate_master_persona(); // drop master persona
@@ -57,8 +58,9 @@ int main() {
            gasnett_sched_yield();
         }
       }
+      delete [] LZ;
       #if !KEEP_MASTER
-        persona_scope *ps = new persona_scope(master_persona());  // re-acquire master
+        ps = new persona_scope(master_persona());  // re-acquire master
       #endif
     } else {
       while (!done.ready()) progress();
@@ -68,5 +70,6 @@ int main() {
 
     print_test_success(true);
     upcxx::finalize();
+    delete ps;
     return 0;
 } 

@@ -53,6 +53,7 @@ int main() {
   }
 
   barrier();
+  delete [] vals;
   if (!rank_me()) cout << "SUCCESS" << endl;
 
   upcxx::finalize();
