@@ -32,6 +32,7 @@ Notable bug fixes:
 * issue #371: `team_id`s are not "universal" as documented
 * issue #373: No `python` in `$PATH` in recent Linux distros
 * issue #369: `completion_cx::as_future()` typically leaks
+* issue #380: Compile regression on bulk upcxx::rput with source+operation completions
 
 Breaking changes:
 
