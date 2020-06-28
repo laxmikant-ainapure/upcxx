@@ -14,13 +14,13 @@ New features/enhancements:
 
 Notable bug fixes:
 
+* issue #343: Guarantee equality for default-constructed invalid `upcxx::team_id`
 * issue #353: configure: automatically cross-compile on Cray XC
 * issue #356: `SERIALIZED_{FIELDS|VALUES}` incorrectly require public constructors
-* issue #343: Guarantee equality for default-constructed invalid upcxx::team_id
+* issue #369: `completion_cx::as_future()` typically leaks
 * issue #371: `team_id`s are not "universal" as documented
 * issue #373: No `python` in `$PATH` in recent Linux distros
-* issue #369: `completion_cx::as_future()` typically leaks
-* issue #380: Compile regression on bulk upcxx::rput with source+operation completions
+* issue #380: Compile regression on bulk `upcxx::rput` with source+operation completions
 
 Breaking changes:
 
