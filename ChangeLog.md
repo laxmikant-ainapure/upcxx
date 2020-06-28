@@ -11,6 +11,8 @@ New features/enhancements:
 
 Notable bug fixes:
 
+* issue #353: configure: automatically cross-compile on Cray XC
+
 Breaking changes:
 
 * Configure-time envvar `CROSS` has been renamed to `UPCXX_CROSS`.
