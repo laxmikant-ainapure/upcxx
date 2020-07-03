@@ -153,6 +153,9 @@ Additional make targets:
   By default, `dev-test-*` compiles all tests for all detected networks and
   `dev-check-*` compiles *and runs* all tests for only the default network.
   One can set `NETWORKS` to override these defaults.
+  As with non-dev targets, one can optionally set `TESTS` and/or `NO_TESTS`
+  to a space-delimited list of test name substrings used as a filter to select
+  or discard a subset of tests to be compiled/run.
 
 * `make dev-{tests,check}-{opt,debug}`  
   These are versions of `dev-tests` and `dev-check` for a single codemode.

@@ -65,6 +65,13 @@ TEST_RERR_LIMIT ?= 100
 export TEST_CERR_LIMIT
 export TEST_RERR_LIMIT
 
+# TESTS,NO_TESTS : a comma- or space-delimited list of test name filters to be selected / discarded
+TESTS=.
+NO_TESTS=empty-dummy-ban
+comma:= ,
+empty:=
+space:= $(empty) $(empty)
+TEST_PATTERN = ($(subst $(space),|,$(strip $(subst $(comma),$(space),$(1)))))
 
 # Compile prerequisites for 'check' or 'tests'
 # Build is restricted to single codemode and the networks in $(NETWORKS)
@@ -108,6 +115,10 @@ do-build-%: force
 	 IFS=+ read name threadmode network <<<$*;       \
 	 src=$${name//..//};                             \
 	 exe="$(TEST_EXE_PATTERN)";                      \
+	 if ! [[ "$$exe" =~ $(call TEST_PATTERN,$(TESTS)) ]] || \
+	      [[ "$$exe" =~ $(call TEST_PATTERN,$(NO_TESTS)) ]] ; then \
+	     echo Skipping filtered $$exe ; exit 0 ; \
+         fi ; \
 	 flags=TEST_FLAGS_$$(basename $$src .cpp | tr '[a-z]-' '[A-Z]_'); \
 	 output=$(TEST_OUTPUT)/$${exe}-compile.out ;     \
 	 ( if [[ '$(UPCXX_VERBOSE)' == 1 ]]; then set -x; fi;  \
@@ -314,6 +325,10 @@ do-run-tests: force
 	 echo "Running tests with RANKS=$$ranks";                       \
 	 for test in $(call ALL_TESTS,$(NETWORKS)); do                  \
 	   [[ -x $$test ]] || continue;                                 \
+	   if ! [[ "$$test" =~ $(call TEST_PATTERN,$(TESTS)) ]] || \
+	        [[ "$$test" =~ $(call TEST_PATTERN,$(NO_TESTS) $(test_exclude_compile_only)) ]] ; then \
+	      echo Skipping filtered $$test ; continue ; \
+           fi ; \
 	   echo "Running $$test"; : $$((++total));                      \
 	   if [[ -n '$(UPCXX_BINDIR)' ]]; then                          \
 	     runcmd='$(UPCXX_BINDIR)/upcxx-run';                        \

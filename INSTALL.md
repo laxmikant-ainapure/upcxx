@@ -211,6 +211,10 @@ distributions.  One may, if desired, return to the configure step and pass
 `--disable-ibv` (or other undesired network) to remove support for a given
 network from the build of UPC\+\+.
 
+Variables `TESTS` and `NO_TESTS` can optionally be set to a space-delimited
+list of test name substrings used as a filter to select or discard a subset
+of tests to be compiled/run.
+
 If it is not possible to both compile and run parallel applications in the
 same environment, then one may apply the following two steps in place of
 `make check`:
