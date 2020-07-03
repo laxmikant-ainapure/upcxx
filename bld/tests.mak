@@ -72,22 +72,32 @@ test_exclude_all = \
 	test/segment_allocator.cpp \
 	test/debug-codemode.cpp \
 	test/o3-codemode.cpp \
-	test/seq-threadmode.cpp \
-	test/par-threadmode.cpp \
 	test/multifile.cpp \
 	test/multifile-buddy.cpp \
-	test/promise_multiple_results.cpp \
-	test/promise_reused.cpp \
-	test/quiescence_failure.cpp \
-	test/regression/issue105.cpp \
 	test/uts/uts.cpp \
 	example/prog-guide/rb1d-check.cpp
 
 test_exclude_seq = \
+	test/par-threadmode.cpp \
 	$(TEST_EXCLUDE_SEQ)
 
 test_exclude_par = \
+	test/seq-threadmode.cpp \
 	$(TEST_EXCLUDE_PAR)
+
+# PATTERNS to identify compile-only tests that are not intended to be run,
+# either because they are intended to fail at runtime or don't run test anything useful
+#
+test_exclude_compile_only = \
+	issue105 \
+	issue185 \
+	issue219 \
+	issue224 \
+	issue333 \
+	promise_multiple_results \
+	promise_reused \
+	quiescence_failure \
+	-threadmode
 
 #
 # Section 2. Step 3.
