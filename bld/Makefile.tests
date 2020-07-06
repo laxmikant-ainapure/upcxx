@@ -306,7 +306,11 @@ tests-clean: force
 
 # Variables for controlling run wrappers
 VALGRIND ?= valgrind
-VALGRIND_WRAPPER=$(VALGRIND) -q --error-exitcode=123 --error-markers=VALGRIND_ERROR: --leak-check=full --errors-for-leak-kinds=definite,indirect,possible
+ifneq ($(wildcard $(GASNET)/other/contrib/gasnet.supp),)
+VALGRIND_SUPPRESS_GASNET = --suppressions=$(GASNET)/other/contrib/gasnet.supp
+endif
+VALGRIND_SUPPRESS ?= $(VALGRIND_SUPPRESS_GASNET)
+VALGRIND_WRAPPER=$(VALGRIND) -q --error-exitcode=123 --error-markers=VALGRIND_ERROR: --leak-check=full --errors-for-leak-kinds=definite,indirect,possible $(VALGRIND_SUPPRESS)
 TIMEOUT ?= timeout
 TIMEOUT_WRAPPER=$(TIMEOUT) --foreground -k 7m 5m
 RUN_WRAPPER=# default is to use $(TIMEOUT_WRAPPER), when available
