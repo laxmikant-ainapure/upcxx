@@ -847,8 +847,11 @@ void upcxx::finalize() {
 
   { // barrier
     gasnet_barrier_notify(0, GASNET_BARRIERFLAG_ANONYMOUS);
-    while(GASNET_OK != gasnet_barrier_try(0, GASNET_BARRIERFLAG_ANONYMOUS))
+    do {
+      // issue 384: ensure we invoke user-level progress at least once during
+      // runtime teardown, to harvest any runtime-deferred actions.
       upcxx::progress();
+    } while(gasnet_barrier_try(0, GASNET_BARRIERFLAG_ANONYMOUS) != GASNET_OK);
   }
 
   quiesce_rdzv(/*in_finalize=*/true, noise);
