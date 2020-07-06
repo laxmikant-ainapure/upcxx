@@ -309,7 +309,10 @@ VALGRIND ?= valgrind
 ifneq ($(wildcard $(GASNET)/other/contrib/gasnet.supp),)
 VALGRIND_SUPPRESS_GASNET = --suppressions=$(GASNET)/other/contrib/gasnet.supp
 endif
-VALGRIND_SUPPRESS ?= $(VALGRIND_SUPPRESS_GASNET)
+ifneq ($(wildcard $(upcxx_src)/utils/valgrind/upcxx.supp),)
+VALGRIND_SUPPRESS_UPCXX = --suppressions=$(upcxx_src)/utils/valgrind/upcxx.supp
+endif
+VALGRIND_SUPPRESS ?= $(VALGRIND_SUPPRESS_GASNET) $(VALGRIND_SUPPRESS_UPCXX)
 VALGRIND_WRAPPER=$(VALGRIND) -q --error-exitcode=123 --error-markers=VALGRIND_ERROR: --leak-check=full --errors-for-leak-kinds=definite,indirect,possible $(VALGRIND_SUPPRESS)
 TIMEOUT ?= timeout
 TIMEOUT_WRAPPER=$(TIMEOUT) --foreground -k 7m 5m

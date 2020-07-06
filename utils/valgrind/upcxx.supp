@@ -1,0 +1,79 @@
+# This file is a suppression file for using Valgrind with UPC++
+# See the valgrind documentation for info on the use and format of this file.
+#
+# This file is not carefully maintained.
+
+# issue 377: UPC++ runtime sends uninitialized bytes over AMUDP
+{
+   issue-377-send_am_eager_persona
+   Memcheck:Param
+   socketcall.sendto(msg)
+   ...
+   fun:*sendPacket*amudp*
+   ...
+   fun:*upcxx*send_am_eager_persona*
+}
+{
+   issue-377-send_am_eager_master
+   Memcheck:Param
+   socketcall.sendto(msg)
+   ...
+   fun:*sendPacket*amudp*
+   ...
+   fun:*upcxx*send_am_eager_master*
+}
+{
+   issue-377-rma_put_then_am_master_protocol
+   Memcheck:Param
+   socketcall.sendto(msg)
+   ...
+   fun:*sendPacket*amudp*
+   ...
+   fun:*upcxx*rma_put_then_am_master_protocol*
+}
+{
+   issue-377-bcast_am_master_eager
+   Memcheck:Param
+   socketcall.sendto(msg)
+   ...
+   fun:*sendPacket*amudp*
+   ...
+   fun:*upcxx*bcast_am_master_eager*
+}
+{
+   issue-377-send_am_eager_restricted
+   Memcheck:Param
+   socketcall.sendto(msg)
+   ...
+   fun:*sendPacket*amudp*
+   ...
+   fun:*upcxx*send_am_eager_restricted*
+}
+# This wildcard is necessary for automatic retransmits of the above,
+# but as a retransmit it should never block new real injections
+{
+   issue-377-retransmits
+   Memcheck:Param
+   socketcall.sendto(msg)
+   ...
+   fun:*sendPacket*amudp*
+   fun:*AMUDP_HandleRequestTimeouts*
+}
+# The following is necessary to suppress issue377 when using the rvous get protocol
+# Unfortunately, the call stack for the request handler that injects the problematic
+# payload via AMReply entirely lacks any attribution to UPC++ runtime frames, because
+# that information has been erased from the stack by the rvous round-trip.
+# So we are forced to suppress payload checking for ALL udp-conduit RMA get operations.
+{
+   issue-377-rvous-gets
+   Memcheck:Param
+   socketcall.sendto(msg)
+   ...
+   fun:*sendPacket*amudp*
+   ...
+   fun:gasnete_amref_get_reqh*
+}
+
+
+
+
