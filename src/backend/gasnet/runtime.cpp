@@ -378,9 +378,7 @@ void upcxx::destroy_heap() {
 
   quiesce_rdzv(/*in_finalize=*/false, noise);
   
-  gasnet_barrier_notify(0, GASNET_BARRIERFLAG_ANONYMOUS);
-  int ok = gasnet_barrier_wait(0, GASNET_BARRIERFLAG_ANONYMOUS);
-  UPCXX_ASSERT_ALWAYS(ok == GASNET_OK);
+  gex_Event_Wait(gex_Coll_BarrierNB( gasnet::handle_of(upcxx::world()), 0));
   
   if(gasnet::sheap_footprint_user.count != 0)
     noise.warn()<<"destroy_heap() called with "<<gasnet::sheap_footprint_user.count<<" live shared objects.";
@@ -425,9 +423,7 @@ void upcxx::restore_heap(void) {
   }
   shared_heap_isinit = true;
 
-  gasnet_barrier_notify(0, GASNET_BARRIERFLAG_ANONYMOUS);
-  int ok = gasnet_barrier_wait(0, GASNET_BARRIERFLAG_ANONYMOUS);
-  UPCXX_ASSERT_ALWAYS(ok == GASNET_OK);
+  gex_Event_Wait(gex_Coll_BarrierNB( gasnet::handle_of(upcxx::world()), 0));
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -711,9 +707,7 @@ void upcxx::init() {
   //////////////////////////////////////////////////////////////////////////////
   // Exit barrier
   
-  gasnet_barrier_notify(0, GASNET_BARRIERFLAG_ANONYMOUS);
-  ok = gasnet_barrier_wait(0, GASNET_BARRIERFLAG_ANONYMOUS);
-  UPCXX_ASSERT_ALWAYS(ok == GASNET_OK);
+  gex_Event_Wait(gex_Coll_BarrierNB( gasnet::handle_of(upcxx::world()), 0));
 }
 
 namespace {
@@ -846,9 +840,13 @@ void upcxx::finalize() {
   noise_log noise("upcxx::finalize()");
 
   { // barrier
-    gasnet_barrier_notify(0, GASNET_BARRIERFLAG_ANONYMOUS);
-    while(GASNET_OK != gasnet_barrier_try(0, GASNET_BARRIERFLAG_ANONYMOUS))
+    // DO NOT convert this loop to backend::quiesce() which lacks the desired behavior
+    gex_Event_t e = gex_Coll_BarrierNB( gasnet::handle_of(upcxx::world()), 0);
+    do {
+      // issue 384: ensure we invoke user-level progress at least once during
+      // runtime teardown, to harvest any runtime-deferred actions.
       upcxx::progress();
+    } while (gex_Event_Test(e) != 0);
   }
 
   quiesce_rdzv(/*in_finalize=*/true, noise);
