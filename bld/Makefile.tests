@@ -353,7 +353,9 @@ do-run-tests: force
 	     runcmd=$${!runvar};                                        \
 	   fi;                                                          \
 	   output=$(TEST_OUTPUT)/$$test-run.out ;                       \
-	   $$runcmd -np $$ranks -- $$run_wrapper ./$$test &> $$output;  \
+	   ( if [[ '$(UPCXX_VERBOSE)' == 1 ]]; then set -x; fi;         \
+	     $$runcmd -np $$ranks -- $$run_wrapper ./$$test &> $$output; \
+	   );                                                           \
 	   exitcode=$$?;                                                \
 	   if [[ $$exitcode != 0 ]] || grep -q ERROR $$output; then     \
 	     echo "FAILED (exitcode=$$exitcode)"; : $$((++failed));     \
