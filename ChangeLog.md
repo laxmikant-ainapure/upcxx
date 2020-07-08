@@ -13,6 +13,9 @@ New features/enhancements: (see specification and programmer's guide for full de
   derived from `std::bad_alloc`) which provides additional diagnostics about the failure.
 * Rpc's which return future values experience one less heap allocation and
   virtual dispatch in the runtime's critical path.
+* Improved compatability with heap analysis tools like Valgrind (at some
+  potential performance cost) using new configure option --enable-valgrind
+* Tests run by `make check` and friends now enforce a 5m time limit by default
 * ...
 
 Notable bug fixes:
