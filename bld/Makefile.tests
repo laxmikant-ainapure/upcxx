@@ -306,8 +306,11 @@ tests-clean: force
 
 # Variables for controlling run wrappers
 VALGRIND ?= valgrind
-ifneq ($(wildcard $(GASNET)/other/contrib/gasnet.supp),)
+ifneq ($(wildcard $(GASNET)/other/contrib/gasnet.supp),) # OLD location
 VALGRIND_SUPPRESS_GASNET = --suppressions=$(GASNET)/other/contrib/gasnet.supp
+endif
+ifneq ($(wildcard $(GASNET)/other/valgrind/gasnet.supp),) # NEW location
+VALGRIND_SUPPRESS_GASNET = --suppressions=$(GASNET)/other/valgrind/gasnet.supp
 endif
 ifneq ($(wildcard $(upcxx_src)/utils/valgrind/upcxx.supp),)
 VALGRIND_SUPPRESS_UPCXX = --suppressions=$(upcxx_src)/utils/valgrind/upcxx.supp
