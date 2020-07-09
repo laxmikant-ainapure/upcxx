@@ -89,13 +89,28 @@ int main() {
   global_ptr<unsigned int> uptr =
     upcxx::reinterpret_pointer_cast<unsigned int>(ptr);
   ptr = upcxx::reinterpret_pointer_cast<int>(ptr);
+  UPCXX_ASSERT_ALWAYS(ptr == cptr);
   ptr = upcxx::const_pointer_cast<int>(cptr);
   UPCXX_ASSERT_ALWAYS(ptr == cptr);
 
+  global_ptr<const unsigned int> ucptr =
+    upcxx::reinterpret_pointer_cast<const unsigned int>(cptr);
+  cptr = upcxx::reinterpret_pointer_cast<const int>(cptr);
+  UPCXX_ASSERT_ALWAYS(ptr == cptr);
+  cptr = upcxx::const_pointer_cast<const int>(ptr);
+  UPCXX_ASSERT_ALWAYS(ptr == cptr);
+
   global_ptr<A> base_ptr;
-  global_ptr<B> derived_ptr = upcxx::static_pointer_cast<B>(base_ptr);
+  global_ptr<B> derived_ptr =
+    upcxx::static_pointer_cast<B>(base_ptr);
   base_ptr = upcxx::static_pointer_cast<A>(derived_ptr);
   UPCXX_ASSERT_ALWAYS(base_ptr.is_null());
+
+  global_ptr<const A> base_cptr;
+  global_ptr<const B> derived_cptr =
+    upcxx::static_pointer_cast<const B>(base_cptr);
+  base_cptr = upcxx::static_pointer_cast<const A>(derived_cptr);
+  UPCXX_ASSERT_ALWAYS(base_cptr.is_null());
 
   global_ptr<int, memory_kind::any> aptr = ptr;
   ptr = upcxx::static_kind_cast<memory_kind::host>(aptr);
