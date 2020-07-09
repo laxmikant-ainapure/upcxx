@@ -318,7 +318,10 @@ endif
 VALGRIND_SUPPRESS ?= $(VALGRIND_SUPPRESS_GASNET) $(VALGRIND_SUPPRESS_UPCXX)
 VALGRIND_WRAPPER=$(VALGRIND) -q --error-exitcode=123 --error-markers=VALGRIND_ERROR: --leak-check=full --errors-for-leak-kinds=definite,indirect,possible $(VALGRIND_SUPPRESS)
 TIMEOUT ?= timeout
-TIMEOUT_WRAPPER=$(TIMEOUT) --foreground -k 7m 5m
+UPCXX_RUN_TIME_LIMIT ?= 300
+HARD_TIME_LIMIT_PAD = 120
+HARD_TIME_LIMIT := $(shell echo $$(($(UPCXX_RUN_TIME_LIMIT) + $(HARD_TIME_LIMIT_PAD) )) )
+TIMEOUT_WRAPPER=$(TIMEOUT) --foreground -k $(HARD_TIME_LIMIT)s $(UPCXX_RUN_TIME_LIMIT)s
 RUN_WRAPPER=# default is to use $(TIMEOUT_WRAPPER), when available
 
 do-run-tests: force
@@ -361,7 +364,9 @@ do-run-tests: force
 	   );                                                           \
 	   exitcode=$$?;                                                \
 	   if [[ $$exitcode != 0 ]] || grep -q ERROR $$output; then     \
-	     echo "FAILED (exitcode=$$exitcode)"; : $$((++failed));     \
+	     comment= ; \
+	     case $$exitcode in 124) comment=": probable timeout" ;; esac ; \
+	     echo "FAILED (exitcode=$$exitcode)$$comment"; : $$((++failed));     \
 	     $$MAKE $(MAKE_HERE) do-test-xml RESULT=run-fail OUTPUT=$$output ; \
 	   else                                                         \
 	     $$MAKE $(MAKE_HERE) do-test-xml RESULT=run-pass OUTPUT=$$output ; \

@@ -211,6 +211,14 @@ distributions.  One may, if desired, return to the configure step and pass
 `--disable-ibv` (or other undesired network) to remove support for a given
 network from the build of UPC\+\+.
 
+By default the test-running step runs each test with a 5 minute time limit
+(assuming the `timeout` command from GNU coreutils appears in `$PATH`).
+If any tests terminate with `FAILED (exitcode=124): probable timeout`, this
+indicates a timeout (which might happen in environments with very slow hardware
+or slow job launch). The simplest workaround in such cases is to set
+`TIMEOUT=false` to disable the timeout. Alternatively, one can set envvar
+`UPCXX_RUN_TIME_LIMIT` to a value in seconds to enforce a longer timeout.
+
 Variables `TESTS` and `NO_TESTS` can optionally be set to a space-delimited
 list of test name substrings used as a filter to select or discard a subset
 of tests to be compiled/run.
