@@ -127,6 +127,10 @@ Usage:
         at configure time for any meeting the version requirement.  The first
         one thus identified is then located in $PATH dynamically at runtime.
 
+  --enable-valgrind
+        Enable limited support for the Valgrind dynamic analysis tool,
+        at some potential cost in performance (off by default).
+
   -h|--help|--usage
         Produces this message.
   --help=recursive
@@ -206,6 +210,10 @@ UPCXX_CONFIG_ENVVARS=( CC CFLAGS CXX CXXFLAGS CPPFLAGS LDFLAGS LIBS\
 for var in ${UPCXX_CONFIG_ENVVARS[*]} ; do
     eval ORIG_$var=\'${!var}\'
 done
+
+# Clear "new" non-legacy configure options
+# these are only accepted on the configure line and not via environment
+UPCXX_VALGRIND=
 
 unset gasnet_help
 
@@ -311,9 +319,18 @@ while [[ $# -gt 0 ]]; do
       UPCXX_MPSC_QUEUE="$(get_arg_val $1)"; export UPCXX_MPSC_QUEUE
       ;;
 
-    # Anything we don't consume will be passed to GASNet's configure
-    # Quoting is believed sufficient for space, tab, single-quote and double-quote.
-    *)
+    *) # Anything we don't consume above will be passed to GASNet's configure
+
+      case "$1" in 
+
+        # These options are interpreted here and ALSO passed to GASNet's configure
+        ?(-)-enable-valgrind)     UPCXX_VALGRIND=1 ; export UPCXX_VALGRIND;;
+        ?(-)-disable-valgrind)    UPCXX_VALGRIND=  ; export UPCXX_VALGRIND;;
+      
+      esac
+
+
+      # Quoting is believed sufficient for space, tab, single-quote and double-quote.
       GASNET_CONFIGURE_ARGS+="${GASNET_CONFIGURE_ARGS+ }\"${1//\"/\\\"}\""
       ;;
   esac
@@ -987,6 +1004,7 @@ export UPCXX_CUDA=$UPCXX_CUDA
 export UPCXX_CUDA_NVCC=$UPCXX_CUDA_NVCC
 export UPCXX_CUDA_CPPFLAGS=$UPCXX_CUDA_CPPFLAGS
 export UPCXX_CUDA_LIBFLAGS=$UPCXX_CUDA_LIBFLAGS
+export UPCXX_VALGRIND=$UPCXX_VALGRIND
 include \$(upcxx_src)/bld/Makefile.rules
 EOF
 

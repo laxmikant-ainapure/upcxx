@@ -546,6 +546,11 @@ do-upcxx-clean-debug: force
 
 upcxx-all:     $(call FOREACH_DBGOPT,do-upcxx-all)
 upcxx-install: $(call FOREACH_DBGOPT,do-upcxx-install)
+	@if [[ '$(UPCXX_VALGRIND)' = 1 ]] ; then \
+	   set -e ; set -x ; \
+	   mkdir -p "$(DESTDIR)$(prefix)/lib/valgrind" ; \
+	   cp -f "$(upcxx_src)/utils/valgrind/upcxx.supp" "$(DESTDIR)$(prefix)/lib/valgrind" ; \
+	 fi
 	@$(MAKE) -f $(upcxx_src)/bld/Makefile.tests do-post-install-test-script
 upcxx-clean:   $(call FOREACH_DBGOPT,do-upcxx-clean)
 upcxx-distclean: do-upcxx-clean-opt do-upcxx-clean-debug # Always both

@@ -200,6 +200,7 @@ int main(void) {
                 }));
     }
     fut.wait();
+    delete [] edges_to_insert;
 
     upcxx::finalize();
 

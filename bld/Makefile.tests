@@ -65,6 +65,13 @@ TEST_RERR_LIMIT ?= 100
 export TEST_CERR_LIMIT
 export TEST_RERR_LIMIT
 
+# TESTS,NO_TESTS : a comma- or space-delimited list of test name filters to be selected / discarded
+TESTS=.
+NO_TESTS=empty-dummy-ban
+comma:= ,
+empty:=
+space:= $(empty) $(empty)
+TEST_PATTERN = ($(subst $(space),|,$(strip $(subst $(comma),$(space),$(1)))))
 
 # Compile prerequisites for 'check' or 'tests'
 # Build is restricted to single codemode and the networks in $(NETWORKS)
@@ -108,6 +115,10 @@ do-build-%: force
 	 IFS=+ read name threadmode network <<<$*;       \
 	 src=$${name//..//};                             \
 	 exe="$(TEST_EXE_PATTERN)";                      \
+	 if ! [[ "$$exe" =~ $(call TEST_PATTERN,$(TESTS)) ]] || \
+	      [[ "$$exe" =~ $(call TEST_PATTERN,$(NO_TESTS)) ]] ; then \
+	     echo Skipping filtered $$exe ; exit 0 ; \
+         fi ; \
 	 flags=TEST_FLAGS_$$(basename $$src .cpp | tr '[a-z]-' '[A-Z]_'); \
 	 output=$(TEST_OUTPUT)/$${exe}-compile.out ;     \
 	 ( if [[ '$(UPCXX_VERBOSE)' == 1 ]]; then set -x; fi;  \
@@ -293,13 +304,44 @@ tests-clean: force
 
 .PHONY: do-tests test_install tests tests-clean
 
+# Variables for controlling run wrappers
+VALGRIND ?= valgrind
+ifneq ($(wildcard $(GASNET)/other/contrib/gasnet.supp),) # OLD location
+VALGRIND_SUPPRESS_GASNET = --suppressions=$(GASNET)/other/contrib/gasnet.supp
+endif
+ifneq ($(wildcard $(GASNET)/other/valgrind/gasnet.supp),) # NEW location
+VALGRIND_SUPPRESS_GASNET = --suppressions=$(GASNET)/other/valgrind/gasnet.supp
+endif
+ifneq ($(wildcard $(upcxx_src)/utils/valgrind/upcxx.supp),)
+VALGRIND_SUPPRESS_UPCXX = --suppressions=$(upcxx_src)/utils/valgrind/upcxx.supp
+endif
+VALGRIND_SUPPRESS ?= $(VALGRIND_SUPPRESS_GASNET) $(VALGRIND_SUPPRESS_UPCXX)
+VALGRIND_WRAPPER=$(VALGRIND) -q --error-exitcode=123 --error-markers=VALGRIND_ERROR: --leak-check=full --errors-for-leak-kinds=definite,indirect,possible $(VALGRIND_SUPPRESS)
+TIMEOUT ?= timeout
+UPCXX_RUN_TIME_LIMIT ?= 300
+HARD_TIME_LIMIT_PAD = 120
+HARD_TIME_LIMIT := $(shell echo $$(($(UPCXX_RUN_TIME_LIMIT) + $(HARD_TIME_LIMIT_PAD) )) )
+TIMEOUT_WRAPPER=$(TIMEOUT) --foreground -k $(HARD_TIME_LIMIT)s $(UPCXX_RUN_TIME_LIMIT)s
+RUN_WRAPPER=# default is to use $(TIMEOUT_WRAPPER), when available
+
 do-run-tests: force
 	@mkdir -p "$(TEST_OUTPUT)" ;                                    \
 	 if [[ -z "$(RANKS)" ]]; then ranks=4; else ranks=$(RANKS); fi; \
+	 run_wrapper='$(RUN_WRAPPER)' ;                                 \
+	 if [[ -z "$$run_wrapper" ]]; then                              \
+	   run_wrapper='$(TIMEOUT_WRAPPER)' ;                           \
+	   if [[ "`$$run_wrapper echo OK 2>&1`" != "OK" || $$? != 0 ]]; then \
+	     run_wrapper= ;                                             \
+	   fi;                                                          \
+	 fi;                                                            \
 	 total=0; failed=0;                                             \
 	 echo "Running tests with RANKS=$$ranks";                       \
 	 for test in $(call ALL_TESTS,$(NETWORKS)); do                  \
 	   [[ -x $$test ]] || continue;                                 \
+	   if ! [[ "$$test" =~ $(call TEST_PATTERN,$(TESTS)) ]] || \
+	        [[ "$$test" =~ $(call TEST_PATTERN,$(NO_TESTS) $(test_exclude_compile_only)) ]] ; then \
+	      echo Skipping filtered $$test ; continue ; \
+           fi ; \
 	   echo "Running $$test"; : $$((++total));                      \
 	   if [[ -n '$(UPCXX_BINDIR)' ]]; then                          \
 	     runcmd='$(UPCXX_BINDIR)/upcxx-run';                        \
@@ -317,14 +359,24 @@ do-run-tests: force
 	     runcmd=$${!runvar};                                        \
 	   fi;                                                          \
 	   output=$(TEST_OUTPUT)/$$test-run.out ;                       \
-	   $$runcmd -np $$ranks ./$$test &> $$output;                   \
-	   if [[ $$? != 0 ]] || grep -q ERROR $$output; then            \
-	     echo FAILED; : $$((++failed));                             \
+	   ( if [[ '$(UPCXX_VERBOSE)' == 1 ]]; then set -x; fi;         \
+	     $$runcmd -np $$ranks -- $$run_wrapper ./$$test &> $$output; \
+	   );                                                           \
+	   exitcode=$$?;                                                \
+	   if [[ $$exitcode != 0 ]] || grep -q ERROR $$output; then     \
+	     comment= ; \
+	     case $$exitcode in 124) comment=": probable timeout" ;; esac ; \
+	     echo "FAILED (exitcode=$$exitcode)$$comment"; : $$((++failed));     \
 	     $$MAKE $(MAKE_HERE) do-test-xml RESULT=run-fail OUTPUT=$$output ; \
 	   else                                                         \
 	     $$MAKE $(MAKE_HERE) do-test-xml RESULT=run-pass OUTPUT=$$output ; \
 	   fi;                                                          \
-	   grep -i -e "Test result: " -e SUCCESS $$output | sort -u;    \
+	   if expr "$$run_wrapper" : '.*valgrind' > /dev/null &&        \
+	    ( [[ $$exitcode = 123 ]] || grep -q VALGRIND_ERROR $$output ) ; then \
+	     cat $$output;                                              \
+	   else                                                         \
+	     grep -i -e "Test result: " -e SUCCESS -e ERROR $$output | sort -u; \
+	   fi;                                                          \
 	 done;                                                          \
 	 echo -e "\nResult reports: $(TEST_OUTPUT)";                    \
 	 if [[ $$failed = 0 ]]; then                                    \

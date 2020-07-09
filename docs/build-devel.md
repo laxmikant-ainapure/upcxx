@@ -153,6 +153,9 @@ Additional make targets:
   By default, `dev-test-*` compiles all tests for all detected networks and
   `dev-check-*` compiles *and runs* all tests for only the default network.
   One can set `NETWORKS` to override these defaults.
+  As with non-dev targets, one can optionally set `TESTS` and/or `NO_TESTS`
+  to a space-delimited list of test name substrings used as a filter to select
+  or discard a subset of tests to be compiled/run.
 
 * `make dev-{tests,check}-{opt,debug}`  
   These are versions of `dev-tests` and `dev-check` for a single codemode.
@@ -190,6 +193,12 @@ For details see [utils/dev-ci/README.md](../utils/dev-ci/README.md).
   command building the UPC\+\+ libraries will pass `-fdiagnostics-color=always`
   to compilers which support it.  This can be used to ensure colorized output
   even when piping to a pager or saving the output to a file.
+
+* `RUN_WRAPPER='$(VALGRIND_WRAPPER)'` on command line:
+  Make targets that run multiple tests (check, run-tests, etc) will wrap the 
+  runs in a valgrind leak check. This greatly slows execution time, and
+  also disables the normal test timeout mechanism. 
+  Requires a working valgrind tool.
 
 ## Internal-Only Configuration Options
 
