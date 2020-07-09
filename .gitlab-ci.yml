@@ -1,0 +1,607 @@
+##
+## Docs
+##
+#
+# - IMPORTANT NOTICES
+#   - DO NOT: push any untrusted code
+#     - Code (including shell code in configure and Makefiles) are run on
+#       at least some "runners" as a normal user without the benefit of
+#       containerization such as Docker.
+#     - On Theta, CI jobs can run batch jobs charged against our allocation.
+#   - DO: push only to your "user/" namespace.
+#     - Assuming use of a remote named 'alcf' and a Bitbucket user AnnExample:
+#       `git push alcf HEAD:annexample/check/issue-9876`
+#
+# - Automated triggers based on branch names as follows:
+#   - Branch name == 'develop'
+#     - Runs CI at level of "dev-check" on every push
+#   - Branch name contains the string '/dev-check/'
+#     - Runs CI at level of "dev-check" on every push
+#   - Branch name contains the string '/check/'
+#     - Runs CI at level of "check" on every push
+#   - All others
+#     - No CI is triggered, but manual triggers are still possible (see below)
+#
+# - Results reporting to Bitbucket
+#   - Build results for 'develop' are automatically reported to
+#     `https://bitbucket.org/berkeleylab/upcxx`
+#   - Reports use a key of "$CI_JOB_NAME.(dev-)check".  For instance the keys
+#     'dirac.gcc.check' and 'dirac.gcc.dev-check'.
+#   - Since keys omit any time or sequence info, a rerun can/will overwrite a
+#     previous failure.  This is useful to deal with (fairly rare) timeouts or
+#     other external factors which may cause a build to fail.
+#     - The GitLab UI has a "Retry" button of one form or another on several of
+#       the pages which display job status.  On dashboard-type views it is the
+#       icon consisting of two arrows forming a circle.
+#   - For (branch =~ '^[user]/*'), for [user] any sequence of non-/ characters,
+#     then build results are reported to `https://bitbucket.org/[user]/[repo]`
+#     - The value of [repo] defaults to `upcxx` with per-user exceptions
+#       handled by logic in this file.
+#     - Contact Paul for info on setting up your repo to allow these build
+#       results to be posted.
+#
+# - One can trigger runs manually in a simple (stupid) UI accessible at
+#   `https://ecpci-test.alcf.anl.gov/anl/upcpp/pipelines/new`
+#   - Choose a branch from the pull down
+#   - Set any variables desired (described below)
+#   - Click "Run Pipeline"
+#
+# - In addition to use of the UI, one can use query URLs via a browser
+#   - https://ecpci-test.alcf.anl.gov/anl/upcpp/pipelines/new?ref=develop&var[CI_HOST]=dirac
+#     will (re)test `develop` with variable `CI_HOST` set to `dirac`
+#     (variables are described below).
+#   - One may separate multiple variable settings with `&`
+#   - CLI web clients don't work because MFA is required for authentication
+#   - Storing such links in a wiki, markdown or GDoc works fine
+#
+# - CI variables
+#   - The default is to run all jobs (job = host.compiler) for any commit
+#   - The following "selection" variables (listed with their supported values)
+#     can be set in order to limit runs to the subset mating the constraints:
+#     - CI_COMPILER: gnu, llvm, pgi, intel, cray, xcode
+#     - CI_AGE:      new, old
+#     - CI_CPU:      x86_64, knl, ppc64le
+#     - CI_OS:       linux, cnl, macos
+#     - CI_HOST:     theta, theta-fe, dirac
+#     - CI_NAME:     name of a specific job, such as "theta.PrgEnv-llvm_floor"
+#   - The following control what is tested or how, with example legal values
+#     - CI_DEV_CHECK       Must be 0 or 1 (or blank/unset for the default)
+#     - CI_RUN_TESTS       [UNIMPLMENTED]
+#     - CI_NETWORKS        smp udp
+#     - CI_RANKS           4
+#     - CI_MAKE            /usr/local/bin/make
+#     - CI_MAKE_PARALLEL   -j6
+#     - CI_CONFIGURE_ARGS  [UNIMPLMENTED]
+#   - The following per-host/per-job variables provide additional fine-grained
+#     control:
+#     - CI_THETA_RUN_ALL_PRGENV
+#       - Defaults to empty.  Only theta.PrgEnv-llvm{,_floor} run their tests.
+#       - Set to '1' to enable *all* theta.PrgEnv-* jobs to submit the tests
+#         to be run on the compute nodes.
+#   - Any variable set when requesting the run is propagated to the environment.
+#     - In the `CI_DEV_CHECK=1` case, this means `TEST_*` environment
+#       variables are available to exclude tests and to add any extra flags
+#       if/when necessary.  However, this is somewhat fragile, since these are
+#       not additive with respect to values set here.
+#
+# - TODO:
+#   - Wrap pipeline.sh in .generic:script
+#     - Simplifies the script and maintenance
+#     - Provides implementation of CI_RUN_TESTS and CI_CONFIGURE_ARGS
+#   - Implement CI_RUN_TESTS and CI_CONFIGURE_ARGS in .dev_ci:script
+#     - Probably should use improvements to utils/dev-ci
+#     - Also opportunity to implement CI_DEV_CHECK w/o "patching"
+
+
+#
+# Global configuration / settings
+#
+stages:
+  - build
+variables:
+  ANL_THETA_PROJECT_SERVICE_USER: "upcpp"
+  ANL_THETA_SCHEDULER_PARAMETERS: "-n 1 -A CSC250STPM17 -t 0:30:00 "
+  CI_COMPILER: ""          # gnu, llvm, pgi, intel, cray, xcode
+  CI_AGE: ""               # new, old
+  CI_CPU: ""               # x86_64, knl, ppc64le
+  CI_OS: ""                # linux, cnl, macos
+  CI_HOST: ""              # theta, theta-fe, dirac
+  CI_NAME: ""              # name of a specific job, such as "dirac.pgi"
+  CI_NETWORKS: "smp udp"
+  CI_RANKS: 4
+  CI_MAKE: make
+  CI_MAKE_PARALLEL: ""
+  CI_DEV_CHECK: ""
+
+#
+# Dummy job for defining YAML anchors to be used elsewhere
+#
+.defs:
+  rules:
+    # EXCLUDES based on CI_[FOO] set but not matching MY_[FOO]
+    # TODO: merge to one complex expression?
+    - &when_cc
+      { if: '$CI_COMPILER != "" && $CI_COMPILER != $MY_COMPILER', when: never }
+    - &when_age
+      { if: '$CI_AGE      != "" && $CI_AGE      != $MY_AGE', when: never }
+    - &when_os
+      { if: '$CI_OS       != "" && $CI_OS       != $MY_OS', when: never }
+    - &when_cpu
+      { if: '$CI_CPU      != "" && $CI_CPU      != $MY_CPU', when: never }
+    - &when_host
+      { if: '$CI_HOST     != "" && $CI_HOST     != $MY_HOST', when: never }
+    - &when_name
+      { if: '$CI_NAME     != "" && $CI_NAME     != $CI_JOB_NAME', when: never }
+    - &when_web
+      { if: '$CI_PIPELINE_SOURCE == "web"', when: always }
+    - &when_push
+      if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_REF_NAME =~ /\/(dev-)?check\//'
+      when: always
+  variables: &old_gnu   { MY_COMPILER: 'gnu',   MY_AGE: 'old', UPCXX_HAVE_OPENMP: 1 }
+  variables: &new_gnu   { MY_COMPILER: 'gnu',   MY_AGE: 'new', UPCXX_HAVE_OPENMP: 1 }
+  variables: &old_llvm  { MY_COMPILER: 'llvm',  MY_AGE: 'old', UPCXX_HAVE_OPENMP: 1 }
+  variables: &new_llvm  { MY_COMPILER: 'llvm',  MY_AGE: 'new', UPCXX_HAVE_OPENMP: 1 }
+  variables: &old_intel { MY_COMPILER: 'intel', MY_AGE: 'old', UPCXX_HAVE_OPENMP: 1 }
+  variables: &new_intel { MY_COMPILER: 'intel', MY_AGE: 'new', UPCXX_HAVE_OPENMP: 1 }
+  variables: &old_pgi   { MY_COMPILER: 'pgi',   MY_AGE: 'old', UPCXX_HAVE_OPENMP: 1 }
+  variables: &new_pgi   { MY_COMPILER: 'pgi',   MY_AGE: 'new', UPCXX_HAVE_OPENMP: 1 }
+  variables: &old_cray  { MY_COMPILER: 'cray',  MY_AGE: 'old', UPCXX_HAVE_OPENMP: 1 }
+  variables: &new_cray  { MY_COMPILER: 'cray',  MY_AGE: 'new', UPCXX_HAVE_OPENMP: 1 }
+  variables: &old_xcode { MY_COMPILER: 'xcode', MY_AGE: 'old', UPCXX_HAVE_OPENMP: '' }
+  variables: &new_xcode { MY_COMPILER: 'xcode', MY_AGE: 'new', UPCXX_HAVE_OPENMP: '' }
+  script:
+    - &do_ci_dev_check |-
+      # Establish default value of $CI_DEV_CHECK
+      if [[ -z "$CI_DEV_CHECK" ]]; then
+        if [[ $CI_COMMIT_REF_NAME == "develop" || $CI_COMMIT_REF_NAME =~ /dev-check/ ]]; then
+          export CI_DEV_CHECK=1
+        else
+          export CI_DEV_CHECK=0
+        fi
+      fi
+    - &start_logging
+      exec &> >(tee -a output.txt)
+    - &do_ci_vars |-
+      # Reporting and re-exporting of $CI_* variables
+      # Should follow do_ci_dev_check
+      echo "==== CI SYSTEM VARS ===="
+      for var in CI_JOB_URL CI_JOB_NAME CI_COMMIT_REF_NAME CI_COMMIT_SHA CI_PIPELINE_SOURCE; do
+        printf "%20s = '%s'\n" $var "${!var}"
+      done
+      echo "==== CI SELECTION VARS ===="
+      for var in CI_COMPILER CI_AGE CI_CPU CI_OS CI_HOST CI_NAME; do
+        printf "%20s = '%s'\n" $var "${!var}"
+      done
+      echo "==== CI CONTROL VARS ===="
+      for var in CI_NETWORKS CI_RANKS CI_MAKE CI_MAKE_PARALLEL CI_DEV_CHECK; do
+        printf "%20s = '%s'\n" $var "${!var}"
+      done
+      echo "===="
+      export CONFIGURE_ARGS+=" --with-default-network=${CI_NETWORKS%% *}"
+      export RANKS="$CI_RANKS"
+      if [[ $GASNET_SPAWNFN == 'L' ]]; then
+        # TEMPORARY workaround for bug 4079
+        export TIMEOUT=${TIMEOUT:-$(type -p timeout)}
+      fi
+      unset BITBUCKET_USER BITBUCKET_APP_PASSWORD
+      env > environment
+      DO_MAKE="$CI_MAKE $CI_MAKE_PARALLEL"  # NEVER export 'MAKE'
+    - &post_build_status |-
+      # Report build status of $STATE to Bitbucket if configured.
+      # Must follow use of &do_ci_dev_check ($CI_DEV_CHECK used in build "key")
+      # Must precede use, if any, of &do_ci_vars (which clears the credentials)
+      if [[ -n "$BITBUCKET_APP_PASSWORD" ]]; then
+        prevstate="$(set +o)"; set +x
+        if [[ -z $BITBUCKET_REPO ]] ; then
+          if [[ $CI_COMMIT_REF_NAME =~ ^([^/]*)/ ]]; then
+            user="${BASH_REMATCH[1]}"
+            BITBUCKET_REPO="${user}/"
+            case $user in
+              jdbachan) BITBUCKET_REPO+="upcxx-jdbachan";;
+              *) BITBUCKET_REPO+=upcxx;;
+            esac
+          else
+             BITBUCKET_REPO=berkeleylab/upcxx
+          fi
+        fi
+        URL="https://api.bitbucket.org/2.0/repositories/${BITBUCKET_REPO}/commit/${CI_COMMIT_SHA}/statuses/build"
+        KEY="$CI_JOB_NAME.$((( $CI_DEV_CHECK )) && echo dev- || true)check"
+        HREF="$CI_JOB_URL"
+        if [[ -e output.txt ]]; then
+          TITLE="GitLab CI of ${CI_COMMIT_REF_NAME} at ${CI_COMMIT_SHORT_SHA} on $KEY"
+          if [[ $STATE == 'FAILED' ]]; then
+            TITLE+=' (FAILED)'
+          fi
+          curl -sS -u "$BITBUCKET_USER:$BITBUCKET_APP_PASSWORD" \
+               https://api.bitbucket.org/2.0/snippets  \
+               -F title="GitLab CI of ${CI_COMMIT_REF_NAME} at ${CI_COMMIT_SHORT_SHA} on $KEY" \
+               -F file=@output.txt >snippet.json || true
+          id="$(grep -o '"id":"[^"]*"' snippet.json | cut '-d"' -f4)"
+          if [[ -n "$id" ]]; then
+            HREF="https://bitbucket.org/${BITBUCKET_USER}/workspace/snippets/${id}"
+          fi
+        fi
+        DATA="{ \"state\": \"$STATE\", \"key\": \"$KEY\", \"url\": \"$HREF\" }"
+        echo "DATA: $DATA"
+        echo "URL:  $URL"
+        curl -sS -u "$BITBUCKET_USER:$BITBUCKET_APP_PASSWORD" "$URL" \
+           -X POST -H "Content-Type: application/json" -d "$DATA" 2>&1
+        echo
+        unset BITBUCKET_USER BITBUCKET_APP_PASSWORD
+        eval "$prevstate"
+      fi
+
+#
+# Compiler templates (use with extends)
+#
+.old_gnu:   { variables: *old_gnu }
+.new_gnu:   { variables: *new_gnu }
+.old_llvm:  { variables: *old_llvm }
+.new_llvm:  { variables: *new_llvm }
+.old_intel: { variables: *old_intel }
+.new_intel: { variables: *new_intel }
+.old_pgi:   { variables: *old_pgi }
+.new_pgi:   { variables: *new_pgi }
+.old_cray:  { variables: *old_cray }
+.new_cray:  { variables: *new_cray }
+.old_xcode: { variables: *old_xcode }
+.new_xcode: { variables: *new_xcode }
+
+#
+# Job templates (use with extends)
+#
+
+# Generic job (single-stage pipeline)
+.generic:
+  stage: build
+  rules:
+    - *when_cc
+    - *when_age
+    - *when_os
+    - *when_cpu
+    - *when_host
+    - *when_name
+    - *when_web
+    - *when_push
+  artifacts:
+    paths:
+      - Makefile
+      - config.log
+      - environment
+      - bld/gasnet.*/config.*
+      - test-results
+#   reports: { junit: test_results }
+    expire_in: 1 week
+    when: always
+  script:
+    - *do_ci_dev_check
+    - STATE=INPROGRESS
+    - *post_build_status
+    - *start_logging
+    - *do_ci_vars
+    - |-
+      set -e -x
+      ./configure --prefix=inst $CONFIGURE_ARGS
+      $DO_MAKE all
+      $DO_MAKE install
+      $DO_MAKE test_install || touch .pipe-failed
+      # split to reduce peak storage requirement:
+      for net in $CI_NETWORKS; do
+        export NETWORKS=$net
+        if (( $CI_DEV_CHECK )); then
+          for codemode in opt debug; do
+            $DO_MAKE dev-check-$codemode || touch .pipe-failed
+            (set +x; rm -rf test-*-*)
+          done
+        else
+          $DO_MAKE check || touch .pipe-failed
+          (set +x; rm -rf test-*-*)
+        fi
+      done
+      test ! -f .pipe-failed
+      touch .pipe-passed
+  after_script:
+    - rm -rf test-*-*
+    - *do_ci_dev_check
+    - test -f .pipe-passed && STATE=SUCCESSFUL || STATE=FAILED
+    - *post_build_status
+
+# Variant using utils/dev-ci scripts
+.dev_ci:
+  extends: [ .generic ]
+  variables:
+    CI_DEV_CI_STAGES: 'configure,build,tests,run'
+  script:
+    - *do_ci_dev_check
+    - STATE=INPROGRESS
+    - *post_build_status
+    - *start_logging
+    - *do_ci_vars
+    - |-
+      if ! (( $CI_DEV_CHECK )); then
+        perl -pi -e 's/dev-((run-)?tests)/\1/' -- utils/dev-ci/$ci_script
+      fi
+      DEV_CI_STAGES="${DEV_CI_STAGES:-configure,build,tests,run}"
+      export NETWORKS="$CI_NETWORKS"
+      ./utils/dev-ci/$ci_script --stages="$DEV_CI_STAGES" --dir=. && touch .pipe-passed
+
+################################################################################
+##
+## Theta compute nodes
+##
+## Host-specific note:
+##  Unless CI_THETA_RUN_ALL_PRGENV=1, only PrgEnv-llvm{,_floor} will run the tests.
+##
+
+.theta.compute:
+  tags: [ shell, anl, ecp-theta ]
+  variables:
+    CI_MAKE_PARALLEL: "-j8"
+    CI_NETWORKS: "aries"
+    MY_OS:   'cnl'
+    MY_CPU:  'knl'
+    MY_HOST: 'theta'
+  before_script: # "defeat" Theta-specific codemode split
+    - *do_ci_dev_check
+    - &theta-dev-ci |-
+      if ! (( $CI_DEV_CHECK )); then
+        perl -pi -e 's/ln|mv|rm -rf|opt debug/:/' -- utils/dev-ci/$ci_script
+      fi
+      if ! (( $CI_THETA_RUN_ALL_PRGENV )); then
+        DEV_CI_STAGES="${DEV_CI_STAGES:-configure,build,tests}"
+      fi
+
+# Theta PrgEnv-llvm
+theta.PrgEnv-llvm:
+  extends: [ .dev_ci, .new_llvm, .theta.compute ]
+  variables:
+    ci_script: theta-llvm
+    CI_THETA_RUN_ALL_PRGENV: 1
+    UPCXX_HAVE_OPENMP: ''
+
+# Theta PrgEnv-llvm_floor
+theta.PrgEnv-llvm_floor:
+  extends: [ .dev_ci, .old_llvm, .theta.compute ]
+  variables:
+    ci_script: theta-llvm_old
+    CI_THETA_RUN_ALL_PRGENV: 1
+    UPCXX_HAVE_OPENMP: ''
+
+# Theta PrgEnv-gnu
+theta.PrgEnv-gnu:
+  extends: [ .dev_ci, .new_gnu, .theta.compute ]
+  variables:
+    ci_script: theta-llvm
+  before_script:
+    - *do_ci_dev_check
+    - *theta-dev-ci
+    - perl -pi -e 's/-llvm/-gnu/;'
+        -- utils/dev-ci/$ci_script
+
+# Theta PrgEnv-intel
+theta.PrgEnv-intel:
+  extends: [ .dev_ci, .new_intel, .theta.compute ]
+  variables:
+    ci_script: theta-llvm
+  before_script:
+    - *do_ci_dev_check
+    - *theta-dev-ci
+    - perl -pi -e 's/-llvm/-intel/;'
+               -e 's/ load xalt/ load xalt gcc/;'
+        -- utils/dev-ci/$ci_script
+
+# Theta PrgEnv-cray
+theta.PrgEnv-cray:
+  extends: [ .dev_ci, .new_cray, .theta.compute ]
+  variables:
+    ci_script: theta-llvm
+  before_script:
+    - *do_ci_dev_check
+    - *theta-dev-ci
+    - perl -pi -e 's/-llvm/-cray/;'
+        -- utils/dev-ci/$ci_script
+
+################################################################################
+##
+## Theta login node
+##
+## Host-specific note:
+##  These jobs do NOT run except by request (match to CI_NAME).
+##  The Dirac jobs cover both older and newer compiler versions
+##
+.theta.login:
+  tags: [ shell, anl, ecp-theta ]
+  rules:
+    - *when_name
+  variables:
+    CI_MAKE_PARALLEL: "-j8"
+    CONFIGURE_ARGS: --without-cross
+    GASNET_SPAWNFN: L
+    MY_OS:   'linux'
+    MY_CPU:  'x86_64'
+    MY_HOST: 'theta-fe'
+
+# Theta login node GNU
+theta.gnu:
+  extends: [ .generic, .new_gnu, .theta.login ]
+  before_script:
+    - module load gcc
+    - export CC=gcc CXX=g++
+
+# Theta login node Intel
+theta.intel:
+  extends: [ .generic, .new_intel, .theta.login ]
+  before_script:
+    - module load gcc intel
+    - export CC=icc CXX=icpc
+
+# Theta login node LLVM
+theta.llvm:
+  extends: [ .generic, .new_llvm, .theta.login ]
+  variables:
+    UPCXX_HAVE_OPENMP: ''
+  before_script:
+    - module swap PrgEnv-intel PrgEnv-llvm
+    - module load gcc
+    - module unload xalt
+    - export CXX='clang++ --gcc-toolchain=/opt/gcc/8.3.0/snos'
+    - export CC='clang --gcc-toolchain=/opt/gcc/8.3.0/snos'
+
+
+################################################################################
+##
+## Dirac-like runner
+##
+
+.dirac:
+  tags: [ shell, lbnl, class, dirac ]
+  variables:
+    CI_MAKE_PARALLEL: "-j4"
+    MY_OS:   'linux'
+    MY_CPU:  'x86_64'
+    MY_HOST: 'dirac'
+    GASNET_SPAWNFN: L
+    GASNET_SUPERNODE_MAXSIZE: 2
+
+dirac.pgi:
+  extends: [ .generic, .new_pgi, .dirac ]
+  resource_group: pgi_license
+  variables:
+    TEST_EXCLUDE_ALL: 'test/future.cpp test/regression/issue138.cpp'
+  before_script:
+    - module load PrgEnv/pgi
+    - export CC=pgcc CXX=pgc++
+
+dirac.intel:
+  extends: [ .generic, .new_intel, .dirac ]
+  resource_group: intel_license
+  before_script:
+    - module load PrgEnv/intel
+    - export CC=icc CXX=icpc
+
+dirac.gcc:
+  extends: [ .generic, .new_gnu, .dirac ]
+  before_script:
+    - module load PrgEnv/gnu
+    - export CC=gcc CXX=g++
+
+dirac.clang:
+  extends: [ .generic, .new_llvm, .dirac ]
+  before_script:
+    - module load PrgEnv/llvm
+    - export CC=clang CXX=clang++
+
+dirac.pgi_floor:
+  extends: [ .generic, .old_pgi, .dirac ]
+  resource_group: pgi_license
+  variables:
+    TEST_EXCLUDE_ALL: 'test/regression/issue138.cpp'
+  before_script:
+    - module load PrgEnv/pgi/19.1
+    - export CC=pgcc CXX=pgc++
+
+dirac.intel_floor:
+  extends: [ .generic, .old_intel, .dirac ]
+  resource_group: intel_license
+  before_script:
+    - module load PrgEnv/intel/2017.2.174
+    - export CC=icc CXX=icpc
+
+dirac.gcc_floor:
+  extends: [ .generic, .old_gnu, .dirac ]
+  before_script:
+    - module load PrgEnv/gnu/6.4.0
+    - export CC=gcc CXX=g++
+
+dirac.clang_floor:
+  extends: [ .generic, .old_llvm, .dirac ]
+  before_script:
+    - module load PrgEnv/llvm/4.0.0-gcc640
+    - export CC=clang CXX=clang++
+
+################################################################################
+##
+## macOS 10.15 (Catalina) runner w/ Xcode 11.x
+##
+
+.catalina:
+  tags: [ shell, lbnl, class, xcode-11 ]
+  variables:
+    CI_MAKE_PARALLEL: "-j4"
+    MY_OS:   'macos'
+    MY_CPU:  'x86_64'
+    MY_HOST: 'catalina'
+    GASNET_SPAWNFN: L
+    GASNET_SUPERNODE_MAXSIZE: 2
+
+catalina.xcode:
+  extends: [ .dev_ci, .new_xcode, .catalina ]
+  variables:
+    ci_script: catalina-xcode
+
+################################################################################
+##
+## macOS 10.11 (El-Capitan) runner w/ Xcode 8.x
+##
+
+.el-capitan:
+  tags: [ shell, lbnl, class, xcode-8 ]
+  variables:
+    CI_MAKE_PARALLEL: "-j4"
+    MY_OS:   'macos'
+    MY_CPU:  'x86_64'
+    MY_HOST: 'el-capitan'
+    GASNET_SPAWNFN: L
+    GASNET_SUPERNODE_MAXSIZE: 2
+
+el-capitan.xcode_floor:
+  extends: [ .dev_ci, .new_xcode, .el-capitan ]
+  variables:
+    ci_script: el-capitan-xcode_old
+
+################################################################################
+##
+## Power9 VM runner
+##
+
+.power9:
+  tags: [ shell, lbnl, class, power9 ]
+  variables:
+    CI_MAKE_PARALLEL: "-j4"
+    MY_OS:   'linux'
+    MY_CPU:  'ppc64le'
+    MY_HOST: 'power9'
+    GASNET_SPAWNFN: L
+    GASNET_SUPERNODE_MAXSIZE: 2
+    GASNET_CONFIGURE_ARGS: '--enable-force-posix-realtime'
+
+power9.pgi:
+  extends: [ .generic, .new_pgi, .power9 ]
+  variables:
+    TEST_EXCLUDE_ALL: 'test/future.cpp test/regression/issue138.cpp'
+    CC:  /opt/pgi/linuxpower/19.10/bin/pgcc
+    CXX: /opt/pgi/linuxpower/19.10/bin/pgc++
+
+power9.gcc:
+  extends: [ .generic, .new_gnu, .power9 ]
+  variables:
+    CC:  /usr/local/pkg/gcc/10.1.0/bin/gcc
+    CXX: /usr/local/pkg/gcc/10.1.0/bin/g++
+
+power9.clang:
+  extends: [ .generic, .new_llvm, .power9 ]
+  variables:
+    CC:  /usr/local/pkg/clang/10.0.0/bin/clang
+    CXX: /usr/local/pkg/clang/10.0.0/bin/clang++
+
+power9.gcc_floor:
+  extends: [ .generic, .old_gnu, .power9 ]
+  variables:
+    CC:  /usr/local/pkg/gcc/6.4.0/bin/gcc
+    CXX: /usr/local/pkg/gcc/6.4.0/bin/g++
+
+power9.clang_floor:
+  extends: [ .generic, .old_llvm, .power9 ]
+  variables:
+    CC:  /usr/local/pkg/clang/5.0.0-gcc640/bin/clang
+    CXX: /usr/local/pkg/clang/5.0.0-gcc640/bin/clang++
