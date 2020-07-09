@@ -12,6 +12,7 @@ testprograms_seq = \
 	test/atomics.cpp \
 	test/collectives.cpp \
 	test/dist_object.cpp \
+	test/global_ptr.cpp \
 	test/local_team.cpp \
 	test/barrier.cpp \
 	test/rpc_barrier.cpp \
