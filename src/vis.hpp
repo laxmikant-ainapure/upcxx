@@ -703,8 +703,9 @@ namespace upcxx
                   Cxs cxs=completions<future_cx<operation_cx_event>>{{}})
   {
 
-    // Pull T out of global_ptr<T> from SrcIter
-    using T = typename std::iterator_traits<SrcIter>::value_type::element_type;
+    // Pull T out of global_ptr</*const*/ T> from SrcIter
+    using U = typename std::iterator_traits<SrcIter>::value_type::element_type;
+    using T = typename std::remove_const<U>::type;
     using D = typename std::iterator_traits<DestIter>::value_type;
     
     static_assert(std::is_convertible</*from*/D, /*to*/const T*>::value,
@@ -870,7 +871,7 @@ namespace upcxx
     /*EventValues=*/detail::rput_event_values,
     Cxs>::return_t  
   rget_strided(
-               global_ptr<T> src_base,
+               global_ptr<const T> src_base,
                std::ptrdiff_t const *src_strides,
                T* dest_base,
                std::ptrdiff_t const *dest_strides,
@@ -925,7 +926,7 @@ namespace upcxx
     /*EventValues=*/detail::rput_event_values,
     Cxs>::return_t  
   rget_strided(
-               global_ptr<T> src_base,
+               global_ptr<const T> src_base,
                std::array<std::ptrdiff_t,Dim> const &src_strides,
                T *dest_base,
                std::array<std::ptrdiff_t,Dim> const &dest_strides,

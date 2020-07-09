@@ -242,6 +242,15 @@ namespace upcxx {
                            ptr.device_);
   }
 
+  template<typename T, typename U, memory_kind K>
+  global_ptr<T,K> const_pointer_cast(global_ptr<U,K> ptr) {
+    UPCXX_GPTR_CHK(ptr);
+    return global_ptr<T,K>(detail::internal_only(),
+                           ptr.rank_,
+                           const_cast<T*>(ptr.raw_ptr_),
+                           ptr.device_);
+  }
+
   template<memory_kind K, typename T, memory_kind K1>
   // sfinae out if there is no overlap between the two KindSet's
   typename std::enable_if<(int(K) & int(K1)) != 0 , global_ptr<T,K>>::type
