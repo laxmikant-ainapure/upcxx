@@ -11,9 +11,12 @@
 #include <tuple>
 
 namespace upcxx {
-  //////////////////////////////////////////////////////////////////////
-  // Event names for common completion events as used by rput/rget etc.
-  // This set is extensible from anywhere in the source.
+  //////////////////////////////////////////////////////////////////////////////
+  /* Event names for common completion events as used by rput/rget etc. This
+  set is extensible from anywhere in the source. These are left as incomplete
+  types since only their names matter as template parameters (usually spelled
+  "Event" in this file). Spelling is `[what]_cx_event`.
+  */
   
   struct source_cx_event;
   struct remote_cx_event;
@@ -34,15 +37,24 @@ namespace upcxx {
     template<>
     struct event_is_remote<remote_cx_event>: std::true_type {};
   }
-    
-  //////////////////////////////////////////////////////////////////////
-  // Signalling actions tagged by the event they react to.
+  
+  //////////////////////////////////////////////////////////////////////////////
+  /* Completion action descriptors holding the information provided by the
+  user. Spelling is `[what]_cx`. The type encodes the event this action
+  corresponds to. The runtime state should hold copies of whatever runtime
+  state the user supplied with no extra processing. The corresponding event can
+  be queried via `::event_t`. Since the `rpc_cx` action is shipped remotely to
+  fulfill `as_rpc`, to make the other templates manageable, all actions must
+  "pretend" to also support serialization by supplying a `::deserialized_cx`
+  type to be used as its `deserialized_type`.
+  */
 
-  // Future completion
+  // Future completion to be fulfilled during given progress level
   template<typename Event, progress_level level = progress_level::user>
   struct future_cx {
     using event_t = Event;
     using deserialized_cx = future_cx<Event,level>;
+    // stateless
   };
 
   // Promise completion
@@ -58,6 +70,7 @@ namespace upcxx {
   struct buffered_cx {
     using event_t = Event;
     using deserialized_cx = buffered_cx<Event>;
+    // stateless
   };
 
   // Synchronous completion via blocking on network/peers
@@ -65,6 +78,7 @@ namespace upcxx {
   struct blocking_cx {
     using event_t = Event;
     using deserialized_cx = blocking_cx<Event>;
+    // stateless
   };
 
   // LPC completion
@@ -82,7 +96,7 @@ namespace upcxx {
     }
   };
   
-  // RPC completion. Arguments are bound into fn_.
+  // RPC completion. Arguments are already bound into fn_ (via upcxx::bind).
   template<typename Event, typename Fn>
   struct rpc_cx {
     using event_t = Event;
@@ -92,10 +106,10 @@ namespace upcxx {
     rpc_cx(Fn fn): fn_(std::move(fn)) {}
   };
   
-  //////////////////////////////////////////////////////////////////////
-  // completions<...>: A list of tagged completion actions. We use
-  // lisp-like lists where the head is the first element and the tail
-  // is the list of everything after.
+  //////////////////////////////////////////////////////////////////////////////
+  /* completions<...>: A list of completion actions. We use lisp-like lists where
+  the head is the first element and the tail is the list of everything after.
+  */
   
   template<typename ...Cxs>
   struct completions;
@@ -122,7 +136,7 @@ namespace upcxx {
     }
   };
 
-  //////////////////////////////////////////////////////////////////////
+  //////////////////////////////////////////////////////////////////////////////
   // operator "|": Concatenates two completions lists.
   
   template<typename ...B>
@@ -142,9 +156,9 @@ namespace upcxx {
     };
   }
 
-  //////////////////////////////////////////////////////////////////////
-  // detail::completions_has_event: detects if there exists an action
-  // tagged by the given event in the completions list.
+  //////////////////////////////////////////////////////////////////////////////
+  // detail::completions_has_event: detects if there exists an action associated
+  // with the given event in the completions list.
 
   namespace detail {
     template<typename Cxs, typename Event>
@@ -162,10 +176,9 @@ namespace upcxx {
     };
   }
 
-  //////////////////////////////////////////////////////////////////////
-  // detail::completions_is_event_sync: detects if there exists a
-  // buffered_cx or blocking_cx action tagged by the given event in the
-  // completions list
+  //////////////////////////////////////////////////////////////////////////////
+  // detail::completions_is_event_sync: detects if there exists a buffered_cx or
+  // blocking_cx action tagged by the given event in the completions list
 
   namespace detail {
     template<typename Cxs, typename Event>
@@ -258,8 +271,9 @@ namespace upcxx {
     };
   }
 
-  //////////////////////////////////////////////////////////////////////
-  // User-interface for obtaining a completion tied to an event.
+  //////////////////////////////////////////////////////////////////////////////
+  // User-interface for obtaining a singleton completion list (one action tied
+  // to one event).
 
   namespace detail {
     template<typename Event>
@@ -371,18 +385,35 @@ namespace upcxx {
   }
 
 
-  //////////////////////////////////////////////////////////////////////
-  // cx_state: Per action state that survives until the event
-  // is triggered. For future_cx's this holds a promise instance which
-  // seeds the future given back to the user. All other cx actions get
-  // their information stored as-is. All of these expose `operator()(T...)`
-  // which is used to "fire" the action safely from any progress context.
-  // Notice that the args are taken as by-value T..., this ensures they each
-  // make get their own private copy, which they should then move into the
-  // users callable or promise etc.
+  //////////////////////////////////////////////////////////////////////////////
+  /* detail::cx_state: Per action state that survives until the event is
+  triggered. For future_cx's this holds a promise instance which seeds the
+  future given back to the user. All other cx actions get their information
+  stored as-is.
+
+  // Specializations should look like:
+  template<typename Event, typename ...T>
+  struct cx_state<whatever_cx<Event>, std::tuple<T...>> {
+    // There will be exatcly one call to one of the following functions before
+    // this state destructs...
+
+    void operator()(T...) {
+      // This functions should be marked `&&` but isn't to support legacy.
+      
+      // Event has been satisfied so fire this action, Must work in any progress
+      // context. Notice event values are taken sans-reference since an event
+      // may have multiple "listeners", each should get a private copy.
+    }
+    
+    lpc_dormant<T...> to_lpc_dormant(lpc_dormant<T...> *tail) && {
+      // Convert this state into a dormant lpc (chained against a supplied tail
+      // which could be null).
+    }
+  };
+  */
   
   namespace detail {
-    template<typename Cx /* the action */,
+    template<typename Cx /* the action specialized upon */,
              typename EventArgsTup /* tuple containing list of action's value types*/>
     struct cx_state;
     
@@ -406,6 +437,8 @@ namespace upcxx {
         pro_(new future_header_promise<T...>) {
       }
 
+      // completions_returner_head handles cx_state<future_cx> specially and requires
+      // this additional method.
       future<T...> get_future() const {
         return detail::promise_get_future(pro_);
       }
@@ -423,7 +456,11 @@ namespace upcxx {
       }
     };
 
-    // promise and events have matching (non-empty) types
+    /* There are multiple specializations for promise_cx since both the promise
+    and event have their own `T...` and either these must match or the event's
+    list is empty */
+    
+    // Case when promise and event have matching (non-empty) type lists T...
     template<typename Event, typename ...T>
     struct cx_state<promise_cx<Event,T...>, std::tuple<T...>> {
       future_header_promise<T...> *pro_; // holds ref
@@ -452,7 +489,7 @@ namespace upcxx {
         );
       }
     };
-    // event is empty
+    // Case when event type list is empty
     template<typename Event, typename ...T>
     struct cx_state<promise_cx<Event,T...>, std::tuple<>> {
       future_header_promise<T...> *pro_; // holds ref
@@ -477,7 +514,7 @@ namespace upcxx {
         backend::fulfill_during<progress_level::user>(/*move ref*/pro_, 1);
       }
     };
-    // promise and event are empty
+    // Case when promise and event type list are both empty
     template<typename Event>
     struct cx_state<promise_cx<Event>, std::tuple<>> {
       future_header_promise<> *pro_; // holds ref
@@ -526,7 +563,9 @@ namespace upcxx {
         upcxx::current_persona().undischarged_n_ -= 1;
       }
     };
-    
+
+    // cx_state<rpc_cx<...>> does not fit the usual mold since the event isn't
+    // triggered locally.
     template<typename Event, typename Fn, typename ...T>
     struct cx_state<rpc_cx<Event,Fn>, std::tuple<T...>> {
       Fn fn_;
@@ -542,42 +581,68 @@ namespace upcxx {
     };
   }
 
-  //////////////////////////////////////////////////////////////////////
-  // detail::completions_state: Constructed against a user-supplied
-  // completions<...> value. This is what remembers the actions or
-  // holds the promises (need by future returns) and so should probably
-  // be heap allocated. To fire all actions registered to an event
-  // call `operator()` with the event type as the first template arg.
-  //
-  // EventPredicate<Event>::value: Maps an event-type to a compile-time
-  // bool value for enabling that event in this object. Events which
-  // aren't enabled are not copied out of the constructor-time
-  // completions<...> instance and execute no-ops under operator().
-  //
-  // EventValues::future_t<Event>: Maps an event-type to a type-list
-  // (as future) which types the values reported by the completed
-  // action. `operator()` will expect that the runtime values it receives
-  // match the types reported by this map for the given event.
-  //
-  // ordinal: indexes the nesting depth of this type so that base classes
-  // with identical types can be disambiguated.
+  //////////////////////////////////////////////////////////////////////////////
+  /* detail::completions_state: Constructed against a user-supplied
+  completions<...> value, converting its action descriptors into tracked
+  state (e.g. what_cx<Event> becomes cx_state<what_cx<Event>>). Clients are typically
+  given a completions<...> by the user (a list of actions), and should
+  construct this class to convert those actions into a list of tracked stateful
+  things. As various events complete, this thing should be notified and it will
+  visit all its members firing their actions.
+
+  A completions_state takes an EventPredicate to select which events are
+  tracked (the unselected carry no state and do nothing when notified). This is
+  required to support remote events. When both local and remote events are in
+  play the client will construct two completions_state's against the same
+  completions<...> list. One instance to track local completions (using
+  EventPredicate=detail::event_is_here), and the other (with
+  EventPredicate=detail::event_is_remote) to be shipped off and invoked
+  remotely.
+
+  We also take an EventValues map which assigns to each event type the runtime
+  value types produced by the event (some T...).
+
+  More specifically the template args are...
+  
+  EventPredicate<Event>::value: Maps an event-type to a compile-time bool value
+  for enabling that event in this instance.
+
+  EventValues::tuple_t<Event>: Maps an event-type to a type-list (wrapped as a
+  tuple<T...>) which types the values reported by the completed action.
+  `operator()` will expect that the runtime values it receives match the types
+  reported by this map for the given event.
+  
+  ordinal: indexes the nesting depth of this type so that base classes
+  with identical types can be disambiguated.
+  */
   namespace detail {
     template<template<typename> class EventPredicate,
              typename EventValues,
              typename Cxs,
              int ordinal=0> 
     struct completions_state /*{
-      using completions_t = Cxs;
+      using completions_t = Cxs; // retrieve the original completions<...> user type
 
       // True iff no events contained in `Cxs` are enabled by `EventPredicate`.
       static constexpr bool empty;
 
       // Fire actions corresponding to `Event` if its enabled. Type-list
-      // V... should match the T... in `EventValues::future_t<Event>`.
+      // V... should match the T... in `EventValues::tuple_t<Event>`.
       template<typename Event, typename ...V>
-      void operator()(V&&...);
+      void operator()(V&&...); // should be &&, but not for legacy
+
+      // Create a callable to fire all actions associated with given event. Note
+      // this method consumes the instance (&&) so Event should be the only event
+      // enabled by our predicate if any.
+      template<typename Event>
+      SomeCallable bind_event() &&;
+
+      // Convert states of actions associated with given Event to dormant lpc list
+      template<typename Event>
+      lpc_dormant<...> to_lpc_dormant() &&;
     }*/;
-    
+
+    // completions_state specialization for empty completions<>
     template<template<typename> class EventPredicate,
              typename EventValues,
              int ordinal>
@@ -608,13 +673,29 @@ namespace upcxx {
           lpc_dormant
         >::type*
       to_lpc_dormant() && {
-        return nullptr;
+        return nullptr; // the empty lpc_dormant list
       }
     };
 
+    /* completions_state for non-empty completions<...> deconstructs list one
+    at a time recursively. The first element is the head, the list of
+    everything else is the tail. It inherits a completions_state_head for each
+    list item, passing it the predicate boolean evaluated for the item's event,
+    and the entire EventValues mapping (not sure why as this feels like the
+    right place to evaluate the mapping on the item's event type just like we
+    do with the predicate).
+
+    completions_state_head handles the logic of being and doing nothing for
+    disabled events. It also exposes action firing mechanisms that test that the
+    completed event matches the one associated with the action. This makes the
+    job of completions_state easy, as it can just visit all the heads and fire
+    them.
+    */
+
     template<bool event_selected, typename EventValues, typename Cx, int ordinal>
     struct completions_state_head;
-    
+
+    // completions_state_head with event disabled (predicate=false)
     template<typename EventValues, typename Cx, int ordinal>
     struct completions_state_head<
         /*event_enabled=*/false, EventValues, Cx, ordinal
@@ -630,6 +711,7 @@ namespace upcxx {
     template<typename Cx>
     using cx_event_t = typename Cx::event_t;
 
+    // completions_state_head with event enabled (predicate=true)
     template<typename EventValues, typename Cx, int ordinal>
     struct completions_state_head<
         /*event_enabled=*/true, EventValues, Cx, ordinal
@@ -683,9 +765,10 @@ namespace upcxx {
 
       template<typename Event, typename Lpc>
       Lpc* to_lpc_dormant_case(std::false_type, Lpc *tail) && {
-        return tail;
+        return tail; // ignore this event, just return tail (meaning no append)
       }
 
+      // Append dormant lpc to tail iff Event == CxH::event_t
       template<typename Event, typename Lpc>
       Lpc* to_lpc_dormant(Lpc *tail) && {
         return std::move(*this).template to_lpc_dormant_case<Event>(
@@ -696,7 +779,8 @@ namespace upcxx {
         );
       }
     };
-    
+
+    // Now we can define completions_state for non empty completions<...>
     template<template<typename> class EventPredicate,
              typename EventValues, typename CxH, typename ...CxT,
              int ordinal>
@@ -848,6 +932,15 @@ namespace upcxx {
       template<typename Event>
       typename detail::template bind<event_bound<Event>, completions_state>::return_type
       bind_event() && {
+        /* This is gross. We are moving our entire instance into this bound
+        callable instead of just the items related to Event. This limits the
+        applicability of bind_event to completion_state's with only a single
+        enabled event type. Fortunately thats all that is needed since
+        bind_event is currently only used to produce the callable that is
+        shipped as an rpc.
+        TODO: we should at least assert no events besides Event are enabled by
+        our predicate.
+        */
         return upcxx::bind(event_bound<Event>(), std::move(*this));
       }
 
@@ -866,6 +959,12 @@ namespace upcxx {
 
   //////////////////////////////////////////////////////////////////////
   // Serialization of a completions_state of rpc_cx's
+
+  /* TODO: I believe enabling serialization for completions_state is totally
+  unnecessary. Now that we have completions_state::bind_event, anyone wanting
+  to send this over the wire should just send my_cx_state.bind_event<rpc_cx_event>()
+  instead.
+  */
   
   template<typename EventValues, typename Event, typename Fn, int ordinal>
   struct serialization<
@@ -988,16 +1087,23 @@ namespace upcxx {
     }
   };
 
-  //////////////////////////////////////////////////////////////////////
-  // detail::completions_returner: Manage return type for completions<...>
-  // object. Construct one of these instances against a
-  // detail::completions_state&. Call operator() to get the return value.
-
+  //////////////////////////////////////////////////////////////////////////////
+  /* detail::completions_returner: Manage return type for completions<...>
+  object. Construct one of these instances against a detail::completions_state&
+  *before* any injection is done. Afterwards, call operator() to produce the
+  return value desired by user.
+  */
+  
   namespace detail {
+    /* The implementation of completions_returner tears apart the completions<...>
+    list matching for future_cx's since those are the only ones that return
+    something to user.
+    */
     template<template<typename> class EventPredicate,
              typename EventValues, typename Cxs>
     struct completions_returner;
 
+    // completions_returner for empty completions<>
     template<template<typename> class EventPredicate,
              typename EventValues>
     struct completions_returner<EventPredicate, EventValues, completions<>> {
@@ -1011,12 +1117,17 @@ namespace upcxx {
       
       void operator()() const {/*return void*/}
     };
-    
+
+    // completions_returner_head is inherited by completions_returner to dismantle
+    // the head element of the list and recursively inherit completions_returner
+    // of the tail.
     template<template<typename> class EventPredicate,
-             typename EventValues, typename Cxs,
-             typename TailReturn>
+             typename EventValues, typename Cxs/*user completions<...>*/,
+             typename TailReturn/*return type computed by tail*/>
     struct completions_returner_head;
-    
+
+    // specialization: we found a future_cx and are appending our return value
+    // onto a tuple of return values
     template<template<typename> class EventPredicate,
              typename EventValues, typename CxH_event, progress_level level, typename ...CxT,
              typename ...TailReturn_tuplees>
@@ -1048,6 +1159,8 @@ namespace upcxx {
       }
     };
 
+    // specialization: we found a future_cx and one other item is returning a
+    // value, so we introduce a two-element tuple.
     template<template<typename> class EventPredicate,
              typename EventValues, typename CxH_event, progress_level level, typename ...CxT,
              typename TailReturn_not_tuple>
@@ -1079,6 +1192,8 @@ namespace upcxx {
       }
     };
 
+    // specialization: we found a future_cx and are the first to want to return
+    // a value.
     template<template<typename> class EventPredicate,
              typename EventValues, typename CxH_event, progress_level level, typename ...CxT>
     struct completions_returner_head<
@@ -1102,7 +1217,8 @@ namespace upcxx {
         ) {
       }
     };
-    
+
+    // specialization: the action is not a future, do not muck with return value
     template<template<typename> class EventPredicate,
              typename EventValues, typename CxH_not_future, typename ...CxT,
              typename TailReturn>
@@ -1127,7 +1243,10 @@ namespace upcxx {
           >{std::move(tail)} {
       }
     };
-    
+
+    // completions_returner for non-empty completions<...>: inherit
+    // completions_returner_head which will dismantle the head element and
+    // recursively inherit completions_returner on the tail list.
     template<template<typename> class EventPredicate,
              typename EventValues, typename CxH, typename ...CxT>
     struct completions_returner<EventPredicate, EventValues,
