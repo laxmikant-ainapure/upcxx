@@ -512,7 +512,8 @@ namespace upcxx
                    Cxs cxs=completions<future_cx<operation_cx_event>>{{}})
   {
 
-    using T = typename std::tuple_element<0,typename std::iterator_traits<SrcIter>::value_type>::type::element_type;
+    using U = typename std::tuple_element<0,typename std::iterator_traits<SrcIter>::value_type>::type::element_type;
+    using T = typename std::remove_const<U>::type;
     using D = typename std::tuple_element<0,typename std::iterator_traits<DestIter>::value_type>::type;
 
     static_assert(is_trivially_serializable<T>::value,
