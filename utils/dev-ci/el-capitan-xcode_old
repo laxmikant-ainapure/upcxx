@@ -7,6 +7,8 @@ source $(dirname $0)/_ci-common
 export GASNET_SPAWNFN=L
 export GASNET_SUPERNODE_MAXSIZE=2
 
+export TIMEOUT=gtimeout # GNU coreutils are installed with a "g" prefix
+
 export NETWORKS="${CI_NETWORKS:-udp}"
 export GMAKE="${CI_MAKE:-${GMAKE:-make}}"
 MAKE_CMD="$GMAKE ${CI_MAKE_PARALLEL:--j4}"
