@@ -1,3 +1,7 @@
+#ifndef UPCXX_IN_GLOBAL_PTR_HPP
+#error This header is not meant to be included directly. Please use #include <upcxx/upcxx.hpp>
+#endif
+
     static_assert(!std::is_volatile<T>::value,
                   "global_ptr<T> does not support volatile qualification on T");
 

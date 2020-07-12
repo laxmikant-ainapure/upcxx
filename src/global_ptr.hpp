@@ -4,6 +4,7 @@
 /**
  * global_ptr.hpp
  */
+#define UPCXX_IN_GLOBAL_PTR_HPP
 
 #include <upcxx/backend.hpp>
 #include <upcxx/diagnostic.hpp>
@@ -409,4 +410,5 @@ namespace std {
   };
 } // namespace std
 
+#undef UPCXX_IN_GLOBAL_PTR_HPP
 #endif
