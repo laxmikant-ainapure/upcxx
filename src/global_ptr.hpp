@@ -40,6 +40,7 @@ namespace upcxx {
   class global_ptr : public global_ptr<const T, KindSet> {
   public:
     using element_type = T;
+    using pointer_type = T*;
     #include <upcxx/global_ptr_impl.hpp>
 
     using base_type = global_ptr<const T, KindSet>;
@@ -63,6 +64,7 @@ namespace upcxx {
   class global_ptr<const T, KindSet> {
   public:
     using element_type = const T;
+    using pointer_type = const T*;
     #include <upcxx/global_ptr_impl.hpp>
 
     static constexpr memory_kind kind = KindSet;

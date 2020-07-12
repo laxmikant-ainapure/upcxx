@@ -24,8 +24,17 @@
 // UPCXX_ETYPE(global_ptr<E> gp) yields typename E for any expression gp
 #define UPCXX_ETYPE(gp)  typename UPCXX_GPTYPE(gp)::element_type
 
+// UPCXX_ETYPE(global_ptr<E> gp) yields typename E* for any expression gp
+#define UPCXX_PTYPE(gp)  typename UPCXX_GPTYPE(gp)::pointer_type
+
 // UPCXX_KTYPE(global_ptr<E,kind> gp) yields kind for any expression gp
 #define UPCXX_KTYPE(gp)  (UPCXX_GPTYPE(gp)::kind)
+
+// UPCXX_MTYPE(global_ptr<E> gp, FIELD) yields the type of a
+// non-reference member FIELD of E for any expression gp, preserving
+// constness
+#define UPCXX_MTYPE(gp, FIELD) \
+  typename ::std::remove_reference<decltype((::std::declval<UPCXX_PTYPE(gp)>()->FIELD))>::type
 
 // UNSPECIFIED MACRO: This variant is not guaranteed by the spec
 // upcxx_memberof_unsafe(global_ptr<T> gp, field-designator)
@@ -34,7 +43,7 @@
 #define upcxx_memberof_unsafe(gp, FIELD) ( \
   UPCXX_STATIC_ASSERT(offsetof(UPCXX_ETYPE(gp), FIELD) < sizeof(UPCXX_ETYPE(gp)), \
                       "offsetof returned a bogus result. This is probably due to an unsupported non-standard-layout type"), \
-  ::upcxx::global_ptr<decltype(::std::declval<UPCXX_ETYPE(gp)>().FIELD), UPCXX_KTYPE(gp)>( \
+  ::upcxx::global_ptr<UPCXX_MTYPE(gp, FIELD), UPCXX_KTYPE(gp)>( \
     ::upcxx::detail::internal_only(), \
     (gp),\
     offsetof(UPCXX_ETYPE(gp), FIELD) \
