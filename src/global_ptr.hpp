@@ -46,14 +46,27 @@ namespace upcxx {
 
     using base_type = global_ptr<const T, KindSet>;
 
-    using base_type::base_type; // inherit constructors
-    // disable construction from a pointer-to-const
-    global_ptr(detail::internal_only, intrank_t rank, const T *raw,
-               int device = -1) = delete;
-    // enable construction from a pointer-to-non-const
+    // allow construction from a pointer-to-non-const
     explicit global_ptr(detail::internal_only, intrank_t rank, T *raw,
                         int device = -1):
       base_type(detail::internal_only(), rank, raw, device) {
+    }
+
+    template <typename U>
+    explicit global_ptr(detail::internal_only,
+                        const global_ptr<U, KindSet> &other, std::ptrdiff_t offset):
+      base_type(detail::internal_only(), other, offset) {
+    }
+
+    template<memory_kind KindSet1,
+             typename = typename std::enable_if<((int)KindSet & (int)KindSet1) == (int)KindSet1>::type>
+    global_ptr(global_ptr<const T,KindSet1> const &that):
+      base_type(that) {
+    }
+
+    // null pointer represented with rank 0
+    global_ptr(std::nullptr_t nil = nullptr):
+      base_type(nil) {
     }
 
     T* local() const {
