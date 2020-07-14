@@ -172,7 +172,7 @@ namespace upcxx {
       Cxs
     >::return_t
   rget(
-      global_ptr<T> gp_s,
+      global_ptr<const T> gp_s,
       Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
     ) {
 
@@ -245,7 +245,7 @@ namespace upcxx {
       Cxs
     >::return_t
   rget(
-      global_ptr<T> gp_s,
+      global_ptr<const T> gp_s,
       T *buf_d, std::size_t n,
       Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
     ) {

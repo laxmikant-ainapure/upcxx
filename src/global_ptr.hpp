@@ -4,6 +4,7 @@
 /**
  * global_ptr.hpp
  */
+#define UPCXX_IN_GLOBAL_PTR_HPP
 
 #include <upcxx/backend.hpp>
 #include <upcxx/diagnostic.hpp>
@@ -16,29 +17,72 @@
 #include <iostream> // ostream
 #include <type_traits> // is_const, is_volatile
 
+#ifndef UPCXX_GPTR_CHECK_ENABLED
+// -DUPCXX_GPTR_CHECK_ENABLED=0/1 independently controls gptr checking (default enabled with assertions)
+#define UPCXX_GPTR_CHECK_ENABLED UPCXX_ASSERT_ENABLED
+#endif
+#ifndef UPCXX_GPTR_CHECK_ALIGNMENT
+#define UPCXX_GPTR_CHECK_ALIGNMENT 1 // -DUPCXX_GPTR_CHECK_ALIGNMENT=0 disables alignment checking
+#endif
+
+#if UPCXX_GPTR_CHECK_ENABLED
+#define UPCXX_GPTR_CHK(p)         ((p).check(true, __func__))
+#define UPCXX_GPTR_CHK_NONNULL(p) ((p).check(false, __func__))
+#else
+#define UPCXX_GPTR_CHK(p)         ((void)0)
+#define UPCXX_GPTR_CHK_NONNULL(p) ((void)0)
+#endif
+
 namespace upcxx {
   //////////////////////////////////////////////////////////////////////////////
   // global_ptr
   
   template<typename T, memory_kind KindSet = memory_kind::host>
-  class global_ptr {
+  class global_ptr : public global_ptr<const T, KindSet> {
   public:
-    static_assert(!std::is_const<T>::value && !std::is_volatile<T>::value,
-                  "global_ptr<T> does not support cv qualification on T");
-
-    static_assert(!std::is_reference<T>::value, // spec issue #158
-                  "global_ptr<T> does not support reference types as T");
-
     using element_type = T;
+    using pointer_type = T*;
+    #include <upcxx/global_ptr_impl.hpp>
+
+    using base_type = global_ptr<const T, KindSet>;
+
+    // allow construction from a pointer-to-non-const
+    explicit global_ptr(detail::internal_only, intrank_t rank, T *raw,
+                        int device = -1):
+      base_type(detail::internal_only(), rank, raw, device) {
+    }
+
+    template <typename U>
+    explicit global_ptr(detail::internal_only,
+                        const global_ptr<U, KindSet> &other, std::ptrdiff_t offset):
+      base_type(detail::internal_only(), other, offset) {
+    }
+
+    template<memory_kind KindSet1,
+             typename = typename std::enable_if<((int)KindSet & (int)KindSet1) == (int)KindSet1>::type>
+    global_ptr(global_ptr<const T,KindSet1> const &that):
+      base_type(that) {
+    }
+
+    // null pointer represented with rank 0
+    global_ptr(std::nullptr_t nil = nullptr):
+      base_type(nil) {
+    }
+
+    T* local() const {
+      return const_cast<T*>(base_type::local());
+    }
+  };
+
+  template<typename T, memory_kind KindSet>
+  class global_ptr<const T, KindSet> {
+  public:
+    using element_type = const T;
+    using pointer_type = const T*;
+    #include <upcxx/global_ptr_impl.hpp>
+
     static constexpr memory_kind kind = KindSet;
 
-    #ifndef UPCXX_GPTR_CHECK_ENABLED
-    // -DUPCXX_GPTR_CHECK_ENABLED=0/1 independently controls gptr checking (default enabled with assertions)
-    #define UPCXX_GPTR_CHECK_ENABLED UPCXX_ASSERT_ENABLED 
-    #endif
-    #ifndef UPCXX_GPTR_CHECK_ALIGNMENT
-    #define UPCXX_GPTR_CHECK_ALIGNMENT 1 // -DUPCXX_GPTR_CHECK_ALIGNMENT=0 disables alignment checking
-    #endif
     void check(bool allow_null=true, const char *context=nullptr) const {
         void *this_sanity_check = (void*)this;
         UPCXX_ASSERT_ALWAYS(this_sanity_check, "global_ptr::check() invoked on a null pointer to global_ptr");
@@ -47,24 +91,19 @@ namespace upcxx {
         #else
           constexpr size_t align = 0;
         #endif
-        backend::validate_global_ptr(allow_null, rank_, reinterpret_cast<void*>(raw_ptr_), device_, 
-                                     KindSet, align, detail::typename_of<T>(), context);
+          backend::validate_global_ptr(allow_null, rank_,
+                                       reinterpret_cast<void*>(raw_ptr_),
+                                       device_, KindSet, align,
+                                       detail::typename_of<T>(), context);
     }
-    #if UPCXX_GPTR_CHECK_ENABLED
-      #define UPCXX_GPTR_CHK(p)         ((p).check(true, __func__))
-      #define UPCXX_GPTR_CHK_NONNULL(p) ((p).check(false, __func__))
-    #else
-      #define UPCXX_GPTR_CHK(p)         ((void)0)
-      #define UPCXX_GPTR_CHK_NONNULL(p) ((void)0)
-    #endif
     
-    explicit global_ptr(detail::internal_only, intrank_t rank, T *raw,
+    explicit global_ptr(detail::internal_only, intrank_t rank, const T *raw,
                         int device = -1):
       #if UPCXX_MANY_KINDS
         device_(device),
       #endif
       rank_(rank),
-      raw_ptr_(raw) {
+      raw_ptr_(const_cast<T*>(raw)) {
       static_assert(std::is_trivially_copyable<global_ptr<T,KindSet>>::value, "Internal error.");
       UPCXX_GPTR_CHK(*this);
     }
@@ -86,7 +125,7 @@ namespace upcxx {
 
     template<memory_kind KindSet1,
              typename = typename std::enable_if<((int)KindSet & (int)KindSet1) == (int)KindSet1>::type>
-    global_ptr(global_ptr<T,KindSet1> const &that):
+    global_ptr(global_ptr<const T,KindSet1> const &that):
       global_ptr(detail::internal_only(), that.rank_, that.raw_ptr_, that.device_) {
       UPCXX_GPTR_CHK(*this);
     }
@@ -116,7 +155,7 @@ namespace upcxx {
       return !is_null();
     }
     
-    T* local() const {
+    const T* local() const {
       UPCXX_GPTR_CHK(*this);
       return KindSet != memory_kind::host && device_ != -1
         ? nullptr
@@ -141,41 +180,6 @@ namespace upcxx {
         return device_ == -1 ? memory_kind::host : memory_kind::cuda_device;
     }
     
-    global_ptr operator+=(std::ptrdiff_t diff) {
-      if (diff) UPCXX_GPTR_CHK_NONNULL(*this);
-      else      UPCXX_GPTR_CHK(*this);
-      raw_ptr_ += diff;
-      UPCXX_GPTR_CHK(*this);
-      return *this;
-    }
-    friend global_ptr operator+(global_ptr a, int b) { return a += (ptrdiff_t)b; }
-    friend global_ptr operator+(global_ptr a, long b) { return a += (ptrdiff_t)b; }
-    friend global_ptr operator+(global_ptr a, long long b) { return a += (ptrdiff_t)b; }
-    friend global_ptr operator+(global_ptr a, unsigned int b) { return a += (ptrdiff_t)b; }
-    friend global_ptr operator+(global_ptr a, unsigned long b) { return a += (ptrdiff_t)b; }
-    friend global_ptr operator+(global_ptr a, unsigned long long b) { return a += (ptrdiff_t)b; }
-    
-    friend global_ptr operator+(int b, global_ptr a) { return a += (ptrdiff_t)b; }
-    friend global_ptr operator+(long b, global_ptr a) { return a += (ptrdiff_t)b; }
-    friend global_ptr operator+(long long b, global_ptr a) { return a += (ptrdiff_t)b; }
-    friend global_ptr operator+(unsigned int b, global_ptr a) { return a += (ptrdiff_t)b; }
-    friend global_ptr operator+(unsigned long b, global_ptr a) { return a += (ptrdiff_t)b; }
-    friend global_ptr operator+(unsigned long long b, global_ptr a) { return a += (ptrdiff_t)b; }
-
-    global_ptr operator-=(std::ptrdiff_t diff) {
-      if (diff) UPCXX_GPTR_CHK_NONNULL(*this);
-      else      UPCXX_GPTR_CHK(*this);
-      raw_ptr_ -= diff;
-      UPCXX_GPTR_CHK(*this);
-      return *this;
-    }
-    friend global_ptr operator-(global_ptr a, int b) { return a -= (ptrdiff_t)b; }
-    friend global_ptr operator-(global_ptr a, long b) { return a -= (ptrdiff_t)b; }
-    friend global_ptr operator-(global_ptr a, long long b) { return a -= (ptrdiff_t)b; }
-    friend global_ptr operator-(global_ptr a, unsigned int b) { return a -= (ptrdiff_t)b; }
-    friend global_ptr operator-(global_ptr a, unsigned long b) { return a -= (ptrdiff_t)b; }
-    friend global_ptr operator-(global_ptr a, unsigned long long b) { return a -= (ptrdiff_t)b; }
-    
     std::ptrdiff_t operator-(global_ptr rhs) const {
       if (raw_ptr_ == rhs.raw_ptr_) { UPCXX_GPTR_CHK(*this); UPCXX_GPTR_CHK(rhs); }
       else  { UPCXX_GPTR_CHK_NONNULL(*this); UPCXX_GPTR_CHK_NONNULL(rhs); }
@@ -184,26 +188,6 @@ namespace upcxx {
       return raw_ptr_ - rhs.raw_ptr_;
     }
 
-    global_ptr& operator++() {
-      return *this = *this + 1;
-    }
-
-    global_ptr operator++(int) {
-      global_ptr old = *this;
-      *this = *this + 1;
-      return old;
-    }
-
-    global_ptr& operator--() {
-      return *this = *this - 1;
-    }
-
-    global_ptr operator--(int) {
-      global_ptr old = *this;
-      *this = *this - 1;
-      return old;
-    }
-    
     friend bool operator==(global_ptr a, global_ptr b) {
       UPCXX_GPTR_CHK(a); UPCXX_GPTR_CHK(b); 
       return a.device_ == b.device_ && a.rank_ == b.rank_ && a.raw_ptr_ == b.raw_ptr_;
@@ -245,22 +229,6 @@ namespace upcxx {
     UPCXX_COMPARE_OP(>)
     UPCXX_COMPARE_OP(>=)
     #undef UPCXX_COMAPRE_OP
-    
-  private:
-    friend struct std::less<global_ptr<T,KindSet>>;
-    friend struct std::less_equal<global_ptr<T,KindSet>>;
-    friend struct std::greater<global_ptr<T,KindSet>>;
-    friend struct std::greater_equal<global_ptr<T,KindSet>>;
-    friend struct std::hash<global_ptr<T,KindSet>>;
-
-    template<typename U, typename V, memory_kind K>
-    friend global_ptr<U,K> reinterpret_pointer_cast(global_ptr<V,K> ptr);
-
-    template<typename U, memory_kind K>
-    friend std::ostream& operator<<(std::ostream &os, global_ptr<U,K> ptr);
-
-    //explicit global_ptr(intrank_t rank, T* ptr)
-    //  : rank_(rank), raw_ptr_(ptr) {}
   
   public: //private!
     #if UPCXX_MANY_KINDS
@@ -287,6 +255,15 @@ namespace upcxx {
     return global_ptr<T,K>(detail::internal_only(),
                            ptr.rank_,
                            reinterpret_cast<T*>(ptr.raw_ptr_),
+                           ptr.device_);
+  }
+
+  template<typename T, typename U, memory_kind K>
+  global_ptr<T,K> const_pointer_cast(global_ptr<U,K> ptr) {
+    UPCXX_GPTR_CHK(ptr);
+    return global_ptr<T,K>(detail::internal_only(),
+                           ptr.rank_,
+                           const_cast<T*>(ptr.raw_ptr_),
                            ptr.device_);
   }
 
@@ -446,4 +423,5 @@ namespace std {
   };
 } // namespace std
 
+#undef UPCXX_IN_GLOBAL_PTR_HPP
 #endif

@@ -40,7 +40,7 @@ namespace upcxx {
       /*EventValues=*/detail::rput_event_values,
       Cxs
     >::return_t
-  copy(global_ptr<T,Ks> src, T *dest, std::size_t n,
+  copy(global_ptr<const T,Ks> src, T *dest, std::size_t n,
        Cxs cxs=completions<future_cx<operation_cx_event>>{{}}) {
     UPCXX_GPTR_CHK(src);
     UPCXX_ASSERT(src && dest, "pointer arguments to copy may not be null");
@@ -74,7 +74,7 @@ namespace upcxx {
       /*EventValues=*/detail::rput_event_values,
       Cxs
     >::return_t
-  copy(global_ptr<T,Ks> src, global_ptr<T,Kd> dest, std::size_t n,
+  copy(global_ptr<const T,Ks> src, global_ptr<T,Kd> dest, std::size_t n,
        Cxs cxs=completions<future_cx<operation_cx_event>>{{}}) {
     UPCXX_GPTR_CHK(src); UPCXX_GPTR_CHK(dest);
     UPCXX_ASSERT(src && dest, "pointer arguments to copy may not be null");

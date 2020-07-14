@@ -16,6 +16,9 @@ New features/enhancements: (see specification and programmer's guide for full de
 * Improved compatability with heap analysis tools like Valgrind (at some
   potential performance cost) using new configure option --enable-valgrind
 * Tests run by `make check` and friends now enforce a 5m time limit by default
+* Added support for `global_ptr<const T>` with implicit conversion
+  from `global_ptr<T>` to `global_ptr<const T>`. Communication
+  operations now take a `global_ptr<const T>` where appropriate.
 * ...
 
 Notable bug fixes:

@@ -332,8 +332,8 @@ namespace upcxx {
         return op(atomic_op::store, gptr, order, val, (T)0, cxs);
       }
       template<typename Cxs = FUTURE_CX>
-      FETCH_RTYPE<Cxs> load(global_ptr<T> gptr, std::memory_order order, Cxs cxs = Cxs{{}}) const {
-        return fop(atomic_op::load, gptr, order, (T)0, (T)0, cxs);
+      FETCH_RTYPE<Cxs> load(global_ptr<const T> gptr, std::memory_order order, Cxs cxs = Cxs{{}}) const {
+        return fop(atomic_op::load, const_pointer_cast<T>(gptr), order, (T)0, (T)0, cxs);
       }
       template<typename Cxs = FUTURE_CX>
       NOFETCH_RTYPE<Cxs> inc(global_ptr<T> gptr, std::memory_order order, Cxs cxs = Cxs{{}}) const {
