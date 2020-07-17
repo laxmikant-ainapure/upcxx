@@ -175,6 +175,10 @@ namespace gasnet {
       int eager_subrank_ub;
       std::atomic<std::int64_t> rdzv_refs;
     };
+
+    // required by union with nontrivial atomic member
+    bcast_payload_header() noexcept {}
+    ~bcast_payload_header() noexcept {}
   };
   
   // The receiver-side bcast'd rpc message type. Inherits lpc base type since rpc's

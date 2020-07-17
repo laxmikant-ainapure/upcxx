@@ -33,7 +33,8 @@ TARGETS= \
     upcxx_serialized_fields_recursive \
     upcxx_serialized_values_recursive \
     upcxx_serialization \
-    upcxx_serialization_nested 
+    upcxx_serialization_nested \
+    serialize_abstract_base 
 
 all: $(TARGETS)
 

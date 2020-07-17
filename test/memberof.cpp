@@ -4,14 +4,24 @@
 #include <cassert>
 #include <upcxx/upcxx.hpp>
 
+#if __cplusplus <= 201703
+using std::is_pod;
+#else 
+// C++20 deprecates this utility for no good reason..
+template<typename T>
+struct is_pod {
+  static constexpr bool value = std::is_standard_layout<T>::value && std::is_trivial<T>::value;
+};
+#endif
+
 #define T(t) if (!upcxx::rank_me()) do { \
     std::cout << "\n *** " << #t << " *** " << std::endl; \
     std::cout << "std::is_standard_layout<" #t "> = " \
               << std::is_standard_layout<t>::value << std::endl; \
     std::cout << "std::is_trivial<" #t "> = " \
               << std::is_trivial<t>::value << std::endl; \
-    std::cout << "std::is_pod<" #t "> = " \
-              << std::is_pod<t>::value << std::endl; \
+    std::cout << "is_pod<" #t "> = " \
+              << is_pod<t>::value << std::endl; \
   } while (0)
 
 #ifndef _STRINGIFY
@@ -23,7 +33,7 @@ template<typename T, bool standard_layout, bool trivial, bool pod>
 void typeprops() {
   SA(std::is_standard_layout<T>::value == standard_layout);
   SA(std::is_trivial<T>::value == trivial);
-  SA(std::is_pod<T>::value == pod);
+  SA(is_pod<T>::value == pod);
 }
 
 struct tricksy { // standard layout, trivial, POD

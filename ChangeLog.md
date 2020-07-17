@@ -5,6 +5,30 @@ This is the ChangeLog for public releases of [UPC++](https://upcxx.lbl.gov).
 For information on using UPC++, see: [README.md](README.md)    
 For information on installing UPC++, see: [INSTALL.md](INSTALL.md)
 
+### 2020.07.17: Bug-fix release 2020.3.2
+
+New features/enhancements:
+
+* Shared heap exhaustion in `upcxx::new_(array)` now throws `upcxx::bad_shared_alloc` (a type
+  derived from `std::bad_alloc`) which provides additional diagnostics about the failure.
+
+Notable bug fixes:
+
+* issue #343: Guarantee equality for default-constructed invalid `upcxx::team_id`
+* issue #353: configure: automatically cross-compile on Cray XC
+* issue #356: `SERIALIZED_{FIELDS|VALUES}` incorrectly require public constructors
+* issue #369: `completion_cx::as_future()` typically leaks
+* issue #371: `team_id`s are not "universal" as documented
+* issue #373: No `python` in `$PATH` in recent Linux distros
+* issue #380: Compile regression on bulk `upcxx::rput` with source+operation completions
+
+Breaking changes:
+
+* Configure-time envvar `CROSS` has been renamed to `UPCXX_CROSS`.
+  For backwards compat, the former is still accepted when the latter is unset.
+* Implementation of `upcxx::team_id` is no longer Trivial (was never guaranteed to be).
+  It remains DefaultConstructible, TriviallyCopyable, StandardLayoutType, EqualityComparable
+
 ### 2020.03.12: Release 2020.3.0
 
 Infrastructure and requirements changes:

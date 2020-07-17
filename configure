@@ -71,10 +71,16 @@ Usage:
         Specify the C and C++ compilers to use.
         Override the values of $CC and $CXX, if any.
         The (platform dependent) default is usually appropriate.
-  --with-cross=...
-        Specifies the cross-compilation target name.
-        Overrides the value of $CROSS, if any.
-        The (empty) default is appropriate unless cross-compiling.
+  --with-cross(=...)
+  --without-cross
+        Control cross-compilation.
+        Passing `--with-cross` (without a value) requests the default
+        auto-detection behavior, while providing a value requests a
+        specific cross-compilation target.
+        Passing `--without-cross` disables cross-compilation.
+        Overrides the value of $UPCXX_CROSS, if any.
+        The default behavior (auto-detection) is appropriate unless
+        auto-detection is making the wrong choice.
 
   --with-cuda
   --without-cuda
@@ -108,7 +114,9 @@ Usage:
   --with-python=...
         Specify the location of Python3 or Python2 version 2.7.5 or newer.
         Overrides the value of $UPCXX_PYTHON, if any.
-        Default is search for 'python' in $PATH dynamically at runtime.
+        Default is to search for common Python interpreter names in $PATH
+        at configure time for any meeting the version requirement.  The first
+        one thus identified is then located in $PATH dynamically at runtime.
 
   -h|--help|--usage
         Produces this message.
@@ -175,6 +183,12 @@ single=''
 # Each distinct warning added should start with a newline
 warnings=''
 
+# backwards compat: CROSS
+# must preserve both unset and set-but-empty, which have significance
+if [[ ${UPCXX_CROSS-unset}${CROSS+set} == 'unsetset' ]]; then
+  export UPCXX_CROSS=${CROSS}
+fi
+
 unset gasnet_help
 
 #
@@ -217,7 +231,9 @@ while [[ $# -gt 0 ]]; do
 
     --with-cc?(=*))              CC="$(get_arg_val $1)";    export CC;;
     --with-cxx?(=*))             CXX="$(get_arg_val $1)";   export CXX;;
-    --with-cross?(=*))           CROSS="$(get_arg_val $1)"; export CROSS;;
+    --with-cross)                unset UPCXX_CROSS;                  export UPCXX_CROSS;;
+    --with-cross?(=*))           UPCXX_CROSS="$(get_arg_val $1)";    export UPCXX_CROSS;;
+    --without-cross)             UPCXX_CROSS='';                     export UPCXX_CROSS;;
 
     --with-gmake?(=*))           GMAKE="$(get_arg_val $1)"; export GMAKE;;
     --with-python?(=*))          UPCXX_PYTHON="$(get_arg_val $1)"; export UPCXX_PYTHON;;
@@ -292,6 +308,41 @@ function check_known_path {
       warnings+='WARNING: This full path will be encoded in installed scripts.\n'
       warnings+='WARNING: Please ensure it is valid for all users and on all nodes.\n'
   esac
+}
+
+# check_tool_path()
+#
+# input: the path or filename to check
+# accepts full paths
+# searches for bare names (no /) in $PATH
+# rejects relative paths and bare names not found in $PATH
+# also rejects any input which is missing or not executable
+# on success returns zero with absolute path on stdout
+# returns non-zero on failure with (partial) error message on stdout
+check_tool_path() {
+  local exe="${1%% *}"
+  local args="${1/$exe}"
+  if [[ $exe =~ ^/ ]]; then
+    # full path: check that it exists and is executable
+    if [[ ! -x $exe ]]; then
+      echo 'does not exist or is not executable'
+      return 1
+    fi
+    echo "$exe$args"
+  elif [[ ! $exe =~ / ]]; then
+    # bare tool name: search in $PATH
+    local output=$(type -p "$exe" 2>/dev/null || true)
+    if [[ -z $output || ! -x $output ]]; then
+      echo 'was not found in $PATH'
+      return 1
+    fi
+    echo "$output$args"
+  else
+    # relative path: prohibited
+    echo 'is a relative path (not permitted)'
+    return 1
+  fi
+  return 0
 }
 
 #
@@ -495,42 +546,99 @@ else
 fi
 
 #
+# Cross-compilation
+#
+cross_aries() {  # auto-detection for partial or empty target
+    local srun=$(type -p srun)
+    local aprun=$(type -p aprun)
+    local fullauto="${UPCXX_CROSS-y}"
+    if [[ ( -z $srun && -z $aprun ) || ( -n $srun && -n $aprun ) ]]; then
+        echo_and_die 'ERROR: Unable to determine Cray XC job scheduler.  Please pass either' \
+                     '`--with-cross=cray-aries-slurm` or `--with-cross=cray-aries-alps`.'
+    elif [[ -n $srun ]]; then
+       UPCXX_CROSS='cray-aries-slurm'
+    else
+       UPCXX_CROSS='cray-aries-alps'
+    fi
+    warnings+="\nINFO: Cross-compiling for target '$UPCXX_CROSS' based on current environment.\n"
+    if [[ $fullauto == 'y' ]]; then
+        warnings+='INFO: You may pass `--without-cross` to disable cross-compilation.\n'
+    fi
+}
+if [[ ${UPCXX_CROSS-unset} == 'unset' ]]; then
+    # attempt to auto-detect from environment
+    if [[ $CRAYPE_NETWORK_TARGET == aries ]]; then
+        echo 'INFO: Cray aries network software detected.  Will cross-compile.'
+        cross_aries # auto-detect job scheduler
+    else
+        UPCXX_CROSS=''
+    fi
+else
+    case $UPCXX_CROSS in
+      ''|cray-aries-slurm|cray-aries-alps)
+        # disabled or known/supported: nothing to do
+        ;;
+      *)
+        # explicit but unknown
+        warnings+="\nWARNING: Unrecognized (thus unsupported) cross-compilation target '$UPCXX_CROSS'\n"
+        ;;
+    esac
+fi
+export UPCXX_CROSS
+
 # UPCXX_PYTHON
 # First expand full path or validating existence
 # Second check version
 #
 UPCXX_PYTHON_MIN=2.7.5
-if [[ "$UPCXX_PYTHON" =~ ^/ ]]; then
-  # Verify user-provided full path exists and is executable
-  if [[ ! -x "$UPCXX_PYTHON" ]]; then
-    echo_and_die "ERROR: Python interpreter '$UPCXX_PYTHON' not found."
-  fi
-  fpy="$UPCXX_PYTHON"
-  python_whence="specified by full path"
-elif [[ -n "$UPCXX_PYTHON" ]]; then
-  # Verify user-provided value exists in $PATH and is executable
-  fpy=$(type -p $UPCXX_PYTHON || true)
-  if [[ -x "$fpy" ]]; then
-    UPCXX_PYTHON="$fpy"
+function check_py {
+  $1 -c "import sys; sys.exit(sys.version_info < (${UPCXX_PYTHON_MIN//./,}));" &> /dev/null;
+}
+unset py fpy # given/guessed value and its full path
+if [[ -n $UPCXX_PYTHON ]]; then
+  py="$UPCXX_PYTHON"
+  fpy=$(check_tool_path "$UPCXX_PYTHON") && :  # "&& :" prevents ERR trap but preserves $?
+  if [[ $? -ne 0 ]]; then
+    echo "ERROR: Python interpreter '$UPCXX_PYTHON' $fpy." >&2
+    echo_and_die "Use '--with-python=...' to specify a different Python interpreter."
+  elif [[ $UPCXX_PYTHON =~ ^/ ]]; then
+    python_whence='specified by full path'
   else
-    echo_and_die "ERROR: Python interpreter '$UPCXX_PYTHON' not found in \$PATH."
+    python_whence='found in $PATH'
   fi
-  python_whence="found in \$PATH"
+  fpy_ver="$($fpy --version 2>&1)" && :
+  if [[ $? -ne 0 ]]; then
+    echo_and_die "ERROR: Requested python interpreter failed running '$UPCXX_PYTHON --version'"
+  fi
+  if ! check_py $fpy &> /dev/null; then
+    echo "ERROR: Requested python interpreter '$UPCXX_PYTHON' reports version '$fpy_ver'" >&2
+    echo_and_die "ERROR: Python interpreter is older than the minimum of $UPCXX_PYTHON_MIN."
+  fi
 else
-  # Confirm presence of 'python' in $PATH
-  # We leave UPCXX_PYTHON unset to prevent rewrite of upcxx-run at install
-  fpy=$(type -p python || true)
-  if [[ ! -x "$fpy" ]]; then
-    echo "ERROR: No 'python' found in \$PATH."  >&2
-    echo_and_die "ERROR: Use '--with-python=...' to specify a Python interpreter."
+  for py in python python3 python3.{0..20} python2; do
+    tmp=$(type -p "$py" 2>/dev/null || true)
+    if [[ -n $tmp && -x $tmp ]] && check_py $tmp; then
+      fpy="$tmp"
+      break
+    fi
+  done
+  if [[ -z "$fpy" ]]; then
+    echo 'ERROR: No suitable Python interpreter was found in $PATH'
+    echo_and_die "Use '--with-python=...' to specify a Python interpreter ($UPCXX_PYTHON_MIN or newer)."
   fi
-  python_whence="found in \$PATH"
+  python_whence='found in $PATH'
+  fpy_ver="$($fpy --version 2>&1)"
 fi
-if ! $fpy -c "import sys; sys.exit(sys.version_info < (${UPCXX_PYTHON_MIN//./,}));" &> /dev/null; then
-  echo "ERROR: Python interpreter '$fpy' reports version '$($fpy --version 2>&1)'" >&2
-  echo_and_die "ERROR: Python interpreter is older than the minimum of $UPCXX_PYTHON_MIN."
+if test -z "$UPCXX_INSTALL_QUIET"; then
+  echo "$fpy: $fpy_ver"; echo
 fi
-check_known_path "$fpy" "Python interpreter '$fpy' $python_whence."
+if [[ -n $UPCXX_PYTHON ]]; then
+  UPCXX_PYTHON="$fpy"
+  check_known_path "$fpy" "Python interpreter '$fpy' $python_whence."
+else
+  # If UPCXX_PYTHON unset, then preserve run-time search of $PATH
+  UPCXX_PYTHON="/usr/bin/env $py"
+fi
 
 #
 # system-checks
@@ -729,7 +837,7 @@ fi
 #
 case $GASNET_CONDUIT in
   '')
-    if [[ "$CROSS" =~ -aries- ]]; then
+    if [[ "$UPCXX_CROSS" =~ -aries- ]]; then
       GASNET_CONDUIT=aries
     else
       GASNET_CONDUIT=smp
@@ -774,7 +882,7 @@ export CONFIG_CC=$CC
 export CONFIG_CXX=$CXX
 export GASNET=$GASNET
 export GASNET_TYPE=$GASNET_TYPE
-export CROSS=$CROSS
+export CROSS=$UPCXX_CROSS
 export UPCXX_CSUMCMD=$UPCXX_CSUMCMD
 export UPCXX_MPSC_QUEUE=UPCXX_MPSC_QUEUE_$(tr '[a-z]' '[A-Z]' <<<$UPCXX_MPSC_QUEUE)
 export UPCXX_DBGOPT=$UPCXX_DBGOPT

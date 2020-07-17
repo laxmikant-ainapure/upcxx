@@ -626,13 +626,14 @@ namespace upcxx {
     promise_meta *meta = &pro_hdr->pro_meta;
     
     if(deps == (meta->deferred_decrements += deps)) { // ensure not already in the queue
-      pro_hdr->incref(1);
-      
+      // transfer given ref into queue
       if(future_header_promise<T...>::is_trivially_deletable)
         per.pros_deferred_trivial_.enqueue(&meta->base);
       else
         per.self_inbox_[user].enqueue(&meta->base);
     }
+    else
+      pro_hdr->dropref(); // given a ref we dont want
   }
   
   template<typename Fn, bool known_active>

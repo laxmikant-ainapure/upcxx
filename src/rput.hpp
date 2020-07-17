@@ -109,8 +109,10 @@ namespace upcxx {
 
       void src_hook() {/*default is nop*/}
       
+      template<typename=void> // prevents instantiation unless actually called lest the cast inside will type fail
       void add_op_suc(backend::gasnet::handle_cb_successor suc, std::true_type /*op_is_handle1*/) {
-        suc(static_cast<rput_op_handle_cb<Obj,Traits,true>*>(this));
+        Obj *me = static_cast<Obj*>(this);
+        suc(static_cast<rput_op_handle_cb<Obj,Traits,true>*>(me));
       }
       void add_op_suc(backend::gasnet::handle_cb_successor suc, std::false_type /*op_is_handle*/) {
         // nop
