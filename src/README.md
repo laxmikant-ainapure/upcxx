@@ -274,3 +274,177 @@ the implementation uses to submit promises, especially those **owned by the
 user** (e.g. `operation_cx::as_promise`) for which properties like quiescence
 are unknowable and progress level is a template parameter. It only requires the
 persona be active with this thread.
+
+
+## Serialization
+
+The ways serialization can be registered for a type T:
+
+  * Specialize such that `upcxx::is_trivially_serializable<T>::value == true`
+
+  * Specialize `upcxx::serialization<T>`.
+
+  * Provide member type `T::upcxx_serialization`.
+
+  * Provide nested member type template (this has higher priority than above)
+    `T::upcxx_serialization::template supply_type_please<typename>`. The
+    implementation passes in the type `T` being serialized. Useful for cases
+    when `T::upcxx_serialization` can't easily know this (like it was inherited
+    from some base class of `T`). **Proposal**: generalize `upcxx_serialization`
+    to be *possibly* templated on a type to subsume this feature, e.g. the
+    implementation would first try `T::upcxx_serialization<T>::??` and if that
+    dies then try `T::upcxx_serialization::??`.
+    
+  * Free when `std::is_trivially_copyable<T>::value == true`
+
+The job of `serialization_traits<T>` is to determine the registration point
+among the above and present it for querying through a uniform interface. The
+implementation considerably extends the fidelity of serialization behavior a
+type can register, which means that `serialization_traits` also calculates
+default values for these extensions when they aren't specified.
+
+The presented members of `serialization_traits<T>`, all of which are `static`,
+and additionally `constexpr` for data fields, are:
+
+  * `serialize`, `deserialize`: As indicated by the spec.
+  
+  * `bool is_serializable`: Whether invoking serialization is definitely
+    sanctioned. Note that other members are still available even if this value
+    is false. For instance, a moveable type with no serialization registered
+    can still be serialized and will use the trivial mechanism to do so, but
+    that hardly makes it safe. Perhaps counter intuitively, the default value
+    is `true`, since that's the correct assumption when a registration point is
+    discovered.
+
+  * `bool is_actually_trivially_serializable`: Whether the underlying
+    serialization mechanism is the trivial byte copy regardless of whether the
+    type thinks itself TriviallySerializable. Used by other serialization
+    facilities to dispatch to optimized memcpy's for bulk serialization. The
+    default value is `false`.
+
+  * `bool skip_is_fast`: Whether the sibling function `skip` exists and meets
+    the criteria that it is "fast", meaning that padding the serialized
+    representation with a leading byte jump delta word to implement skip would
+    perform worse overall. Arguably this should be renamed to
+    `skip_is_available` or even `skip_is_available_and_fast`. The default is
+    `false`.
+    
+  * `void skip(Reader &r)`: Advance the given reader past one instance of a
+    serialized `T` and do so "quickly". There is no default implementation for
+    this function so it is not guaranteed to exist.
+
+  * `SizeAfter ubound(SizeBefore prefix, T const&)`: Computes a storage
+    size upper-bounding the buffer size needed to hold the serialized value as
+    appended to an input buffer of size `prefix`. See the "Serialization:
+    Storage Sizes" section below for valid types of `SizeAfter` and
+    `SizeBefore`. If the trivial mechanism is used than this just pads `prefix`
+    to `alignof(T)` and adds `sizeof(T)`. Otherwise the provided default
+    returns the invalid storage size indicating no upper bound (which will
+    cause `serialization_writer` to use a growable buffer).
+    
+  * `bool references_buffer`: Whether the deserialized object holds pointers
+    into the buffer form which it was deserialized. The default value is `false`.
+
+  * `typedef deserialized_type`: The type with pointer removed returned by
+    sibling `deserialized_type* deserialize()`. It is undefined behavior if
+    these do not match. The provided default calculates the unpointered return
+    type of `deserialize()`.
+
+  * `deserialized_type deserialized_value(T const&)`: Serializes to a temporary
+    buffer and returns the deserialized value. This is only provided for types
+    which are returnable from functions (C-style arrays are not).
+
+  * `typedef static_ubound_t`: The storage size type as returned by
+    `ubound(detail::empty_storage_size)` when it is entirely static, otherwise
+    the invalid storage size type. See the "Serialization: Storage Sizes"
+    section below.
+
+  * `static_ubound_t static_ubound`: The singleton instance of `static_ubound_t`.
+
+
+### Serialization: Storage Sizes
+
+`ubound()` manipulates storage size values, which are pairs of byte sizes and
+required alignments, whose types must be instantiations of
+`detail::storage_size<size_t,size_t>`. This space of types and inhabiting
+values creates one superspace where the values carry varying degrees of static
+knowledge, with these degrees being:
+
+  * Entirely static: Both the size and alignment values are carried in the
+    type, thus permitting the runtime data to be empty.
+
+  * Dynamic size, statically bounded alignment: This size and alignment are
+    carried at runtime, but there is a static inclusive upper bound on the
+    alignment.
+
+  * Dynamic size, dynamic unbounded alignment: This size and alignment are all
+    runtime. We have no static knowledge.
+
+The primary operation over the storage size superspace is `a.cat(b)` which
+returns the computed storage size needed to hold bytes for `a` followed by (in
+increasing memory address order) bytes of `b`, where padding bytes are inserted
+before `b` but not after. Thus storage sizes are not necessarily multiples of
+their alignment. There is a designated "invalid" storage size value inhabiting
+its own singleton specialization of `detail::storage_size<?,?>` (thus entirely
+static) which when cat'd with any other always poisons the result to be invalid
+as well. The "empty" storage size has zero bytes and requires only one byte
+alignment.
+
+Authors of `ubound` routines need not understand the complexities involved in
+`detail::sotrage_size`'s implementation. The contract (or "concept" in C++
+lingo) the superspace follows is conceptually simple, just remember the types
+are nearly as dynamic as the runtime values, so parameterize input types and
+aggressively compute return types. In the following specifications, any type
+parameter beginning with the prefix "SS" is implicitly some instantiation of
+`detail::storage_size<?,?>`.
+
+The factory functions/values for storage sizes are:
+
+  * `template<typename T> constexpr SSReturn detail::storage_size_of()`: Builds
+    a completely static storage size from `sizeof(T)` & `alignof(T)`.
+
+  * `constexpr detail::storage_size<0,1> detail::empty_storage_size`
+
+  * `constexpr detail::invalid_storage_size_t detail::invalid_storage_size`:
+    where `detail::invalid_storage_size_t` is the designated instantiation of
+    `detail::storage_size<?,?>` for the singleton type having the invalid value.
+
+Members of a storage size:
+
+  * `SSReturn cat(SSThat that) const`: cat's `this` with `that`.
+
+  * `template<size_t size, size_t align> SSReturn cat() const`: cat's `this`
+    with a `(size,align)` storage size built from compile time values.
+
+  * `template<typename T> cat_size_of() const`: cat's `this` with a
+    `(sizeof(T),alignof(T)` storage size built from the compile time type.
+
+  * `SSReturn cat(size_t size, size_t align) const`: cat's `this` with a
+    `(size,align)` storage size built from runtime values. Always prefer a
+    templated compile time variant if applicable as they return types with the
+    greatest degree of static knowledge.
+
+  * `template<typename T> SSReturn cat_ubound_of(T const &that) const`:
+    Shorthand for `serialization_traits<T>::ubound(*this, that)` which is a
+    huge key-stroke save when authoring ubound's.
+
+  * `template<size_t n> SSReturn arrayed() const`: returns `this` cat'd with
+    itself `n` times. Zero is an acceptable input and returns an empty storage
+    size.
+    
+  * `SSReturn arrayed(size_t n) const`: returns `this` cat'd with itself `n`
+    times. Just like its compile time sibling but obviously less preferable.
+
+  * `constexpr size_t size_aligned(size_t min_align=1) const`: returns the size
+    of this storage size padded to the next multiple of its alignment.
+
+  * `typedef static_otherwise_invalid_t`: Equivalent to this type when it is
+    entirely static (no runtime state), otherwise it is the invalid type.
+    
+  * `constexpr static_otherwise_invalid_t static_otherwise_invalid() const`:
+    The singleton instance of `static_otherwise_invalid_t`.
+
+
+### Serialization: Readers / Writers
+
+TODO
