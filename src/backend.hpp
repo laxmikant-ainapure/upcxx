@@ -113,6 +113,17 @@ namespace backend {
       persona &active_per
     ) {
 
+    /* We don't utilize the lpc characteristic of promises here since we can't
+    be sure the promise wasn't also registered against this persona but during
+    user level progress, a separate queue, which would clobber the intrusive
+    linkage. We address this by always allocating a new lpc to bounce into
+    promise fulfillment for `fulfill_during<progress_level::internal>`, which
+    allows `fulfill_during<progress_level::user>` to know it can use
+    `persona_tls::fulfill_during_user_of_active` unconditionally. Since
+    user-level promises are numerous and internal-level are rare (non-existent?
+    the implementation tends to use callbacks rather than futures) this is the
+    performance smart choice.*/
+    
     detail::the_persona_tls.during(
       active_per, progress_level::internal,
       [=]() {
