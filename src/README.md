@@ -334,13 +334,18 @@ and additionally `constexpr` for data fields, are:
     this function so it is not guaranteed to exist.
 
   * `SizeAfter ubound(SizeBefore prefix, T const&)`: Computes a storage
-    size upper-bounding the buffer size needed to hold the serialized value as
-    appended to an input buffer of size `prefix`. See the "Serialization:
-    Storage Sizes" section below for valid types of `SizeAfter` and
-    `SizeBefore`. If the trivial mechanism is used than this just pads `prefix`
-    to `alignof(T)` and adds `sizeof(T)`. Otherwise the provided default
-    returns the invalid storage size indicating no upper bound (which will
-    cause `serialization_writer` to use a growable buffer).
+    size upper-bounding the buffer size needed to hold some incoming "prefix"
+    of data plus the appended serialized value. See the "Serialization: Storage
+    Sizes" section below for valid types of `SizeAfter` and `SizeBefore`. If
+    the trivial mechanism is used than this just pads `prefix` to `alignof(T)`
+    and adds `sizeof(T)`. Otherwise the provided default returns the invalid
+    storage size indicating no upper bound (which will cause
+    `detail::serialization_writer` to use a growable buffer). **Important**:
+    the bound is interpreted as _exact_ when it is purely static! If the return
+    is pure static but during `serialize` less space is used, correctness is
+    compromised (specifically during `serialization_reader::skip_sequence`).
+    Again, see "Serialization: Storage Sizes" for what it means to be purely
+    static.
     
   * `bool references_buffer`: Whether the deserialized object holds pointers
     into the buffer form which it was deserialized. The default value is `false`.
@@ -371,7 +376,8 @@ values creates one superspace where the values carry varying degrees of static
 knowledge, with these degrees being:
 
   * Entirely static: Both the size and alignment values are carried in the
-    type, thus permitting the runtime data to be empty.
+    type, thus permitting the runtime data to be empty. This is the only case
+    when the "invalid" value may be possible.
 
   * Dynamic size, statically bounded alignment: This size and alignment are
     carried at runtime, but there is a static inclusive upper bound on the
@@ -384,19 +390,25 @@ The primary operation over the storage size superspace is `a.cat(b)` which
 returns the computed storage size needed to hold bytes for `a` followed by (in
 increasing memory address order) bytes of `b`, where padding bytes are inserted
 before `b` but not after. Thus storage sizes are not necessarily multiples of
-their alignment. There is a designated "invalid" storage size value inhabiting
-its own singleton specialization of `detail::storage_size<?,?>` (thus entirely
-static) which when cat'd with any other always poisons the result to be invalid
-as well. The "empty" storage size has zero bytes and requires only one byte
-alignment.
+their alignment. There is a designated "invalid" storage size value which when
+cat'd with any other always poisons the result to be invalid as well. The
+"empty" storage size has zero bytes and requires only one byte alignment.
+
+The invalid storage size has its own dedicated singleton type
+`detail::storage_size<-1,-1>`, and this is the only type which can encode the
+invalid value. This means that there is no instance of
+`detail::storage_size<_,_>` which can encode all possible storage size values.
+The closest you can get is `detail::storage_size<>` (uses default parameters)
+which is the fully dynamic specialization and can encode all values except
+invalid.
 
 Authors of `ubound` routines need not understand the complexities involved in
-`detail::sotrage_size`'s implementation. The contract (or "concept" in C++
+`detail::storage_size`'s implementation. The contract (or "concept" in C++
 lingo) the superspace follows is conceptually simple, just remember the types
 are nearly as dynamic as the runtime values, so parameterize input types and
 aggressively compute return types. In the following specifications, any type
 parameter beginning with the prefix "SS" is implicitly some instantiation of
-`detail::storage_size<?,?>`.
+`detail::storage_size<_,_>`.
 
 The factory functions/values for storage sizes are:
 
@@ -407,9 +419,31 @@ The factory functions/values for storage sizes are:
 
   * `constexpr detail::invalid_storage_size_t detail::invalid_storage_size`:
     where `detail::invalid_storage_size_t` is the designated instantiation of
-    `detail::storage_size<?,?>` for the singleton type having the invalid value.
+    `detail::storage_size<_,_>` for the singleton type having the invalid value.
 
-Members of a storage size:
+Size/alignment members of a storage size:
+
+  * `[? static constexpr ?] size_t size, align`: Possibly static fields for
+    accessing the size and alignment values.
+
+  * `static constexpr size_t static_size, static_align`: Static fields that
+    will hold the same as `size, align` for statically known values, but `-1`
+    for invalid value, `-2` for dynamically known value.
+
+  * `static constexpr size_t static_align_ub`: The same as `static_align` except
+    in the case where the alignment is dynamic but bounded statically, in which
+    case `static_align=-2` but `static_align_ub` will be that bound.
+
+  * `constexpr size_t size_aligned(size_t min_align=1) const`: returns the size
+    of this storage size padded to the next multiple of its alignment.
+
+  * `typedef static_otherwise_invalid_t`: Equivalent to this type when it is
+    entirely static, otherwise it is the invalid type.
+    
+  * `constexpr static_otherwise_invalid_t static_otherwise_invalid() const`:
+    The singleton instance of `static_otherwise_invalid_t`.
+
+"Cat" members of storage size:
 
   * `SSReturn cat(SSThat that) const`: cat's `this` with `that`.
 
@@ -433,18 +467,96 @@ Members of a storage size:
     size.
     
   * `SSReturn arrayed(size_t n) const`: returns `this` cat'd with itself `n`
-    times. Just like its compile time sibling but obviously less preferable.
-
-  * `constexpr size_t size_aligned(size_t min_align=1) const`: returns the size
-    of this storage size padded to the next multiple of its alignment.
-
-  * `typedef static_otherwise_invalid_t`: Equivalent to this type when it is
-    entirely static (no runtime state), otherwise it is the invalid type.
-    
-  * `constexpr static_otherwise_invalid_t static_otherwise_invalid() const`:
-    The singleton instance of `static_otherwise_invalid_t`.
+    times. Just like its compile time sibling but obviously less preferable
+    since it can't possibly return an all static type.
 
 
-### Serialization: Readers / Writers
+### Serialization: Writers
 
-TODO
+There are two implementations of the serialization Writer concept:
+
+  * Bounded: When `serialization_traits<T>::ubound(...)` returns a non-invalid
+    value then the Writer can use a non-growing buffer allocated once and
+    allows writing bytes to be branch free.
+
+  * Unbounded: Otherwise a growable buffer is used at the cost of overflow checks
+    each time bytes are written.
+
+These are implemented by the two specializations of
+`detail::serialization_writer<bool bounded>`, both of which have nearly
+matching APIs. At this time, the unbounded writer uses a linked list of smaller
+"hunk" buffers and then compacts them all down at the end to present a
+contiguous buffer. The argument for this implementation over a resizing
+contiguous buffer is that pooling system allocators prefer many objects of
+fixed size vs fewer objects ranging the spectrum of sizes.
+
+The Writer API extensions:
+
+  * `serialization_writer(void *buf, size_t capacity)`: Construct the writer
+    with an initial buffer of given capacity. If bounded then `capacity` is
+    essentially irrelevant to functioning. But when unbounded, this buffer
+    is the initial hunk and so must outlive this writer and have at least 64
+    bytes of capacity.
+
+  * `~serialization_writer()`: Destructs writer. Bounded is no-op. Unbounded
+    deallocates all the internally allocated hunks.
+
+  * `serialization_writer(serialization_writer&&)`: Move constructor.
+
+  * `size_t size() const`: Current size of data written in bytes.
+
+  * `size_t align() const`: Max alignment requirement of data written in bytes.
+
+  * `bool contained_in_initial() const`: Whether all the data written is
+    contained in the buffer provided to constructor. When this is true there is
+    no need to call `compact_and_invalidate` to build the final buffer, just use
+    the one you passed to the constructor. For bounded=true this is always true.
+
+  * `void compact_and_invalidate(void *buf)`: Build final contiguous buffer into
+    provided `buf` (needs to be at least `this->size()` big and meet
+    `this->align()`). For bounded this is just a `memcpy`. This writer is then
+    reset to an invalid state which only permits destruction.
+
+For a well documented example of how to query ubound's, allocate buffers, and
+construct a writer see `serialization_traits::deserialized_value()`.
+
+
+### Serialization: Readers
+
+The only implementation of Reader is `detail::serialization_reader`. Just
+construct it with a pointer to a contiguous buffer as generated by one of
+`detail::serialization_writer<_>`.
+
+Reader API extensions:
+
+  * `serialization_reader(void const *buffer)`: Initialize with cursor=buffer.
+
+  * `serialization_reader(serialization_reader const&)`: Shallow copy, just
+    copies the cursor.
+
+  * `char* head() const`: Current cursor value in the buffer. TODO: rename to
+    `cursor()`.
+
+  * `void jump(uintptr_t delta)`: Advance the cursor by delta bytes.
+
+  * `template<typename T> void skip()`: Skip over one serialized `T`. Do not
+    instantiate unless `serialization_traits<T>::skip` exists.
+
+  * `template<typename T> void skip_sequence(size_t n)`: Skip over `n`
+    serialized `T`. Do not instantiate unless `serialization_traits<T>::skip`
+    exists.
+
+  * `template<typename T> static constexpr bool skip_sequence_is_fast()`:
+    Whether there is any performance benefit to calling `skip_sequence(n)` vs a
+    loop over `skip()`.
+
+
+### Serialization: Views
+
+View necessitates many of the above extensions. Since a view deserializes
+lazily (via `upcxx::deserializing_iterator`), when a view is deserialized it
+just grabs the reader's cursor (by copying the `detail::serialization_reader`)
+and skips over itself. Advancing a `deserializing_iterator` also employs skip
+to move to the next element. Views detect the skippability of their element type
+and will prefix every element with its serialized size to make it skippable in
+the case that it isn't otherwise.

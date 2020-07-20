@@ -348,7 +348,7 @@ namespace upcxx {
       std::size_t size() const { return size_; }
       std::size_t align() const { return align_; }
 
-      bool contained_in_initial() const {
+      /*TODO: constexpr*/ bool contained_in_initial() const {
         return true;
       }
 

@@ -9,15 +9,22 @@
 #include <stdexcept>
 
 namespace upcxx {
-  //////////////////////////////////////////////////////////////////////////////
-  // deserializing_iterator: Wraps a serialization_reader whose head is pointing
-  // to a consecutive sequence of packed T's.
   namespace detail {
+    ////////////////////////////////////////////////////////////////////////////
+    // detail::serialization_view_element: Exposes API as necessary for
+    // serialization registration. Behavior depends on if T is skippable. If so
+    // we just defer to serialization_triats<T>, but if its not then we prepend
+    // each element with a jump delta to make skipping possible.
+    
     template<typename T,
              bool skip_is_fast = serialization_traits<T>::skip_is_fast>
     struct serialization_view_element;
   }
     
+  //////////////////////////////////////////////////////////////////////////////
+  // deserializing_iterator: Wraps a serialization_reader whose head is pointing
+  // to a consecutive sequence of packed T's.
+
   template<typename T>
   class deserializing_iterator {
   public:
