@@ -52,7 +52,11 @@ void upcxx::fatal_error(const char *msg, const char *title, const char *file, in
   ss << std::string(70, '/') << '\n';
   
   #if UPCXX_BACKEND_GASNET
-    gasnett_fatalerror("\n%s", ss.str().c_str());
+    #ifdef gasnett_fatalerror_nopos
+      gasnett_fatalerror_nopos("\n%s", ss.str().c_str());
+    #else
+      gasnett_fatalerror("\n%s", ss.str().c_str());
+    #endif
   #else
     std::cerr << ss.str();
     std::abort();
