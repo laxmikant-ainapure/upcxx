@@ -45,6 +45,9 @@ namespace upcxx {
       Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
     ) {
 
+    UPCXX_ASSERT(root >= 0 && root < tm.rank_n(),
+      "broadcast_nontrivial(..., root, team) requires root in [0, team.rank_n()-1] == [0, " << tm.rank_n()-1 << "], but given: " << root);
+
     using cxs_state_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::broadcast_scalar_event_values<T>,
@@ -133,6 +136,9 @@ namespace upcxx {
       "use at own risk)."
     );
     
+    UPCXX_ASSERT(root >= 0 && root < tm.rank_n(),
+      "broadcast(..., root, team) requires root in [0, team.rank_n()-1] == [0, " << tm.rank_n()-1 << "], but given: " << root);
+
     struct broadcast_cb final: backend::gasnet::handle_cb {
       detail::completions_state<
         /*EventPredicate=*/detail::event_is_here,
@@ -180,6 +186,9 @@ namespace upcxx {
       "Consider `upcxx::broadcast_nontrivial` instead (experimental feature, "
       "use at own risk)."
     );
+
+    UPCXX_ASSERT(root >= 0 && root < tm.rank_n(),
+      "broadcast(..., root, team) requires root in [0, team.rank_n()-1] == [0, " << tm.rank_n()-1 << "], but given: " << root);
 
     struct broadcast_cb final: backend::gasnet::handle_cb {
       T value;
