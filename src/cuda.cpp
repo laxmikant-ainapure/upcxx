@@ -102,7 +102,7 @@ upcxx::cuda_device::cuda_device(int device):
       CU_CHECK_ALWAYS(("cuDevicePrimaryCtxRetain()", res));
       CU_CHECK_ALWAYS(cuCtxPushCurrent(ctx));
 
-      cuda::device_state *st = new cuda::device_state;
+      cuda::device_state *st = new cuda::device_state{};
       st->context = ctx;
       CU_CHECK_ALWAYS(cuStreamCreate(&st->stream, CU_STREAM_NON_BLOCKING));
       cuda::devices[device] = st;
@@ -115,7 +115,9 @@ upcxx::cuda_device::cuda_device(int device):
 }
 
 upcxx::cuda_device::~cuda_device() {
-  UPCXX_ASSERT_ALWAYS(device_ == invalid_device_id, "upcxx::cuda_device must have destroy() called before it dies.");
+  if(backend::init_count > 0) { // we don't assert on leaks after finalization
+    UPCXX_ASSERT_ALWAYS(device_ == invalid_device_id, "upcxx::cuda_device must have destroy() called before it dies.");
+  }
 }
 
 void upcxx::cuda_device::destroy(upcxx::entry_barrier eb) {
@@ -157,6 +159,13 @@ detail::device_allocator_core<upcxx::cuda_device>::device_allocator_core(
     #endif
   ) {
   UPCXX_ASSERT_ALWAYS(backend::master.active_with_caller());
+  #if UPCXX_CUDA_ENABLED
+    if (dev) {
+      UPCXX_ASSERT_ALWAYS(!cuda::devices[dev->device_]->allocator_core, 
+                          "A cuda_device may only be used to create one device_allocator");
+      cuda::devices[dev->device_]->allocator_core = this;
+    }
+  #endif
 }
 
 detail::device_allocator_core<upcxx::cuda_device>::~device_allocator_core() {
