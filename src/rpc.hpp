@@ -93,6 +93,9 @@ namespace upcxx {
       "All rpc arguments must be Serializable."
     );
       
+    UPCXX_ASSERT(recipient >= 0 && recipient < tm.rank_n(),
+      "rpc_ff(team, recipient, ...) requires recipient in [0, team.rank_n()-1] == [0, " << tm.rank_n()-1 << "], but given: " << recipient);
+
     backend::template send_am_master<progress_level::user>(
       tm, recipient,
       upcxx::bind(std::forward<Fn>(fn), std::forward<Arg>(args)...)
@@ -103,6 +106,9 @@ namespace upcxx {
   auto rpc_ff(intrank_t recipient, Fn &&fn, Arg &&...args)
     // computes our return type, but SFINAE's out if fn(args...) is ill-formed
     -> typename detail::rpc_ff_return<Fn(Arg...), completions<>>::type {
+
+    UPCXX_ASSERT(recipient >= 0 && recipient < world().rank_n(),
+      "rpc_ff(recipient, ...) requires recipient in [0, rank_n()-1] == [0, " << world().rank_n()-1 << "], but given: " << recipient);
     
     return rpc_ff(world(), recipient, std::forward<Fn>(fn), std::forward<Arg>(args)...);
   }
@@ -130,6 +136,9 @@ namespace upcxx {
       "All rpc arguments must be Serializable."
     );
       
+    UPCXX_ASSERT(recipient >= 0 && recipient < tm.rank_n(),
+      "rpc_ff(team, recipient, ...) requires recipient in [0, team.rank_n()-1] == [0, " << tm.rank_n()-1 << "], but given: " << recipient);
+
     auto state = detail::completions_state<
         /*EventPredicate=*/detail::event_is_here,
         /*EventValues=*/detail::rpc_ff_event_values,
@@ -159,6 +168,9 @@ namespace upcxx {
     // computes our return type, but SFINAE's out if fn(args...) is ill-formed
     -> typename detail::rpc_ff_return<Fn(Arg...), Cxs>::type {
   
+    UPCXX_ASSERT(recipient >= 0 && recipient < world().rank_n(),
+      "rpc_ff(recipient, ...) requires recipient in [0, rank_n()-1] == [0, " << world().rank_n()-1 << "], but given: " << recipient);
+
     return rpc_ff(world(), recipient, std::move(cxs), std::forward<Fn>(fn), std::forward<Arg>(args)...);
   }
   
@@ -299,6 +311,9 @@ namespace upcxx {
     // computes our return type, but SFINAE's out if fn(args...) is ill-formed
     -> typename detail::rpc_return<Fn(Arg...), Cxs>::type {
     
+    UPCXX_ASSERT(recipient >= 0 && recipient < tm.rank_n(),
+      "rpc(team, recipient, ...) requires recipient in [0, team.rank_n()-1] == [0, " << tm.rank_n()-1 << "], but given: " << recipient);
+        
     return detail::template rpc<Cxs, Fn&&, Arg&&...>(
         tm, recipient, std::move(cxs), std::forward<Fn>(fn), std::forward<Arg>(args)...
       );
@@ -309,6 +324,9 @@ namespace upcxx {
     // computes our return type, but SFINAE's out if fn(args...) is ill-formed
     -> typename detail::rpc_return<Fn(Arg...), Cxs>::type {
     
+    UPCXX_ASSERT(recipient >= 0 && recipient < world().rank_n(),
+      "rpc(recipient, ...) requires recipient in [0, rank_n()-1] == [0, " << world().rank_n()-1 << "], but given: " << recipient);
+        
     return detail::template rpc<Cxs, Fn&&, Arg&&...>(
         world(), recipient, std::move(cxs), std::forward<Fn>(fn), std::forward<Arg>(args)...
       );
@@ -320,6 +338,9 @@ namespace upcxx {
     // computes our return type, but SFINAE's out if fn(args...) is ill-formed
     -> typename detail::rpc_return<Fn(Arg...), completions<future_cx<operation_cx_event>>>::type {
     
+    UPCXX_ASSERT(recipient >= 0 && recipient < tm.rank_n(),
+      "rpc(team, recipient, ...) requires recipient in [0, team.rank_n()-1] == [0, " << tm.rank_n()-1 << "], but given: " << recipient);
+        
     return detail::template rpc<completions<future_cx<operation_cx_event>>, Fn&&, Arg&&...>(
       tm, recipient, operation_cx::as_future(),
       std::forward<Fn>(fn), std::forward<Arg>(args)...
@@ -331,6 +352,9 @@ namespace upcxx {
     // computes our return type, but SFINAE's out if fn(args...) is ill-formed
     -> typename detail::rpc_return<Fn(Arg...), completions<future_cx<operation_cx_event>>, typename detail::rpc_remote_results<Fn(Arg...)>::type>::type {
     
+    UPCXX_ASSERT(recipient >= 0 && recipient < world().rank_n(),
+      "rpc(recipient, ...) requires recipient in [0, rank_n()-1] == [0, " << world().rank_n()-1 << "], but given: " << recipient);
+
     return detail::template rpc<completions<future_cx<operation_cx_event>>, Fn&&, Arg&&...>(
       world(), recipient, operation_cx::as_future(),
       std::forward<Fn>(fn), std::forward<Arg>(args)...
