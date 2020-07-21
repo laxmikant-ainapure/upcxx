@@ -134,6 +134,8 @@ namespace {
 template<std::size_t size, int bit_flavor>
 upcxx::detail::atomic_domain_untyped<size,bit_flavor>::atomic_domain_untyped(
   std::vector<atomic_op> const &ops, const team &tm) {
+  UPCXX_ASSERT(backend::master.active_with_caller());
+
   gex_OP_t opmask = 0;
   for (auto next_op : ops) opmask |= static_cast<gex_OP_t>(next_op);
   atomic_gex_ops = opmask;
