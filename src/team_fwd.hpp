@@ -37,7 +37,9 @@ namespace upcxx {
     team_id() : dig_(digest::zero()) {} // issue 343: disable trivial default construction
 
     team& here() const {
-      return *static_cast<team*>(detail::registry[dig_]);
+      team *presult = static_cast<team*>(detail::registry[dig_]);
+      UPCXX_ASSERT(presult, "team_id::here() called for an invalid id or team (possibly outside its lifetime)");
+      return *presult;
     }
 
     future<team&> when_here() const {

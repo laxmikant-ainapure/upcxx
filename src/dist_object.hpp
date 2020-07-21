@@ -29,6 +29,8 @@ namespace upcxx {
     
   //public:
     dist_object<T>& here() const {
+      UPCXX_ASSERT(detail::registry[dig_],
+        "dist_id::here() called for an invalid id or dist_object (possibly outside its lifetime)");
       return std::get<0>(
         // 3. retrieve results tuple
         detail::future_header_result<dist_object<T>&>::results_of(
