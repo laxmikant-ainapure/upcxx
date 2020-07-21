@@ -26,14 +26,14 @@ fi
 
 ## TESTS
 if [[ $STAGES =~ ,tests, ]]; then
-  time $MAKE_CMD dev-tests
+  time $MAKE_CMD dev-tests || touch .pipe-fail
 fi
 
 ## RUN
 if [[ $STAGES =~ ,run, ]]; then
   unset TMPDIR
-  time salloc -C haswell -t 90 -q interactive -N 2 -- time $GMAKE dev-run-tests
+  time salloc -C haswell -t 90 -q interactive -N 2 -- time $GMAKE dev-run-tests || touch .pipe-fail
 fi
 
 ## DONE
-success
+finished

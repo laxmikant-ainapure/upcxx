@@ -36,16 +36,14 @@ fi
 
 ## TESTS
 if [[ $STAGES =~ ,tests, ]]; then
-  time $MAKE_CMD dev-tests
+  time $MAKE_CMD dev-tests || touch .pipe-fail
 fi
 
 ## RUN
 if [[ $STAGES =~ ,run, ]]; then
   unset TMPDIR
-  rm -f .run-failed
-  time bsub -W 30 -nnodes 4 -P csc296 -I "time $GMAKE dev-run-tests NETWORKS='$NETWORKS' || touch .run-failed"
-  [[ -e .run-failed ]] && failure
+  time bsub -W 30 -nnodes 4 -P csc296 -I "time $GMAKE dev-run-tests NETWORKS='$NETWORKS' || touch .pipe-fail"
 fi
 
 ## DONE
-success
+finished
