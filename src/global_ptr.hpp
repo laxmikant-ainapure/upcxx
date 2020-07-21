@@ -26,8 +26,8 @@
 #endif
 
 #if UPCXX_GPTR_CHECK_ENABLED
-#define UPCXX_GPTR_CHK(p)         ((p).check(true, __func__))
-#define UPCXX_GPTR_CHK_NONNULL(p) ((p).check(false, __func__))
+#define UPCXX_GPTR_CHK(p)         ((p).check(true,  __func__, UPCXX_FUNC))
+#define UPCXX_GPTR_CHK_NONNULL(p) ((p).check(false, __func__, UPCXX_FUNC))
 #else
 #define UPCXX_GPTR_CHK(p)         ((void)0)
 #define UPCXX_GPTR_CHK_NONNULL(p) ((void)0)
@@ -83,7 +83,7 @@ namespace upcxx {
 
     static constexpr memory_kind kind = KindSet;
 
-    void check(bool allow_null=true, const char *context=nullptr) const {
+    void check(bool allow_null=true, const char *short_context=nullptr, const char *context=nullptr) const {
         void *this_sanity_check = (void*)this;
         UPCXX_ASSERT_ALWAYS(this_sanity_check, "global_ptr::check() invoked on a null pointer to global_ptr");
         #if UPCXX_GPTR_CHECK_ALIGNMENT
@@ -94,7 +94,8 @@ namespace upcxx {
           backend::validate_global_ptr(allow_null, rank_,
                                        reinterpret_cast<void*>(raw_ptr_),
                                        device_, KindSet, align,
-                                       detail::typename_of<T>(), context);
+                                       detail::typename_of<T>(), 
+                                       short_context, context);
     }
     
     explicit global_ptr(detail::internal_only, intrank_t rank, const T *raw,

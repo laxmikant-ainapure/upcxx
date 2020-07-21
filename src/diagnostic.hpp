@@ -4,31 +4,37 @@
 #include <sstream>
 
 namespace upcxx {
-  void fatal_error(const char *msg, const char *title=nullptr, const char *file=0, int line=0);
-  inline void fatal_error(const std::string &msg, const char *title=nullptr, const char *file=0, int line=0) {
-    fatal_error(msg.c_str(), title, file, line);
+  void fatal_error(const char *msg, const char *title=nullptr, const char *func=0, const char *file=0, int line=0);
+  inline void fatal_error(const std::string &msg, const char *title=nullptr, const char *func=0, const char *file=0, int line=0) {
+    fatal_error(msg.c_str(), title, func, file, line);
   }
 
-  void assert_failed(const char *file, int line, const char *msg=nullptr);
-  inline void assert_failed(const char *file, int line, const std::string &str) {
-    assert_failed(file, line, str.c_str());
+  void assert_failed(const char *func, const char *file, int line, const char *msg=nullptr);
+  inline void assert_failed(const char *func, const char *file, int line, const std::string &str) {
+    assert_failed(func, file, line, str.c_str());
   }
 }
+
+#if (__GNUC__)
+#define UPCXX_FUNC __PRETTY_FUNCTION__
+#else
+#define UPCXX_FUNC __func__
+#endif
 
 // unconditional fatal error, with file/line and custom message
 #define UPCXX_FATAL_ERROR(ios_msg) \
       ::upcxx::fatal_error(([&]() { ::std::stringstream _upcxx_fatal_ss; \
                                      _upcxx_fatal_ss << ios_msg; \
                                      return _upcxx_fatal_ss.str(); })(), \
-                           nullptr, __FILE__, __LINE__)
+                           nullptr, UPCXX_FUNC, __FILE__, __LINE__)
 
 #define UPCXX_ASSERT_1(ok) \
  ( (ok) ? (void)0 : \
-      ::upcxx::assert_failed(__FILE__, __LINE__, ::std::string("Failed condition: " #ok)) )
+      ::upcxx::assert_failed(UPCXX_FUNC, __FILE__, __LINE__, ::std::string("Failed condition: " #ok)) )
 
 #define UPCXX_ASSERT_2(ok, ios_msg) \
  ( (ok) ? (void)0 : \
-      ::upcxx::assert_failed(__FILE__, __LINE__, \
+      ::upcxx::assert_failed(UPCXX_FUNC, __FILE__, __LINE__, \
         ([&]() { ::std::stringstream _upcxx_assert_ss; \
                  _upcxx_assert_ss << ios_msg; \
                  return _upcxx_assert_ss.str(); })()) )

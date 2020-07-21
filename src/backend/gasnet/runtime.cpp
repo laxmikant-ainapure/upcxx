@@ -1128,7 +1128,8 @@ intrank_t backend::team_rank_to_world(const team &tm, intrank_t peer) {
 }
 
 void backend::validate_global_ptr(bool allow_null, intrank_t rank, void *raw_ptr, std::int32_t device,
-                                  memory_kind KindSet, size_t T_align, const char *T_name, const char *context) {
+                                  memory_kind KindSet, size_t T_align, const char *T_name, 
+                                  const char *short_context, const char *context) {
   if_pf (!upcxx::initialized()) return; // don't perform checking before init
   if_pf (!T_name) T_name = "";
 
@@ -1218,9 +1219,9 @@ void backend::validate_global_ptr(bool allow_null, intrank_t rank, void *raw_ptr
   } while (0);
 
   if_pf (error) {
-    if (context && *context) ss << " in " << context << "\n";
-    ss << "  rank = " << rank << ", raw_ptr = " << raw_ptr << ", device = " << device;
-    fatal_error(ss.str(), "fatal global_ptr error");
+    if (short_context && *short_context) ss << " in " << short_context;
+    ss << "\n  rank = " << rank << ", raw_ptr = " << raw_ptr << ", device = " << device;
+    fatal_error(ss.str(), "fatal global_ptr error", context);
   }
 }
 
