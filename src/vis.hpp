@@ -475,7 +475,8 @@ namespace upcxx
         srcsize+=sv->gex_len;
       }
     
-    UPCXX_ASSERT(dstsize==srcsize);
+    UPCXX_ASSERT(dstsize==srcsize, 
+       "rput_irregular: destination size (" << dstsize << "bytes ) does not match source size (" << srcsize << " bytes)");
     
     detail::rput_cbs_irreg<cxs_here_t, cxs_remote_t> cbs_static{
       gpdrank,
@@ -570,7 +571,9 @@ namespace upcxx
       }
     
 
-    UPCXX_ASSERT(dstsize==srcsize);
+    UPCXX_ASSERT(dstsize==srcsize, 
+       "rget_irregular: destination size (" << dstsize << " bytes) does not match source size (" << srcsize << " bytes)");
+
     auto *cb = new detail::rget_cb_irreg<cxs_here_t,cxs_remote_t>{
       rank_s,
       cxs_here_t{std::move(cxs)},
@@ -644,13 +647,13 @@ namespace upcxx
     // during the resize. This new way is to do a `reserve` followed by `push_back's`.
     dst_ptrs.reserve(std::distance(dst_runs_begin, dst_runs_end));
  
-    intrank_t dst_rank = upcxx::rank_me(); // default for empty sequence is self
-    if(dst_ptrs.capacity() !=0) dst_rank = (*dst_runs_begin).rank_;
+    intrank_t dst_rank;
+    if(dst_ptrs.capacity()) dst_rank = (*dst_runs_begin).rank_;
+    else                    dst_rank = upcxx::rank_me(); // default for empty sequence is self
     for(DestIter d=dst_runs_begin; !(d == dst_runs_end); ++d) {
       UPCXX_GPTR_CHK(*d);
       UPCXX_ASSERT(*d, "pointer arguments to rput_regular may not be null");
       UPCXX_ASSERT(dst_rank==(*d).rank_, "pointer arguments to rput_regular must all target the same affinity");
-      dst_rank = (*d).rank_;
       dst_ptrs.push_back((*d).raw_ptr_);
     }
 
@@ -665,7 +668,8 @@ namespace upcxx
     }
 
     UPCXX_ASSERT(src_ptrs.size()*src_run_length == dst_ptrs.size()*dst_run_length,
-                 "Source and destination must contain same number of elements.");
+       "rput_regular: destination size (" << dst_ptrs.size()*dst_run_length 
+       << " bytes) does not match source size (" << src_ptrs.size()*src_run_length << " bytes)");
 
     detail::rput_cbs_reg<cxs_here_t, cxs_remote_t> cbs_static{
       dst_rank,
@@ -751,21 +755,21 @@ namespace upcxx
     std::vector<void*> src_ptrs;
     src_ptrs.reserve(std::distance(src_runs_begin, src_runs_end));
    
-    intrank_t src_rank = upcxx::rank_me(); // default for empty sequence is self
-    if(src_ptrs.capacity() != 0) src_rank = (*src_runs_begin).rank_;
+    intrank_t src_rank;
+    if(src_ptrs.capacity()) src_rank = (*src_runs_begin).rank_;
+    else                    src_rank = upcxx::rank_me(); // default for empty sequence is self
     for(SrcIter s=src_runs_begin; !(s == src_runs_end); ++s) {
       UPCXX_GPTR_CHK(*s);
       UPCXX_ASSERT((*s), "pointer arguments to rget_regular may not be null");
       UPCXX_ASSERT(src_rank==(*s).rank_, "pointer arguments to rget_regular must all target the same affinity");
       src_ptrs.push_back((*s).raw_ptr_);
-      src_rank = (*s).rank_;
     }
  
     
-    UPCXX_ASSERT(
-      src_ptrs.size()*src_run_length == dst_ptrs.size()*dst_run_length,
-      "Source and destination runs must contain the same number of elements."
-    );
+    UPCXX_ASSERT(src_ptrs.size()*src_run_length == dst_ptrs.size()*dst_run_length,
+       "rget_regular: destination size (" << dst_ptrs.size()*dst_run_length 
+       << " bytes) does not match source size (" << src_ptrs.size()*src_run_length << " bytes)");
+
     
     auto *cb = new detail::rget_cb_reg<cxs_here_t,cxs_remote_t>{
       src_rank,
