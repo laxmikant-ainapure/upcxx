@@ -49,6 +49,8 @@ namespace upcxx {
   }
   
   inline bool local_team_contains(intrank_t rank) {
+    UPCXX_ASSERT(rank >= 0 && rank < upcxx::rank_n(),
+      "local_team_contains(rank) requires rank in [0, world().rank_n()-1] == [0, " << upcxx::rank_n()-1 << "], but given: " << rank);
     return backend::rank_is_local(rank);
   }
   
