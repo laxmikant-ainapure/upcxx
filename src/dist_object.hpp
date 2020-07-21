@@ -88,7 +88,7 @@ namespace upcxx {
     dist_object(const upcxx::team &tm, U &&...arg):
       tm_(&tm),
       value_(std::forward<U>(arg)...) {
-      UPCXX_ASSERT(backend::master.active_with_caller());
+      UPCXX_ASSERT_MASTER();
       
       id_ = const_cast<upcxx::team*>(&tm)->next_collective_id(detail::internal_only());
       
@@ -102,7 +102,7 @@ namespace upcxx {
     dist_object(T value, const upcxx::team &tm):
       tm_(&tm),
       value_(std::move(value)) {
-      UPCXX_ASSERT(backend::master.active_with_caller());
+      UPCXX_ASSERT_MASTER();
 
       id_ = const_cast<upcxx::team*>(&tm)->next_collective_id(detail::internal_only());
       
@@ -124,7 +124,7 @@ namespace upcxx {
       id_(that.id_),
       value_(std::move(that.value_)) {
       
-      UPCXX_ASSERT(backend::master.active_with_caller());
+      UPCXX_ASSERT_MASTER();
       UPCXX_ASSERT((that.id_ != digest{~0ull, ~0ull}));
 
       that.id_ = digest{~0ull, ~0ull}; // the tombstone id value
@@ -141,7 +141,7 @@ namespace upcxx {
     }
     
     ~dist_object() {
-      if (backend::init_count > 0) UPCXX_ASSERT(backend::master.active_with_caller());
+      if (backend::init_count > 0) UPCXX_ASSERT_MASTER();
 
       if(id_ != digest{~0ull, ~0ull}) {
         auto it = detail::registry.find(id_);

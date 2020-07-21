@@ -33,7 +33,7 @@ team::team(team &&that):
   n_(that.n_),
   me_(that.me_) {
   
-  UPCXX_ASSERT(backend::master.active_with_caller());
+  UPCXX_ASSERT_MASTER();
   UPCXX_ASSERT((that.id_ != digest{~0ull, ~0ull}));
   
   that.id_ = digest{~0ull, ~0ull}; // the tombstone id value
@@ -53,7 +53,7 @@ team::~team() {
 }
 
 team team::split(intrank_t color, intrank_t key) const {
-  UPCXX_ASSERT(backend::master.active_with_caller());
+  UPCXX_ASSERT_MASTER();
   UPCXX_ASSERT(color >= 0 || color == color_none);
   
   gex_TM_t sub_tm = GEX_TM_INVALID;
@@ -90,7 +90,7 @@ team team::split(intrank_t color, intrank_t key) const {
 }
 
 void team::destroy(entry_barrier eb) {
-  UPCXX_ASSERT(backend::master.active_with_caller());
+  UPCXX_ASSERT_MASTER();
   
   if(this->handle != reinterpret_cast<uintptr_t>(GEX_TM_INVALID)) {
     backend::quiesce(*this, eb);

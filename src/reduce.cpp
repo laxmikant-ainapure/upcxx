@@ -42,7 +42,7 @@ void upcxx::detail::reduce_one_or_all_trivial_erased(
     backend::gasnet::handle_cb *cb
   ) {
   
-  UPCXX_ASSERT(backend::master.active_with_caller());
+  UPCXX_ASSERT_MASTER();
   
   #if 0
     if(&tm == &upcxx::world() && tm.rank_me()==0)

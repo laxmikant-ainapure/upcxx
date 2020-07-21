@@ -372,7 +372,7 @@ namespace {
 void upcxx::destroy_heap() {
   noise_log noise("upcxx::destroy_heap()");
   
-  UPCXX_ASSERT_ALWAYS(backend::master.active_with_caller());
+  UPCXX_ASSERT_ALWAYS_MASTER();
   UPCXX_ASSERT_ALWAYS(shared_heap_isinit);
   backend::quiesce(upcxx::world(), entry_barrier::user);
 
@@ -410,7 +410,7 @@ void upcxx::destroy_heap() {
 // all processes, returning them to a live state.
 
 void upcxx::restore_heap(void) {
-  UPCXX_ASSERT_ALWAYS(backend::master.active_with_caller());
+  UPCXX_ASSERT_ALWAYS_MASTER();
   UPCXX_ASSERT_ALWAYS(!shared_heap_isinit);
   UPCXX_ASSERT_ALWAYS(shared_heap_sz > 0);
 
@@ -517,7 +517,7 @@ void upcxx::init() {
 
   // ready master persona
   backend::initial_master_scope = new persona_scope(backend::master);
-  UPCXX_ASSERT_ALWAYS(backend::master.active_with_caller());
+  UPCXX_ASSERT_ALWAYS_MASTER();
   
   // Build team upcxx::world()
   ::new(detail::the_world_team.raw()) upcxx::team(
@@ -831,7 +831,7 @@ namespace {
 }
 
 void upcxx::finalize() {
-  UPCXX_ASSERT_ALWAYS(backend::master.active_with_caller());
+  UPCXX_ASSERT_ALWAYS_MASTER();
   UPCXX_ASSERT_ALWAYS(backend::init_count > 0);
   
   if(0 != --backend::init_count)
@@ -955,9 +955,7 @@ std::string upcxx::detail::shared_heap_stats() {
   
 void* gasnet::allocate(size_t size, size_t alignment, sheap_footprint_t *foot) {
   UPCXX_ASSERT(shared_heap_isinit);
-  #if UPCXX_BACKEND_GASNET_SEQ
-    UPCXX_ASSERT(backend::master.active_with_caller());
-  #endif
+  UPCXX_ASSERT_MASTER_IFSEQ();
 
   std::lock_guard<detail::par_mutex> locked{segment_lock_};
   
@@ -1001,9 +999,7 @@ void* gasnet::allocate(size_t size, size_t alignment, sheap_footprint_t *foot) {
 
 void gasnet::deallocate(void *p, sheap_footprint_t *foot) {
   UPCXX_ASSERT(shared_heap_isinit);
-  #if UPCXX_BACKEND_GASNET_SEQ
-    UPCXX_ASSERT(backend::master.active_with_caller());
-  #endif
+  UPCXX_ASSERT_MASTER_IFSEQ();
 
   std::lock_guard<detail::par_mutex> locked{segment_lock_};
   
@@ -1296,7 +1292,7 @@ namespace {
       Fn fn
     ) {
     
-    UPCXX_ASSERT(!UPCXX_BACKEND_GASNET_SEQ || backend::master.active_with_caller());
+    UPCXX_ASSERT_MASTER_IFSEQ();
 
     auto *cb = gasnet::make_handle_cb(std::move(fn));
     

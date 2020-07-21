@@ -8,7 +8,7 @@ namespace upcxx {
   namespace detail {
     template<typename T>
     future_header_promise<T>* registered_promise(digest id, int initial_anon) {
-      UPCXX_ASSERT(backend::master.active_with_caller());
+      UPCXX_ASSERT_MASTER();
       
       future_header_promise<T> *pro;
       
@@ -29,7 +29,7 @@ namespace upcxx {
 
     template<typename T, typename ...U>
     T* registered_state(digest id, U &&...ctor_args) {
-      UPCXX_ASSERT(backend::master.active_with_caller());
+      UPCXX_ASSERT_MASTER();
       
       T *thing;
       

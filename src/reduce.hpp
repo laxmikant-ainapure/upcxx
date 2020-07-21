@@ -628,7 +628,7 @@ namespace upcxx {
         typename reduce_state::cxs_state_t *cxs_st
       ) {
       
-      UPCXX_ASSERT(backend::master.active_with_caller());
+      UPCXX_ASSERT_MASTER();
       detail::persona_scope_redundant master_as_top(backend::master, detail::the_persona_tls);
       
       intrank_t rank_n = tm.rank_n();

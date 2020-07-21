@@ -87,7 +87,7 @@ void upcxx::cuda::curt_failed(cudaError_t res, const char *file, int line, const
 upcxx::cuda_device::cuda_device(int device):
   device_(device) {
 
-  UPCXX_ASSERT_ALWAYS(backend::master.active_with_caller());
+  UPCXX_ASSERT_ALWAYS_MASTER();
 
   #if UPCXX_CUDA_ENABLED
     if(device != invalid_device_id) {
@@ -121,7 +121,7 @@ upcxx::cuda_device::~cuda_device() {
 }
 
 void upcxx::cuda_device::destroy(upcxx::entry_barrier eb) {
-  UPCXX_ASSERT(backend::master.active_with_caller());
+  UPCXX_ASSERT_ALWAYS_MASTER();
 
   backend::quiesce(upcxx::world(), eb);
 
@@ -158,7 +158,7 @@ detail::device_allocator_core<upcxx::cuda_device>::device_allocator_core(
       segment_allocator(nullptr, 0)
     #endif
   ) {
-  UPCXX_ASSERT_ALWAYS(backend::master.active_with_caller());
+  UPCXX_ASSERT_ALWAYS_MASTER();
   #if UPCXX_CUDA_ENABLED
     if (dev) {
       UPCXX_ASSERT_ALWAYS(!cuda::devices[dev->device_]->allocator_core, 
@@ -173,7 +173,7 @@ detail::device_allocator_core<upcxx::cuda_device>::~device_allocator_core() {
     // The thread safety restriction of this call still applies when upcxx isn't
     // initialized, we just have no good way of asserting it so we conditionalize
     // on initialized().
-    UPCXX_ASSERT_ALWAYS(backend::master.active_with_caller());
+    UPCXX_ASSERT_ALWAYS_MASTER();
   }
 
   #if UPCXX_CUDA_ENABLED  
