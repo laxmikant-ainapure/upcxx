@@ -666,6 +666,7 @@ namespace gasnet {
       progress_level am_level, AmFn &&am_fn,
       handle_cb *src_cb, reply_cb *rem_cb
     ) {
+    UPCXX_ASSERT_MASTER_IFSEQ();
 
     bool rank_d_is_local = backend::rank_is_local(rank_d);
     
