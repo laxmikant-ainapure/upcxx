@@ -41,6 +41,7 @@ Notable bug fixes:
 * issue #369: `completion_cx::as_future()` typically leaks
 * issue #380: Compile regression on bulk upcxx::rput with source+operation completions
 * issue #384: finalize can complete without invoking progress, leading to obscure leaks
+* issue #389: `future::result*()` should assert readiness
 
 Breaking changes:
 
