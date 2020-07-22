@@ -19,6 +19,8 @@ New features/enhancements: (see specification and programmer's guide for full de
 * Added support for `global_ptr<const T>` with implicit conversion
   from `global_ptr<T>` to `global_ptr<const T>`. Communication
   operations now take a `global_ptr<const T>` where appropriate.
+* Added a number of precondition sanity checks in debug mode, to help users find
+  bugs in their code when compiling with `-codemode=debug` (aka, `upcxx -g`).
 * ...
 
 Notable bug fixes:
