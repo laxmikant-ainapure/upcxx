@@ -25,14 +25,14 @@ fi
 
 ## TESTS
 if [[ $STAGES =~ ,tests, ]]; then
-  time $MAKE_CMD dev-tests
+  time $MAKE_CMD dev-tests || touch .pipe-fail
 fi
 
 ## RUN
 unset TMPDIR
 if [[ $STAGES =~ ,run, ]]; then
-  time $GMAKE dev-run-tests
+  time $GMAKE dev-run-tests || touch .pipe-fail
 fi
 
 ## DONE
-success
+finished
