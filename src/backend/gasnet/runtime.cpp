@@ -440,6 +440,8 @@ void upcxx::init() {
   #if UPCXX_BACKEND_GASNET_SEQ
     gasnet_seq_thread_id = upcxx::detail::thread_id();
   #endif
+  detail::persona_tls &tls = detail::the_persona_tls;
+  tls.is_primordial_thread = true;
 
   gex_Client_t client;
   gex_EP_t endpoint;

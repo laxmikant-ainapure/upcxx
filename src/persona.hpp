@@ -226,6 +226,7 @@ namespace upcxx {
     struct persona_tls {
       int progressing_add_1;
       unsigned burstable_bits;
+      bool is_primordial_thread; // true iff this thread inited the current library
       
       persona default_persona;
       // persona_scope default_scope;
@@ -243,6 +244,7 @@ namespace upcxx {
       constexpr persona_tls():
         progressing_add_1(),
         burstable_bits(),
+        is_primordial_thread(),
         default_persona(internal_only()), // call special constructor that builds default persona
         default_scope_raw(),
         top_xor_default(),
@@ -475,7 +477,12 @@ namespace upcxx {
     
     bool was_active = p.active();
     UPCXX_ASSERT(!was_active || p.active_with_caller(tls), "Persona already active in another thread.");
-    
+    if (UPCXX_BACKEND_GASNET_SEQ && &p == &master_persona()) 
+       UPCXX_ASSERT(tls.is_primordial_thread,
+        "When compiled in threadmode=seq, only the primordial thread may acquire the master persona.\n"
+        "Multi-threaded applications should compile with `upcxx -threadmode=par` or `UPCXX_THREADMODE=par`.\n"
+        "For details, please see `docs/implementation-defined.md`");
+
     // point this scope at persona
     this->set_persona(&p, tls);
     
@@ -513,6 +520,11 @@ namespace upcxx {
     
     bool was_active = p.active();
     UPCXX_ASSERT(!was_active || p.active_with_caller(tls), "Persona already active in another thread.");
+    if (UPCXX_BACKEND_GASNET_SEQ && &p == &master_persona()) 
+       UPCXX_ASSERT(tls.is_primordial_thread,
+        "When compiled in threadmode=seq, only the primordial thread may acquire the master persona.\n"
+        "Multi-threaded applications should compile with `upcxx -threadmode=par` or `UPCXX_THREADMODE=par`.\n"
+        "For details, please see `docs/implementation-defined.md`");
     
     // point this scope at persona
     this->set_persona(&p, tls);
