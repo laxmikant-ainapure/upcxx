@@ -717,10 +717,26 @@ namespace upcxx {
       template<typename T>
       void skip_sequence(std::size_t n) {
         if(n != 0) {
+          // Skip the leading element to get us to the correct alignment to
+          // potentially skip the remaining elements in bulk.
           this->template skip<T>();
           n -= 1;
-          if(serialization_traits<T>::static_ubound_t::is_valid)
-            this->unplace(serialization_traits<T>::static_ubound.arrayed(n)); // skip rest
+
+          if(serialization_traits<T>::static_ubound_t::is_valid) {
+            // Here we utilize that static bounds are exact and that the sequence
+            // of cat's applied to the input prefix are 1-to-1 with writes. To
+            // compute the difference between consecutive elements we do a difference
+            // of bound sizes *after* one element is already there to bring the
+            // alignment padding to its steady state.
+            constexpr std::size_t delta = decltype(
+                serialization_traits<T>::ubound(
+                  std::declval<typename serialization_traits<T>::static_ubound_t>(),
+                  std::declval<T const&>()
+                )
+              )::static_size - serialization_traits<T>::static_ubound_t::static_size;
+
+            this->jump(n*delta);
+          }
           else {
             while(n--)
               this->template skip<T>();
