@@ -36,6 +36,18 @@ namespace upcxx {
   }
   
   //////////////////////////////////////////////////////////////////////
+  // detail::is_not_array
+
+  namespace detail {
+    template<typename T>
+    struct is_not_array :
+      std::integral_constant<
+          bool,
+          !std::is_array<typename std::remove_reference<T>::type>::value
+        > {};
+  }
+
+  //////////////////////////////////////////////////////////////////////
   // rpc_ff
 
   namespace detail {
@@ -66,6 +78,15 @@ namespace upcxx {
 
     static_assert(
       detail::trait_forall<
+          detail::is_not_array,
+          Arg...
+        >::value,
+      "Arrays may not be passed as arguments to rpc. "
+      "To send the contents of an array, use upcxx::make_view() to construct a upcxx::view over the elements."
+    );
+
+    static_assert(
+      detail::trait_forall<
           is_serializable,
           typename binding<Arg>::on_wire_type...
         >::value,
@@ -91,6 +112,15 @@ namespace upcxx {
   auto rpc_ff(const team &tm, intrank_t recipient, Cxs cxs, Fn &&fn, Arg &&...args)
     // computes our return type, but SFINAE's out if fn(args...) is ill-formed
     -> typename detail::rpc_ff_return<Fn(Arg...), Cxs>::type {
+
+    static_assert(
+      detail::trait_forall<
+          detail::is_not_array,
+          Arg...
+        >::value,
+      "Arrays may not be passed as arguments to rpc. "
+      "To send the contents of an array, use upcxx::make_view() to construct a upcxx::view over the elements."
+    );
 
     static_assert(
       detail::trait_forall<
@@ -200,6 +230,15 @@ namespace upcxx {
       // computes our return type, but SFINAE's out if fn(args...) is ill-formed
       -> typename detail::rpc_return<Fn(Arg...), Cxs>::type {
       
+      static_assert(
+        detail::trait_forall<
+            detail::is_not_array,
+            Arg...
+          >::value,
+        "Arrays may not be passed as arguments to rpc. "
+        "To send the contents of an array, use upcxx::make_view() to construct a upcxx::view over the elements."
+      );
+
       static_assert(
         detail::trait_forall<
             is_serializable,
