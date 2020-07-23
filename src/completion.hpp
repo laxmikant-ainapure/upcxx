@@ -191,6 +191,38 @@ namespace upcxx {
   }
   
   //////////////////////////////////////////////////////////////////////
+  // detail::as_rpc_return: computes the return type of as_rpc, while
+  // also checking whether the function object can be invoked with the
+  // given arguments when converted to their off-wire types
+
+  namespace detail {
+    template<typename Call, typename = void>
+    struct check_rpc_call : std::false_type {};
+    template<typename Fn, typename ...Args>
+    struct check_rpc_call<
+        Fn(Args...),
+        decltype(
+          std::declval<typename binding<Fn>::off_wire_type&&>()(
+            std::declval<typename binding<Args>::off_wire_type&&>()...
+          ),
+          void()
+        )
+      > : std::true_type {};
+
+    template<typename Event, typename Fn, typename ...Args>
+    struct as_rpc_return {
+        static_assert(
+          check_rpc_call<Fn(Args...)>::value,
+          "function object provided to as_rpc cannot be invoked on the given arguments as rvalue references. "
+          "Note: make sure that the function object does not have any non-const lvalue-reference parameters."
+        );
+      using type = completions<
+          rpc_cx<Event, typename bind<Fn&&, Args&&...>::return_type>
+        >;
+    };
+  }
+
+  //////////////////////////////////////////////////////////////////////
   // User-interface for obtaining a completion tied to an event.
 
   namespace detail {
@@ -238,9 +270,7 @@ namespace upcxx {
     template<typename Event>
     struct support_as_rpc {
       template<typename Fn, typename ...Args>
-      static completions<
-          rpc_cx<Event, typename detail::bind<Fn&&, Args&&...>::return_type>
-        >
+      static typename detail::as_rpc_return<Event, Fn, Args...>::type
       as_rpc(Fn &&fn, Args &&...args) {
         return {
           rpc_cx<Event, typename detail::bind<Fn&&, Args&&...>::return_type>{
