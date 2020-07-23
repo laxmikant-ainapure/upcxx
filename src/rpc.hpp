@@ -82,8 +82,7 @@ namespace upcxx {
           Arg...
         >::value,
       "Arrays may not be passed as arguments to rpc. "
-      "To send the contents of an array, use upcxx::make_view() to construct a upcxx::view over the elements. "
-      "To send an array as a pointer, insert an explicit cast to a pointer."
+      "To send the contents of an array, use upcxx::make_view() to construct a upcxx::view over the elements."
     );
 
     static_assert(
@@ -120,8 +119,7 @@ namespace upcxx {
           Arg...
         >::value,
       "Arrays may not be passed as arguments to rpc. "
-      "To send the contents of an array, use upcxx::make_view() to construct a upcxx::view over the elements. "
-      "To send an array as a pointer, insert an explicit cast to a pointer."
+      "To send the contents of an array, use upcxx::make_view() to construct a upcxx::view over the elements."
     );
 
     static_assert(
@@ -238,8 +236,7 @@ namespace upcxx {
             Arg...
           >::value,
         "Arrays may not be passed as arguments to rpc. "
-        "To send the contents of an array, use upcxx::make_view() to construct a upcxx::view over the elements. "
-        "To send an array as a pointer, insert an explicit cast to a pointer."
+        "To send the contents of an array, use upcxx::make_view() to construct a upcxx::view over the elements."
       );
 
       static_assert(
