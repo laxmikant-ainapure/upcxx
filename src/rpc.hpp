@@ -81,7 +81,9 @@ namespace upcxx {
           detail::is_not_array,
           Arg...
         >::value,
-      "Array types are not Serializable and may not be passed to rpc."
+      "Arrays may not be passed as arguments to rpc. "
+      "To send the contents of an array, use upcxx::make_view() to construct a upcxx::view over the elements. "
+      "To send an array as a pointer, insert an explicit cast to a pointer."
     );
 
     static_assert(
@@ -117,7 +119,9 @@ namespace upcxx {
           detail::is_not_array,
           Arg...
         >::value,
-      "Array types are not Serializable and may not be passed to rpc."
+      "Arrays may not be passed as arguments to rpc. "
+      "To send the contents of an array, use upcxx::make_view() to construct a upcxx::view over the elements. "
+      "To send an array as a pointer, insert an explicit cast to a pointer."
     );
 
     static_assert(
@@ -233,7 +237,9 @@ namespace upcxx {
             detail::is_not_array,
             Arg...
           >::value,
-        "Array types are not Serializable and may not be passed to rpc."
+        "Arrays may not be passed as arguments to rpc. "
+        "To send the contents of an array, use upcxx::make_view() to construct a upcxx::view over the elements. "
+        "To send an array as a pointer, insert an explicit cast to a pointer."
       );
 
       static_assert(
