@@ -81,20 +81,42 @@ namespace upcxx {
           completions<Cx...>
         >::return_t;
     };
+
+    // SFINAE-avoiding return-type computation for rpc_ff.
+    template<typename Call, typename Cxs, typename = void>
+    struct rpc_ff_return_no_sfinae {
+      using type = void;
+      static const bool value = false; // whether Call is valid
+    };
+
+    template<typename Fn, typename Cxs, typename ...Arg>
+    struct rpc_ff_return_no_sfinae<
+        Fn(Arg...), Cxs,
+        decltype(
+          std::declval<typename detail::rpc_ff_return<Fn(Arg...), Cxs>::type>(),
+          void()
+        )
+      > {
+      using type = typename detail::rpc_ff_return<Fn(Arg...), Cxs>::type;
+      static const bool value = true;
+    };
   }
   
   // defaulted completions
   template<typename Fn, typename ...Arg>
   auto rpc_ff(const team &tm, intrank_t recipient, Fn &&fn, Arg &&...args)
-    // computes our return type, but SFINAE's out if fn(args...) is ill-formed
-    -> typename detail::rpc_ff_return<Fn(Arg...), completions<>>::type {
+    // computes our return type, but SFINAE's out if fn is a completions type
+    -> typename std::enable_if<
+         !detail::is_completions<Fn>::value,
+         typename detail::rpc_ff_return_no_sfinae<Fn(Arg...), completions<>>::type
+       >::type {
 
     static_assert(
       detail::trait_forall<
           detail::is_not_array,
           Arg...
         >::value,
-      "Arrays may not be passed as arguments to rpc. "
+      "Arrays may not be passed as arguments to rpc_ff. "
       "To send the contents of an array, use upcxx::make_view() to construct a upcxx::view over the elements."
     );
 
@@ -104,6 +126,12 @@ namespace upcxx {
           typename binding<Arg>::on_wire_type...
         >::value,
       "All rpc arguments must be Serializable."
+    );
+
+    static_assert(
+      detail::rpc_ff_return_no_sfinae<Fn(Arg...), completions<>>::value,
+      "function object provided to rpc_ff cannot be invoked on the given arguments as rvalue references. "
+      "Note: make sure that the function object does not have any non-const lvalue-reference parameters."
     );
       
     UPCXX_ASSERT(recipient >= 0 && recipient < tm.rank_n(),
@@ -117,27 +145,30 @@ namespace upcxx {
   
   template<typename Fn, typename ...Arg>
   auto rpc_ff(intrank_t recipient, Fn &&fn, Arg &&...args)
-    // computes our return type, but SFINAE's out if fn(args...) is ill-formed
-    -> typename detail::rpc_ff_return<Fn(Arg...), completions<>>::type {
+    // computes our return type, but SFINAE's out if fn is a completions type
+    -> typename std::enable_if<
+         !detail::is_completions<Fn>::value,
+         typename detail::rpc_ff_return_no_sfinae<Fn(Arg...), completions<>>::type
+       >::type {
 
     UPCXX_ASSERT(recipient >= 0 && recipient < world().rank_n(),
       "rpc_ff(recipient, ...) requires recipient in [0, rank_n()-1] == [0, " << world().rank_n()-1 << "], but given: " << recipient);
-    
+
     return rpc_ff(world(), recipient, std::forward<Fn>(fn), std::forward<Arg>(args)...);
   }
 
   // explicit completions
-  template<typename Cxs, typename Fn, typename ...Arg>
-  auto rpc_ff(const team &tm, intrank_t recipient, Cxs cxs, Fn &&fn, Arg &&...args)
-    // computes our return type, but SFINAE's out if fn(args...) is ill-formed
-    -> typename detail::rpc_ff_return<Fn(Arg...), Cxs>::type {
+  template<typename Fn, typename ...Cxs, typename ...Arg>
+  auto rpc_ff(const team &tm, intrank_t recipient, completions<Cxs...> cxs, Fn &&fn, Arg &&...args)
+    // computes our return type, does not SFINAE out
+    -> typename detail::rpc_ff_return_no_sfinae<Fn(Arg...), completions<Cxs...>>::type {
 
     static_assert(
       detail::trait_forall<
           detail::is_not_array,
           Arg...
         >::value,
-      "Arrays may not be passed as arguments to rpc. "
+      "Arrays may not be passed as arguments to rpc_ff. "
       "To send the contents of an array, use upcxx::make_view() to construct a upcxx::view over the elements."
     );
 
@@ -149,19 +180,25 @@ namespace upcxx {
       "All rpc arguments must be Serializable."
     );
       
+    static_assert(
+      detail::rpc_ff_return_no_sfinae<Fn(Arg...), completions<Cxs...>>::value,
+      "function object provided to rpc_ff cannot be invoked on the given arguments as rvalue references. "
+      "Note: make sure that the function object does not have any non-const lvalue-reference parameters."
+    );
+
     UPCXX_ASSERT(recipient >= 0 && recipient < tm.rank_n(),
       "rpc_ff(team, recipient, ...) requires recipient in [0, team.rank_n()-1] == [0, " << tm.rank_n()-1 << "], but given: " << recipient);
 
     auto state = detail::completions_state<
         /*EventPredicate=*/detail::event_is_here,
         /*EventValues=*/detail::rpc_ff_event_values,
-        Cxs
+        completions<Cxs...>
       >{std::move(cxs)};
     
     auto returner = detail::completions_returner<
         /*EventPredicate=*/detail::event_is_here,
         /*EventValues=*/detail::rpc_ff_event_values,
-        Cxs
+        completions<Cxs...>
       >{state};
     
     backend::template send_am_master<progress_level::user>(
@@ -176,10 +213,10 @@ namespace upcxx {
     return returner();
   }
   
-  template<typename Cxs, typename Fn, typename ...Arg>
-  auto rpc_ff(intrank_t recipient, Cxs cxs, Fn &&fn, Arg &&...args)
-    // computes our return type, but SFINAE's out if fn(args...) is ill-formed
-    -> typename detail::rpc_ff_return<Fn(Arg...), Cxs>::type {
+  template<typename Fn, typename ...Cxs, typename ...Arg>
+  auto rpc_ff(intrank_t recipient, completions<Cxs...> cxs, Fn &&fn, Arg &&...args)
+    // computes our return type, does not SFINAE out
+    -> typename detail::rpc_ff_return_no_sfinae<Fn(Arg...), completions<Cxs...>>::type {
   
     UPCXX_ASSERT(recipient >= 0 && recipient < world().rank_n(),
       "rpc_ff(recipient, ...) requires recipient in [0, rank_n()-1] == [0, " << world().rank_n()-1 << "], but given: " << recipient);
@@ -341,12 +378,16 @@ namespace upcxx {
     template<typename Cxs, typename Fn, typename ...Arg>
     future<> rpc(const team &, intrank_t, Fn &&, Arg &&..., Cxs, ...) {
       // check that this overload is not unintentionally invoked
-      static_assert(!detail::rpc_return_no_sfinae<Fn(Arg...), Cxs>::value,
-                    "internal error");
+      static_assert(
+        !detail::rpc_return_no_sfinae<Fn(Arg...), Cxs>::value,
+        "internal error"
+      );
       // friendlier error message for when Fn(Arg...) is invalid
-      static_assert(detail::rpc_return_no_sfinae<Fn(Arg...), Cxs>::value,
-                    "function object provided to rpc cannot be invoked on the given arguments as rvalue references. "
-                    "Note: make sure that the function object does not have any non-const lvalue-reference parameters.");
+      static_assert(
+        detail::rpc_return_no_sfinae<Fn(Arg...), Cxs>::value,
+        "function object provided to rpc cannot be invoked on the given arguments as rvalue references. "
+        "Note: make sure that the function object does not have any non-const lvalue-reference parameters."
+      );
       return make_future();
     }
   }
@@ -401,7 +442,7 @@ namespace upcxx {
   auto rpc(intrank_t recipient, Fn &&fn, Arg &&...args)
     // computes our return type, but SFINAE's out if fn is a completions type
     -> typename std::enable_if<
-        !detail::is_completions<Fn>::value,
+         !detail::is_completions<Fn>::value,
          typename detail::rpc_return_no_sfinae<Fn(Arg...), completions<future_cx<operation_cx_event>>>::type
        >::type {
 
