@@ -43,6 +43,7 @@ Notable bug fixes:
 * issue #369: `completion_cx::as_future()` typically leaks
 * issue #380: Compile regression on bulk upcxx::rput with source+operation completions
 * issue #384: finalize can complete without invoking progress, leading to obscure leaks
+* issue #386: `upcxx_memberof_general` prohibits member designators that end with an array access
 * issue #389: `future::result*()` should assert readiness
 
 Breaking changes:
@@ -53,6 +54,9 @@ Breaking changes:
   For backwards compat, the former is still accepted.
 * Implementation of upcxx::team_id is no longer Trivial (was never guaranteed to be).
   It remains DefaultConstructible, TriviallyCopyable, StandardLayoutType, EqualityComparable
+* `upcxx_memberof(gp, mem)` and `upcxx_memberof_general(gp, mem)` now
+  produce a `global_ptr<T>` when `mem` names an array whose element
+  type is `T`.
 
 ### 2020.03.12: Release 2020.3.0
 

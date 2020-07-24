@@ -41,6 +41,8 @@
 // element type
 // detail::decayed_gp_t<T, Kind> is the type resulting from applying
 // decay_array_gp to a global_ptr<T, Kind>
+// NOTE: this code relies on the ability to construct a
+// global_ptr<T[N]>, which we then decay to a global_ptr<T>
 namespace upcxx {
   namespace detail {
     template<typename T>
@@ -172,7 +174,7 @@ auto memberof_general_helper(global_ptr<Obj,Kind> gptr, Get getter)
   UPCXX_STATIC_ASSERT(!::std::is_reference<decltype(::std::declval<UPCXX_ETYPE(gp)>().FIELD)>::value, \
     "upcxx_memberof_general may not be used on fields with reference type or on array elements. " \
     "Note: if your call is of the form upcxx_memberof_general(obj, array_field[idx]), " \
-    "instead do: upcxx_memberof_general(obj, array_field)+idx"), \
+    "instead do: upcxx_memberof_general(obj, array_field).then([=](global_ptr<T> gp) { return gp + idx; })"), \
   ::upcxx::detail::memberof_general_helper((gp), \
     [](UPCXX_ETYPE(gp) *lptr) { return ::std::addressof(lptr->FIELD); } \
   ) \
