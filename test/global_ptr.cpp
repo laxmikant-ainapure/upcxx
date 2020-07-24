@@ -13,6 +13,9 @@ struct A {
   double x;
   const int y = 3;
   mutable char z;
+  double arr1[1];
+  const int arr2[2] = {};
+  mutable char arr3[4][3];
 };
 struct B : A {};
 
@@ -21,21 +24,25 @@ struct assert_same {
   static_assert(std::is_same<T1, T2>::value, "types differ");
 };
 
+#define CHECK_MEMBEROF_GUTS(accessor, suffix) {                 \
+    auto gp_x = accessor(ptr, x) suffix;                        \
+    auto gp_y = accessor(ptr, y) suffix;                        \
+    auto gp_z = accessor(ptr, z) suffix;                        \
+    auto gp_arr1 = accessor(ptr, arr1) suffix;                  \
+    auto gp_arr2 = accessor(ptr, arr2) suffix;                  \
+    auto gp_arr3 = accessor(ptr, arr3) suffix;                  \
+    assert_same<decltype(gp_x), global_ptr<Ex1>> as_x;          \
+    assert_same<decltype(gp_y), global_ptr<Ex2>> as_y;          \
+    assert_same<decltype(gp_z), global_ptr<Ex3>> as_z;          \
+    assert_same<decltype(gp_arr1), global_ptr<Ex1>> as_arr1;    \
+    assert_same<decltype(gp_arr2), global_ptr<Ex2>> as_arr2;    \
+    assert_same<decltype(gp_arr3), global_ptr<Ex3>> as_arr3;    \
+  }
+
 template<typename Ex1, typename Ex2, typename Ex3, typename GP>
 static void check_memberof(GP ptr) {
-  auto gp_x = upcxx_memberof(ptr, x);
-  auto gp_y = upcxx_memberof(ptr, y);
-  auto gp_z = upcxx_memberof(ptr, z);
-  assert_same<decltype(gp_x), global_ptr<Ex1>> as_x;
-  assert_same<decltype(gp_y), global_ptr<Ex2>> as_y;
-  assert_same<decltype(gp_z), global_ptr<Ex3>> as_z;
-
-  auto gp_xg = upcxx_memberof_general(ptr, x).wait();
-  auto gp_yg = upcxx_memberof_general(ptr, y).wait();
-  auto gp_zg = upcxx_memberof_general(ptr, z).wait();
-  assert_same<decltype(gp_xg), global_ptr<Ex1>> as_xg;
-  assert_same<decltype(gp_yg), global_ptr<Ex2>> as_yg;
-  assert_same<decltype(gp_zg), global_ptr<Ex3>> as_zg;
+  CHECK_MEMBEROF_GUTS(upcxx_memberof,);
+  CHECK_MEMBEROF_GUTS(upcxx_memberof_general, .wait());
 }
 
 int main() {
