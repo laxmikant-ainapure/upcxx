@@ -290,11 +290,13 @@ variables:
         export NETWORKS=$net
         if (( $CI_DEV_CHECK )); then
           for codemode in opt debug; do
-            $DO_MAKE dev-check-$codemode || touch .pipe-failed
+            $DO_MAKE dev-tests-$codemode || touch .pipe-failed
+            $DO_MAKE dev-run-tests || touch .pipe-failed
             (set +x; rm -rf test-*-*)
           done
         else
-          $DO_MAKE check || touch .pipe-failed
+          $DO_MAKE tests || touch .pipe-failed
+          $DO_MAKE run-tests || touch .pipe-failed
           (set +x; rm -rf test-*-*)
         fi
       done
