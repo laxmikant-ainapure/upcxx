@@ -48,7 +48,8 @@ namespace upcxx {
       detail::device_allocator_core<Device>(&dev, base, size) {
     }
     device_allocator(Device &dev, std::size_t size):
-      detail::device_allocator_core<Device>(&dev, Device::template null_pointer<void>(), size) {
+      detail::device_allocator_core<Device>((UPCXX_ASSERT(dev.is_active()),&dev), 
+                                            Device::template null_pointer<void>(), size) {
     }
     
     device_allocator(device_allocator &&that):
@@ -129,7 +130,7 @@ namespace upcxx {
     template<typename T>
     static typename Device::template pointer<T> local(global_ptr<T,Device::kind> gp) {
       UPCXX_GPTR_CHK(gp);
-      UPCXX_ASSERT(gp.where() == upcxx::rank_me());
+      UPCXX_ASSERT(gp.is_null() || gp.where() == upcxx::rank_me());
       return gp.raw_ptr_;
     }
   };

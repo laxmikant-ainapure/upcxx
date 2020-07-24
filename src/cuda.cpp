@@ -69,7 +69,7 @@ void upcxx::cuda::cu_failed(CUresult res, const char *file, int line, const char
   std::stringstream ss;
   ss << expr <<"\n  error="<<errname<<": "<<errstr;
   
-  upcxx::fatal_error(ss.str(), "CUDA call failed", file, line);
+  upcxx::fatal_error(ss.str(), "CUDA call failed", nullptr, file, line);
 }
 
 void upcxx::cuda::curt_failed(cudaError_t res, const char *file, int line, const char *expr) {
@@ -80,14 +80,14 @@ void upcxx::cuda::curt_failed(cudaError_t res, const char *file, int line, const
   std::stringstream ss;
   ss << expr <<"\n  error="<<errname<<": "<<errstr;
   
-  upcxx::fatal_error(ss.str(), "CUDA call failed", file, line);
+  upcxx::fatal_error(ss.str(), "CUDA call failed", nullptr, file, line);
 }
 #endif
 
 upcxx::cuda_device::cuda_device(int device):
   device_(device) {
 
-  UPCXX_ASSERT_ALWAYS(backend::master.active_with_caller());
+  UPCXX_ASSERT_ALWAYS_MASTER();
 
   #if UPCXX_CUDA_ENABLED
     if(device != invalid_device_id) {
@@ -102,7 +102,7 @@ upcxx::cuda_device::cuda_device(int device):
       CU_CHECK_ALWAYS(("cuDevicePrimaryCtxRetain()", res));
       CU_CHECK_ALWAYS(cuCtxPushCurrent(ctx));
 
-      cuda::device_state *st = new cuda::device_state;
+      cuda::device_state *st = new cuda::device_state{};
       st->context = ctx;
       CU_CHECK_ALWAYS(cuStreamCreate(&st->stream, CU_STREAM_NON_BLOCKING));
       cuda::devices[device] = st;
@@ -115,11 +115,13 @@ upcxx::cuda_device::cuda_device(int device):
 }
 
 upcxx::cuda_device::~cuda_device() {
-  UPCXX_ASSERT_ALWAYS(device_ == invalid_device_id, "upcxx::cuda_device must have destroy() called before it dies.");
+  if(backend::init_count > 0) { // we don't assert on leaks after finalization
+    UPCXX_ASSERT_ALWAYS(device_ == invalid_device_id, "upcxx::cuda_device must have destroy() called before it dies.");
+  }
 }
 
 void upcxx::cuda_device::destroy(upcxx::entry_barrier eb) {
-  UPCXX_ASSERT(backend::master.active_with_caller());
+  UPCXX_ASSERT_ALWAYS_MASTER();
 
   backend::quiesce(upcxx::world(), eb);
 
@@ -156,7 +158,14 @@ detail::device_allocator_core<upcxx::cuda_device>::device_allocator_core(
       segment_allocator(nullptr, 0)
     #endif
   ) {
-  UPCXX_ASSERT_ALWAYS(backend::master.active_with_caller());
+  UPCXX_ASSERT_ALWAYS_MASTER();
+  #if UPCXX_CUDA_ENABLED
+    if (dev) {
+      UPCXX_ASSERT_ALWAYS(!cuda::devices[dev->device_]->allocator_core, 
+                          "A cuda_device may only be used to create one device_allocator");
+      cuda::devices[dev->device_]->allocator_core = this;
+    }
+  #endif
 }
 
 detail::device_allocator_core<upcxx::cuda_device>::~device_allocator_core() {
@@ -164,7 +173,7 @@ detail::device_allocator_core<upcxx::cuda_device>::~device_allocator_core() {
     // The thread safety restriction of this call still applies when upcxx isn't
     // initialized, we just have no good way of asserting it so we conditionalize
     // on initialized().
-    UPCXX_ASSERT_ALWAYS(backend::master.active_with_caller());
+    UPCXX_ASSERT_ALWAYS_MASTER();
   }
 
   #if UPCXX_CUDA_ENABLED  

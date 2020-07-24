@@ -12,7 +12,7 @@ void detail::broadcast_trivial(
     const team &tm, intrank_t root, void *buf, size_t size,
     backend::gasnet::handle_cb *cb
   ) {
-  UPCXX_ASSERT(backend::master.active_with_caller());
+  UPCXX_ASSERT_MASTER();
   
   gex_Event_t e = gex_Coll_BroadcastNB(
     gasnet::handle_of(tm),

@@ -37,7 +37,9 @@ namespace upcxx {
     team_id() : dig_(digest::zero()) {} // issue 343: disable trivial default construction
 
     team& here() const {
-      return *static_cast<team*>(detail::registry[dig_]);
+      team *presult = static_cast<team*>(detail::registry[dig_]);
+      UPCXX_ASSERT(presult, "team_id::here() called for an invalid id or team (possibly outside its lifetime)");
+      return *presult;
     }
 
     future<team&> when_here() const {
@@ -93,13 +95,19 @@ namespace upcxx {
     intrank_t rank_me() const { return me_; }
     
     intrank_t from_world(intrank_t rank) const {
+      UPCXX_ASSERT(rank >= 0 && rank < upcxx::rank_n(), 
+                   "team::from_world(rank) requires rank in [0, world().rank_n()-1] == [0, " << upcxx::rank_n()-1 << "], but given: " << rank);
       return backend::team_rank_from_world(*this, rank);
     }
     intrank_t from_world(intrank_t rank, intrank_t otherwise) const {
+      UPCXX_ASSERT(rank >= 0 && rank < upcxx::rank_n(), 
+                   "team::from_world(rank, otherwise) requires rank in [0, world().rank_n()-1] == [0, " << upcxx::rank_n()-1 << "], but given: " << rank);
       return backend::team_rank_from_world(*this, rank, otherwise);
     }
     
     intrank_t operator[](intrank_t peer) const {
+      UPCXX_ASSERT(peer >= 0 && peer < this->rank_n(), 
+                   "team[peer_index] requires peer_index in [0, rank_n()-1] == [0, " << this->rank_n()-1 << "], but given: " << peer);
       return backend::team_rank_to_world(*this, peer);
     }
     

@@ -396,7 +396,8 @@ namespace upcxx {
       const team &tm = upcxx::world(),
       Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
     ) {
-    UPCXX_ASSERT(0 <= root && root < tm.rank_n());
+    UPCXX_ASSERT(root >= 0 && root < tm.rank_n(),
+      "reduce_one(..., root, team) requires root in [0, team.rank_n()-1] == [0, " << tm.rank_n()-1 << "], but given: " << root);
     
     return detail::reduce_one_or_all_trivial<T1,BinaryOp,Cxs,T>(
         std::move(value), std::move(op), root, tm, std::move(cxs)
@@ -416,7 +417,8 @@ namespace upcxx {
       const team &tm = upcxx::world(),
       Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
     ) {
-    UPCXX_ASSERT(0 <= root && root < tm.rank_n());
+    UPCXX_ASSERT(root >= 0 && root < tm.rank_n(),
+      "reduce_one(..., root, team) requires root in [0, team.rank_n()-1] == [0, " << tm.rank_n()-1 << "], but given: " << root);
     
     return detail::reduce_one_or_all_trivial<T,BinaryOp,Cxs>(
         src, dst, n, std::move(op), root, tm, std::move(cxs)
@@ -492,6 +494,8 @@ namespace upcxx {
       const team &tm = upcxx::world(),
       Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
     ) {
+    UPCXX_ASSERT(root >= 0 && root < tm.rank_n(),
+      "reduce_one_nontrivial(..., root, team) requires root in [0, team.rank_n()-1] == [0, " << tm.rank_n()-1 << "], but given: " << root);
       
     return detail::reduce_one_nontrivial(
         std::forward<T1>(value), std::move(op), root, tm, std::move(cxs),
@@ -624,7 +628,7 @@ namespace upcxx {
         typename reduce_state::cxs_state_t *cxs_st
       ) {
       
-      UPCXX_ASSERT(backend::master.active_with_caller());
+      UPCXX_ASSERT_MASTER();
       detail::persona_scope_redundant master_as_top(backend::master, detail::the_persona_tls);
       
       intrank_t rank_n = tm.rank_n();

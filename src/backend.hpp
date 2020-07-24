@@ -156,6 +156,7 @@ namespace backend {
   //////////////////////////////////////////////////////////////////////////////
   
   inline bool rank_is_local(intrank_t r) {
+    UPCXX_ASSERT(r >= 0 && r < backend::rank_n, "Invalid argument to rank_is_local: " << r);
     return all_ranks_definitely_local || std::uintptr_t(r) - std::uintptr_t(pshm_peer_lb) < std::uintptr_t(pshm_peer_n);
     // Is equivalent to...
     // return pshm_peer_lb <= r && r < pshm_peer_ub;
@@ -204,7 +205,8 @@ namespace backend {
   }
 
   void validate_global_ptr(bool allow_null, intrank_t rank, void *raw_ptr, std::int32_t device,
-                           memory_kind KindSet, size_t T_align, const char *T_name, const char *context);
+                           memory_kind KindSet, size_t T_align, const char *T_name, 
+                           const char *short_context, const char *context);
 }}
   
 ////////////////////////////////////////////////////////////////////////////////

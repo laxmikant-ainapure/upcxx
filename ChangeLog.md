@@ -19,6 +19,8 @@ New features/enhancements: (see specification and programmer's guide for full de
 * Added support for `global_ptr<const T>` with implicit conversion
   from `global_ptr<T>` to `global_ptr<const T>`. Communication
   operations now take a `global_ptr<const T>` where appropriate.
+* Added a number of precondition sanity checks in debug mode, to help users find
+  bugs in their code when compiling with `-codemode=debug` (aka, `upcxx -g`).
 * ...
 
 Notable bug fixes:
@@ -41,6 +43,7 @@ Notable bug fixes:
 * issue #369: `completion_cx::as_future()` typically leaks
 * issue #380: Compile regression on bulk upcxx::rput with source+operation completions
 * issue #384: finalize can complete without invoking progress, leading to obscure leaks
+* issue #389: `future::result*()` should assert readiness
 
 Breaking changes:
 

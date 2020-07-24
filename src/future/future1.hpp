@@ -127,6 +127,14 @@ namespace upcxx {
     get_at_(Tup &&tup, std::integral_constant<int,i>) {
       return std::template get<i>(static_cast<Tup&&>(tup));
     }
+
+    static std::string nonready_msg(const char *this_func, const char *wait_func, const char *result_desc) {
+      return 
+       std::string("Called future::") + this_func + "() on a non-ready future, which has undefined behavior.\n"
+       + "Please call future::" + wait_func + "() instead, which blocks invoking progress until readiness,"
+       " and then returns the " + result_desc + ".\n"
+       "Alternatively, use future::then(...) to schedule an asynchronous callback to execute after the future is readied.";
+    }
   
   public:
     template<int i=-1>
@@ -136,6 +144,7 @@ namespace upcxx {
           typename detail::tuple_element_or_void<(i<0 ? 0 : i), results_type>::type
       >::type
     result() const& {
+      UPCXX_ASSERT( ready(), nonready_msg("result","wait","result") );
       return get_at_(
           impl_.result_refs_or_vals(),
           std::integral_constant<int, (
@@ -154,6 +163,7 @@ namespace upcxx {
           typename detail::tuple_element_or_void<(i<0 ? 0 : i), results_type>::type
       >::type
     result() && {
+      UPCXX_ASSERT( ready(), nonready_msg("result","wait","result") );
       return get_at_(
           static_cast<impl_type&&>(impl_).result_refs_or_vals(),
           std::integral_constant<int, (
@@ -172,6 +182,7 @@ namespace upcxx {
           typename detail::tuple_element_or_void<(i<0 ? 0 : i), clref_results_refs_or_vals_type>::type
       >::type
     result_reference() const& {
+      UPCXX_ASSERT( ready(), nonready_msg("result_reference","wait_reference","result reference") );
       return get_at_(
           impl_.result_refs_or_vals(),
           std::integral_constant<int, (
@@ -190,6 +201,7 @@ namespace upcxx {
           typename detail::tuple_element_or_void<(i<0 ? 0 : i), rref_results_refs_or_vals_type>::type
       >::type
     result_reference() && {
+      UPCXX_ASSERT( ready(), nonready_msg("result_reference","wait_reference","result reference") );
       return get_at_(
           static_cast<impl_type&&>(impl_).result_refs_or_vals(),
           std::integral_constant<int, (
@@ -202,16 +214,20 @@ namespace upcxx {
     }
     
     results_type result_tuple() const& {
+      UPCXX_ASSERT( ready(), nonready_msg("result_tuple","wait_tuple","result tuple") );
       return impl_.result_refs_or_vals();
     }
     results_type result_tuple() && {
+      UPCXX_ASSERT( ready(), nonready_msg("result_tuple","wait_tuple","result tuple") );
       return static_cast<impl_type&&>(impl_).result_refs_or_vals();
     }
     
     clref_results_refs_or_vals_type result_reference_tuple() const& {
+      UPCXX_ASSERT( ready(), nonready_msg("result_reference_tuple","wait_tuple","result tuple") );
       return impl_.result_refs_or_vals();
     }
     rref_results_refs_or_vals_type result_reference_tuple() && {
+      UPCXX_ASSERT( ready(), nonready_msg("result_reference_tuple","wait_tuple","result tuple") );
       return static_cast<impl_type&&>(impl_).result_refs_or_vals();
     }
 

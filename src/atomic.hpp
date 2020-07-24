@@ -291,6 +291,8 @@ namespace upcxx {
       #endif
 
       atomic_domain(atomic_domain &&that) {
+        UPCXX_ASSERT_MASTER();
+
         this->ad_gex_handle = that.ad_gex_handle;
         this->atomic_gex_ops = that.atomic_gex_ops;
         this->parent_tm_ = that.parent_tm_;

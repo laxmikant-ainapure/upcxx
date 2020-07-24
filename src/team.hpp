@@ -8,7 +8,7 @@ namespace upcxx {
   namespace detail {
     template<typename T>
     future_header_promise<T>* registered_promise(digest id, int initial_anon) {
-      UPCXX_ASSERT(backend::master.active_with_caller());
+      UPCXX_ASSERT_MASTER();
       
       future_header_promise<T> *pro;
       
@@ -29,7 +29,7 @@ namespace upcxx {
 
     template<typename T, typename ...U>
     T* registered_state(digest id, U &&...ctor_args) {
-      UPCXX_ASSERT(backend::master.active_with_caller());
+      UPCXX_ASSERT_MASTER();
       
       T *thing;
       
@@ -49,6 +49,8 @@ namespace upcxx {
   }
   
   inline bool local_team_contains(intrank_t rank) {
+    UPCXX_ASSERT(rank >= 0 && rank < upcxx::rank_n(),
+      "local_team_contains(rank) requires rank in [0, world().rank_n()-1] == [0, " << upcxx::rank_n()-1 << "], but given: " << rank);
     return backend::rank_is_local(rank);
   }
   

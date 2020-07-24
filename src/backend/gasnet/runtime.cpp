@@ -372,7 +372,7 @@ namespace {
 void upcxx::destroy_heap() {
   noise_log noise("upcxx::destroy_heap()");
   
-  UPCXX_ASSERT_ALWAYS(backend::master.active_with_caller());
+  UPCXX_ASSERT_ALWAYS_MASTER();
   UPCXX_ASSERT_ALWAYS(shared_heap_isinit);
   backend::quiesce(upcxx::world(), entry_barrier::user);
 
@@ -410,7 +410,7 @@ void upcxx::destroy_heap() {
 // all processes, returning them to a live state.
 
 void upcxx::restore_heap(void) {
-  UPCXX_ASSERT_ALWAYS(backend::master.active_with_caller());
+  UPCXX_ASSERT_ALWAYS_MASTER();
   UPCXX_ASSERT_ALWAYS(!shared_heap_isinit);
   UPCXX_ASSERT_ALWAYS(shared_heap_sz > 0);
 
@@ -440,6 +440,8 @@ void upcxx::init() {
   #if UPCXX_BACKEND_GASNET_SEQ
     gasnet_seq_thread_id = upcxx::detail::thread_id();
   #endif
+  detail::persona_tls &tls = detail::the_persona_tls;
+  tls.is_primordial_thread = true;
 
   gex_Client_t client;
   gex_EP_t endpoint;
@@ -517,7 +519,7 @@ void upcxx::init() {
 
   // ready master persona
   backend::initial_master_scope = new persona_scope(backend::master);
-  UPCXX_ASSERT_ALWAYS(backend::master.active_with_caller());
+  UPCXX_ASSERT_ALWAYS_MASTER();
   
   // Build team upcxx::world()
   ::new(detail::the_world_team.raw()) upcxx::team(
@@ -831,7 +833,7 @@ namespace {
 }
 
 void upcxx::finalize() {
-  UPCXX_ASSERT_ALWAYS(backend::master.active_with_caller());
+  UPCXX_ASSERT_ALWAYS_MASTER();
   UPCXX_ASSERT_ALWAYS(backend::init_count > 0);
   
   if(0 != --backend::init_count)
@@ -955,9 +957,7 @@ std::string upcxx::detail::shared_heap_stats() {
   
 void* gasnet::allocate(size_t size, size_t alignment, sheap_footprint_t *foot) {
   UPCXX_ASSERT(shared_heap_isinit);
-  #if UPCXX_BACKEND_GASNET_SEQ
-    UPCXX_ASSERT(backend::master.active_with_caller());
-  #endif
+  UPCXX_ASSERT_MASTER_IFSEQ();
 
   std::lock_guard<detail::par_mutex> locked{segment_lock_};
   
@@ -1001,9 +1001,7 @@ void* gasnet::allocate(size_t size, size_t alignment, sheap_footprint_t *foot) {
 
 void gasnet::deallocate(void *p, sheap_footprint_t *foot) {
   UPCXX_ASSERT(shared_heap_isinit);
-  #if UPCXX_BACKEND_GASNET_SEQ
-    UPCXX_ASSERT(backend::master.active_with_caller());
-  #endif
+  UPCXX_ASSERT_MASTER_IFSEQ();
 
   std::lock_guard<detail::par_mutex> locked{segment_lock_};
   
@@ -1128,7 +1126,8 @@ intrank_t backend::team_rank_to_world(const team &tm, intrank_t peer) {
 }
 
 void backend::validate_global_ptr(bool allow_null, intrank_t rank, void *raw_ptr, std::int32_t device,
-                                  memory_kind KindSet, size_t T_align, const char *T_name, const char *context) {
+                                  memory_kind KindSet, size_t T_align, const char *T_name, 
+                                  const char *short_context, const char *context) {
   if_pf (!upcxx::initialized()) return; // don't perform checking before init
   if_pf (!T_name) T_name = "";
 
@@ -1218,9 +1217,9 @@ void backend::validate_global_ptr(bool allow_null, intrank_t rank, void *raw_ptr
   } while (0);
 
   if_pf (error) {
-    if (context && *context) ss << " in " << context << "\n";
-    ss << "  rank = " << rank << ", raw_ptr = " << raw_ptr << ", device = " << device;
-    fatal_error(ss.str(), "fatal global_ptr error");
+    if (short_context && *short_context) ss << " in " << short_context;
+    ss << "\n  rank = " << rank << ", raw_ptr = " << raw_ptr << ", device = " << device;
+    fatal_error(ss.str(), "fatal global_ptr error", context);
   }
 }
 
@@ -1295,7 +1294,7 @@ namespace {
       Fn fn
     ) {
     
-    UPCXX_ASSERT(!UPCXX_BACKEND_GASNET_SEQ || backend::master.active_with_caller());
+    UPCXX_ASSERT_MASTER_IFSEQ();
 
     auto *cb = gasnet::make_handle_cb(std::move(fn));
     
