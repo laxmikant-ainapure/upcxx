@@ -1336,9 +1336,9 @@ namespace upcxx {
   }
   
   template<typename T>
-  struct serialization<T&>: detail::serialization_not_supported {};
+  struct serialization<T&>: serialization_traits<typename std::remove_const<T>::type> {};
   template<typename T>
-  struct serialization<T&&>: detail::serialization_not_supported {};
+  struct serialization<T&&>: serialization_traits<typename std::remove_const<T>::type> {};
 
   template<typename T>
   struct serialization<T const>: serialization_traits<T> {
