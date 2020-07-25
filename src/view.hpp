@@ -22,9 +22,9 @@ namespace upcxx {
   class deserializing_iterator {
   public:
     using difference_type = std::ptrdiff_t;
-    using value_type = T;
-    using pointer = T*;
-    using reference = T;
+    using value_type = typename serialization_traits<T>::deserialized_type;
+    using pointer = value_type*;
+    using reference = value_type;
     using iterator_category = std::input_iterator_tag;
     
   private:
@@ -33,9 +33,9 @@ namespace upcxx {
   public:
     deserializing_iterator(char const *p = nullptr) noexcept: r_(p) {}
     
-    T operator*() const noexcept {
+    value_type operator*() const noexcept {
       detail::serialization_reader r1(r_);
-      detail::raw_storage<T> raw;
+      detail::raw_storage<value_type> raw;
       detail::serialization_view_element<T>::deserialize(r1, &raw);
       return raw.value_and_destruct();
     }
@@ -309,7 +309,8 @@ namespace upcxx {
       }
 
       template<typename Reader>
-      static T* deserialize(Reader &r, void *spot) noexcept {
+      static typename serialization_traits<T>::deserialized_type*
+      deserialize(Reader &r, void *spot) noexcept {
         r.template read_trivial<std::size_t>();
         return r.template read_into<T>(spot);
       }
@@ -321,6 +322,20 @@ namespace upcxx {
         std::size_t delta = r.template read_trivial<std::size_t>();
         r.jump(delta);
       }
+    };
+
+    // Compute deserialized view type for an element type T, correctly
+    // handling the case where T itself is a view.
+    // Base case: T is not a view -> result(T) = view<T>
+    template<typename T>
+    struct nested_view_deserialized_type {
+      using type = view<T/*, default iterator*/>;
+    };
+    // Recursive case: T is a view<U, Iter> -> result(T) = view<result(U)>
+    template<typename T, typename Iter>
+    struct nested_view_deserialized_type<view<T, Iter>> {
+      using type = view<typename nested_view_deserialized_type<T>::type
+                        /*, default iterator*/>;
     };
 
     // Non-trivially packed T. On the wire this is two size_t's, one for the skip
@@ -344,7 +359,7 @@ namespace upcxx {
         ::new(delta) std::size_t(size1 - size0);
       }
 
-      using deserialized_type = view<typename serialization_traits<T>::deserialized_type/*, default iterator*/>;
+      using deserialized_type = typename nested_view_deserialized_type<T>::type;
       
       template<typename Reader>
       static deserialized_type* deserialize(Reader &r, void *spot) noexcept {
@@ -391,7 +406,7 @@ namespace upcxx {
         w.write_sequence(x.beg_, x.end_, x.n_);
       }
 
-      using deserialized_type = view<T/*, default iterator*/>;
+      using deserialized_type = typename nested_view_deserialized_type<T>::type;
       
       template<typename Reader>
       static void skip(Reader &r) noexcept {
