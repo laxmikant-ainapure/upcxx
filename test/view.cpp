@@ -111,6 +111,58 @@ static_assert(is_serializable<pair_t>::value, "ERROR");
 static_assert(!is_actually_trivially_serializable<pair_t>::value, "ERROR");
 #undef pair_t
 
+// test deserialized types for asymmetric and (undocumented) nested views
+struct D {
+  int w,x;
+};
+struct S { // asymmetric serialization
+  int x,y,z;
+  struct upcxx_serialization {
+    template<typename Writer>
+    static void serialize (Writer& writer, S const & t) {
+        writer.write(t.x);
+    }
+    template<typename Reader>
+    static D* deserialize(Reader& reader, void* storage) {
+        int x = reader.template read<int>();
+        D *up = new(storage) D();
+        up->x = x;
+        return up;
+    }
+  };
+};
+
+template<typename T>
+using in = upcxx::view<T, T*>;
+template<typename T>
+using out = upcxx::view<T>;
+template<typename T>
+using dt = upcxx::deserialized_type_t<T>;
+
+template<typename T, typename U>
+struct assert_same {
+  static_assert(std::is_same<T, U>::value, "differ");
+};
+
+template<typename T, typename U>
+struct check {
+  using I1 = T;
+  using I2 = in<I1>;
+  using I3 = in<I2>;
+  using I4 = in<I3>;
+  using O1 = I1;
+  using O2 = out<O1>;
+  using O3 = out<O2>;
+  using O4 = out<O3>;
+  assert_same<dt<T>, U> a;
+  assert_same<dt<I2>, O2> b;
+  assert_same<dt<I3>, O3> c;
+  assert_same<dt<I4>, O4> d;
+};
+
+check<int, int> check_trivial;
+check<S, D> check_asymmetric;
+
 ////////////////////////////////////////////////////////////////////////////////
 // runtime test
 
