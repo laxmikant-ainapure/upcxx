@@ -45,6 +45,7 @@ Notable bug fixes:
 * issue #384: finalize can complete without invoking progress, leading to obscure leaks
 * issue #386: `upcxx_memberof_general` prohibits member designators that end with an array access
 * issue #389: `future::result*()` should assert readiness
+* [spec issue #160](https://bitbucket.org/berkeleylab/upcxx-spec/issues/160): Deadlocks arising from synchronous collective calls with internal progress
 
 Breaking changes:
 
@@ -57,6 +58,7 @@ Breaking changes:
 * `upcxx_memberof(gp, mem)` and `upcxx_memberof_general(gp, mem)` now
   produce a `global_ptr<T>` when `mem` names an array whose element
   type is `T`.
+* `atomic_domain` construction now has user-level progress
 
 ### 2020.03.12: Release 2020.3.0
 
