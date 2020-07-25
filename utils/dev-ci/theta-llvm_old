@@ -6,7 +6,7 @@ source $(dirname $0)/_ci-common
 ## ENVIRONMENT
 for x in gnu cray intel llvm; do module swap PrgEnv-$x PrgEnv-llvm/4.0; done 2>/dev/null
 module load xalt
-export TMPDIR=$XDG_RUNTIME_DIR
+export TMPDIR=${XDG_RUNTIME_DIR:-/tmp}
 
 export NETWORKS="${CI_NETWORKS:-aries}"
 export GMAKE="${CI_MAKE:-${GMAKE:-make}}"

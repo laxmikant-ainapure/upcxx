@@ -12,7 +12,7 @@ module load lsf-tools
 module load cuda
 export GASNET_IBV_PORTS=mlx5_0+mlx5_1
 export UPCXX_HAVE_OPENMP=1
-export TMPDIR=$XDG_RUNTIME_DIR
+export TMPDIR=${XDG_RUNTIME_DIR:-/tmp}
 
 export NETWORKS="${CI_NETWORKS:-ibv}"
 export GMAKE="${CI_MAKE:-${GMAKE:-make}}"
