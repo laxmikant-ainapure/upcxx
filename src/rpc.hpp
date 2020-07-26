@@ -36,18 +36,6 @@ namespace upcxx {
   }
   
   //////////////////////////////////////////////////////////////////////
-  // detail::is_not_array
-
-  namespace detail {
-    template<typename T>
-    struct is_not_array :
-      std::integral_constant<
-          bool,
-          !std::is_array<typename std::remove_reference<T>::type>::value
-        > {};
-  }
-
-  //////////////////////////////////////////////////////////////////////
   // detail::is_completions
 
   namespace detail {
