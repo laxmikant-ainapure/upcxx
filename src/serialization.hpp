@@ -1329,17 +1329,23 @@ namespace upcxx {
   
   //////////////////////////////////////////////////////////////////////////////
 
+  // references and cv qualifiers
+
   namespace detail {
     struct serialization_not_supported {
       static constexpr bool is_serializable = false;
     };
   }
-  
+
+  // a reference is serialized by serializing the referent
   template<typename T>
   struct serialization<T&>: serialization_traits<typename std::remove_const<T>::type> {};
   template<typename T>
   struct serialization<T&&>: serialization_traits<typename std::remove_const<T>::type> {};
 
+  // T const is [trivially] serializable if T is
+  template<typename T>
+  struct is_trivially_serializable<T const>: is_trivially_serializable<T> {};
   template<typename T>
   struct serialization<T const>: serialization_traits<T> {
     // inherit is_serializable
@@ -1360,7 +1366,21 @@ namespace upcxx {
 
     // inherit skip
   };
-  
+
+  // T[&,&&] volatile is not serializable
+  template<typename T>
+  struct serialization_traits<T volatile>: detail::serialization_not_supported {};
+  template<typename T>
+  struct serialization<T volatile>: detail::serialization_not_supported {};
+  template<typename T>
+  struct serialization_traits<T volatile&>: detail::serialization_not_supported {};
+  template<typename T>
+  struct serialization<T volatile&>: detail::serialization_not_supported {};
+  template<typename T>
+  struct serialization_traits<T volatile&&>: detail::serialization_not_supported {};
+  template<typename T>
+  struct serialization<T volatile&&>: detail::serialization_not_supported {};
+
   //////////////////////////////////////////////////////////////////////////////
 
   template<typename R, typename ...A>
