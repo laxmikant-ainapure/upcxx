@@ -156,6 +156,11 @@ upcxx::detail::atomic_domain_untyped<size,bit_flavor>::atomic_domain_untyped(
   parent_tm_ = &tm;
   
   if(opmask) {
+    #if GASNET_DEBUG
+      // spec issue #160: gex_AD_Create currently performs some synchronization in DEBUG mode (only)
+      // so perform a user barrier here to ensure no team members are blocked awaiting an RPC response
+      backend::quiesce(tm, entry_barrier::user);
+    #endif
     // Create the gasnet atomic domain for the world team.
     gex_AD_Create(reinterpret_cast<gex_AD_t*>(&ad_gex_handle),
                   gasnet::handle_of(tm), 
