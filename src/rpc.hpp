@@ -130,7 +130,8 @@ namespace upcxx {
 
     static_assert(
       detail::rpc_ff_return_no_sfinae<Fn(Arg...), completions<>>::value,
-      "function object provided to rpc_ff cannot be invoked on the given arguments as rvalue references. "
+      "function object provided to rpc_ff cannot be invoked on the given arguments as rvalue references "
+      "(after deserialization of the function object and arguments). "
       "Note: make sure that the function object does not have any non-const lvalue-reference parameters."
     );
       
@@ -182,7 +183,8 @@ namespace upcxx {
       
     static_assert(
       detail::rpc_ff_return_no_sfinae<Fn(Arg...), completions<Cxs...>>::value,
-      "function object provided to rpc_ff cannot be invoked on the given arguments as rvalue references. "
+      "function object provided to rpc_ff cannot be invoked on the given arguments as rvalue references "
+      "(after deserialization of the function object and arguments). "
       "Note: make sure that the function object does not have any non-const lvalue-reference parameters."
     );
 
@@ -375,6 +377,9 @@ namespace upcxx {
     }
 
     // Overload replaces SFINAE with a static assertion failure.
+    // Note: cxs comes after args to prevent the dummy int from being
+    // folded into the parameter pack for ...Arg, forcing it into the
+    // variadic arguments here.
     template<typename Cxs, typename Fn, typename ...Arg>
     future<> rpc(const team &, intrank_t, Fn &&, Arg &&..., Cxs, ...) {
       // check that this overload is not unintentionally invoked
@@ -385,7 +390,8 @@ namespace upcxx {
       // friendlier error message for when Fn(Arg...) is invalid
       static_assert(
         detail::rpc_return_no_sfinae<Fn(Arg...), Cxs>::value,
-        "function object provided to rpc cannot be invoked on the given arguments as rvalue references. "
+        "function object provided to rpc cannot be invoked on the given arguments as rvalue references "
+        "(after deserialization of the function object and arguments). "
         "Note: make sure that the function object does not have any non-const lvalue-reference parameters."
       );
       return make_future();

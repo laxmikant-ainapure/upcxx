@@ -213,7 +213,8 @@ namespace upcxx {
     struct as_rpc_return {
         static_assert(
           check_rpc_call<Fn(Args...)>::value,
-          "function object provided to as_rpc cannot be invoked on the given arguments as rvalue references. "
+          "function object provided to as_rpc cannot be invoked on the given arguments as rvalue references "
+          "(after deserialization of the function object and arguments). "
           "Note: make sure that the function object does not have any non-const lvalue-reference parameters."
         );
       using type = completions<
