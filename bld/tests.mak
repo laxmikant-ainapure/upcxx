@@ -58,6 +58,7 @@ testprograms_par = \
 test_dirs = \
 	test \
 	test/regression \
+	test/neg \
 	test/uts \
 	example/prog-guide \
 	example/serialization

@@ -1,0 +1,1 @@
+global_ptr<T> does not support volatile qualification on T

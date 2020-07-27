@@ -1,0 +1,1 @@
+Atomic domains only supported on non-const 32 and 64-bit integral or floating-point types

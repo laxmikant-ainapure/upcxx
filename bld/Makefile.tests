@@ -106,14 +106,17 @@ check: force
 .PHONY: check
 
 TEST_EXE_PATTERN ?= test-$$(basename $$src .cpp)-$$network
+HASH:=\#
 
 export MAKE # $$MAKE in the rule below avoids a jobserver warning bug in make 4.3
             # MAKEFLAGS override squashes a similar jobserver warning bug in make 4.2.1
 # We encode '/' as '..' to allow this pattern rule to work
+
 do-build-%: force
 	@export MAKEFLAGS="--no-print-directory" ;       \
 	 IFS=+ read name threadmode network <<<$*;       \
 	 src=$${name//..//};                             \
+	 errc="$(upcxx_src)/$${src%.c*}.errc";           \
 	 exe="$(TEST_EXE_PATTERN)";                      \
 	 if ! [[ "$$exe" =~ $(call TEST_PATTERN,$(TESTS)) ]] || \
 	      [[ "$$exe" =~ $(call TEST_PATTERN,$(NO_TESTS)) ]] ; then \
@@ -130,16 +133,47 @@ do-build-%: force
 	                         $(UPCXX_COLOR_CXXFLAGS) \
 	                         -o $$exe$(EXESUFFIX)    \
 				 2> $$output );          \
-	 if [[ $$? == 0 ]]; then                         \
-	   $$MAKE $(MAKE_HERE) do-test-xml RESULT=compile-pass OUTPUT=$$output ; \
-	   printf 'Compiling %-30s SUCCESS\n' "$$exe";   \
-	 else                                            \
-	   $$MAKE $(MAKE_HERE) do-test-xml RESULT=compile-fail OUTPUT=$$output ; \
-	   printf 'Compiling %-30s FAILED\n' "$$exe";    \
-	   head -n $(TEST_CERR_LIMIT) $$output ;         \
-	   [[ -n "$$TEST_SENTINEL" ]] && touch $$TEST_SENTINEL; \
-	   exit 1;                                       \
-	 fi
+	 result=$$?;                                     \
+	 if [[ -f $$errc ]]; then : expect compile error ; \
+	   if [[ $$result == 0 ]]; then                  \
+	     $$MAKE $(MAKE_HERE) do-test-xml RESULT=compile-fail OUTPUT=$$output ; \
+	     printf 'Compiling %-30s FAILED: expected compile error, got success\n' "$$exe"; \
+	     rm -f "$$exe$(EXESUFFIX)";                  \
+	     [[ -n "$$TEST_SENTINEL" ]] && touch $$TEST_SENTINEL; \
+	     exit 1;                                     \
+	   else : match output to any line in .errc, each specifying a multi-line perl regexp ; \
+	     match=0 ;                                   \
+	     while IFS= read -r line ; do                \
+	       if [[ "$$line" =~ ^[[:space:]]*$$ ]]      \
+	       || [[ "$$line" =~ ^[[:space:]]*$(HASH) ]] ; then  \
+	         : skip blank lines and comments ;       \
+	       else                                      \
+	         $(PERL) -e 'undef $$/; my $$out=<>; $$out =~ s/\s+/ /g; exit !($$out =~ m!'"$$line"'!i)' \
+		    < $$output && match=1 ;              \
+	       fi;                                       \
+	     done < "$$errc" ;                           \
+	     if [[ $$match == 1 ]]; then                 \
+	       $$MAKE $(MAKE_HERE) do-test-xml RESULT=compile-pass OUTPUT=$$output ; \
+	       printf 'Compiling %-30s SUCCESS\n' "$$exe"; \
+	     else                                        \
+	       $$MAKE $(MAKE_HERE) do-test-xml RESULT=compile-fail OUTPUT=$$output ; \
+	       printf 'Compiling %-30s FAILED: compile error did not match expected pattern\n' "$$exe"; \
+	       [[ -n "$$TEST_SENTINEL" ]] && touch $$TEST_SENTINEL; \
+	       exit 1;                                   \
+	     fi;                                         \
+	   fi;                                           \
+	 else : expect compile pass ;                    \
+	   if [[ $$result == 0 ]]; then                  \
+	     $$MAKE $(MAKE_HERE) do-test-xml RESULT=compile-pass OUTPUT=$$output ; \
+	     printf 'Compiling %-30s SUCCESS\n' "$$exe"; \
+	   else                                          \
+	     $$MAKE $(MAKE_HERE) do-test-xml RESULT=compile-fail OUTPUT=$$output ; \
+	     printf 'Compiling %-30s FAILED\n' "$$exe";  \
+	     head -n $(TEST_CERR_LIMIT) $$output ;       \
+	     [[ -n "$$TEST_SENTINEL" ]] && touch $$TEST_SENTINEL; \
+	     exit 1;                                     \
+	   fi;                                           \
+	 fi; 
 
 # UPCXX_TESTS defaults to all, but test_install (for instance) may override
 UPCXX_TESTS ?= $(addsuffix +seq,$(testprograms_seq)) $(addsuffix +par,$(testprograms_par))
