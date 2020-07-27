@@ -116,6 +116,11 @@ do-gasnet-configure: force
 	   mkdir -p "$$dir" && cd "$$dir" &&                                          \
 	     eval "$$cmd" 2>&1 | tee config.txt; exit $${PIPESTATUS[0]};              \
 	 fi
+	@if test \! -f "$(GASNET_CONFIG_FRAGMENT)"; then                              \
+	   $(MAKE) -C $(GASNETDIR)/$(GASNET_CONDUIT)-conduit                          \
+			$(GASNET_CONDUIT)-$(GASNET_THREADMODE).mak &&                 \
+	   $(MAKE) do-gasnet-mak UPCXX_FRAGMENTS="$(builddir)/$(GASNETDIR)";          \
+	 fi
 
 #
 # On-demand compile of a single instance of libgasnet
@@ -362,7 +367,7 @@ endif
 endif
 
 #
-# Generated configuration header
+# Generated configuration header (.hpp) and fragment (.mak)
 # TODO: dependencies to rebuild when something (what?) changes in GASNet
 #
 
@@ -371,7 +376,7 @@ include $(top_srcdir)/bld/config.mak
 UPCXX_CONFIG_HEADER = gen_include/upcxx/upcxx_config.hpp
 
 UPCXX_CONFIG_SCRIPTS_FULL = \
-	$(addprefix $(top_srcdir)/utils/config/, $(UPCXX_CONFIG_SCRIPTS))
+	$(addprefix $(top_srcdir)/utils/config/upcxx/, $(UPCXX_CONFIG_SCRIPTS))
 
 $(UPCXX_CONFIG_HEADER): $(UPCXX_CONFIG_SCRIPTS_FULL)
 	@mkdir -p $(dir $@)
@@ -392,6 +397,26 @@ $(UPCXX_CONFIG_HEADER): $(UPCXX_CONFIG_SCRIPTS_FULL)
 	   echo '#endif // _UPCXX_CONFIG_HPP';                \
 	 ) >| $@
 
+GASNET_CONFIG_SCRIPTS_FULL = \
+	$(addprefix $(top_srcdir)/utils/config/gasnet/, $(GASNET_CONFIG_SCRIPTS))
+
+do-gasnet-mak: force
+	@export $(UPCXX_CONFIG_VARS)                          \
+	        $(foreach var,$(UPCXX_CONFIG_FRAG_VARS),GASNET_$(var)='$(GASNET_$(var))'); \
+	 cd $(UPCXX_FRAGMENTS);                               \
+	 ( echo '# This file is auto-generated. Do not edit.';\
+	   echo ;                                             \
+	   for script in $(GASNET_CONFIG_SCRIPTS_FULL); do    \
+	     $(SHELL) $$script;                               \
+	     if [[ $$? != 0 ]]; then                          \
+	       echo "Error running $$script" >& 2;            \
+	       rm -f $(GASNET_CONFIG_FRAGMENT);               \
+	       exit 1;                                        \
+	     fi;                                              \
+	   done;                                              \
+	 ) >| $(GASNET_CONFIG_FRAGMENT)
+.PHONY: do-gasnet-mak
+
 # Panic button to zap generated upcxx_config.hpp files
 .PHONY: upcxx-unconfig
 upcxx-unconfig: force
@@ -402,6 +427,7 @@ upcxx-unconfig: force
 	        $(foreach backend, $(ALL_BACKENDS),       \
 	        $(foreach conduit, $(ALL_CONDUITS),       \
 	          $(call UPCXXDIR_FN,$(assert),$(optlev),$(dbgsym),$(backend),$(conduit))))))))
+	rm -f gasnet.opt.mak gasnet.dbg.mak
 
 #
 # Build upcxx library from its sources, with dependency tracking
@@ -534,10 +560,12 @@ do-upcxx-clean-opt: force
 	rm -Rf $(foreach backend, $(ALL_BACKENDS),       \
                $(foreach conduit, $(ALL_CONDUITS),       \
 	         $(call UPCXXDIR_FN,0,3,0,$(backend),$(conduit))))
+	rm -f gasnet.opt.mak
 do-upcxx-clean-debug: force
 	rm -Rf $(foreach backend, $(ALL_BACKENDS),       \
                $(foreach conduit, $(ALL_CONDUITS),       \
 	         $(call UPCXXDIR_FN,1,0,1,$(backend),$(conduit))))
+	rm -f gasnet.debug.mak
 
 #
 # Standard all, install, clean and distclean

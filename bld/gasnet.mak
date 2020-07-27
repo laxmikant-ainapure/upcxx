@@ -26,3 +26,10 @@ GASNET_THREADMODE = $(UPCXX_BACKEND:gasnet_%=%)
 GASNET_VAR_CMD =  test -f $(1)/Makefile && MAKEFLAGS='$(filter-out d -d --debug=%,$(MAKEFLAGS))' $(MAKE) -C $(1) echovar VARNAME=$(2)
 GASNET_VAR_VAL = $(shell $(call GASNET_VAR_CMD,$(1),$(2)))
 GASNET_VAR     = $(shell $(call GASNET_VAR_CMD,$(1),$(2)) | cut -d\" -f2)
+
+# Generated fragment with additional settings
+GASNET_CONFIG_FRAGMENT = $(upcxx_bld)/bld/gasnet.$(GASNET_CODEMODE).mak
+ifneq ($(wildcard $(GASNET_CONFIG_FRAGMENT)),)
+  $(GASNET_CONFIG_FRAGMENT): ; @: # empty rule
+  include $(GASNET_CONFIG_FRAGMENT)
+endif

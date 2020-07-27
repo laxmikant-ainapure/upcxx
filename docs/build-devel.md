@@ -113,11 +113,13 @@ slightly to:
 Additional make targets:
 
 * `make upcxx-unconfig`  
-  This gives a mechanism to remove all generated `upcxx_config.hpp` files.
+  This gives a mechanism to remove all generated `upcxx_config.hpp` and
+  `gasnet.{codemode}.mak` files.
   This may be necessary when modifying the GASNet sources or anything that
-  could invalidate the generated header (though modifying the probes will
-  also trigger regeneration).
-  However, `make clean` is also sufficient.
+  could invalidate the generated files.  While modifying the probe scripts
+  will trigger regeneration of the header, the special treatment gmake gives
+  to files it includes prevents doing the same for the makefile fragments.
+  Note that `make clean` is also sufficient.
 
 * `make gasnet [DO_WHAT=sub_target] [NETWORK=xyz] [UPCXX_CODEMODE={opt,debug}]`  
   This is a shortcut for `make -C <CONDUIT_DIR> sub_target`, where the value of
@@ -243,12 +245,18 @@ necessary to add new header files to any manually-maintained list.  If there are
 headers missing from an install, then it is appropriate to update
 `src/upcxx_headers.cpp` to ensure then are reached in the crawl.
 
-#### To add probes which generate content in `upcxx_config.h`
+#### To add a configure probe
 
-Adding a configure probe only requires writing a bash script taking a set of
+Configure probes run after GASNet has been configured can generate content in
+`upcxx_config.hpp` or `gasnet.{codemode}.mak`.
+
+Adding a configure probe requires writing a bash script taking a set of
 pre-defined environment variables as input, and generating content on `stdout`
-to be included in the generated `upcxx_config.hpp` files.  More details are
-provided in [utils/config/README.md](../utils/config/README.md).
+to be included in the generated `upcxx_config.hpp` or `gasnet.{debug,opt}.mak`
+files.  To be run, a script must be added to one of the variables
+`UPCXX_CONFIG_SCRIPTS` or `GASNET_CONFIG_SCRIPTS` in `bld/config.mak`.
+
+More details appear in [utils/config/README.md](../utils/config/README.md).
 
 #### To add tests or examples
 
