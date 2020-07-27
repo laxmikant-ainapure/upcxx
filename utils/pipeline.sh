@@ -30,6 +30,10 @@ CI_DEV_CHECK="${CI_DEV_CHECK:-0}"
 echo "CI_DEV_CHECK=$CI_DEV_CHECK"
 CI_RUN_TESTS="${CI_RUN_TESTS:-1}"
 echo "CI_RUN_TESTS=$CI_RUN_TESTS"
+CI_TESTS="${CI_TESTS:-}"
+echo "CI_TESTS=$CI_TESTS"
+CI_NO_TESTS="${CI_NO_TESTS:-}"
+echo "CI_NO_TESTS=$CI_NO_TESTS"
 CI_MAKE=${CI_MAKE:-make}
 echo "CI_MAKE=$CI_MAKE"
 CI_MAKE_PARALLEL=${CI_MAKE_PARALLEL:--j8}
@@ -54,6 +58,16 @@ if (( "$CI_DEV_CHECK" )) ; then
 else
   DEV=""
 fi
+if [[ -n "$CI_TESTS" ]] ; then
+  CI_TESTS="TESTS=$CI_TESTS"
+else
+  CI_TESTS="DUMMY=1"
+fi
+if [[ -n "$CI_NO_TESTS" ]] ; then
+  CI_NO_TESTS="NO_TESTS=$CI_NO_TESTS"
+else
+  CI_NO_TESTS="DUMMY=1"
+fi
 
 set -e
 set -x
@@ -69,7 +83,7 @@ time $MAKE install
 
 time $MAKE test_install || touch .pipe-fail
 
-time $MAKE ${DEV}tests NETWORKS="$CI_NETWORKS" || touch .pipe-fail      # compile tests
+time $MAKE ${DEV}tests NETWORKS="$CI_NETWORKS" "$CI_TESTS" "$CI_NO_TESTS" || touch .pipe-fail      # compile tests
 
 if (( "$CI_RUN_TESTS" )) ; then
   # variables controlling (potentially simulated) distributed behavior
@@ -80,7 +94,7 @@ if (( "$CI_RUN_TESTS" )) ; then
   # Run for each network as a separate test session, in the user-provided order
   # Deliberately avoid parallel make for runners to ensure we don't risk memory exhaustion
   for network in $CI_NETWORKS ; do 
-    time $CI_MAKE ${DEV}run-tests RANKS=$CI_RANKS NETWORKS=$network || touch .pipe-fail  
+    time $CI_MAKE ${DEV}run-tests RANKS=$CI_RANKS NETWORKS=$network "$CI_TESTS" "$CI_NO_TESTS" || touch .pipe-fail  
   done
 fi
 
