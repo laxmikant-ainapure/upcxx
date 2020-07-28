@@ -30,7 +30,7 @@ int main() {
 
   { myclass mc(world());
 
-    mc.ad.fetch_add(gp, 1, std::memory_order_acq_rel);
+    mc.ad.fetch_add(gp, 1, std::memory_order_acq_rel).wait();
   }
 
   if (!rank_me()) {
