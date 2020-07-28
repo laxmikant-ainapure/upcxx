@@ -36,15 +36,16 @@ namespace upcxx {
   }
   
   //////////////////////////////////////////////////////////////////////
-  // detail::is_not_array
+  // detail::is_completions
 
   namespace detail {
+    // Used to distinguish completions from function objects in rpc
+    // overloads.
     template<typename T>
-    struct is_not_array :
-      std::integral_constant<
-          bool,
-          !std::is_array<typename std::remove_reference<T>::type>::value
-        > {};
+    struct is_completions : std::false_type {};
+
+    template<typename ...Cxs>
+    struct is_completions<completions<Cxs...>> : std::true_type {};
   }
 
   //////////////////////////////////////////////////////////////////////
@@ -68,20 +69,42 @@ namespace upcxx {
           completions<Cx...>
         >::return_t;
     };
+
+    // SFINAE-avoiding return-type computation for rpc_ff.
+    template<typename Call, typename Cxs, typename = void>
+    struct rpc_ff_return_no_sfinae {
+      using type = void;
+      static const bool value = false; // whether Call is valid
+    };
+
+    template<typename Fn, typename Cxs, typename ...Arg>
+    struct rpc_ff_return_no_sfinae<
+        Fn(Arg...), Cxs,
+        decltype(
+          std::declval<typename detail::rpc_ff_return<Fn(Arg...), Cxs>::type>(),
+          void()
+        )
+      > {
+      using type = typename detail::rpc_ff_return<Fn(Arg...), Cxs>::type;
+      static const bool value = true;
+    };
   }
   
   // defaulted completions
   template<typename Fn, typename ...Arg>
   auto rpc_ff(const team &tm, intrank_t recipient, Fn &&fn, Arg &&...args)
-    // computes our return type, but SFINAE's out if fn(args...) is ill-formed
-    -> typename detail::rpc_ff_return<Fn(Arg...), completions<>>::type {
+    // computes our return type, but SFINAE's out if fn is a completions type
+    -> typename std::enable_if<
+         !detail::is_completions<Fn>::value,
+         typename detail::rpc_ff_return_no_sfinae<Fn(Arg...), completions<>>::type
+       >::type {
 
     static_assert(
       detail::trait_forall<
           detail::is_not_array,
           Arg...
         >::value,
-      "Arrays may not be passed as arguments to rpc. "
+      "Arrays may not be passed as arguments to rpc_ff. "
       "To send the contents of an array, use upcxx::make_view() to construct a upcxx::view over the elements."
     );
 
@@ -91,6 +114,13 @@ namespace upcxx {
           typename binding<Arg>::on_wire_type...
         >::value,
       "All rpc arguments must be Serializable."
+    );
+
+    static_assert(
+      detail::rpc_ff_return_no_sfinae<Fn(Arg...), completions<>>::value,
+      "function object provided to rpc_ff cannot be invoked on the given arguments as rvalue references "
+      "(after deserialization of the function object and arguments). "
+      "Note: make sure that the function object does not have any non-const lvalue-reference parameters."
     );
       
     UPCXX_ASSERT(recipient >= 0 && recipient < tm.rank_n(),
@@ -104,27 +134,33 @@ namespace upcxx {
   
   template<typename Fn, typename ...Arg>
   auto rpc_ff(intrank_t recipient, Fn &&fn, Arg &&...args)
-    // computes our return type, but SFINAE's out if fn(args...) is ill-formed
-    -> typename detail::rpc_ff_return<Fn(Arg...), completions<>>::type {
+    // computes our return type, but SFINAE's out if fn is a completions type
+    -> typename std::enable_if<
+         !detail::is_completions<Fn>::value,
+         typename detail::rpc_ff_return_no_sfinae<Fn(Arg...), completions<>>::type
+       >::type {
 
     UPCXX_ASSERT(recipient >= 0 && recipient < world().rank_n(),
       "rpc_ff(recipient, ...) requires recipient in [0, rank_n()-1] == [0, " << world().rank_n()-1 << "], but given: " << recipient);
-    
+
     return rpc_ff(world(), recipient, std::forward<Fn>(fn), std::forward<Arg>(args)...);
   }
 
   // explicit completions
   template<typename Cxs, typename Fn, typename ...Arg>
   auto rpc_ff(const team &tm, intrank_t recipient, Cxs cxs, Fn &&fn, Arg &&...args)
-    // computes our return type, but SFINAE's out if fn(args...) is ill-formed
-    -> typename detail::rpc_ff_return<Fn(Arg...), Cxs>::type {
+    // computes our return type, but SFINAE's out if cxs is not a completions type
+    -> typename std::enable_if<
+         detail::is_completions<Cxs>::value,
+         typename detail::rpc_ff_return_no_sfinae<Fn(Arg...), Cxs>::type
+       >::type {
 
     static_assert(
       detail::trait_forall<
           detail::is_not_array,
           Arg...
         >::value,
-      "Arrays may not be passed as arguments to rpc. "
+      "Arrays may not be passed as arguments to rpc_ff. "
       "To send the contents of an array, use upcxx::make_view() to construct a upcxx::view over the elements."
     );
 
@@ -136,6 +172,13 @@ namespace upcxx {
       "All rpc arguments must be Serializable."
     );
       
+    static_assert(
+      detail::rpc_ff_return_no_sfinae<Fn(Arg...), Cxs>::value,
+      "function object provided to rpc_ff cannot be invoked on the given arguments as rvalue references "
+      "(after deserialization of the function object and arguments). "
+      "Note: make sure that the function object does not have any non-const lvalue-reference parameters."
+    );
+
     UPCXX_ASSERT(recipient >= 0 && recipient < tm.rank_n(),
       "rpc_ff(team, recipient, ...) requires recipient in [0, team.rank_n()-1] == [0, " << tm.rank_n()-1 << "], but given: " << recipient);
 
@@ -165,8 +208,11 @@ namespace upcxx {
   
   template<typename Cxs, typename Fn, typename ...Arg>
   auto rpc_ff(intrank_t recipient, Cxs cxs, Fn &&fn, Arg &&...args)
-    // computes our return type, but SFINAE's out if fn(args...) is ill-formed
-    -> typename detail::rpc_ff_return<Fn(Arg...), Cxs>::type {
+    // computes our return type, but SFINAE's out if cxs is not a completions type
+    -> typename std::enable_if<
+         detail::is_completions<Cxs>::value,
+         typename detail::rpc_ff_return_no_sfinae<Fn(Arg...), Cxs>::type
+       >::type {
   
     UPCXX_ASSERT(recipient >= 0 && recipient < world().rank_n(),
       "rpc_ff(recipient, ...) requires recipient in [0, rank_n()-1] == [0, " << world().rank_n()-1 << "], but given: " << recipient);
@@ -234,11 +280,30 @@ namespace upcxx {
           completions<Cx...>
         >::return_t;
     };
+
+    // SFINAE-avoiding return-type computation for rpc.
+    template<typename Call, typename Cxs, typename = void>
+    struct rpc_return_no_sfinae {
+      using type = future<>;
+      static const bool value = false; // whether Call is valid
+    };
+
+    template<typename Fn, typename Cxs, typename ...Arg>
+    struct rpc_return_no_sfinae<
+        Fn(Arg...), Cxs,
+        decltype(
+          std::declval<typename detail::rpc_return<Fn(Arg...), Cxs>::type>(),
+          void()
+        )
+      > {
+      using type = typename detail::rpc_return<Fn(Arg...), Cxs>::type;
+      static const bool value = true;
+    };
   }
   
   namespace detail {
     template<typename Cxs, typename Fn, typename ...Arg>
-    auto rpc(const team &tm, intrank_t recipient, Cxs cxs, Fn &&fn, Arg &&...args)
+    auto rpc(const team &tm, intrank_t recipient, Fn &&fn, Arg &&...args, Cxs cxs, int /*dummy*/)
       // computes our return type, but SFINAE's out if fn(args...) is ill-formed
       -> typename detail::rpc_return<Fn(Arg...), Cxs>::type {
       
@@ -304,60 +369,95 @@ namespace upcxx {
       
       return returner();
     }
+
+    // Overload replaces SFINAE with a static assertion failure.
+    // Note: cxs comes after args to prevent the dummy int from being
+    // folded into the parameter pack for ...Arg, forcing it into the
+    // variadic arguments here.
+    template<typename Cxs, typename Fn, typename ...Arg>
+    future<> rpc(const team &, intrank_t, Fn &&, Arg &&..., Cxs, ...) {
+      // check that this overload is not unintentionally invoked
+      static_assert(
+        !detail::rpc_return_no_sfinae<Fn(Arg...), Cxs>::value,
+        "internal error"
+      );
+      // friendlier error message for when Fn(Arg...) is invalid
+      static_assert(
+        detail::rpc_return_no_sfinae<Fn(Arg...), Cxs>::value,
+        "function object provided to rpc cannot be invoked on the given arguments as rvalue references "
+        "(after deserialization of the function object and arguments). "
+        "Note: make sure that the function object does not have any non-const lvalue-reference parameters."
+      );
+      return make_future();
+    }
   }
-  
+
   template<typename Cxs, typename Fn, typename ...Arg>
   auto rpc(const team &tm, intrank_t recipient, Cxs cxs, Fn &&fn, Arg &&...args)
-    // computes our return type, but SFINAE's out if fn(args...) is ill-formed
-    -> typename detail::rpc_return<Fn(Arg...), Cxs>::type {
-    
+    // computes our return type, but SFINAE's out if cxs is not a completions type
+    -> typename std::enable_if<
+         detail::is_completions<Cxs>::value,
+         typename detail::rpc_return_no_sfinae<Fn(Arg...), Cxs>::type
+       >::type {
+
     UPCXX_ASSERT(recipient >= 0 && recipient < tm.rank_n(),
       "rpc(team, recipient, ...) requires recipient in [0, team.rank_n()-1] == [0, " << tm.rank_n()-1 << "], but given: " << recipient);
-        
+
     return detail::template rpc<Cxs, Fn&&, Arg&&...>(
-        tm, recipient, std::move(cxs), std::forward<Fn>(fn), std::forward<Arg>(args)...
+        tm, recipient, std::forward<Fn>(fn), std::forward<Arg>(args)...,
+        std::move(cxs), 0
       );
   }
   
   template<typename Cxs, typename Fn, typename ...Arg>
   auto rpc(intrank_t recipient, Cxs cxs, Fn &&fn, Arg &&...args)
-    // computes our return type, but SFINAE's out if fn(args...) is ill-formed
-    -> typename detail::rpc_return<Fn(Arg...), Cxs>::type {
-    
+    // computes our return type, but SFINAE's out if cxs is not a completions type
+    -> typename std::enable_if<
+         detail::is_completions<Cxs>::value,
+         typename detail::rpc_return_no_sfinae<Fn(Arg...), Cxs>::type
+       >::type {
+
     UPCXX_ASSERT(recipient >= 0 && recipient < world().rank_n(),
       "rpc(recipient, ...) requires recipient in [0, rank_n()-1] == [0, " << world().rank_n()-1 << "], but given: " << recipient);
-        
+
     return detail::template rpc<Cxs, Fn&&, Arg&&...>(
-        world(), recipient, std::move(cxs), std::forward<Fn>(fn), std::forward<Arg>(args)...
+        world(), recipient, std::forward<Fn>(fn), std::forward<Arg>(args)...,
+        std::move(cxs), 0
       );
   }
   
   // rpc: default completions variant
   template<typename Fn, typename ...Arg>
   auto rpc(const team &tm, intrank_t recipient, Fn &&fn, Arg &&...args)
-    // computes our return type, but SFINAE's out if fn(args...) is ill-formed
-    -> typename detail::rpc_return<Fn(Arg...), completions<future_cx<operation_cx_event>>>::type {
-    
+    // computes our return type, but SFINAE's out if fn is a completions type
+    -> typename std::enable_if<
+         !detail::is_completions<Fn>::value,
+         typename detail::rpc_return_no_sfinae<Fn(Arg...), completions<future_cx<operation_cx_event>>>::type
+       >::type {
+
     UPCXX_ASSERT(recipient >= 0 && recipient < tm.rank_n(),
       "rpc(team, recipient, ...) requires recipient in [0, team.rank_n()-1] == [0, " << tm.rank_n()-1 << "], but given: " << recipient);
-        
+
     return detail::template rpc<completions<future_cx<operation_cx_event>>, Fn&&, Arg&&...>(
-      tm, recipient, operation_cx::as_future(),
-      std::forward<Fn>(fn), std::forward<Arg>(args)...
+      tm, recipient, std::forward<Fn>(fn), std::forward<Arg>(args)...,
+      operation_cx::as_future(), 0
     );
   }
   
   template<typename Fn, typename ...Arg>
   auto rpc(intrank_t recipient, Fn &&fn, Arg &&...args)
-    // computes our return type, but SFINAE's out if fn(args...) is ill-formed
-    -> typename detail::rpc_return<Fn(Arg...), completions<future_cx<operation_cx_event>>, typename detail::rpc_remote_results<Fn(Arg...)>::type>::type {
-    
+    // computes our return type, but SFINAE's out if fn is a completions type
+    -> typename std::enable_if<
+         !detail::is_completions<Fn>::value,
+         typename detail::rpc_return_no_sfinae<Fn(Arg...), completions<future_cx<operation_cx_event>>>::type
+       >::type {
+
     UPCXX_ASSERT(recipient >= 0 && recipient < world().rank_n(),
       "rpc(recipient, ...) requires recipient in [0, rank_n()-1] == [0, " << world().rank_n()-1 << "], but given: " << recipient);
 
     return detail::template rpc<completions<future_cx<operation_cx_event>>, Fn&&, Arg&&...>(
-      world(), recipient, operation_cx::as_future(),
-      std::forward<Fn>(fn), std::forward<Arg>(args)...
+      world(), recipient, std::forward<Fn>(fn), std::forward<Arg>(args)...,
+      operation_cx::as_future(), 0
     );
   }
 }
