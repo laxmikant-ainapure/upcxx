@@ -324,17 +324,17 @@ namespace upcxx {
       }
     };
 
-    // Compute deserialized view type for an element type T, correctly
+    // Compute deserialized type for a view element type T, correctly
     // handling the case where T itself is a view.
-    // Base case: T is not a view -> result(T) = view<T>
+    // Base case: T is not a view -> result(T) = T
     template<typename T>
-    struct nested_view_deserialized_type {
-      using type = view<T/*, default iterator*/>;
+    struct view_element_deserialized_type {
+      using type = T;
     };
     // Recursive case: T is a view<U, Iter> -> result(T) = view<result(U)>
     template<typename T, typename Iter>
-    struct nested_view_deserialized_type<view<T, Iter>> {
-      using type = view<typename nested_view_deserialized_type<T>::type
+    struct view_element_deserialized_type<view<T, Iter>> {
+      using type = view<typename view_element_deserialized_type<T>::type
                         /*, default iterator*/>;
     };
 
@@ -359,7 +359,8 @@ namespace upcxx {
         ::new(delta) std::size_t(size1 - size0);
       }
 
-      using deserialized_type = typename nested_view_deserialized_type<T>::type;
+      using deserialized_type = view<typename view_element_deserialized_type<T>::type
+                                     /*, default iterator*/>;
       
       template<typename Reader>
       static deserialized_type* deserialize(Reader &r, void *spot) noexcept {
@@ -406,7 +407,8 @@ namespace upcxx {
         w.write_sequence(x.beg_, x.end_, x.n_);
       }
 
-      using deserialized_type = typename nested_view_deserialized_type<T>::type;
+      using deserialized_type = view<typename view_element_deserialized_type<T>::type
+                                     /*, default iterator*/>;
       
       template<typename Reader>
       static void skip(Reader &r) noexcept {
