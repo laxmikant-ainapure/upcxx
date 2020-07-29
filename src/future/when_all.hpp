@@ -18,7 +18,20 @@ namespace upcxx {
     };
 
     template<typename AnsKind, typename ...AnsT,
-             typename ArgKind, typename ...ArgT,
+             typename Arg, // non-future type
+             typename ...MoreArgs>
+    struct when_all_return_cat<
+        /*Ans=*/future1<AnsKind, AnsT...>,
+        /*ArgDecayed...=*/Arg, MoreArgs...
+      > {
+      using type = typename when_all_return_cat<
+          future1<AnsKind, AnsT..., Arg>,
+          MoreArgs...
+        >::type;
+    };
+
+    template<typename AnsKind, typename ...AnsT,
+             typename ArgKind, typename ...ArgT, // future type
              typename ...MoreArgs>
     struct when_all_return_cat<
         /*Ans=*/future1<AnsKind, AnsT...>,
@@ -43,13 +56,13 @@ namespace upcxx {
     template<typename ...ArgFu>
     when_all_return_t<ArgFu...> when_all_fast(ArgFu &&...arg) {
       return typename when_all_return_t<ArgFu...>::impl_type(
-        static_cast<ArgFu&&>(arg)...
+        to_fast_future(static_cast<ArgFu&&>(arg))...
       );
     }
     // single component optimization
     template<typename ArgFu>
-    ArgFu&& when_all_fast(ArgFu &&arg) {
-      return static_cast<ArgFu&&>(arg);
+    auto when_all_fast(ArgFu &&arg) -> decltype(to_fast_future(arg))&& {
+      return to_fast_future(static_cast<ArgFu&&>(arg));
     }
   }
 
@@ -67,13 +80,13 @@ namespace upcxx {
   template<typename ...ArgFu>
   detail::when_all_return_t<ArgFu...> when_all(ArgFu &&...arg) {
     return typename detail::when_all_return_t<ArgFu...>::impl_type(
-      static_cast<ArgFu&&>(arg)...
+      detail::to_fast_future(static_cast<ArgFu&&>(arg))...
     );
   }
   // single component optimization
   template<typename ArgFu>
-  ArgFu&& when_all(ArgFu &&arg) {
-    return static_cast<ArgFu&&>(arg);
+  auto when_all(ArgFu &&arg) -> decltype(detail::to_fast_future(arg))&& {
+    return detail::to_fast_future(static_cast<ArgFu&&>(arg));
   }
   
 }
