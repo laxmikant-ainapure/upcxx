@@ -85,6 +85,10 @@ time $MAKE test_install || touch .pipe-fail
 
 time $MAKE ${DEV}tests NETWORKS="$CI_NETWORKS" "$CI_TESTS" "$CI_NO_TESTS" || touch .pipe-fail      # compile tests
 
+if ! (( "$CI_DEV_CHECK" )) ; then # build negative compile tests, even when not doing full dev-check
+  time $MAKE dev-tests-debug NETWORKS=smp TESTS=neg- "$CI_NO_TESTS" || touch .pipe-fail
+fi
+
 if (( "$CI_RUN_TESTS" )) ; then
   # variables controlling (potentially simulated) distributed behavior
   export GASNET_SPAWNFN=${GASNET_SPAWNFN:-L}
