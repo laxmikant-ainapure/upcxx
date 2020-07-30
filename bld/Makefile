@@ -61,15 +61,6 @@ GASNETDIR = gasnet.$(GASNET_CODEMODE)
 UPCXX_DBGOPT ?= debug opt
 FOREACH_DBGOPT = $(addprefix $(1)-,$(UPCXX_DBGOPT))
 
-# Some useful GASNet variables
-ifneq ($(wildcard $(builddir)/$(GASNETDIR)),)
-GASNET_CONDUITS   := $(call GASNET_VAR,$(builddir)/$(GASNETDIR),CONDUITS)
-GASNET_CC_FAMILY  := $(call GASNET_VAR,$(builddir)/$(GASNETDIR),CC_FAMILY)
-GASNET_CXX_FAMILY := $(call GASNET_VAR,$(builddir)/$(GASNETDIR),CXX_FAMILY)
-GASNET_CC_SUBFAMILY  := $(call GASNET_VAR,$(builddir)/$(GASNETDIR),CC_SUBFAMILY)
-GASNET_CXX_SUBFAMILY := $(call GASNET_VAR,$(builddir)/$(GASNETDIR),CXX_SUBFAMILY)
-endif
-
 dummy:
 	@echo NO DEFAULT TARGET
 force:
@@ -79,8 +70,8 @@ force:
 ## Human-readable GASNet conduit list on stdout, for use in error reporting
 # If GASNet configure has not yet run, list supported conduits
 list-networks: force
-	@if [[ -n '$(GASNET_CONDUITS)' ]]; then           \
-	   echo "Available networks: $(GASNET_CONDUITS)"; \
+	@if [[ -n '$(CONDUITS)' ]]; then           \
+	   echo "Available networks: $(CONDUITS)"; \
 	 else                                      \
 	   echo "Supported networks include a system-specific subset of: $(filter-out $(UNOFFICIAL_CONDUITS),$(ALL_CONDUITS))"; \
 	 fi
@@ -500,7 +491,7 @@ UPCXX_NOCRAWL_INSTALL_HEADERS = \
 do-upcxx-all: force
 	@$(MAKE) do-gasnet-configure
 	@targets='';                                                           \
-	 for conduit in $(GASNET_CONDUITS); do                                 \
+	 for conduit in $(CONDUITS); do                                        \
 	   for backend in $(ALL_BACKENDS); do                                  \
 	     targets="$$targets $(call UPCXXDIR_FN,$(ASSERT),$(OPTLEV),$(DBGSYM),$$backend,$$conduit)/libupcxx.a";\
 	   done;                                                               \
@@ -528,7 +519,7 @@ do-upcxx-install-one: force
 	@$(MAKE) do-upcxx-install-headers do-upcxx-install-lib \
 	         do-upcxx-meta UPCXX_META_GASNET='$(prefix)/$(GASNETDIR)'
 do-upcxx-install-all: force
-	@for conduit in $(GASNET_CONDUITS); do                               \
+	@for conduit in $(CONDUITS); do                                      \
 	   for backend in $(ALL_BACKENDS); do                                \
 	     $(MAKE) do-upcxx-install-one                                    \
 	       DST="$(prefix)/upcxx.$(UPCXX_CODEMODE).$$backend.$$conduit"   \
@@ -615,7 +606,7 @@ UPCXX_EXE_CSUM_VALS = $(foreach var,$(UPCXX_EXE_CSUM_VARS),$($(var)))
 SRCPATH = $(shell cd $(STARTDIR) && cd $(dir $(SRC)) && pwd)/$(notdir $(SRC))
 UPCXX_EXE_CSUM = $(firstword $(shell $(UPCXX_CSUMCMD) <<< '$(SRCPATH) $(UPCXX_EXE_CSUM_VALS)'))
 UPCXX_EXE_STEM = $(builddir)/$(UPCXXDIR)/exe/$(UPCXX_EXE_CSUM)
-UPCXX_EXE      = $(UPCXX_EXE_STEM)$(call GASNET_VAR,$(builddir)/$(GASNETDIR),EXESUFFIX)
+UPCXX_EXE      = $(UPCXX_EXE_STEM)$(EXESUFFIX)
 
 do-exe: force
 	@mkdir -p $(UPCXXDIR)/exe

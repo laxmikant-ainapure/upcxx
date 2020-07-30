@@ -29,10 +29,9 @@ BLDDIR = $(upcxx_bld)/bld
 GASNET_BLDDIR = $(BLDDIR)/gasnet.$(firstword $(UPCXX_DBGOPT))
 
 include $(upcxx_src)/bld/gasnet.mak
-CONDUITS  = $(call GASNET_VAR,$(GASNET_BLDDIR),CONDUITS)
 
 install-hook: force
-	@CONDUITS='$(CONDUITS)';                             \
+	@export CONDUITS='$(CONDUITS)';                      \
 	 cd $(upcxx_src) &&                                  \
 	 . utils/install-common.sh &&                        \
 	 conduit_default="$(UPCXX_DEFAULT_NETWORK)" &&       \

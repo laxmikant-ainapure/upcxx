@@ -11,7 +11,8 @@ UPCXX_CONFIG_SCRIPTS = \
 	builtin_assume_aligned.sh \
 	hidden_am_concurrency_level.sh
 # Scripts (in $(upcxx_src)/utils/config/gasnet) to be run IN ORDER
-GASNET_CONFIG_SCRIPTS = # empty
+GASNET_CONFIG_SCRIPTS = \
+	config_status.sh
 
 # Environment (UPCXX_* prefixed) to export to configure probe scripts
 UPCXX_CONFIG_VARS = \

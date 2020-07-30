@@ -24,13 +24,6 @@ BLDDIR = $(upcxx_bld)/bld
 ## GASNet ##
 include $(upcxx_src)/bld/gasnet.mak
 GASNET_BLDDIR = $(BLDDIR)/gasnet.$(firstword $(UPCXX_CODEMODE) $(UPCXX_DBGOPT))
-CONDUITS  = $(call GASNET_VAR,$(GASNET_BLDDIR),CONDUITS)
-EXESUFFIX = $(call GASNET_VAR,$(GASNET_BLDDIR),EXESUFFIX)
-GASNET_CC_FAMILY  := $(call GASNET_VAR,$(GASNET_BLDDIR),CC_FAMILY)
-GASNET_CXX_FAMILY := $(call GASNET_VAR,$(GASNET_BLDDIR),CXX_FAMILY)
-GASNET_CC_SUBFAMILY  := $(call GASNET_VAR,$(GASNET_BLDDIR),CC_SUBFAMILY)
-GASNET_CXX_SUBFAMILY := $(call GASNET_VAR,$(GASNET_BLDDIR),CXX_SUBFAMILY)
-PERL := $(call GASNET_VAR,$(GASNET_BLDDIR),PERL)
 
 # public-facing targets don't use GASNet "conduit" terminology
 # using "target-specific variable values" for the defaults
@@ -80,7 +73,7 @@ do-test-prereqs: force
 	@echo 'Building dependencies...'
 	@$(MAKE) -C $(BLDDIR) do-gasnet-configure-$(UPCXX_CODEMODE) || \
 	 $(MAKE) failure TARGET=build
-	@$(MAKE) -C $(BLDDIR) $${NETWORKS:+GASNET_CONDUITS='$(NETWORKS)'} do-upcxx-all-$(UPCXX_CODEMODE) || \
+	@$(MAKE) -C $(BLDDIR) $${NETWORKS:+CONDUITS='$(NETWORKS)'} do-upcxx-all-$(UPCXX_CODEMODE) || \
          $(MAKE) failure TARGET=build
 
 .PHONY: do-test-prereqs
