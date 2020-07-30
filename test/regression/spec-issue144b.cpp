@@ -47,6 +47,27 @@ int main() {
   }
   assert(fa.result_reference().x == 16);
 
+  // demonstrate with a custom non-copyable type and multiple values
+  future<A,A> fb;
+  { 
+    fb = make_future(A(1),A(2)); // trivially ready future
+  }
+  assert(fb.result_reference<0>().x == 1);
+  assert(fb.result_reference<1>().x == 2);
+  {
+    promise<A,A> p;
+    fb = p.get_future(); // real non-ready future
+    assert(!fb.ready());
+    p.fulfill_result(A(3),A(4));
+  }
+  assert(fb.result_reference<0>().x == 3);
+  assert(fb.result_reference<1>().x == 4);
+  #if WHEN_ALL
+  fb = when_all(fa,fa); // currently broken
+  assert(fb.result_reference<0>().x == 16);
+  assert(fb.result_reference<1>().x == 16);
+  #endif
+
   upcxx::barrier();
   if (!upcxx::rank_me()) { std::cout << "SUCCESS" << std::endl; }
  
