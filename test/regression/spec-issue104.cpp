@@ -37,6 +37,14 @@ int main() {
   assert(accum == 42*5);
   accum = 0;
 
+  // misc tests
+  future<int> bar = when_all(7);
+  assert(bar.ready());
+  assert(bar.result() == 7);
+  future<int> foo = when_all(accum);
+  assert(foo.ready());
+  assert(foo.result() == 0);
+
   // an equivalent communication keeping the relevant references inside in the future chain
   //future<global_ptr<int>,int &> chainP = when_all<global_ptr<int>&,int &>(gp, accum); // broken due to issue #396
   future<global_ptr<int>,int &> chainP = when_all(gp, make_future<int&>(accum));
@@ -52,6 +60,9 @@ int main() {
   }
   chainP.wait();
   assert(accum == 42*5);
+
+  assert(foo.result() == 0);
+  assert(bar.result() == 7);
 
   barrier();
   if (!rank_me()) {
