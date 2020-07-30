@@ -3,10 +3,7 @@
 #include <type_traits>
 #include <upcxx/upcxx.hpp>
 
-template<typename T, typename U>
-struct assert_same {
-  static_assert(std::is_same<T, U>::value, "differ");
-};
+#include "util.hpp"
 
 template<typename T, bool TS, bool S, typename DT = void>
 struct check {
@@ -53,6 +50,8 @@ D d{-4, -5};
 
 int main() {
   upcxx::init();
+
+  print_test_header();
 
   int x = 3;
   double y = 5.3;
@@ -141,6 +140,8 @@ int main() {
     UPCXX_ASSERT_ALWAYS(res.wait().w == -4);
     UPCXX_ASSERT_ALWAYS(res.wait().x == -5);
   }
+
+  print_test_success();
 
   upcxx::finalize();
 }

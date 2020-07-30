@@ -19,11 +19,6 @@ struct A {
 };
 struct B : A {};
 
-template<typename T1, typename T2>
-struct assert_same {
-  static_assert(std::is_same<T1, T2>::value, "types differ");
-};
-
 #define CHECK_MEMBEROF_GUTS(accessor, suffix) {                 \
     auto gp_x = accessor(ptr, x) suffix;                        \
     auto gp_y = accessor(ptr, y) suffix;                        \

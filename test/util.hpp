@@ -64,4 +64,9 @@ std::string test_name(const char *file) {
   }
 #endif
 
+template<typename T1, typename T2>
+struct assert_same {
+  static_assert(std::is_same<T1, T2>::value, "types differ");
+};
+
 #endif
