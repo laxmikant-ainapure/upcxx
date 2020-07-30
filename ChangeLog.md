@@ -30,6 +30,7 @@ Notable bug fixes:
 * issue #346: `configure --cross=cray*` ignores `--with-cc/--with-cxx`
 * [spec issue #158](https://bitbucket.org/berkeleylab/upcxx-spec/issues/158): prohibit reference types in global_ptr and upcxx_memberof_general
 * issue #353: configure: automatically cross-compile on Cray XC
+* issue #355: `upcxx::view<T>` broken with asymmetric deserialization of `T`
 * issue #356: `SERIALIZED_{FIELDS|VALUES}` incorrectly require public constructors
 * issue #364: Stray "-e" output on macOS and possibly elsewhere
 * issue #361: upcxx::rpc broken when mixing arguments of T&& and dist_object& 
