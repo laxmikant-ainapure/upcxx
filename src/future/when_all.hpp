@@ -18,20 +18,7 @@ namespace upcxx {
     };
 
     template<typename AnsKind, typename ...AnsT,
-             typename Arg, // non-future type
-             typename ...MoreArgs>
-    struct when_all_return_cat<
-        /*Ans=*/future1<AnsKind, AnsT...>,
-        /*ArgDecayed...=*/Arg, MoreArgs...
-      > {
-      using type = typename when_all_return_cat<
-          future1<AnsKind, AnsT..., Arg>,
-          MoreArgs...
-        >::type;
-    };
-
-    template<typename AnsKind, typename ...AnsT,
-             typename ArgKind, typename ...ArgT, // future type
+             typename ArgKind, typename ...ArgT,
              typename ...MoreArgs>
     struct when_all_return_cat<
         /*Ans=*/future1<AnsKind, AnsT...>,
@@ -42,15 +29,27 @@ namespace upcxx {
           MoreArgs...
         >::type;
     };
+
+    template<typename Arg>
+    struct when_all_arg_t { // non-future argument
+      using type = future1<future_kind_result, Arg>;
+    };
+
+    template<typename ArgKind, typename ...ArgT>
+    struct when_all_arg_t<future1<ArgKind, ArgT...>> { // future argument
+      using type = future1<ArgKind, ArgT...>;
+    };
     
     // compute return type of when_all
     template<typename ...Arg>
     using when_all_return_t = typename when_all_return_cat<
         future1<
-          future_kind_when_all<typename std::decay<Arg>::type...>
+          future_kind_when_all<
+            typename when_all_arg_t<typename std::decay<Arg>::type>::type...
+          >
           /*, empty T...*/
         >,
-        typename std::decay<Arg>::type...
+        typename when_all_arg_t<typename std::decay<Arg>::type>::type...
       >::type;
 
     template<typename ...ArgFu>
