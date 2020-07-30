@@ -2,6 +2,8 @@
 #include <iostream>
 #include <assert.h>
 #include <unistd.h>
+#include <string>
+#include <memory>
 
 using namespace upcxx;
 
@@ -37,14 +39,6 @@ int main() {
   assert(accum == 42*5);
   accum = 0;
 
-  // misc tests
-  future<int> bar = when_all(7);
-  assert(bar.ready());
-  assert(bar.result() == 7);
-  future<int> foo = when_all(accum);
-  assert(foo.ready());
-  assert(foo.result() == 0);
-
   // an equivalent communication keeping the relevant references inside in the future chain
   //future<global_ptr<int>,int &> chainP = when_all<global_ptr<int>&,int &>(gp, accum); // broken due to issue #396
   future<global_ptr<int>,int &> chainP = when_all(gp, make_future<int&>(accum));
@@ -61,8 +55,22 @@ int main() {
   chainP.wait();
   assert(accum == 42*5);
 
-  assert(foo.result() == 0);
+  // misc tests
+  int v = 0;
+  future<int> bar = when_all(7);
+  assert(bar.ready());
   assert(bar.result() == 7);
+  future<int> foo = when_all(v); v++;
+  assert(foo.ready());
+  assert(foo.result() == 0);
+  std::string s("s");
+  future<std::string> baz = when_all(std::move(s));
+  assert(baz.ready());
+  assert(baz.result() == "s");
+  std::unique_ptr<int> up(new int(17));
+  future<std::unique_ptr<int>> boof = when_all(std::move(up));
+  assert(boof.ready());
+  assert(*boof.result_reference() == 17);
 
   barrier();
   if (!rank_me()) {
