@@ -83,6 +83,9 @@ int main() {
   check<std::tuple<const int, const S&, const D&>, false, true, std::tuple<const int, D, D>>{};
   check<std::tuple<const int&, const S, const D>, false, true, std::tuple<int, const D, const D>>{};
 
+  check<upcxx::global_ptr<const int>, true, true, upcxx::global_ptr<const int>>{};
+  check<upcxx::global_ptr<const int>&, false, true, upcxx::global_ptr<const int>>{};
+
   {
     auto res = upcxx::rpc((upcxx::rank_me() + 1) % upcxx::rank_n(),
       [=](std::pair<int, double> q) -> std::string&& {

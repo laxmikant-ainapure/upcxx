@@ -52,6 +52,11 @@ int main() {
                              const int>::value,
                 "unexpected element_type");
 
+  assert_same<upcxx::deserialized_type_t<global_ptr<int>>,
+              global_ptr<int>>{};
+  assert_same<upcxx::deserialized_type_t<global_ptr<const int>>,
+              global_ptr<const int>>{};
+
   global_ptr<int> ptr;
   global_ptr<const int> cptr;
   UPCXX_ASSERT_ALWAYS(ptr.is_null());
