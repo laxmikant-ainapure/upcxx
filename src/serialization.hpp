@@ -816,6 +816,9 @@ namespace upcxx {
     struct serialization_fields_each {
       using Ti = typename std::remove_reference<typename std::tuple_element<i, TupRefs>::type>::type;
 
+      static_assert( is_serializable<Ti>::value,
+                     "All arguments to UPCXX_SERIALIZED_FIELDS must be Serializable."); 
+
       static_assert(
         std::is_same<Ti, typename serialization_traits<Ti>::deserialized_type>::value,
         "Serialization via UPCXX_SERIALIZED_FIELDS(...) requires that all "
@@ -982,6 +985,9 @@ namespace upcxx {
       // Ti = decay(TupRefs[i]) but without decaying arrays, leave those be!
       using Ti = typename std::remove_cv<typename std::remove_reference<typename std::tuple_element<i, TupRefs>::type>::type>::type;
       using recurse_tail = serialization_values_each<TupRefs, i+1, n>;
+
+      static_assert( is_serializable<Ti>::value,
+                     "All arguments to UPCXX_SERIALIZED_VALUES must be Serializable."); 
       
       template<typename Prefix>
       static auto ubound(Prefix pre, TupRefs const &refs)
