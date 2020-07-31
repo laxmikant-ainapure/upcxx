@@ -3,6 +3,7 @@
 struct A {
   int a;
   virtual void foo(){}
+  UPCXX_SERIALIZED_FIELDS(a);
 };
 
 struct B : public A {
