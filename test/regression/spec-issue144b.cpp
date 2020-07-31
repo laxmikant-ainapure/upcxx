@@ -79,6 +79,39 @@ int main() {
   assert(fb.result_reference<0>().x == 21);
   assert(fb.result_reference<1>().x == 22);
 
+
+  // now try rpc
+  rpc(0,[](A const &a) { 
+              assert(a.x == 10); 
+        }, A(10)).wait(); // works in develop
+  A tmp(11);
+  rpc(0,[](A const &a, A const &b) { 
+              assert(a.x == 10); 
+              assert(b.x == 11); 
+        }, A(10), std::move(tmp)).wait(); // works in develop
+#if !defined(RPC) || RPC
+  future<A> fx = rpc((rank_me()+1)%rank_n(),[]() -> A&& {
+                   static A a(13);
+                   return std::move(a); 
+                 });
+  assert(fx.wait_reference().x == 13);
+
+  future<A> fy = rpc(0,[](A &&a) -> A&& { 
+                    assert(a.x == 22);
+                    return std::move(a); 
+                }, A(22));
+  assert(fy.wait_reference().x == 22);
+
+  future<A,A,A> fz = rpc((rank_me()+1)%rank_n(),
+                      [](A &&a, A &&b) { 
+                    static A c(6);
+                    return make_future(std::move(a),std::move(b),std::move(c));
+                }, A(4), A(5));
+  assert(fz.wait_reference<0>().x == 4);
+  assert(fz.wait_reference<1>().x == 5);
+  assert(fz.wait_reference<2>().x == 6);
+#endif
+
   upcxx::barrier();
   if (!upcxx::rank_me()) { std::cout << "SUCCESS" << std::endl; }
  
