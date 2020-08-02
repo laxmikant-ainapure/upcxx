@@ -40,6 +40,7 @@ Notable bug fixes:
   return the type `future<T>` exactly (previously was `future1<???,T>`). Sole
   remaining exception is `when_all`.
 * issue #313: implement future::{result,wait}_reference.
+* issue #336: Add static_assert to prohibit massive types as top-level arguments to RPC
 * issue #343: Guarantee equality for default-constructed invalid upcxx::team_id
 * issue #371: `team_id`s are not "universal" as documented
 * issue #373: No `python` in `$PATH` in recent Linux distros
@@ -48,6 +49,7 @@ Notable bug fixes:
 * issue #384: finalize can complete without invoking progress, leading to obscure leaks
 * issue #386: `upcxx_memberof_general` prohibits member designators that end with an array access
 * issue #389: `future::result*()` should assert readiness
+* issue #392: Prevent silent use of by-value communication APIs for huge types
 * [spec issue #160](https://bitbucket.org/berkeleylab/upcxx-spec/issues/160): Deadlocks arising from synchronous collective calls with internal progress
 
 Breaking changes:
