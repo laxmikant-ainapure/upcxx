@@ -56,6 +56,10 @@ int main(void) {
     assert(!r->deserialized);
 
     std::cout << "serialization..." << std::endl;
+  #if 0
+    // This approach technically works (with a large enough program stack)
+    // but is a bad idea, because it imposes lots of overhead copying the large type
+    // on both sides.
     upcxx::rpc(0, [] (const massive& r_r) {
                 /*
                  * Validate that this is a deserialized instance 
@@ -65,10 +69,28 @@ int main(void) {
                 assert(r_r.value==42);
                 assert(r_r.scratch_space[N-1] == 27);
             }, std::move(*r)).wait();
+  #else
+    // This approach partially avoids the problem by using a view, which
+    // avoids unnecessary copies on the initiator.
+    // However it's still not great because the view's deserializing_iterator forces
+    // the large object to be instantiated and returned by value, which still leads
+    // to stack overflows on many platforms.
+    upcxx::rpc(0, [] (upcxx::view<massive> r_view) {
+                static massive const & r_r = *r_view.begin();
+                /*
+                 * Validate that this is a deserialized instance 
+                 * and that the entire object was not sent.
+                 */
+                assert(r_r.deserialized);
+                assert(r_r.value==42);
+                assert(r_r.scratch_space[N-1] == 27);
+            }, upcxx::make_view(r,r+1)).wait();
+  #endif
 
     upcxx::barrier();
 
     if (rank == 0) std::cout << "SUCCESS" << std::endl;
+    delete r;
 
     upcxx::finalize();
 
