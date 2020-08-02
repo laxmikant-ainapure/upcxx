@@ -244,6 +244,14 @@ namespace upcxx {
           "(after deserialization of the function object and arguments). "
           "Note: make sure that the function object does not have any non-const lvalue-reference parameters."
         );
+        static_assert(
+          detail::trait_forall<
+              detail::type_respects_static_size_limit,
+              typename binding<Args>::on_wire_type...
+            >::value,
+          UPCXX_STATIC_ASSERT_RPC_MSG(remote_cx::as_rpc)
+        );
+
       using type = completions<
           rpc_cx<Event, typename bind<Fn&&, Args&&...>::return_type>
         >;
