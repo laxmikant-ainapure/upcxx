@@ -183,6 +183,8 @@ namespace upcxx {
       "RMA operations only work on TriviallySerializable types."
     );
 
+    UPCXX_STATIC_ASSERT_VALUE_SIZE(T, rget); // issue 392: prevent large types by-value
+
     UPCXX_ASSERT_ALWAYS(
       (detail::completions_has_event<Cxs, operation_cx_event>::value),
       "Not requesting operation completion is surely an error. You'll have no "

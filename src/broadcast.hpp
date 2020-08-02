@@ -187,6 +187,8 @@ namespace upcxx {
       "use at own risk)."
     );
 
+    UPCXX_STATIC_ASSERT_VALUE_SIZE(T, broadcast); // issue 392: prevent large types by-value
+
     UPCXX_ASSERT(root >= 0 && root < tm.rank_n(),
       "broadcast(..., root, team) requires root in [0, team.rank_n()-1] == [0, " << tm.rank_n()-1 << "], but given: " << root);
 

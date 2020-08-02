@@ -40,6 +40,24 @@ namespace upcxx {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// Argument-checking assertions
+
+// These define the maximum-size (in bytes) of an object that by-value API's will accept without an #error
+#ifndef UPCXX_MAX_VALUE_SIZE
+#define UPCXX_MAX_VALUE_SIZE 512 // user-tunable default
+#endif
+
+#define UPCXX_STATIC_ASSERT_VALUE_SIZE(T, fnname) \
+  static_assert(sizeof(T) <= UPCXX_MAX_VALUE_SIZE, \
+    "This program is attempting to pass an object with a large static type (over " UPCXX_STRINGIFY(UPCXX_MAX_VALUE_SIZE) " bytes) " \
+    "to the by-value overload of upcxx::" #fnname ". This is ill-advised because the by-value overload is " \
+    "designed and tuned for small scalar values, and will impose significant data copy overheads " \
+    "(and possibly program stack overflow) when used with larger types. Please use the bulk upcxx::" \
+    #fnname " overload instead, which manipulates the data by pointer, avoiding costly by-value copies. " \
+    "The threshold for this error can be adjusted (at your own peril!) via -DUPCXX_MAX_VALUE_SIZE=n" \
+  )
+
+////////////////////////////////////////////////////////////////////////////////
 // upcxx::backend implementation: non-backend specific
 
 namespace upcxx {

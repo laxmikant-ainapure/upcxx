@@ -396,6 +396,8 @@ namespace upcxx {
       const team &tm = upcxx::world(),
       Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
     ) {
+    UPCXX_STATIC_ASSERT_VALUE_SIZE(T, reduce_one); // issue 392: prevent large types by-value
+
     UPCXX_ASSERT(root >= 0 && root < tm.rank_n(),
       "reduce_one(..., root, team) requires root in [0, team.rank_n()-1] == [0, " << tm.rank_n()-1 << "], but given: " << root);
     
@@ -519,6 +521,8 @@ namespace upcxx {
       const team &tm = upcxx::world(),
       Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
     ) {
+    UPCXX_STATIC_ASSERT_VALUE_SIZE(T, reduce_all); // issue 392: prevent large types by-value
+
     return detail::reduce_one_or_all_trivial<T1,BinaryOp,Cxs,T>(
         std::move(value), std::move(op), /*all=*/-1, tm, std::move(cxs)
       );

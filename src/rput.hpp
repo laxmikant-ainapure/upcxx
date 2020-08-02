@@ -437,6 +437,8 @@ namespace upcxx {
     
     traits_t::template assert_sane<T>();
 
+    UPCXX_STATIC_ASSERT_VALUE_SIZE(T, rput); // issue 392: prevent large types by-value
+
     UPCXX_GPTR_CHK(gp_d);
     UPCXX_ASSERT(gp_d, "pointer arguments to rput may not be null");
     
