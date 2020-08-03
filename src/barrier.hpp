@@ -31,6 +31,8 @@ namespace upcxx {
       const team &tm = upcxx::world(),
       Cxs cxs = completions<future_cx<operation_cx_event>>({})
     ) {
+    UPCXX_ASSERT_INIT();
+    UPCXX_ASSERT_MASTER();
 
     struct barrier_cb final: backend::gasnet::handle_cb {
       detail::completions_state<

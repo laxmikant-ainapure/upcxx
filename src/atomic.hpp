@@ -196,6 +196,7 @@ namespace upcxx {
       template<typename Cxs = FUTURE_CX>
       FETCH_RTYPE<Cxs> fop(atomic_op aop, global_ptr<T> gptr, std::memory_order order,
                            T val1 = 0, T val2 = 0, Cxs cxs = Cxs{{}}) const {
+        UPCXX_ASSERT_INIT();
         UPCXX_ASSERT(this->atomic_gex_ops || this->ad_gex_handle, "Atomic domain is not constructed");
         UPCXX_ASSERT((detail::completions_has_event<Cxs, operation_cx_event>::value));
         UPCXX_GPTR_CHK(gptr);
@@ -241,6 +242,7 @@ namespace upcxx {
       template<typename Cxs = FUTURE_CX>
       NOFETCH_RTYPE<Cxs> op(atomic_op aop, global_ptr<T> gptr, std::memory_order order,
                             T val1 = 0, T val2 = 0, Cxs cxs = Cxs{{}}) const {
+        UPCXX_ASSERT_INIT();
         UPCXX_ASSERT(this->atomic_gex_ops || this->ad_gex_handle, "Atomic domain is not constructed");
         UPCXX_ASSERT((detail::completions_has_event<Cxs, operation_cx_event>::value));
         UPCXX_GPTR_CHK(gptr);
@@ -320,9 +322,10 @@ namespace upcxx {
       
       // The constructor takes a vector of operations. Currently, flags is currently unsupported.
       atomic_domain(std::vector<atomic_op> const &ops, const team &tm = upcxx::world()) :
-        detail::atomic_domain_untyped<sizeof(T), detail::bit_flavor<T>()>(ops, tm) {}
+        detail::atomic_domain_untyped<sizeof(T), detail::bit_flavor<T>()>((UPCXX_ASSERT_INIT(),ops), tm) {}
       
       void destroy(entry_barrier eb = entry_barrier::user) {
+        UPCXX_ASSERT_INIT();
         detail::atomic_domain_untyped<sizeof(T), detail::bit_flavor<T>()>::destroy(eb);
       }
 
@@ -331,31 +334,38 @@ namespace upcxx {
       template<typename Cxs = FUTURE_CX>
       NOFETCH_RTYPE<Cxs> store(global_ptr<T> gptr, T val, std::memory_order order,
                                Cxs cxs = Cxs{{}}) const {
+        UPCXX_ASSERT_INIT();
         return op(atomic_op::store, gptr, order, val, (T)0, cxs);
       }
       template<typename Cxs = FUTURE_CX>
       FETCH_RTYPE<Cxs> load(global_ptr<const T> gptr, std::memory_order order, Cxs cxs = Cxs{{}}) const {
+        UPCXX_ASSERT_INIT();
         return fop(atomic_op::load, const_pointer_cast<T>(gptr), order, (T)0, (T)0, cxs);
       }
       template<typename Cxs = FUTURE_CX>
       NOFETCH_RTYPE<Cxs> inc(global_ptr<T> gptr, std::memory_order order, Cxs cxs = Cxs{{}}) const {
+        UPCXX_ASSERT_INIT();
         return op(atomic_op::inc, gptr, order, (T)0, (T)0, cxs);
       }
       template<typename Cxs = FUTURE_CX>
       NOFETCH_RTYPE<Cxs> dec(global_ptr<T> gptr, std::memory_order order, Cxs cxs = Cxs{{}}) const {
+        UPCXX_ASSERT_INIT();
         return op(atomic_op::dec,gptr, order, (T)0, (T)0, cxs);
       }
       template<typename Cxs = FUTURE_CX>
       FETCH_RTYPE<Cxs> fetch_inc(global_ptr<T> gptr, std::memory_order order, Cxs cxs = Cxs{{}}) const {
+        UPCXX_ASSERT_INIT();
         return fop(atomic_op::fetch_inc, gptr, order, (T)0, (T)0, cxs);
       }
       template<typename Cxs = FUTURE_CX>
       FETCH_RTYPE<Cxs> fetch_dec(global_ptr<T> gptr, std::memory_order order, Cxs cxs = Cxs{{}}) const {
+        UPCXX_ASSERT_INIT();
         return fop(atomic_op::fetch_dec, gptr, order, (T)0, (T)0, cxs);
       }
       template<typename Cxs = FUTURE_CX>
       FETCH_RTYPE<Cxs> compare_exchange(global_ptr<T> gptr, T val1, T val2, std::memory_order order,
                                         Cxs cxs = Cxs{{}}) const {
+        UPCXX_ASSERT_INIT();
         return fop(atomic_op::compare_exchange, gptr, order, val1, val2, cxs);
       }
       
@@ -364,12 +374,14 @@ namespace upcxx {
         constraint(FETCH_RTYPE<Cxs>) \
 	fetch_##name(global_ptr<T> gptr, T val, std::memory_order order,\
                                       Cxs cxs = Cxs{{}}) const {\
+          UPCXX_ASSERT_INIT(); \
           return fop(atomic_op::fetch_##name, gptr, order, val, (T)0, cxs);\
         }\
         template<typename Cxs = FUTURE_CX>\
         constraint(NOFETCH_RTYPE<Cxs>) \
 	name(global_ptr<T> gptr, T val, std::memory_order order,\
                                 Cxs cxs = Cxs{{}}) const {\
+          UPCXX_ASSERT_INIT(); \
           return op(atomic_op::name, gptr, order, val, (T)0, cxs);\
         }
       // sfinae helpers to disable unsupported type/op combos

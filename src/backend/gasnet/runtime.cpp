@@ -881,6 +881,7 @@ namespace {
 }
 
 void upcxx::finalize() {
+  UPCXX_ASSERT_INIT();
   UPCXX_ASSERT_ALWAYS_MASTER();
   UPCXX_ASSERT_ALWAYS(backend::init_count > 0);
   
@@ -985,6 +986,7 @@ void upcxx::finalize() {
 }
 
 void upcxx::liberate_master_persona() {
+  UPCXX_ASSERT_INIT();
   UPCXX_ASSERT_ALWAYS(&upcxx::current_persona() == &backend::master);
   UPCXX_ASSERT_ALWAYS(backend::initial_master_scope != nullptr);
   
@@ -994,10 +996,12 @@ void upcxx::liberate_master_persona() {
 }
 
 void* upcxx::allocate(size_t size, size_t alignment) {
+  UPCXX_ASSERT_INIT();
   return gasnet::allocate(size, alignment, &gasnet::sheap_footprint_user);
 }
 
 void  upcxx::deallocate(void *p) {
+  UPCXX_ASSERT_INIT();
   gasnet::deallocate(p, &gasnet::sheap_footprint_user);
 }
 
@@ -1813,6 +1817,8 @@ int upcxx::detail::progressing() {
 }
 
 void upcxx::progress(progress_level level) {
+  UPCXX_ASSERT_INIT();
+
   detail::persona_tls &tls = detail::the_persona_tls;
   
   if(tls.get_progressing() >= 0)

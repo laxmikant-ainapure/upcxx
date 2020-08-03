@@ -32,7 +32,8 @@ team::team(team &&that):
   coll_counter_(that.coll_counter_),
   n_(that.n_),
   me_(that.me_) {
-  
+
+  UPCXX_ASSERT_INIT();
   UPCXX_ASSERT_MASTER();
   UPCXX_ASSERT((that.id_ != digest{~0ull, ~0ull}));
   
@@ -53,6 +54,7 @@ team::~team() {
 }
 
 team team::split(intrank_t color, intrank_t key) const {
+  UPCXX_ASSERT_INIT();
   UPCXX_ASSERT_MASTER();
   UPCXX_ASSERT(color >= 0 || color == color_none);
   
@@ -98,6 +100,7 @@ team team::split(intrank_t color, intrank_t key) const {
 #endif
 
 void team::destroy(entry_barrier eb) {
+  UPCXX_ASSERT_INIT();
   UPCXX_ASSERT(this != &world(),      "team::destroy() is prohibited on team world()");
   UPCXX_ASSERT(this != &local_team(), "team::destroy() is prohibited on the local_team()");
 

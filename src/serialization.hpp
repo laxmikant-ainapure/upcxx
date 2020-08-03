@@ -2,6 +2,7 @@
 #define _af3a33ad_9fc7_4d84_990b_b9caa94daf02
 
 #include <upcxx/utility.hpp>
+#include <upcxx/backend_fwd.hpp>
 
 #include <algorithm>
 #include <cstdint>
@@ -293,16 +294,19 @@ namespace upcxx {
 
       template<typename T>
       reserve_handle<T> reserve() {
+        UPCXX_ASSERT_INIT();
         return reserve_handle<T>{this->place(storage_size_of<T>())};
       }
 
       template<typename T>
       void commit(reserve_handle<T> handle, T const &val) {
+        UPCXX_ASSERT_INIT();
         ::new(handle.ptr) T(val);
       }
       
       template<typename T>
       void write(T const &x) {
+        UPCXX_ASSERT_INIT();
         upcxx::template serialization_traits<T>::serialize(*static_cast<Writer*>(this), x);
       }
 
@@ -375,6 +379,7 @@ namespace upcxx {
     public:
       template<typename Iter>
       std::size_t write_sequence(Iter beg, Iter end, std::size_t n=-1) {
+        UPCXX_ASSERT_INIT();
         using T = typename std::remove_cv<
             typename std::iterator_traits<Iter>::value_type
           >::type;
@@ -569,6 +574,7 @@ namespace upcxx {
     public:
       template<typename Iter>
       std::size_t write_sequence(Iter beg, Iter end) {
+        UPCXX_ASSERT_INIT();
         using T = typename std::remove_cv<
             typename std::iterator_traits<Iter>::value_type
           >::type;
@@ -578,6 +584,7 @@ namespace upcxx {
       
       template<typename Iter>
       std::size_t write_sequence(Iter beg, Iter end, std::size_t n) {
+        UPCXX_ASSERT_INIT();
         using T = typename std::remove_cv<
             typename std::iterator_traits<Iter>::value_type
           >::type;
@@ -600,6 +607,7 @@ namespace upcxx {
       
       template<typename T, typename T1 = typename serialization_traits<T>::deserialized_type>
       T1 read() {
+        UPCXX_ASSERT_INIT();
         detail::raw_storage<T1> raw;
         upcxx::template serialization_traits<T>::deserialize(*this, &raw);
         return raw.value_and_destruct();
@@ -607,6 +615,7 @@ namespace upcxx {
 
       template<typename T, typename T1 = typename serialization_traits<T>::deserialized_type>
       T1* read_into(void *raw) {
+        UPCXX_ASSERT_INIT();
         return upcxx::template serialization_traits<T>::deserialize(*this, raw);
       }
 
@@ -659,6 +668,7 @@ namespace upcxx {
       template<typename T,
                typename T1 = typename serialization_traits<T>::deserialized_type>
       T1* read_sequence_into(void *raw, std::size_t n) {
+        UPCXX_ASSERT_INIT();
         return this->template read_sequence_into_<T,T1>(raw, n,
             std::integral_constant<bool, serialization_traits<T>::is_actually_trivially_serializable>()
           );
@@ -1256,6 +1266,7 @@ namespace upcxx {
       > {
       static typename serialization_traits2<T>::deserialized_type
       deserialized_value(T const &x) {
+        UPCXX_ASSERT_INIT();
         using T1 = typename serialization_traits2<T>::deserialized_type;
         
         auto ub = serialization_traits2<T>::ubound(empty_storage_size, x);

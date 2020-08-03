@@ -379,6 +379,7 @@ namespace upcxx {
   }
   
   inline bool persona::active_with_caller() const {
+    UPCXX_ASSERT_INIT();
     return active_with_caller(detail::the_persona_tls);
   }
   
@@ -392,6 +393,7 @@ namespace upcxx {
 
   template<typename Fn>
   void persona::lpc_ff(Fn fn) {
+    UPCXX_ASSERT_INIT();
     this->lpc_ff(detail::the_persona_tls, std::forward<Fn>(fn));
   }
   
@@ -409,6 +411,7 @@ namespace upcxx {
       detail::future_kind_shref<detail::future_header_ops_general>, // the default future kind
       typename decltype(upcxx::apply_as_future(fn))::results_type
     > {
+    UPCXX_ASSERT_INIT();
     
     using results_type = typename decltype(upcxx::apply_as_future(fn))::results_type;
     using results_promise = detail::tuple_types_into_t<results_type, promise>;
@@ -472,6 +475,7 @@ namespace upcxx {
   }
   
   inline persona_scope::persona_scope(persona &p, detail::persona_tls &tls) {
+    UPCXX_ASSERT_INIT_NAMED("upcxx::persona_scope::persona_scope(persona &p)");
     this->lock_ = nullptr;
     this->unlocker_ = nullptr;
     
@@ -511,6 +515,7 @@ namespace upcxx {
   
   template<typename Mutex>
   persona_scope::persona_scope(Mutex &lock, persona &p, detail::persona_tls &tls) {
+    UPCXX_ASSERT_INIT_NAMED("upcxx::persona_scope::persona_scope(Mutex &lock, persona &p)");
     this->lock_ = &lock;
     this->unlocker_ = (void(*)(void*))[](void *lock) {
       static_cast<Mutex*>(lock)->unlock();
@@ -569,20 +574,24 @@ namespace upcxx {
   //////////////////////////////////////////////////////////////////////
   
   inline persona& default_persona() {
+    UPCXX_ASSERT_INIT();
     detail::persona_tls &tls = detail::the_persona_tls;
     return tls.default_persona;
   }
   
   inline persona& current_persona() {
+    UPCXX_ASSERT_INIT();
     detail::persona_tls &tls = detail::the_persona_tls;
     return *tls.get_top_scope()->get_persona(tls);
   }
   
   inline persona_scope& default_persona_scope() {
+    UPCXX_ASSERT_INIT();
     return persona_scope::the_default_dummy_;
   }
   
   inline persona_scope& top_persona_scope() {
+    UPCXX_ASSERT_INIT();
     detail::persona_tls &tls = detail::the_persona_tls;
     detail::persona_scope_raw *top = tls.get_top_scope();
     return top == &tls.default_scope_raw

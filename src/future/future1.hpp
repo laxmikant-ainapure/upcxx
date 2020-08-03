@@ -303,6 +303,7 @@ namespace upcxx {
           results_type,
           typename detail::tuple_element_or_void<(i<0 ? 0 : i), results_type>::type
       >::type {
+      UPCXX_ASSERT_INIT_NAMED("future<...>::wait()");
       
       while(!impl_.ready())
         progress();
@@ -322,6 +323,7 @@ namespace upcxx {
           results_type,
           typename detail::tuple_element_or_void<(i<0 ? 0 : i), results_type>::type
       >::type {
+      UPCXX_ASSERT_INIT_NAMED("future<...>::wait()");
       
       while(!impl_.ready())
         progress();
@@ -337,6 +339,8 @@ namespace upcxx {
     results_type wait_tuple(Fn &&progress) const&
     #endif
     {
+      UPCXX_ASSERT_INIT_NAMED("future<...>::wait_tuple()");
+
       while(!impl_.ready())
         progress();
       
@@ -351,6 +355,8 @@ namespace upcxx {
     results_type wait_tuple(Fn &&progress) &&
     #endif
     {
+      UPCXX_ASSERT_INIT_NAMED("future<...>::wait_tuple()");
+
       while(!impl_.ready())
         progress();
       
@@ -369,6 +375,7 @@ namespace upcxx {
           clref_results_refs_or_vals_type,
           typename detail::tuple_element_or_void<(i<0 ? 0 : i), clref_results_refs_or_vals_type>::type
       >::type {
+      UPCXX_ASSERT_INIT_NAMED("future<...>::wait_reference()");
       
       while(!impl_.ready())
         progress();
@@ -388,6 +395,7 @@ namespace upcxx {
           rref_results_refs_or_vals_type,
           typename detail::tuple_element_or_void<(i<0 ? 0 : i), rref_results_refs_or_vals_type>::type
       >::type {
+      UPCXX_ASSERT_INIT_NAMED("future<...>::wait_reference()");
       
       while(!impl_.ready())
         progress();

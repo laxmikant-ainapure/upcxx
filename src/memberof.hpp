@@ -83,6 +83,7 @@ namespace upcxx {
 #define upcxx_memberof_unsafe(gp, FIELD) ( \
   UPCXX_STATIC_ASSERT(offsetof(UPCXX_ETYPE(gp), FIELD) < sizeof(UPCXX_ETYPE(gp)), \
                       "offsetof returned a bogus result. This is probably due to an unsupported non-standard-layout type"), \
+  UPCXX_ASSERT_INIT_NAMED("upcxx_memberof_unsafe"), \
   UPCXX_DECAYED_GP(UPCXX_MTYPE(gp, FIELD), UPCXX_KTYPE(gp), \
     ::upcxx::detail::internal_only(), \
     (gp),\
@@ -93,6 +94,7 @@ namespace upcxx {
 // upcxx_memberof(global_ptr<T> gp, field-designator)
 // This variant asserts T is standard layout, and thus guaranteed by C++11 to produce well-defined results
 #define upcxx_memberof(gp, FIELD) ( \
+    UPCXX_ASSERT_INIT_NAMED("upcxx_memberof"), \
     UPCXX_STATIC_ASSERT(::std::is_standard_layout<UPCXX_ETYPE(gp)>::value, \
      "upcxx_memberof() requires a global_ptr to a standard-layout type. Perhaps you want upcxx_memberof_unsafe()?"), \
      upcxx_memberof_unsafe(gp, FIELD) \
@@ -163,6 +165,7 @@ template<typename Obj, memory_kind Kind, typename Get,
          typename Mbr = typename std::remove_pointer<decltype(std::declval<Get>()(std::declval<Obj*>()))>::type>
 auto memberof_general_helper(global_ptr<Obj,Kind> gptr, Get getter)
   -> decltype(memberof_general_dispatch<Obj,Kind,Mbr,Get>()(gptr, getter)) {
+  UPCXX_ASSERT_INIT_NAMED("upcxx_memberof_general");
   UPCXX_GPTR_CHK(gptr);
   UPCXX_ASSERT(gptr, "Global pointer expression to upcxx_memberof_general() may not be null");
   return memberof_general_dispatch<Obj,Kind,Mbr,Get>()(gptr, getter);

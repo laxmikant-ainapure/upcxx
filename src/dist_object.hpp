@@ -29,6 +29,7 @@ namespace upcxx {
     
   //public:
     dist_object<T>& here() const {
+      UPCXX_ASSERT_INIT();
       UPCXX_ASSERT(detail::registry[dig_],
         "dist_id::here() called for an invalid id or dist_object (possibly outside its lifetime)");
       return std::get<0>(
@@ -43,6 +44,7 @@ namespace upcxx {
     }
     
     future<dist_object<T>&> when_here() const {
+      UPCXX_ASSERT_INIT();
       return detail::promise_get_future(detail::registered_promise<dist_object<T>&>(dig_));
     }
     
@@ -88,6 +90,7 @@ namespace upcxx {
     dist_object(const upcxx::team &tm, U &&...arg):
       tm_(&tm),
       value_(std::forward<U>(arg)...) {
+      UPCXX_ASSERT_INIT();
       UPCXX_ASSERT_MASTER();
       
       id_ = const_cast<upcxx::team*>(&tm)->next_collective_id(detail::internal_only());
@@ -102,6 +105,7 @@ namespace upcxx {
     dist_object(T value, const upcxx::team &tm):
       tm_(&tm),
       value_(std::move(value)) {
+      UPCXX_ASSERT_INIT();
       UPCXX_ASSERT_MASTER();
 
       id_ = const_cast<upcxx::team*>(&tm)->next_collective_id(detail::internal_only());
@@ -124,6 +128,7 @@ namespace upcxx {
       id_(that.id_),
       value_(std::move(that.value_)) {
       
+      UPCXX_ASSERT_INIT();
       UPCXX_ASSERT_MASTER();
       UPCXX_ASSERT((that.id_ != digest{~0ull, ~0ull}));
 
@@ -158,6 +163,7 @@ namespace upcxx {
     dist_id<T> id() const { return dist_id<T>{id_}; }
     
     future<T> fetch(intrank_t rank) const {
+      UPCXX_ASSERT_INIT();
       return upcxx::rpc(*tm_, rank, [](dist_object<T> const &o) { return *o; }, *this);
     }
   };
