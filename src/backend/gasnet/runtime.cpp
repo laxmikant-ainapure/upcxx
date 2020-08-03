@@ -59,6 +59,14 @@ using namespace std;
     #error "Segment-everything not supported."
 #endif
 
+#ifndef UPCXX_LOCAL_TM_CREATE // gex_TM_Create was added in spec v0.9
+  #if GEX_SPEC_VERSION_MINOR >= 9 || GEX_SPEC_VERSION_MAJOR  
+     #define UPCXX_LOCAL_TM_CREATE 1
+  #else
+     #define UPCXX_LOCAL_TM_CREATE 0
+  #endif
+#endif
+
 static_assert(
   sizeof(gex_Event_t) == sizeof(uintptr_t),
   "Failed: sizeof(gex_Event_t) == sizeof(uintptr_t)"
@@ -587,35 +595,22 @@ void upcxx::init() {
   gex_RankInfo_t *nbhd;
   gex_Rank_t peer_n, peer_me;
   gex_System_QueryNbrhdInfo(&nbhd, &peer_n, &peer_me);
+  void *peer_EP_loc = nullptr;
 
+  // compute local_team membership
   bool contiguous_nbhd = true;
   for(gex_Rank_t p=1; p < peer_n; p++)
     contiguous_nbhd &= (nbhd[p].gex_jobrank == 1 + nbhd[p-1].gex_jobrank);
 
   bool const local_is_world = ((intrank_t)peer_n == backend::rank_n);
-
-  if (!local_is_world) { // determine (upper bound on) scratch requirements for local_team
-    local_scratch_sz = gex_TM_Split(
-      &local_tm, world_tm,
-      /*color*/nbhd[0].gex_jobrank, /*key*/peer_me,
-      nullptr, 0,
-      peer_n == 1
-        ? GEX_FLAG_TM_SCRATCH_SIZE_MIN
-        : GEX_FLAG_TM_SCRATCH_SIZE_RECOMMENDED
-    );
-  }
-
-  // setup shared segment allocator
-  heap_init_internal(segment_size, noise);
-  
   if (local_is_world) {
     if(backend::verbose_noise)
       noise.line() << "Whole world is in same local team.";
     
     backend::pshm_peer_lb = 0;
     backend::pshm_peer_ub = backend::rank_n;
-    peer_n = backend::rank_n;
-    peer_me = backend::rank_me;
+    UPCXX_ASSERT_ALWAYS((intrank_t)peer_n == backend::rank_n);
+    UPCXX_ASSERT_ALWAYS((intrank_t)peer_me == backend::rank_me);
     local_tm = world_tm;
   } else { // !local_is_world
     if(!contiguous_nbhd) {
@@ -630,7 +625,48 @@ void upcxx::init() {
       backend::pshm_peer_lb = nbhd[0].gex_jobrank;
       backend::pshm_peer_ub = nbhd[0].gex_jobrank + peer_n;
     }
+  }
+  backend::pshm_peer_n = peer_n;
+
+  // determine (upper bound on) scratch requirements for local_team
+  if (!local_is_world) { // only if we are creating a GEX-level team
+  #if UPCXX_LOCAL_TM_CREATE
+    // build local_team membership table, avoiding split comms
+    gex_EP_Location_t *peer_ids = new gex_EP_Location_t[peer_n];
+    peer_EP_loc = (void *)peer_ids;
+    for (gex_Rank_t i = 0; i < peer_n; i++) {
+      peer_ids[i].gex_rank = backend::pshm_peer_lb + i;
+      peer_ids[i].gex_ep_index = 0;
+    }
     
+    local_scratch_sz = gex_TM_Create(
+      nullptr, 1,
+      world_tm,
+      peer_ids, peer_n,
+      nullptr, 0,
+      (peer_n == 1
+        ? GEX_FLAG_TM_SCRATCH_SIZE_MIN
+        : GEX_FLAG_TM_SCRATCH_SIZE_RECOMMENDED) |
+      GEX_FLAG_TM_LOCAL_SCRATCH | GEX_FLAG_RANK_IS_JOBRANK
+    );
+  #else
+    local_scratch_sz = gex_TM_Split(
+      &local_tm, world_tm,
+      /*color*/nbhd[0].gex_jobrank, /*key*/peer_me,
+      nullptr, 0,
+      peer_n == 1
+        ? GEX_FLAG_TM_SCRATCH_SIZE_MIN
+        : GEX_FLAG_TM_SCRATCH_SIZE_RECOMMENDED
+    );
+  #endif
+    UPCXX_ASSERT_ALWAYS(local_scratch_sz);
+  }
+
+  // setup shared segment allocator
+  heap_init_internal(segment_size, noise);
+  
+    
+  if (!local_is_world) {
     if(backend::verbose_noise) {
       struct local_team_stats {
         int count;
@@ -665,22 +701,34 @@ void upcxx::init() {
 
       if(stats.count == backend::rank_n)
         noise.warn()<<"All local team's are singletons. Memory sharing between ranks will never succeed.";
-    }
+    } // verbose_noise
     
     UPCXX_ASSERT_ALWAYS( local_scratch_sz && local_scratch_ptr );
-    
+
+  #if UPCXX_LOCAL_TM_CREATE
+    gex_EP_Location_t *peer_ids = (gex_EP_Location_t *)peer_EP_loc;
+    peer_EP_loc = nullptr;
+    gex_TM_Create(
+      &local_tm, 1, 
+      world_tm,
+      peer_ids, peer_n,
+      &local_scratch_ptr, local_scratch_sz,
+      GEX_FLAG_TM_LOCAL_SCRATCH | GEX_FLAG_RANK_IS_JOBRANK
+    );
+    delete [] peer_ids;
+  #else
     gex_TM_Split(
       &local_tm, world_tm,
       /*color*/backend::pshm_peer_lb, /*key*/peer_me,
       local_scratch_ptr, local_scratch_sz,
       /*flags*/0
     );
-    
-    if (!upcxx_upc_is_linked()) 
+  #endif
+
+    if (!upcxx_upc_is_linked()) // UPC mode has custom local_tm scratch cleanup
       gex_TM_SetCData(local_tm, local_scratch_ptr );
   }
   
-  backend::pshm_peer_n = peer_n;
   
   // Build upcxx::local_team()
   ::new(detail::the_local_team.raw()) upcxx::team(
@@ -907,11 +955,20 @@ void upcxx::finalize() {
   
   { // Tear down local_team
     if(gasnet::handle_of(detail::the_local_team.value()) !=
-       gasnet::handle_of(detail::the_world_team.value()))
-      {/*TODO: add local team destruct once GEX has the API.*/}
+       gasnet::handle_of(detail::the_world_team.value())) {
+       if (upcxx_upc_is_linked()) {
+         // local_tm scratch has special handling in UPC mode
+         if (local_scratch_ptr) { 
+           if (upcxx_upc_is_pthreads()) upcxx_upc_free(local_scratch_ptr);
+           else upcxx_upc_all_free(local_scratch_ptr);
+           local_scratch_ptr = nullptr;
+         }
+       }
+    }
     
     detail::the_local_team.value().destroy();
     detail::the_local_team.destruct();
+    local_tm = GEX_TM_INVALID;
   }
   
   // can't just destroy world, it needs special attention

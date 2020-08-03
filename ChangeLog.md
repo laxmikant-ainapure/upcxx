@@ -21,6 +21,8 @@ New features/enhancements: (see specification and programmer's guide for full de
   operations now take a `global_ptr<const T>` where appropriate.
 * Added a number of precondition sanity checks in debug mode, to help users find
   bugs in their code when compiling with `-codemode=debug` (aka, `upcxx -g`).
+* local_team() creation during `upcxx::init()` in multi-node runs is now more scalable
+  in time and memory, providing noticeable improvements at large scale.
 * ...
 
 Notable bug fixes:
