@@ -68,6 +68,12 @@ namespace upcxx {
     static constexpr bool value = serialization_traits<T>::is_serializable;
   };
   
+  namespace detail {
+    // whether a type is serializable or an array of serializable type
+    template<typename T>
+    struct is_serializable_type_or_array;
+  }
+
   template<typename T>
   struct deserialized_type {
     using type = typename serialization_traits<T>::deserialized_type;
@@ -826,8 +832,11 @@ namespace upcxx {
     struct serialization_fields_each {
       using Ti = typename std::remove_reference<typename std::tuple_element<i, TupRefs>::type>::type;
 
-      static_assert( is_serializable<Ti>::value,
-                     "All arguments to UPCXX_SERIALIZED_FIELDS must be Serializable."); 
+      static_assert( detail::is_serializable_type_or_array<Ti>::value,
+                     "Arguments to UPCXX_SERIALIZED_FIELDS must either be Serializable or arrays of Serializable elements.");
+
+      static_assert( !std::is_const<Ti>::value,
+                     "Arguments to UPCXX_SERIALIZED_FIELDS cannot be const.");
 
       static_assert(
         std::is_same<Ti, typename serialization_traits<Ti>::deserialized_type>::value,
@@ -1628,15 +1637,36 @@ namespace upcxx {
   
   //////////////////////////////////////////////////////////////////////////////
 
+  namespace detail {
+    template<typename T>
+    struct is_serializable_type_or_array:
+      ::std::integral_constant<bool, is_serializable<T>::value> {
+    };
+    template<typename T, std::size_t n>
+    struct is_serializable_type_or_array<T[n]>:
+      is_serializable_type_or_array<T> {
+    };
+  }
+
   template<typename T, std::size_t n>
   struct is_trivially_serializable<T[n]>:
-    is_trivially_serializable<T> {
+    std::false_type {
+  };
+  template<typename T, std::size_t n>
+  struct is_trivially_serializable<const T[n]>:
+    std::false_type {
   };
   
   template<typename T, std::size_t n>
   struct serialization<T[n]> {
-    static constexpr bool is_serializable = serialization_traits<T>::is_serializable;
+    static constexpr bool is_actually_trivially_serializable =
+      serialization_traits<T>::is_actually_trivially_serializable;
 
+    // arrays are technically not Serializable
+    static constexpr bool is_serializable = false;
+
+    // but we define serialization for use in UPCXX_SERIALIZED_FIELDS,
+    // Writer::write, and Reader::read_into
     template<typename Prefix>
     static constexpr auto ubound(Prefix pre, T const(&x)[n])
       UPCXX_RETURN_DECLTYPE(
@@ -1667,6 +1697,15 @@ namespace upcxx {
     static void skip(Reader &r) {
       r.template skip_sequence<T>(n);
     }
+  };
+
+  template<typename T, std::size_t n>
+  struct serialization<const T[n]>:
+    detail::serialization_not_supported {
+  };
+  template<typename T, std::size_t n>
+  struct serialization_traits<const T[n]>:
+    detail::serialization_not_supported {
   };
 
   //////////////////////////////////////////////////////////////////////////////

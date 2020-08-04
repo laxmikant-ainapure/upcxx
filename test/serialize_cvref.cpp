@@ -37,6 +37,9 @@ struct S { // asymmetric serialization
     }
   };
 };
+struct U { // no serialization
+  ~U() {} // break trivialness
+};
 
 namespace upcxx {
   template<>
@@ -79,12 +82,30 @@ int main() {
   check<const D&, false, true, D>{};
   check<D&&, false, true, D>{};
 
+  check<U, false, false>{};
+  check<const U, false, false>{};
+  check<const U&, false, false>{};
+  check<U&&, false, false>{};
+
   check<std::pair<const int, const D>, true, true, std::pair<const int, const D>>{};
   check<std::tuple<const int, const S&, const D&>, false, true, std::tuple<const int, D, D>>{};
   check<std::tuple<const int&, const S, const D>, false, true, std::tuple<int, const D, const D>>{};
+  check<std::pair<U, int>, false, false>{};
+  check<std::tuple<U, int>, false, false>{};
 
   check<upcxx::global_ptr<const int>, true, true, upcxx::global_ptr<const int>>{};
   check<upcxx::global_ptr<const int>&, false, true, upcxx::global_ptr<const int>>{};
+
+  check<int[4], false, false>{};
+  check<const int[4], false, false>{};
+  check<int[4][3], false, false>{};
+  check<const int[4][3], false, false>{};
+  check<int(&)[4], false, false>{};
+  check<const int(&)[4], false, false>{};
+  check<std::pair<int[4], int>, false ,false>{};
+  check<std::pair<int(&)[4], int>, false ,false>{};
+  check<std::tuple<int[4], int>, false ,false>{};
+  check<std::tuple<int(&)[4], int>, false ,false>{};
 
   {
     auto res = upcxx::rpc((upcxx::rank_me() + 1) % upcxx::rank_n(),

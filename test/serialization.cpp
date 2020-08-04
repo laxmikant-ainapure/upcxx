@@ -86,12 +86,11 @@ struct nonpod1: nonpod_base {
 
 struct nonpod2: nonpod_base {
   nonpod2(char h, char i): nonpod_base(h,i) {}
-  nonpod2(char h, char i, int x123[3], char const *dummy):
+  nonpod2(char h, char i, const std::string& dummy):
     nonpod_base(h,i) {
-    UPCXX_ASSERT_ALWAYS(x123[0]==1 && x123[1]==2 && x123[2]==3);
-    UPCXX_ASSERT_ALWAYS(std::string(dummy) == "dummy");
+    UPCXX_ASSERT_ALWAYS(dummy == "dummy");
   }
-  UPCXX_SERIALIZED_VALUES(h,i,_123,"dummy")
+  UPCXX_SERIALIZED_VALUES(h,i,std::string("dummy"))
 };
 
 struct nonpod3: nonpod_base {
