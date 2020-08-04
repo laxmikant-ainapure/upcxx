@@ -1,6 +1,6 @@
 #include <upcxx/upcxx.hpp>
 
-#define N 512
+#define N 32
 
 //SNIPPET
 class dist_reduction {

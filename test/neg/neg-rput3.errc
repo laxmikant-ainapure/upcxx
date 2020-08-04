@@ -1,0 +1,1 @@
+This program is attempting to pass an object with a large static type .over .*? bytes. to the by-value overload of upcxx::rput

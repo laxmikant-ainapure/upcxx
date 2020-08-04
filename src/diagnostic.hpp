@@ -21,6 +21,11 @@ namespace upcxx {
 #define UPCXX_FUNC __func__
 #endif
 
+#ifndef UPCXX_STRINGIFY
+#define UPCXX_STRINGIFY_HELPER(x) #x
+#define UPCXX_STRINGIFY(x) UPCXX_STRINGIFY_HELPER(x)
+#endif
+
 // unconditional fatal error, with file/line and custom message
 #define UPCXX_FATAL_ERROR(ios_msg) \
       ::upcxx::fatal_error(([&]() { ::std::stringstream _upcxx_fatal_ss; \

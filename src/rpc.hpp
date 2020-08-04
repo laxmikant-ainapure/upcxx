@@ -123,6 +123,14 @@ namespace upcxx {
       "Note: make sure that the function object does not have any non-const lvalue-reference parameters."
     );
       
+    static_assert(
+      detail::trait_forall<
+         detail::type_respects_static_size_limit,
+         typename binding<Arg>::on_wire_type...
+       >::value,
+      UPCXX_STATIC_ASSERT_RPC_MSG(rpc_ff)
+    );
+
     UPCXX_ASSERT(recipient >= 0 && recipient < tm.rank_n(),
       "rpc_ff(team, recipient, ...) requires recipient in [0, team.rank_n()-1] == [0, " << tm.rank_n()-1 << "], but given: " << recipient);
 
@@ -177,6 +185,14 @@ namespace upcxx {
       "function object provided to rpc_ff cannot be invoked on the given arguments as rvalue references "
       "(after deserialization of the function object and arguments). "
       "Note: make sure that the function object does not have any non-const lvalue-reference parameters."
+    );
+
+    static_assert(
+      detail::trait_forall<
+         detail::type_respects_static_size_limit,
+         typename binding<Arg>::on_wire_type...
+       >::value,
+      UPCXX_STATIC_ASSERT_RPC_MSG(rpc_ff)
     );
 
     UPCXX_ASSERT(recipient >= 0 && recipient < tm.rank_n(),
@@ -324,6 +340,14 @@ namespace upcxx {
         "All rpc arguments must be Serializable."
       );
         
+      static_assert(
+        detail::trait_forall<
+            detail::type_respects_static_size_limit,
+            typename binding<Arg>::on_wire_type...
+          >::value,
+        UPCXX_STATIC_ASSERT_RPC_MSG(rpc)
+      );
+
       using cxs_state_t = detail::completions_state<
           /*EventPredicate=*/detail::event_is_here,
           /*EventValues=*/detail::rpc_event_values<Fn&&(Arg&&...)>,
