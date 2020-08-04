@@ -884,8 +884,10 @@ void upcxx::finalize() {
   UPCXX_ASSERT_ALWAYS_MASTER();
   UPCXX_ASSERT_ALWAYS(backend::init_count > 0);
   
-  if(0 != --backend::init_count)
+  if (backend::init_count > 1) {
+    backend::init_count--;
     return;
+  } // final decrement is performed at end
   
   noise_log noise("upcxx::finalize()");
 
@@ -978,6 +980,8 @@ void upcxx::finalize() {
     delete backend::initial_master_scope;
 
   noise.show();
+  UPCXX_ASSERT_ALWAYS(backend::init_count == 1);
+  backend::init_count = 0;
 }
 
 void upcxx::liberate_master_persona() {
