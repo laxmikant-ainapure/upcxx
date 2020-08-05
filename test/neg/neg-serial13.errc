@@ -1,2 +1,2 @@
-Template argument of read_into must either be Serializable or an array of Serializable elements.
+Template argument of read must be Serializable.
 C++ does not allow functions to return arrays.
