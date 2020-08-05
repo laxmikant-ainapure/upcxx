@@ -307,6 +307,38 @@ struct my_seq2: public my_seq_base<my_seq2<T>, T> {
   }
 };
 
+struct array_write_read_into {
+  // test write<T[n]> and read_into<T[n>
+  int arr1[4];
+  std::string arr2[2];
+
+  template<typename Writer>
+  static void serialize(Writer &w, array_write_read_into const &x) {
+    w.write(x.arr1);
+    w.write(x.arr2);
+  }
+
+  template<typename Reader>
+  static array_write_read_into* deserialize(Reader &r, void *spot) {
+    auto result = new(spot) array_write_read_into;
+    r.template read_into<int[4]>(result->arr1);
+    r.template read_into<std::string[2]>(result->arr2);
+    return result;
+  }
+
+  friend bool operator==(array_write_read_into const &a,
+                         array_write_read_into const &b) {
+    bool result = true;
+    for (std::size_t i = 0; i < 4; ++i) {
+      result = result && a.arr1[i] == b.arr1[i];
+    }
+    for (std::size_t i = 0; i < 2; ++i) {
+      result = result && a.arr2[i] == b.arr2[i];
+    }
+    return result;
+  }
+};
+
 struct noserz {
   UPCXX_SERIALIZED_DELETE()
 };
@@ -470,6 +502,11 @@ int main() {
         }
       )
     });
+  }
+
+  {
+    array_write_read_into a = {{-1, -2, 3, 4}, {"hello", "world"}};
+    roundtrip(a);
   }
 
   print_test_success();
