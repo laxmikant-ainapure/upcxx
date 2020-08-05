@@ -1,0 +1,1 @@
+value_type of iterators passed to write_sequence must be Serializable.

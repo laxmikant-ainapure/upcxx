@@ -313,6 +313,8 @@ namespace upcxx {
       template<typename T>
       void write(T const &x) {
         UPCXX_ASSERT_INIT();
+        static_assert(detail::is_serializable_type_or_array<T>::value,
+                     "Argument to write must either be Serializable or an array of Serializable elements.");
         upcxx::template serialization_traits<T>::serialize(*static_cast<Writer*>(this), x);
       }
 
@@ -389,7 +391,10 @@ namespace upcxx {
         using T = typename std::remove_cv<
             typename std::iterator_traits<Iter>::value_type
           >::type;
-        
+
+        static_assert(is_serializable<T>::value,
+                     "value_type of iterators passed to write_sequence must be Serializable.");
+
         return this->template write_sequence_<T,Iter>(beg, end,
           /*trivial_and_contiguous=*/std::integral_constant<bool,
               serialization_traits<T>::is_actually_trivially_serializable &&
@@ -585,6 +590,9 @@ namespace upcxx {
             typename std::iterator_traits<Iter>::value_type
           >::type;
         
+        static_assert(is_serializable<T>::value,
+                     "value_type of iterators passed to write_sequence must be Serializable.");
+
         return this->template write_sequence_<T,Iter>(beg, end, std::false_type(), 0, serialization_traits<T>::static_ubound);
       }
       
@@ -595,6 +603,9 @@ namespace upcxx {
             typename std::iterator_traits<Iter>::value_type
           >::type;
         
+        static_assert(is_serializable<T>::value,
+                     "value_type of iterators passed to write_sequence must be Serializable.");
+
         return this->template write_sequence_<T,Iter>(beg, end, std::true_type(), n, serialization_traits<T>::static_ubound);
       }
     };
@@ -612,8 +623,13 @@ namespace upcxx {
       void jump(std::uintptr_t delta) { head_ += delta; }
       
       template<typename T, typename T1 = typename serialization_traits<T>::deserialized_type>
-      T1 read() {
+      typename ::std::conditional<!::std::is_array<T1>::value, T1, void>::type read() {
         UPCXX_ASSERT_INIT();
+        static_assert(is_serializable<T>::value,
+                     "Template argument of read must be Serializable.");
+        static_assert(!::std::is_array<T1>::value,
+                     "C++ does not allow functions to return arrays.");
+
         detail::raw_storage<T1> raw;
         upcxx::template serialization_traits<T>::deserialize(*this, &raw);
         return raw.value_and_destruct();
@@ -622,6 +638,9 @@ namespace upcxx {
       template<typename T, typename T1 = typename serialization_traits<T>::deserialized_type>
       T1* read_into(void *raw) {
         UPCXX_ASSERT_INIT();
+        static_assert(detail::is_serializable_type_or_array<T>::value,
+                     "Template argument of read_into must either be Serializable or an array of Serializable elements.");
+
         return upcxx::template serialization_traits<T>::deserialize(*this, raw);
       }
 

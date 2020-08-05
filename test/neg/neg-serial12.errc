@@ -1,0 +1,1 @@
+Template argument of read_into must either be Serializable or an array of Serializable elements.
