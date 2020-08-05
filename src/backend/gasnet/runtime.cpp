@@ -966,7 +966,7 @@ void upcxx::finalize() {
        }
     }
     
-    detail::the_local_team.value().destroy();
+    detail::the_local_team.value().destroy(detail::internal_only(), entry_barrier::none);
     detail::the_local_team.destruct();
     local_tm = GEX_TM_INVALID;
   }
