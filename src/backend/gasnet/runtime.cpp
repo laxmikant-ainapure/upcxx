@@ -441,6 +441,13 @@ void upcxx::init() {
   if(0 != backend::init_count++)
     return;
 
+  static int first_init = 1;
+  if (!first_init) 
+    UPCXX_FATAL_ERROR("This implementation does not currently support re-initialization "
+      "of the UPC++ library after it has been completely finalized in a given process.\n\n"
+      "If this capability is important to you, please contact us!");
+  first_init = 0;
+
   noise_log noise("upcxx::init()");
   
   int ok;
