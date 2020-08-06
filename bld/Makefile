@@ -61,15 +61,6 @@ GASNETDIR = gasnet.$(GASNET_CODEMODE)
 UPCXX_DBGOPT ?= debug opt
 FOREACH_DBGOPT = $(addprefix $(1)-,$(UPCXX_DBGOPT))
 
-# Some useful GASNet variables
-ifneq ($(wildcard $(builddir)/$(GASNETDIR)),)
-GASNET_CONDUITS   := $(call GASNET_VAR,$(builddir)/$(GASNETDIR),CONDUITS)
-GASNET_CC_FAMILY  := $(call GASNET_VAR,$(builddir)/$(GASNETDIR),CC_FAMILY)
-GASNET_CXX_FAMILY := $(call GASNET_VAR,$(builddir)/$(GASNETDIR),CXX_FAMILY)
-GASNET_CC_SUBFAMILY  := $(call GASNET_VAR,$(builddir)/$(GASNETDIR),CC_SUBFAMILY)
-GASNET_CXX_SUBFAMILY := $(call GASNET_VAR,$(builddir)/$(GASNETDIR),CXX_SUBFAMILY)
-endif
-
 dummy:
 	@echo NO DEFAULT TARGET
 force:
@@ -79,8 +70,8 @@ force:
 ## Human-readable GASNet conduit list on stdout, for use in error reporting
 # If GASNet configure has not yet run, list supported conduits
 list-networks: force
-	@if [[ -n '$(GASNET_CONDUITS)' ]]; then           \
-	   echo "Available networks: $(GASNET_CONDUITS)"; \
+	@if [[ -n '$(CONDUITS)' ]]; then           \
+	   echo "Available networks: $(CONDUITS)"; \
 	 else                                      \
 	   echo "Supported networks include a system-specific subset of: $(filter-out $(UNOFFICIAL_CONDUITS),$(ALL_CONDUITS))"; \
 	 fi
@@ -115,6 +106,11 @@ do-gasnet-configure: force
 	   echo "$$cmd";                                                              \
 	   mkdir -p "$$dir" && cd "$$dir" &&                                          \
 	     eval "$$cmd" 2>&1 | tee config.txt; exit $${PIPESTATUS[0]};              \
+	 fi
+	@if test \! -f "$(GASNET_CONFIG_FRAGMENT)"; then                              \
+	   $(MAKE) -C $(GASNETDIR)/$(GASNET_CONDUIT)-conduit                          \
+			$(GASNET_CONDUIT)-$(GASNET_THREADMODE).mak &&                 \
+	   $(MAKE) do-gasnet-mak UPCXX_FRAGMENTS="$(builddir)/$(GASNETDIR)";          \
 	 fi
 
 #
@@ -362,7 +358,7 @@ endif
 endif
 
 #
-# Generated configuration header
+# Generated configuration header (.hpp) and fragment (.mak)
 # TODO: dependencies to rebuild when something (what?) changes in GASNet
 #
 
@@ -371,7 +367,7 @@ include $(top_srcdir)/bld/config.mak
 UPCXX_CONFIG_HEADER = gen_include/upcxx/upcxx_config.hpp
 
 UPCXX_CONFIG_SCRIPTS_FULL = \
-	$(addprefix $(top_srcdir)/utils/config/, $(UPCXX_CONFIG_SCRIPTS))
+	$(addprefix $(top_srcdir)/utils/config/upcxx/, $(UPCXX_CONFIG_SCRIPTS))
 
 $(UPCXX_CONFIG_HEADER): $(UPCXX_CONFIG_SCRIPTS_FULL)
 	@mkdir -p $(dir $@)
@@ -392,6 +388,26 @@ $(UPCXX_CONFIG_HEADER): $(UPCXX_CONFIG_SCRIPTS_FULL)
 	   echo '#endif // _UPCXX_CONFIG_HPP';                \
 	 ) >| $@
 
+GASNET_CONFIG_SCRIPTS_FULL = \
+	$(addprefix $(top_srcdir)/utils/config/gasnet/, $(GASNET_CONFIG_SCRIPTS))
+
+do-gasnet-mak: force
+	@export $(UPCXX_CONFIG_VARS)                          \
+	        $(foreach var,$(UPCXX_CONFIG_FRAG_VARS),GASNET_$(var)='$(GASNET_$(var))'); \
+	 cd $(UPCXX_FRAGMENTS);                               \
+	 ( echo '# This file is auto-generated. Do not edit.';\
+	   echo ;                                             \
+	   for script in $(GASNET_CONFIG_SCRIPTS_FULL); do    \
+	     $(SHELL) $$script;                               \
+	     if [[ $$? != 0 ]]; then                          \
+	       echo "Error running $$script" >& 2;            \
+	       rm -f $(GASNET_CONFIG_FRAGMENT);               \
+	       exit 1;                                        \
+	     fi;                                              \
+	   done;                                              \
+	 ) >| $(GASNET_CONFIG_FRAGMENT)
+.PHONY: do-gasnet-mak
+
 # Panic button to zap generated upcxx_config.hpp files
 .PHONY: upcxx-unconfig
 upcxx-unconfig: force
@@ -402,6 +418,7 @@ upcxx-unconfig: force
 	        $(foreach backend, $(ALL_BACKENDS),       \
 	        $(foreach conduit, $(ALL_CONDUITS),       \
 	          $(call UPCXXDIR_FN,$(assert),$(optlev),$(dbgsym),$(backend),$(conduit))))))))
+	rm -f gasnet.opt.mak gasnet.dbg.mak
 
 #
 # Build upcxx library from its sources, with dependency tracking
@@ -474,7 +491,7 @@ UPCXX_NOCRAWL_INSTALL_HEADERS = \
 do-upcxx-all: force
 	@$(MAKE) do-gasnet-configure
 	@targets='';                                                           \
-	 for conduit in $(GASNET_CONDUITS); do                                 \
+	 for conduit in $(CONDUITS); do                                        \
 	   for backend in $(ALL_BACKENDS); do                                  \
 	     targets="$$targets $(call UPCXXDIR_FN,$(ASSERT),$(OPTLEV),$(DBGSYM),$$backend,$$conduit)/libupcxx.a";\
 	   done;                                                               \
@@ -502,7 +519,7 @@ do-upcxx-install-one: force
 	@$(MAKE) do-upcxx-install-headers do-upcxx-install-lib \
 	         do-upcxx-meta UPCXX_META_GASNET='$(prefix)/$(GASNETDIR)'
 do-upcxx-install-all: force
-	@for conduit in $(GASNET_CONDUITS); do                               \
+	@for conduit in $(CONDUITS); do                                      \
 	   for backend in $(ALL_BACKENDS); do                                \
 	     $(MAKE) do-upcxx-install-one                                    \
 	       DST="$(prefix)/upcxx.$(UPCXX_CODEMODE).$$backend.$$conduit"   \
@@ -534,10 +551,12 @@ do-upcxx-clean-opt: force
 	rm -Rf $(foreach backend, $(ALL_BACKENDS),       \
                $(foreach conduit, $(ALL_CONDUITS),       \
 	         $(call UPCXXDIR_FN,0,3,0,$(backend),$(conduit))))
+	rm -f gasnet.opt.mak
 do-upcxx-clean-debug: force
 	rm -Rf $(foreach backend, $(ALL_BACKENDS),       \
                $(foreach conduit, $(ALL_CONDUITS),       \
 	         $(call UPCXXDIR_FN,1,0,1,$(backend),$(conduit))))
+	rm -f gasnet.debug.mak
 
 #
 # Standard all, install, clean and distclean
@@ -587,7 +606,7 @@ UPCXX_EXE_CSUM_VALS = $(foreach var,$(UPCXX_EXE_CSUM_VARS),$($(var)))
 SRCPATH = $(shell cd $(STARTDIR) && cd $(dir $(SRC)) && pwd)/$(notdir $(SRC))
 UPCXX_EXE_CSUM = $(firstword $(shell $(UPCXX_CSUMCMD) <<< '$(SRCPATH) $(UPCXX_EXE_CSUM_VALS)'))
 UPCXX_EXE_STEM = $(builddir)/$(UPCXXDIR)/exe/$(UPCXX_EXE_CSUM)
-UPCXX_EXE      = $(UPCXX_EXE_STEM)$(call GASNET_VAR,$(builddir)/$(GASNETDIR),EXESUFFIX)
+UPCXX_EXE      = $(UPCXX_EXE_STEM)$(EXESUFFIX)
 
 do-exe: force
 	@mkdir -p $(UPCXXDIR)/exe

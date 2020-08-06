@@ -20,9 +20,10 @@ endif
 # PARAMS: UPCXX_BACKEND
 GASNET_THREADMODE = $(UPCXX_BACKEND:gasnet_%=%)
 
-# Make functions to extract values of GASNet Makefile variables
-#   $(call GASNET_VAR_VAL,GASNET_BLDDIR,VARNAME) ->  VARNAME="VAL"
-#   $(call GASNET_VAR,GASNET_BLDDIR,VARNAME)     ->  VAL
-GASNET_VAR_CMD =  test -f $(1)/Makefile && MAKEFLAGS='$(filter-out d -d --debug=%,$(MAKEFLAGS))' $(MAKE) -C $(1) echovar VARNAME=$(2)
-GASNET_VAR_VAL = $(shell $(call GASNET_VAR_CMD,$(1),$(2)))
-GASNET_VAR     = $(shell $(call GASNET_VAR_CMD,$(1),$(2)) | cut -d\" -f2)
+# Generated fragment with additional settings
+# This replaces previous dynamic use of GASNET_VAR and GASNET_VAR_VAL
+GASNET_CONFIG_FRAGMENT = $(upcxx_bld)/bld/gasnet.$(GASNET_CODEMODE).mak
+ifneq ($(wildcard $(GASNET_CONFIG_FRAGMENT)),)
+  $(GASNET_CONFIG_FRAGMENT): ; @: # empty rule
+  include $(GASNET_CONFIG_FRAGMENT)
+endif

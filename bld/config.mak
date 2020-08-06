@@ -5,11 +5,14 @@
 # environment (UPCXX_CONFIG_VARS or UPCXX_CONFIG_FRAG_VARS).
 #
 
-# Scripts (in $(upcxx_src)/utils/config) to be run IN ORDER
+# Scripts (in $(upcxx_src)/utils/config/upcxx) to be run IN ORDER
 UPCXX_CONFIG_SCRIPTS = \
 	upcxx_network.sh \
 	builtin_assume_aligned.sh \
 	hidden_am_concurrency_level.sh
+# Scripts (in $(upcxx_src)/utils/config/gasnet) to be run IN ORDER
+GASNET_CONFIG_SCRIPTS = \
+	config_status.sh
 
 # Environment (UPCXX_* prefixed) to export to configure probe scripts
 UPCXX_CONFIG_VARS = \

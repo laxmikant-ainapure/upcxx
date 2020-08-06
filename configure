@@ -1097,6 +1097,7 @@ chmod a+rx bin/upcxx bin/upcxx-run bin/upcxx-meta
 #
 [[ -d bld/gasnet.opt   ]] && rm -Rf bld/gasnet.opt
 [[ -d bld/gasnet.debug ]] && rm -Rf bld/gasnet.debug
+rm -f bld/gasnet.opt.mak bld/gasnet.debug.mak
 
 #
 # Simplify logic when using a GASNet build directory (--enable-single only)
