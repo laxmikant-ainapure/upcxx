@@ -628,7 +628,7 @@ namespace upcxx {
         static_assert(is_serializable<T>::value,
                      "Template argument of read must be Serializable.");
         static_assert(!::std::is_array<T1>::value,
-                     "C++ does not allow functions to return arrays.");
+                     "Cannot return array type from read -- use read_into or read_sequence_into instead.");
 
         detail::raw_storage<T1> raw;
         upcxx::template serialization_traits<T>::deserialize(*this, &raw);
@@ -855,7 +855,7 @@ namespace upcxx {
                      "Arguments to UPCXX_SERIALIZED_FIELDS must either be Serializable or arrays of Serializable elements.");
 
       static_assert( !std::is_const<Ti>::value,
-                     "Arguments to UPCXX_SERIALIZED_FIELDS cannot be const.");
+                     "Arguments to UPCXX_SERIALIZED_FIELDS cannot be const -- use UPCXX_SERIALIZED_VALUES instead.");
 
       static_assert(
         std::is_same<Ti, typename serialization_traits<Ti>::deserialized_type>::value,
