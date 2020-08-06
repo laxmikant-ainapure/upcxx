@@ -23,6 +23,7 @@ New features/enhancements: (see specification and programmer's guide for full de
   bugs in their code when compiling with `-codemode=debug` (aka, `upcxx -g`).
 * local_team() creation during `upcxx::init()` in multi-node runs is now more scalable
   in time and memory, providing noticeable improvements at large scale.
+* `team::destroy()` now frees GASNet-level team resources that were previously leaked.
 * ...
 
 Notable bug fixes:

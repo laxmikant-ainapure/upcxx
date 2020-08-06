@@ -131,6 +131,8 @@ namespace upcxx {
     digest next_collective_id(detail::internal_only) {
       return id_.eat(coll_counter_++);
     }
+
+    void destroy(detail::internal_only, entry_barrier eb = entry_barrier::user);
   };
   
   team& world();

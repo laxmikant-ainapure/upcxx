@@ -89,16 +89,41 @@ team team::split(intrank_t color, intrank_t key) const {
     );
 }
 
+#ifndef UPCXX_TM_DESTROY // gex_TM_Destroy was added in spec v0.10
+  #if GEX_SPEC_VERSION_MINOR >= 10 || GEX_SPEC_VERSION_MAJOR  
+     #define UPCXX_TM_DESTROY 1
+  #else
+     #define UPCXX_TM_DESTROY 0
+  #endif
+#endif
+
 void team::destroy(entry_barrier eb) {
+  UPCXX_ASSERT(this != &world(),      "team::destroy() is prohibited on team world()");
+  UPCXX_ASSERT(this != &local_team(), "team::destroy() is prohibited on the local_team()");
+
+  team::destroy(detail::internal_only(), eb);
+}
+
+void team::destroy(detail::internal_only, entry_barrier eb) {
   UPCXX_ASSERT_MASTER();
   
-  if(this->handle != reinterpret_cast<uintptr_t>(GEX_TM_INVALID)) {
+  gex_TM_t tm = gasnet::handle_of(*this);
+
+  if(tm != GEX_TM_INVALID) {
     backend::quiesce(*this, eb);
+
+    void *scratch = gex_TM_QueryCData(tm);
+
+    #if UPCXX_TM_DESTROY
+      if (tm != gasnet::handle_of(detail::the_world_team.value())) {
+        gex_Memvec_t scratch_area;
+        gex_TM_Destroy(tm, &scratch_area, GEX_FLAG_GLOBALLY_QUIESCED);
+
+        if (scratch) UPCXX_ASSERT(scratch == scratch_area.gex_addr);
+      }
+    #endif
     
-    void *scratch = gex_TM_QueryCData(reinterpret_cast<gex_TM_t>(this->handle));
     upcxx::deallocate(scratch);
-    
-    // TODO: destruct with GEX API call when that exists
   }
   
   if(id_ != digest{~0ull, ~0ull})
