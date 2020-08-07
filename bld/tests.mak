@@ -181,11 +181,6 @@ test_exclude_fail_seq =
 
 test_exclude_fail_par =
 
-ifeq ($(strip $(GASNET_CXX_FAMILY)).$(strip $(UPCXX_CODEMODE)),PGI.debug)
-test_exclude_fail_all += \
-	test/regression/issue138.cpp
-endif
-
 # 
 # Section 3. 
 # Flags to add to specific tests
