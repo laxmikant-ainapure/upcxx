@@ -560,3 +560,82 @@ and skips over itself. Advancing a `deserializing_iterator` also employs skip
 to move to the next element. Views detect the skippability of their element type
 and will prefix every element with its serialized size to make it skippable in
 the case that it isn't otherwise.
+
+
+## RPC
+
+### RPC: Commands
+
+The on-the-wire serialized format for rpc's is managed by "src/command.hpp". 
+The format is a function pointer called the "executor" (enocded by 
+`global_fnptr` to assist with process translation) follwed by the serialized 
+function object. The executor knows the type of the function object and is 
+responsible for invoking its deserialization and executing it. To illustrate, 
+lets simplify and pretend the type of the executor is 
+`void(*executor)(detail::serialization_reader&)`. When the runtime wants to execute a 
+command, and presumably it has `serialization_reader` in hand, it first pulls
+off the executor fnptr then passes the reader (now advanced by one fnptr) into 
+that executor.
+
+But of course things aren't that simple. The `detail::command<Arg...>` class
+(which acts like a namespace but isnt since namespaced can't be templated) is 
+templated on `Arg...`, which are the types of the receive side arguments used 
+by the runtime for housekeeping purposes. The new signuture for executors is
+`void(*)(Arg...)`, so clearly the reader must somehow be derivable from the
+args. Let's look at how we construct commands:
+
+```
+template<typename ...Arg>
+struct command {
+    template<detail::serialization_reader(*reader)(Arg...), void(*cleanup)(Arg...),
+             typename Fn1, typename Writer,
+             typename Fn = typename std::decay<Fn1>::type>
+    static void serialize(Writer &w, std::size_t size_ub, Fn1 &&fn)
+}
+```
+
+`command::serialize` takes a function object and encodes it onto a Writer as a 
+command. Additionally, `command::serialize` takes two functions in its template 
+list to perform the following at the receiver side: `reader` which computes a 
+reader from the `Arg...`, and `cleanup` which will be invoked on the `Arg...` 
+after the function object has been executed (which can be asynchronously if
+the function object returns a future, this is essential for buffer lifetime
+extension with views).
+
+For a vanilla RPC, the gasnet backend will use `command<lpc_base*>` since rpc's
+are handled as lpc's on the receiver, see `backend::rpc_as_lpc` for the `reader`
+and `cleanup` functions given to `command<lpc_base*>::serialize`.  In short,
+`rpc_as_lpc::reader_of(lpc_base*)` knows how to build a reader pointing to the
+serialized payload which is attached to the lpc struct, and cleanup frees the
+memory. Cleanup can be pretty tricky since when and how to free the mem depends
+on the protocol used to ship the RPC.
+
+Really tricky point: notice that the executor fnptr signature for
+`command<lpc_base*>` perfectly matches the signature of
+`void(*lpc_vtable::execute_and_delete)(lpc_base*)`. This was a carefully 
+arranged accident! When we build a `rpc_as_lpc` we also mock up an `lpc_vtable`
+whose `execute_and_delete` is just a copy of the executor we found on the wire.
+Thus we incur only a single virtual call when dispatching rpc's found in the
+persona lpc queue. The more natural way would incur double virtual dispatch:
+`rpc_as_lpc::execute_and_delete` would "know" that its an rpc and invoke the
+attached command payload which would pull out the executor and virtual invoke
+that.
+
+### RPC: Protocols
+
+- restricted: The RPC is shipped in an AM medium's payload and is executed
+  directly in the AM context. `cleanup` is a nop.
+
+- eager: Payload in the AM medium, bounced out to the persona's lpc queue
+  by allocating an `rpc_as_lpc` and copying the command bytes there. `cleanup`
+  is basically `std::free`.
+
+- rendezvous, remote target: Command is materialized in sender's segment
+  (`upcxx::allocate`). AM is shipped which will GET the command. When GET completes,
+  lpc is enqueued and sender is AM'd to `upcxx::deallocate` command. `cleanup`
+  does `std::free`.
+  
+- rendezvous, local target: Command is materialized in sender's segment.
+  Target immediately does address translation and enqueues sender's command as
+  lpc, no GET == zero copy! `cleanup` AM's back to sender to `upcxx::deallocate`
+  command.
