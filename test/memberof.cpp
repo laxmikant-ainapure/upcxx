@@ -4,6 +4,12 @@
 #include <cassert>
 #include <upcxx/upcxx.hpp>
 
+#include <gasnet_portable_platform.h>
+#if (PLATFORM_COMPILER_PGI && PLATFORM_COMPILER_VERSION_LT(19,10,0)) && !defined(UPCXX_CODEMODE)
+  // Older PGI compilers prior to 19.10 are known to ICE in debug mode
+  #error UPCXX_TEST_SKIPPED - PGI ICEs on memberof.cpp.  See issue #390.
+#endif
+
 #if __cplusplus <= 201703
 using std::is_pod;
 #else 
