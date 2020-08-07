@@ -10,10 +10,14 @@ UNOFFICIAL_CONDUITS = mpi ucx
 
 # Map UPCXX configuration variables to GASNET_CODEMODE
 # PARAMS: OPTLEV, DBGSYM
-ifeq ($(OPTLEV)$(DBGSYM),01)
-GASNET_CODEMODE ?= debug
+ifeq ($(words $(UPCXX_DBGOPT)),1)
+  GASNET_CODEMODE ?= $(UPCXX_DBGOPT)
 else
-GASNET_CODEMODE ?= opt
+  ifeq ($(OPTLEV)$(DBGSYM),01)
+    GASNET_CODEMODE ?= debug
+  else
+    GASNET_CODEMODE ?= opt
+  endif
 endif
 
 # Map UPCXX configuration variables to GASNET_THREADMODE
