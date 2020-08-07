@@ -398,6 +398,7 @@ namespace upcxx {
     ) {
     UPCXX_STATIC_ASSERT_VALUE_SIZE(T, reduce_one); // issue 392: prevent large types by-value
 
+    UPCXX_ASSERT_INIT();
     UPCXX_ASSERT(root >= 0 && root < tm.rank_n(),
       "reduce_one(..., root, team) requires root in [0, team.rank_n()-1] == [0, " << tm.rank_n()-1 << "], but given: " << root);
     
@@ -419,6 +420,7 @@ namespace upcxx {
       const team &tm = upcxx::world(),
       Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
     ) {
+    UPCXX_ASSERT_INIT();
     UPCXX_ASSERT(root >= 0 && root < tm.rank_n(),
       "reduce_one(..., root, team) requires root in [0, team.rank_n()-1] == [0, " << tm.rank_n()-1 << "], but given: " << root);
     
@@ -496,6 +498,7 @@ namespace upcxx {
       const team &tm = upcxx::world(),
       Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
     ) {
+    UPCXX_ASSERT_INIT();
     UPCXX_ASSERT(root >= 0 && root < tm.rank_n(),
       "reduce_one_nontrivial(..., root, team) requires root in [0, team.rank_n()-1] == [0, " << tm.rank_n()-1 << "], but given: " << root);
       
@@ -522,7 +525,7 @@ namespace upcxx {
       Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
     ) {
     UPCXX_STATIC_ASSERT_VALUE_SIZE(T, reduce_all); // issue 392: prevent large types by-value
-
+    UPCXX_ASSERT_INIT();
     return detail::reduce_one_or_all_trivial<T1,BinaryOp,Cxs,T>(
         std::move(value), std::move(op), /*all=*/-1, tm, std::move(cxs)
       );
@@ -541,6 +544,7 @@ namespace upcxx {
       const team &tm = upcxx::world(),
       Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
     ) {
+    UPCXX_ASSERT_INIT();
     return detail::reduce_one_or_all_trivial<T,BinaryOp,Cxs>(
         src, dst, n, std::move(op), /*all=*/-1, tm, std::move(cxs)
       );
@@ -564,6 +568,7 @@ namespace upcxx {
         Cxs cxs,
         std::true_type trivial_yes
       ) {
+      UPCXX_ASSERT_INIT();
       return reduce_all(std::forward<T1>(value), std::move(op), tm, std::move(cxs));
     }
     
@@ -581,6 +586,7 @@ namespace upcxx {
         Cxs cxs,
         std::false_type trivial_no
       ) {
+      UPCXX_ASSERT_INIT();
       using reduce_state = detail::reduce_state<T,BinaryOp,/*one_not_all=*/false,Cxs>;
       
       typename reduce_state::cxs_state_t cxs_st{std::move(cxs)};
@@ -615,6 +621,7 @@ namespace upcxx {
       const team &tm = upcxx::world(),
       Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
     ) {
+    UPCXX_ASSERT_INIT();
     return detail::reduce_all_nontrivial(
         std::forward<T1>(value), std::move(op), tm, std::move(cxs),
         std::integral_constant<bool, upcxx::is_trivially_serializable<T>::value>()

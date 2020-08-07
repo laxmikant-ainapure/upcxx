@@ -138,6 +138,7 @@ namespace upcxx {
     }
     
     bool is_local() const {
+      UPCXX_ASSERT_INIT();
       UPCXX_GPTR_CHK(*this);
       return device_ == -1 && (raw_ptr_ == nullptr || backend::rank_is_local(rank_));
     }
@@ -157,6 +158,7 @@ namespace upcxx {
     }
     
     const T* local() const {
+      UPCXX_ASSERT_INIT();
       UPCXX_GPTR_CHK(*this);
       return KindSet != memory_kind::host && device_ != -1
         ? nullptr
@@ -298,6 +300,7 @@ namespace upcxx {
 
   template<typename T>
   global_ptr<T> to_global_ptr(T *p) {
+    UPCXX_ASSERT_INIT();
     if(p == nullptr)
       return global_ptr<T>(nullptr);
     else {
@@ -312,6 +315,7 @@ namespace upcxx {
   
   template<typename T>
   global_ptr<T> try_global_ptr(T *p) {
+    UPCXX_ASSERT_INIT();
     intrank_t rank;
     std::uintptr_t raw;
     

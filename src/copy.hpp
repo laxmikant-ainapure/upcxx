@@ -42,6 +42,7 @@ namespace upcxx {
     >::return_t
   copy(global_ptr<const T,Ks> src, T *dest, std::size_t n,
        Cxs cxs=completions<future_cx<operation_cx_event>>{{}}) {
+    UPCXX_ASSERT_INIT();
     UPCXX_GPTR_CHK(src);
     UPCXX_ASSERT(src && dest, "pointer arguments to copy may not be null");
     return detail::copy( src.device_, src.rank_, src.raw_ptr_,
@@ -59,6 +60,7 @@ namespace upcxx {
     >::return_t
   copy(T const *src, global_ptr<T,Kd> dest, std::size_t n,
        Cxs cxs=completions<future_cx<operation_cx_event>>{{}}) {
+    UPCXX_ASSERT_INIT();
     UPCXX_GPTR_CHK(dest);
     UPCXX_ASSERT(src && dest, "pointer arguments to copy may not be null");
     return detail::copy( detail::host_device, upcxx::rank_me(), const_cast<void*>(src),
@@ -76,6 +78,7 @@ namespace upcxx {
     >::return_t
   copy(global_ptr<const T,Ks> src, global_ptr<T,Kd> dest, std::size_t n,
        Cxs cxs=completions<future_cx<operation_cx_event>>{{}}) {
+    UPCXX_ASSERT_INIT();
     UPCXX_GPTR_CHK(src); UPCXX_GPTR_CHK(dest);
     UPCXX_ASSERT(src && dest, "pointer arguments to copy may not be null");
     return detail::copy(

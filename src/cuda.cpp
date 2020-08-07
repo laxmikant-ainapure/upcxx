@@ -87,6 +87,7 @@ void upcxx::cuda::curt_failed(cudaError_t res, const char *file, int line, const
 upcxx::cuda_device::cuda_device(int device):
   device_(device) {
 
+  UPCXX_ASSERT_INIT();
   UPCXX_ASSERT_ALWAYS_MASTER();
 
   #if UPCXX_CUDA_ENABLED
@@ -121,6 +122,7 @@ upcxx::cuda_device::~cuda_device() {
 }
 
 void upcxx::cuda_device::destroy(upcxx::entry_barrier eb) {
+  UPCXX_ASSERT_INIT();
   UPCXX_ASSERT_ALWAYS_MASTER();
 
   backend::quiesce(upcxx::world(), eb);

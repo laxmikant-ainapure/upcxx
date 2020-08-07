@@ -124,6 +124,7 @@ namespace {
 #endif // end hand-rolled barrier
 
 void upcxx::barrier(const team &tm) {
+  UPCXX_ASSERT_INIT();
   UPCXX_ASSERT_MASTER();
  
   // memory fencing is handled inside gex_Coll_BarrierNB + gex_Event_Test

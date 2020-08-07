@@ -10,6 +10,9 @@
 #endif
 
 #define UPCXX_BACKEND_GASNET (UPCXX_BACKEND_GASNET_SEQ | UPCXX_BACKEND_GASNET_PAR)
+#if UPCXX_BACKEND_GASNET && !UPCXX_BACKEND
+#error Inconsistent UPCXX_BACKEND definition!
+#endif
 
 /* This header declares some core user-facing API to break include
  * cycles with headers included by the real "backend.hpp". This header
@@ -194,15 +197,25 @@ namespace backend {
 
 #include <upcxx/diagnostic.hpp>
 
+#if UPCXX_BACKEND
+  #define UPCXX_ASSERT_INIT_NAMED(fnname) \
+    UPCXX_ASSERT(::upcxx::backend::init_count != 0, \
+     "Attempted to invoke " << fnname << " while the UPC++ library was not initialized. " \
+     "Please call upcxx::init() to initialize the library before calling this function.")
+#else
+  #define UPCXX_ASSERT_INIT_NAMED(fnname) ((void)0)
+#endif
+#define UPCXX_ASSERT_INIT() UPCXX_ASSERT_INIT_NAMED("the library call shown above")
+
 namespace upcxx {
   inline intrank_t rank_n() {
-    UPCXX_ASSERT(backend::rank_n != -1, "upcxx::rank_n() called before upcxx::init()");
+    UPCXX_ASSERT_INIT();
     return backend::rank_n;
   }
   inline intrank_t rank_me() {
-    UPCXX_ASSERT(backend::rank_n != -1, "upcxx::rank_me() called before upcxx::init()");
+    UPCXX_ASSERT_INIT();
     return backend::rank_me;
-   }
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

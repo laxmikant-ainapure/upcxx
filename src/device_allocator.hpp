@@ -45,10 +45,11 @@ namespace upcxx {
       detail::device_allocator_core<Device>(nullptr, Device::template null_pointer<void>(), 0) {
     }
     device_allocator(Device &dev, typename Device::template pointer<void> base, std::size_t size):
-      detail::device_allocator_core<Device>(&dev, base, size) {
+      detail::device_allocator_core<Device>((UPCXX_ASSERT_INIT(),UPCXX_ASSERT(dev.is_active()),&dev), 
+                                            base, size) {
     }
     device_allocator(Device &dev, std::size_t size):
-      detail::device_allocator_core<Device>((UPCXX_ASSERT(dev.is_active()),&dev), 
+      detail::device_allocator_core<Device>((UPCXX_ASSERT_INIT(),UPCXX_ASSERT(dev.is_active()),&dev), 
                                             Device::template null_pointer<void>(), size) {
     }
     
@@ -66,6 +67,7 @@ namespace upcxx {
     template<typename T>
     global_ptr<T,Device::kind> allocate(std::size_t n=1,
                                         std::size_t align = Device::template default_alignment<T>()) {
+      UPCXX_ASSERT_INIT();
       lock_.lock();
       void *ptr = this->seg_.allocate(
           n*sizeof(T),
@@ -86,6 +88,7 @@ namespace upcxx {
 
     template<typename T>
     void deallocate(global_ptr<T,Device::kind> p) {
+      UPCXX_ASSERT_INIT();
       UPCXX_GPTR_CHK(p);
       if(p) {
         UPCXX_ASSERT(p.device_ == this->device_ && p.rank_ == upcxx::rank_me());
@@ -97,6 +100,7 @@ namespace upcxx {
 
     template<typename T>
     global_ptr<T,Device::kind> to_global_ptr(typename Device::template pointer<T> p) const {
+      UPCXX_ASSERT_INIT();
       return global_ptr<T,Device::kind>(
         detail::internal_only(),
         upcxx::rank_me(),
@@ -108,6 +112,7 @@ namespace upcxx {
     #if 0 // removed from spec
     template<typename T>
     global_ptr<T,Device::kind> try_global_ptr(typename Device::template pointer<T> p) const {
+      UPCXX_ASSERT_INIT();
       return this->seg_.in_segment((void*)p)
         ? global_ptr<T,Device::kind>(
           detail::internal_only(),
@@ -121,6 +126,7 @@ namespace upcxx {
     
     template<typename T>
     static typename Device::id_type device_id(global_ptr<T,Device::kind> gp) {
+      UPCXX_ASSERT_INIT();
       UPCXX_GPTR_CHK(gp);
       return Device::invalid_device_id == -1 // this is true statically so faster case will always be taken
         ? gp.device_
@@ -129,6 +135,7 @@ namespace upcxx {
     
     template<typename T>
     static typename Device::template pointer<T> local(global_ptr<T,Device::kind> gp) {
+      UPCXX_ASSERT_INIT();
       UPCXX_GPTR_CHK(gp);
       UPCXX_ASSERT(gp.is_null() || gp.where() == upcxx::rank_me());
       return gp.raw_ptr_;

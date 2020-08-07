@@ -429,6 +429,7 @@ namespace upcxx
     static_assert(std::is_convertible<S, const T*>::value,
                   "SrcIter and DestIter need to be over same base T type");
 
+    UPCXX_ASSERT_INIT();
     UPCXX_ASSERT_ALWAYS((detail::completions_has_event<Cxs, operation_cx_event>::value |
                   detail::completions_has_event<Cxs, remote_cx_event>::value),
                  "Not requesting either operation or remote completion is surely an "
@@ -523,7 +524,7 @@ namespace upcxx
     static_assert(std::is_convertible<D, const T*>::value,
                   "SrcIter and DestIter need to be over same base T type");
  
-    
+    UPCXX_ASSERT_INIT();
     UPCXX_ASSERT_ALWAYS((detail::completions_has_event<Cxs, operation_cx_event>::value |
                   detail::completions_has_event<Cxs, remote_cx_event>::value),
                  "Not requesting either operation or remote completion is surely an "
@@ -614,6 +615,7 @@ namespace upcxx
                   "RMA operations only work on TriviallySerializable types."
                   );
     
+    UPCXX_ASSERT_INIT();
     UPCXX_ASSERT_ALWAYS((
                   detail::completions_has_event<Cxs, operation_cx_event>::value |
                   detail::completions_has_event<Cxs, remote_cx_event>::value),
@@ -719,6 +721,7 @@ namespace upcxx
     static_assert(is_trivially_serializable<T>::value,
                   "RMA operations only work on TriviallySerializable types.");
     
+    UPCXX_ASSERT_INIT();
     UPCXX_ASSERT_ALWAYS((detail::completions_has_event<Cxs, operation_cx_event>::value |
                   detail::completions_has_event<Cxs, remote_cx_event>::value),
                  "Not requesting either operation or remote completion is surely an "
@@ -809,6 +812,7 @@ namespace upcxx
       "RMA operations only work on TriviallySerializable types."
     );
     
+    UPCXX_ASSERT_INIT();
     UPCXX_ASSERT_ALWAYS((
       detail::completions_has_event<Cxs, operation_cx_event>::value |
       detail::completions_has_event<Cxs, remote_cx_event>::value),
@@ -886,6 +890,7 @@ namespace upcxx
     static_assert(is_trivially_serializable<T>::value,
       "RMA operations only work on TriviallySerializable types.");
     
+    UPCXX_ASSERT_INIT();
     UPCXX_ASSERT_ALWAYS((detail::completions_has_event<Cxs, operation_cx_event>::value |
                   detail::completions_has_event<Cxs, remote_cx_event>::value),
                  "Not requesting either operation or remote completion is surely an "

@@ -19,21 +19,26 @@ namespace upcxx {
   }
   
   inline persona& master_persona() {
+    UPCXX_ASSERT_INIT();
     return backend::master;
   }
   
   inline bool progress_required() {
+    UPCXX_ASSERT_INIT();
     return detail::the_persona_tls.progress_required();
   }
   inline bool progress_required(persona_scope &bottom) {
+    UPCXX_ASSERT_INIT();
     return detail::the_persona_tls.progress_required(bottom);
   }
   
   inline void discharge() {
+    UPCXX_ASSERT_INIT();
     while(upcxx::progress_required())
       upcxx::progress(progress_level::internal);
   }
   inline void discharge(persona_scope &ps) {
+    UPCXX_ASSERT_INIT();
     while(upcxx::progress_required(ps))
       upcxx::progress(progress_level::internal);
   }
