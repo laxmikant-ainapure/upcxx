@@ -159,6 +159,9 @@ do-build-%: force
 	   if [[ $$result == 0 ]]; then                  \
 	     $$MAKE $(MAKE_HERE) do-test-xml RESULT=compile-pass OUTPUT=$$output ; \
 	     printf 'Compiling %-30s SUCCESS\n' "$$exe"; \
+	   elif grep -w UPCXX_TEST_SKIPPED $$output >& /dev/null; then \
+	     $$MAKE $(MAKE_HERE) do-test-xml RESULT=compile-skip OUTPUT=$$output ; \
+	     printf 'Compiling %-30s SKIPPED\n' "$$exe"; \
 	   else                                          \
 	     $$MAKE $(MAKE_HERE) do-test-xml RESULT=compile-fail OUTPUT=$$output ; \
 	     printf 'Compiling %-30s FAILED\n' "$$exe";  \
@@ -432,14 +435,15 @@ do-test-xml: force
 	 testname=$${testname#test-} ; \
 	 target="$${output%.out}.xml" ; \
 	 suitename=$$(cut -d- -f1 <<<$(RESULT)); \
-	 errors=0 ; failures=0 ; outtype= ; \
+	 skips=0; errors=0 ; failures=0 ; outtype= ; \
 	 case "$(RESULT)" in \
+	   compile-skip) skips=1;    outtype=failure ;; \
 	   compile-fail) failures=1; outtype=failure ;; \
 	   run-fail)     errors=1;   outtype=error   ;; \
 	 esac; \
 	 echo -e '<?xml version="1.0" encoding="UTF-8"?>\n' \
 	         '<testsuite errors="'$$errors'" failures="'$$failures'" name="'$$suitename'" test-cases="1" tests="1">\n'\
-	         ' <testcase name="'"$$testname"'" skip="0" tests="1">' >$$target ; \
+	         ' <testcase name="'"$$testname"'" skip="'$$skips'" tests="1">' >$$target ; \
 	 if [[ -n "$$outtype" ]] ; then \
 	   echo "    <$$outtype>" >>$$target ; \
 	   cat $$output | $(XML_ENCODE) >>$$target ; \
