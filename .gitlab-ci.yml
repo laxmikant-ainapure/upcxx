@@ -468,8 +468,6 @@ theta.llvm:
 dirac.pgi:
   extends: [ .generic, .new_pgi, .dirac ]
   resource_group: pgi_license
-  variables:
-    TEST_EXCLUDE_ALL: 'test/future.cpp test/regression/issue138.cpp'
   before_script:
     - module load PrgEnv/pgi
     - export CC=pgcc CXX=pgc++
@@ -496,8 +494,6 @@ dirac.clang:
 dirac.pgi_floor:
   extends: [ .generic, .old_pgi, .dirac ]
   resource_group: pgi_license
-  variables:
-    TEST_EXCLUDE_ALL: 'test/regression/issue138.cpp'
   before_script:
     - module load PrgEnv/pgi/19.1
     - export CC=pgcc CXX=pgc++
@@ -580,7 +576,6 @@ el-capitan.xcode_floor:
 power9.pgi:
   extends: [ .generic, .new_pgi, .power9 ]
   variables:
-    TEST_EXCLUDE_ALL: 'test/future.cpp test/regression/issue138.cpp'
     CC:  /opt/pgi/linuxpower/19.10/bin/pgcc
     CXX: /opt/pgi/linuxpower/19.10/bin/pgc++
 

@@ -10,6 +10,12 @@
 
 #include "../util.hpp"
 
+#include <gasnet_portable_platform.h>
+#if (PLATFORM_COMPILER_PGI && PLATFORM_COMPILER_VERSION_LT(19,10,0)) && !defined(UPCXX_CODEMODE)
+  // Older PGI compilers prior to 19.10 are known to ICE in debug mode
+  #error UPCXX_TEST_SKIPPED - PGI ICEs on issue138.cpp.  See issues #278 and #390.
+#endif
+
 static const char *alphabet = "abcdefghijklmnopqrstuvwxyz";
 
 template<typename T>
