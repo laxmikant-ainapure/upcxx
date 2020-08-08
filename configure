@@ -91,8 +91,8 @@ Usage:
         The default behavior (auto-detection) is appropriate unless
         auto-detection is making the wrong choice.
 
-  --with-cuda
-  --without-cuda
+  --enable-cuda
+  --disable-cuda
         Enabled or disable UPC++ Memory Kinds over NVIDIA CUDA.
         Overrides the value of $UPCXX_CUDA, if any.
   --with-nvcc=...
@@ -249,44 +249,58 @@ shopt -s extglob
 trap exit ERR  # so exit in get_arg_val exits from top-level
 # DO NOT simplify 'FOO="$(get_arg_val $1)"; export FOO;' to a single command, or get_arg_val can't fatal-exit
 while [[ $# -gt 0 ]]; do
-  case "$1" in
+  arg="$1"
+  orig_arg="$1"
+  shift
+  # uniform preprocessing on args:
+  if [[ "$arg" =~ (^-+(.+)) ]]; then # normalize to single dash
+    arg="-${BASH_REMATCH[2]}"
+  fi
+  if [[ "$arg" =~ (^-+enable-(.+)) ]]; then  # -enable  => -with
+    arg="-with-${BASH_REMATCH[2]}"
+  fi
+  if [[ "$arg" =~ (^-+disable-(.+)) ]]; then # -disable => -without
+    arg="-without-${BASH_REMATCH[2]}"
+  fi
+  #echo "configure: arg '$orig_arg' => '$arg'"
+  case "$arg" in
     # Passed explicitly to GASNet's configure:
-    ?(-)-prefix?(=*))               PREFIX="$(get_arg_val $1)";;
+    -prefix?(=*))               PREFIX="$(get_arg_val $arg)";;
 
     # Used to find and run GASNet's configure:
-    ?(-)-with-gasnet?(=*))          GASNET="$(get_arg_val $1)";         export GASNET;;
-    ?(-)-with-cross)                unset UPCXX_CROSS;                  export UPCXX_CROSS;;
-    ?(-)-with-cross?(=*))           UPCXX_CROSS="$(get_arg_val $1)";    export UPCXX_CROSS;;
-    ?(-)-without-cross)             UPCXX_CROSS='';                     export UPCXX_CROSS;;
+    -with-gasnet?(=*))          GASNET="$(get_arg_val $arg)";         export GASNET;;
+    -with-cross)                unset UPCXX_CROSS;                  export UPCXX_CROSS;;
+    -with-cross?(=*))           UPCXX_CROSS="$(get_arg_val $arg)";    export UPCXX_CROSS;;
+    -without-cross)             UPCXX_CROSS='';                     export UPCXX_CROSS;;
 
     # Not relevant to GASNet's configure:
-    ?(-)-with-default-network?(=*)) GASNET_CONDUIT="$(get_arg_val $1)"; export GASNET_CONDUIT;;
-    ?(-)-with-python?(=*))          UPCXX_PYTHON="$(get_arg_val $1)"; export UPCXX_PYTHON;;
+    -with-default-network?(=*)) GASNET_CONDUIT="$(get_arg_val $arg)"; export GASNET_CONDUIT;;
+    -with-python?(=*))          UPCXX_PYTHON="$(get_arg_val $arg)"; export UPCXX_PYTHON;;
 
     # Passed explicitly to GASNet's configure, potentially after some processing:
-    ?(-)-with-cc?(=*))              CC="$(get_arg_val $1)";    export CC;;
-    ?(-)-with-cxx?(=*))             CXX="$(get_arg_val $1)";   export CXX;;
-    ?(-)-with-cflags?(=*))          CFLAGS="$(get_arg_val $1)";   export CFLAGS;;  # NOT documented in usage
-    ?(-)-with-cxxflags?(=*))        CXXFLAGS="$(get_arg_val $1)"; export CXXFLAGS;;# NOT documented in usage
+    -with-cc?(=*))              CC="$(get_arg_val $arg)";    export CC;;
+    -with-cxx?(=*))             CXX="$(get_arg_val $arg)";   export CXX;;
+    -with-cflags?(=*))          CFLAGS="$(get_arg_val $arg)";   export CFLAGS;;  # NOT documented in usage
+    -with-cxxflags?(=*))        CXXFLAGS="$(get_arg_val $arg)"; export CXXFLAGS;;# NOT documented in usage
 
     # Passed to GASNet's configure implicitly via environment:
-    ?(-)-with-gmake?(=*))           GMAKE="$(get_arg_val $1)"; export GMAKE;;
+    -with-gmake?(=*))           GMAKE="$(get_arg_val $arg)"; export GMAKE;;
 
     # Not yet relevant to GASNet's configure (but might move there later):
-    ?(-)-with-cuda)                 UPCXX_CUDA=1; export UPCXX_CUDA;;
-    ?(-)-without-cuda)              UPCXX_CUDA=0; export UPCXX_CUDA;;
-    ?(-)-with-nvcc?(=*))            UPCXX_CUDA_NVCC="$(get_arg_val $1)";     export UPCXX_CUDA_NVCC;;
-    ?(-)-with-cuda-cppflags?(=*))   UPCXX_CUDA_CPPFLAGS="$(get_arg_val $1)"; export UPCXX_CUDA_CPPFLAGS;;
-    ?(-)-with-cuda-libflags?(=*))   UPCXX_CUDA_LIBFLAGS="$(get_arg_val $1)"; export UPCXX_CUDA_LIBFLAGS;;
+    -with-cuda)                 UPCXX_CUDA=1; export UPCXX_CUDA;;
+    -without-cuda)              UPCXX_CUDA=0; export UPCXX_CUDA;;
+    -with-nvcc?(=*))            UPCXX_CUDA_NVCC="$(get_arg_val $arg)";     export UPCXX_CUDA_NVCC;;
+    -with-cuda-cppflags?(=*))   UPCXX_CUDA_CPPFLAGS="$(get_arg_val $arg)"; export UPCXX_CUDA_CPPFLAGS;;
+    -with-cuda-libflags?(=*))   UPCXX_CUDA_LIBFLAGS="$(get_arg_val $arg)"; export UPCXX_CUDA_LIBFLAGS;;
 
-    -h|?(-)-help|?(-)-usage)
+    -h|-help|-usage)
       echo 'UPC++ configure script.'
       echo '======================='
       usage;
       exit 0;
       ;;
 
-    ?(-)-help=recursive)
+    -help=recursive)
       echo 'UPC++ configure script.'
       echo '======================='
       usage;
@@ -296,45 +310,45 @@ while [[ $# -gt 0 ]]; do
       gasnet_help=1
       ;;
 
-    -V|?(-)-version)
+    -V|-version)
       version;
       exit 0;
       ;;
 
     # These are not in the usage message, but autoconf-familiar users may expect these to work:
-    CC?(=*))   CC="$(get_arg_val $1)";    export CC;;
-    CXX?(=*))  CXX="$(get_arg_val $1)";   export CXX;;
-    CFLAGS?(=*))   CFLAGS="$(get_arg_val $1)";    export CFLAGS;;
-    CXXFLAGS?(=*)) CXXFLAGS="$(get_arg_val $1)";  export CXXFLAGS;;
+    CC?(=*))   CC="$(get_arg_val $arg)";    export CC;;
+    CXX?(=*))  CXX="$(get_arg_val $arg)";   export CXX;;
+    CFLAGS?(=*))   CFLAGS="$(get_arg_val $arg)";    export CFLAGS;;
+    CXXFLAGS?(=*)) CXXFLAGS="$(get_arg_val $arg)";  export CXXFLAGS;;
 
     # These are to remain undocumented
-    -v|?(-)-verbose) set -x ;;
-    ?(-)-enable-single?(=*))
-      single="$(get_arg_val $1)"
+    -v|-verbose) set -x ;;
+    -with-single?(=*))
+      single="$(get_arg_val $arg)"
       warnings+="\nWARNING: --enable-single=$single mode enabled.\n"
       warnings+='WARNING: This mode is intended for maintainers only.\n'
       warnings+='WARNING: Many make targets will fail and components will be missing.\n'
       ;;
-    ?(-)-with-mpsc-queue=*)
-      UPCXX_MPSC_QUEUE="$(get_arg_val $1)"; export UPCXX_MPSC_QUEUE
+    -with-mpsc-queue=*)
+      UPCXX_MPSC_QUEUE="$(get_arg_val $arg)"; export UPCXX_MPSC_QUEUE
       ;;
 
     *) # Anything we don't consume above will be passed to GASNet's configure
 
-      case "$1" in 
+      case "$arg" in 
 
         # These options are interpreted here and ALSO passed to GASNet's configure
-        ?(-)-enable-valgrind)     UPCXX_VALGRIND=1 ; export UPCXX_VALGRIND;;
-        ?(-)-disable-valgrind)    UPCXX_VALGRIND=  ; export UPCXX_VALGRIND;;
+        -with-valgrind)     UPCXX_VALGRIND=1 ; export UPCXX_VALGRIND;;
+        -without-valgrind)  UPCXX_VALGRIND=  ; export UPCXX_VALGRIND;;
       
       esac
 
 
       # Quoting is believed sufficient for space, tab, single-quote and double-quote.
-      GASNET_CONFIGURE_ARGS+="${GASNET_CONFIGURE_ARGS+ }\"${1//\"/\\\"}\""
+      # We pass the unmodified argument to GASNet configure
+      GASNET_CONFIGURE_ARGS+="${GASNET_CONFIGURE_ARGS+ }\"${orig_arg//\"/\\\"}\""
       ;;
   esac
-  shift
 done  
 
 trap failure_and_die ERR  # errors after arg parsing are fatal
