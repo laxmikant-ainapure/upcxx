@@ -24,6 +24,7 @@ New features/enhancements: (see specification and programmer's guide for full de
 * local_team() creation during `upcxx::init()` in multi-node runs is now more scalable
   in time and memory, providing noticeable improvements at large scale.
 * `team::destroy()` now frees GASNet-level team resources that were previously leaked.
+* `configure --enable-X` is now equivalent to `--with-X`, similarly for `--disable`/`--without`
 * ...
 
 Notable bug fixes:
