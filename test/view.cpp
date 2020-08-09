@@ -360,8 +360,9 @@ int main() {
     upcxx::rpc(
       (upcxx::rank_me()+1)%upcxx::rank_n(),
       [](upcxx::view<big_nontrivial> v) {
-        auto spot = new std::aligned_storage<sizeof(big_nontrivial),
-                                             alignof(big_nontrivial)>::type;
+        auto spot =
+          new typename std::aligned_storage<sizeof(big_nontrivial),
+                                            alignof(big_nontrivial)>::type;
         big_nontrivial *z = v.begin().deserialize_into(spot);
         UPCXX_ASSERT_ALWAYS(
           z->data[z->data.size()/2] == (upcxx::rank_me()+upcxx::rank_n()-1)%upcxx::rank_n()
