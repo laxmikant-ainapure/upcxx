@@ -39,6 +39,12 @@ namespace upcxx {
       detail::serialization_view_element<T>::deserialize(r1, &raw);
       return raw.value_and_destruct();
     }
+
+    pointer deserialize_into(void *spot) const noexcept {
+      detail::serialization_reader r1(r_);
+      detail::serialization_view_element<T>::deserialize(r1, spot);
+      return detail::launder(reinterpret_cast<pointer>(spot));
+    }
     
     deserializing_iterator operator++(int) noexcept {
       deserializing_iterator old = *this;
