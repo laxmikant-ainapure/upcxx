@@ -71,7 +71,6 @@ test_dirs = \
 #
 test_exclude_all = \
 	$(TEST_EXCLUDE_ALL) \
-	test/segment_allocator.cpp \
 	test/debug-codemode.cpp \
 	test/o3-codemode.cpp \
 	test/multifile.cpp \
