@@ -12,6 +12,7 @@
 #include <cmath>
 #include <string>
 #include <thread>
+#include <type_traits>
 
 using namespace upcxx;
 using namespace std;
@@ -162,6 +163,25 @@ struct check {
 
 check<int, int> check_trivial;
 check<S, D> check_asymmetric;
+
+// large type with nontrivial serialization
+struct big_nontrivial {
+  std::array<int, 10000> data;
+  ~big_nontrivial() {}
+  struct upcxx_serialization {
+    template<typename Writer>
+    static void serialize(Writer &w, const big_nontrivial &x) {
+      w.write_sequence(x.data.begin(), x.data.end(), x.data.size());
+    }
+    template<typename Reader>
+    static big_nontrivial* deserialize(Reader &r, void *spot) {
+      auto result = new(spot) big_nontrivial;
+      r.template read_sequence_into<int>(result->data.data(),
+                                         result->data.size());
+      return result;
+    }
+  };
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 // runtime test
@@ -333,6 +353,24 @@ int main() {
       rpc_done2->get_future().wait();
       delete rpc_done2;
     }
+
+    // test deserialize_into
+    big_nontrivial *bn = new big_nontrivial;
+    bn->data.fill(upcxx::rank_me());
+    upcxx::rpc(
+      (upcxx::rank_me()+1)%upcxx::rank_n(),
+      [](upcxx::view<big_nontrivial> v) {
+        auto spot =
+          new typename std::aligned_storage<sizeof(big_nontrivial),
+                                            alignof(big_nontrivial)>::type;
+        big_nontrivial *z = v.begin().deserialize_into(spot);
+        UPCXX_ASSERT_ALWAYS(
+          z->data[z->data.size()/2] == (upcxx::rank_me()+upcxx::rank_n()-1)%upcxx::rank_n()
+        );
+        delete z;
+      },
+      upcxx::make_view(bn, bn+1)).wait();
+    delete bn;
 
     // quiesce the world
     upcxx::barrier();

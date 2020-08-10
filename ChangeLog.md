@@ -25,6 +25,8 @@ New features/enhancements: (see specification and programmer's guide for full de
   in time and memory, providing noticeable improvements at large scale.
 * `team::destroy()` now frees GASNet-level team resources that were previously leaked.
 * `configure --enable-X` is now equivalent to `--with-X`, similarly for `--disable`/`--without`
+* Added `deserializing_iterator<T>::deserialize_into` to avoid copying large
+  objects when iterating over a `view` of non-TriviallySerializable elements.
 * ...
 
 Notable bug fixes:
