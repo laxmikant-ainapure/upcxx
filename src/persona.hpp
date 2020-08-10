@@ -574,7 +574,7 @@ namespace upcxx {
   //////////////////////////////////////////////////////////////////////
   
   inline persona& default_persona() {
-    UPCXX_ASSERT_INIT();
+    //UPCXX_ASSERT_INIT(); // allow default_persona() outside init()
     detail::persona_tls &tls = detail::the_persona_tls;
     return tls.default_persona;
   }
