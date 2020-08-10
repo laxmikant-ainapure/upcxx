@@ -1,8 +1,5 @@
 #include <iostream>
-#include <upcxx/backend.hpp>
-#include <upcxx/barrier.hpp>
-#include <upcxx/reduce.hpp>
-#include <upcxx/broadcast.hpp>
+#include <upcxx/upcxx.hpp>
 
 #include "util.hpp"
 

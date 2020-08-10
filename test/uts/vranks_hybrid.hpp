@@ -1,10 +1,7 @@
 #ifndef _f387e40c_d7ab_4dbf_a130_3bcd835cc3b9
 #define _f387e40c_d7ab_4dbf_a130_3bcd835cc3b9
 
-#include <upcxx/backend.hpp>
-#include <upcxx/persona.hpp>
-#include <upcxx/rpc.hpp>
-#include <upcxx/os_env.hpp>
+#include <upcxx/upcxx.hpp>
 
 #include <atomic>
 #include <thread>

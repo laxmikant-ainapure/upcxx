@@ -1,7 +1,4 @@
-#include <upcxx/barrier.hpp>
-#include <upcxx/rpc.hpp>
-#include <upcxx/view.hpp>
-#include <upcxx/dist_object.hpp>
+#include <upcxx/upcxx.hpp>
 
 #include "util.hpp"
 

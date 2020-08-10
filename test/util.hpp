@@ -1,9 +1,8 @@
 #ifndef _f0b217aa_607e_4aa4_8147_82a0d66d6303
 #define _f0b217aa_607e_4aa4_8147_82a0d66d6303
 
-#ifdef UPCXX_BACKEND
-  #include <upcxx/backend_fwd.hpp>
-  #include <upcxx/barrier.hpp>
+#if UPCXX_BACKEND
+  #include <upcxx/upcxx.hpp>
 #endif
 
 #include <iostream>
@@ -32,7 +31,7 @@ std::string test_name(const char *file) {
     return std::string{file + pos + 1};
 }
 
-#ifdef UPCXX_BACKEND
+#if UPCXX_BACKEND
   template<typename=void>
   void print_test_header_(const char *file) {
       if(!upcxx::initialized() || 0 == upcxx::rank_me()) {

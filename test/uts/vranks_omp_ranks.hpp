@@ -1,10 +1,7 @@
 #ifndef _6dd7e289_751e_45bc_90dc_006795a19ea7
 #define _6dd7e289_751e_45bc_90dc_006795a19ea7
 
-#include <upcxx/backend.hpp>
-#include <upcxx/persona.hpp>
-#include <upcxx/rpc.hpp>
-#include <upcxx/os_env.hpp>
+#include <upcxx/upcxx.hpp>
 
 #include <atomic>
 #include <vector>
