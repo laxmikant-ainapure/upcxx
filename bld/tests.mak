@@ -113,7 +113,6 @@ test_exclude_compile_only = \
 test_exclude_all += \
 	test/hello.cpp \
 	test/hello_threads.cpp \
-	test/lpc_barrier.cpp \
 	test/uts/uts_omp.cpp \
 	test/uts/uts_threads.cpp
 
