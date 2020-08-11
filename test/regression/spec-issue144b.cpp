@@ -62,11 +62,22 @@ int main() {
   }
   assert(fb.result_reference<0>().x == 3);
   assert(fb.result_reference<1>().x == 4);
-  #if WHEN_ALL
-  fb = when_all(fa,fa); // currently broken
-  assert(fb.result_reference<0>().x == 16);
-  assert(fb.result_reference<1>().x == 16);
-  #endif
+
+  { 
+    fa = when_all(A(6)); // trivially ready future
+  }
+  assert(fa.result_reference().x == 6);
+  fa = when_all(fa);
+  assert(fa.result_reference().x == 6);
+
+  { 
+    fb = when_all(A(21),A(22)); // trivially ready future
+  }
+  assert(fb.result_reference<0>().x == 21);
+  assert(fb.result_reference<1>().x == 22);
+  fb = when_all(fb);
+  assert(fb.result_reference<0>().x == 21);
+  assert(fb.result_reference<1>().x == 22);
 
   upcxx::barrier();
   if (!upcxx::rank_me()) { std::cout << "SUCCESS" << std::endl; }

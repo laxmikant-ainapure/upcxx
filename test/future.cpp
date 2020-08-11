@@ -125,7 +125,7 @@ int main() {
   detail::make_fast_future(std::vector<int>{1,2,3}).then([=](std::vector<int> &&x) {});
 
   // ensure when_all preserves this ability
-  when_all(detail::make_fast_future(1), when_all(detail::make_fast_future(.01f), detail::make_fast_future(.02f)))
+  when_all(1, when_all(.01f, .02f))
     .then([](int &&a, float &&b, float &&) {}); 
 
   // use debugger to step through and ensure lazy1 and lazy2 happen in
@@ -198,7 +198,7 @@ int main() {
     static_assert(std::is_same<int, decltype(when_all(ans0).member)>::value, "Uh-oh");\
     (void)when_all(ans0).member;\
     static_assert(std::is_same<tuple<int,int,float,int>, decltype(when_all(ans0, ans1, make_future(3.14f), ans2).member)>::value, "Uh-oh");\
-    (void)when_all(ans0,ans1,make_future(3.14f),ans2).member;
+    (void)when_all(ans0,ans1,3.14f,ans2).member;
   THEM(result())
   THEM(wait(nop))
   #undef THEM

@@ -27,6 +27,11 @@ New features/enhancements: (see specification and programmer's guide for full de
 * `configure --enable-X` is now equivalent to `--with-X`, similarly for `--disable`/`--without`
 * Added `deserializing_iterator<T>::deserialize_into` to avoid copying large
   objects when iterating over a `view` of non-TriviallySerializable elements.
+* `when_all(...)` now additionally accepts non-future arguments and implicitly
+  promotes them to trivially ready futures (as with `to_future`) before performing
+  future concatenation. The main consequence is `when_all()` can now replace
+  most uses of `make_future` and `to_future` for constructing trivially ready futures,
+  and continue to serve as the future combinator.
 * ...
 
 Notable bug fixes:
@@ -54,6 +59,7 @@ Notable bug fixes:
 * issue #386: `upcxx_memberof_general` prohibits member designators that end with an array access
 * issue #389: `future::result*()` should assert readiness
 * issue #392: Prevent silent use of by-value communication APIs for huge types
+* [spec issue #104](https://bitbucket.org/berkeleylab/upcxx-spec/issues/104): Provide a universal variadic factory for future
 * [spec issue #160](https://bitbucket.org/berkeleylab/upcxx-spec/issues/160): Deadlocks arising from synchronous collective calls with internal progress
 
 Breaking changes:

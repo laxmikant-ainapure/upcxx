@@ -29,27 +29,39 @@ namespace upcxx {
           MoreArgs...
         >::type;
     };
+
+    template<typename Arg>
+    struct when_all_arg_t { // non-future argument
+      using type = future1<future_kind_result, Arg>;
+    };
+
+    template<typename ArgKind, typename ...ArgT>
+    struct when_all_arg_t<future1<ArgKind, ArgT...>> { // future argument
+      using type = future1<ArgKind, ArgT...>;
+    };
     
     // compute return type of when_all
     template<typename ...Arg>
     using when_all_return_t = typename when_all_return_cat<
         future1<
-          future_kind_when_all<typename std::decay<Arg>::type...>
+          future_kind_when_all<
+            typename when_all_arg_t<typename std::decay<Arg>::type>::type...
+          >
           /*, empty T...*/
         >,
-        typename std::decay<Arg>::type...
+        typename when_all_arg_t<typename std::decay<Arg>::type>::type...
       >::type;
 
     template<typename ...ArgFu>
     when_all_return_t<ArgFu...> when_all_fast(ArgFu &&...arg) {
       return typename when_all_return_t<ArgFu...>::impl_type(
-        static_cast<ArgFu&&>(arg)...
+        to_fast_future(static_cast<ArgFu&&>(arg))...
       );
     }
     // single component optimization
     template<typename ArgFu>
-    ArgFu&& when_all_fast(ArgFu &&arg) {
-      return static_cast<ArgFu&&>(arg);
+    auto when_all_fast(ArgFu &&arg) -> decltype(to_fast_future(arg)) {
+      return to_fast_future(static_cast<ArgFu&&>(arg));
     }
   }
 
@@ -67,13 +79,13 @@ namespace upcxx {
   template<typename ...ArgFu>
   detail::when_all_return_t<ArgFu...> when_all(ArgFu &&...arg) {
     return typename detail::when_all_return_t<ArgFu...>::impl_type(
-      static_cast<ArgFu&&>(arg)...
+      detail::to_fast_future(static_cast<ArgFu&&>(arg))...
     );
   }
   // single component optimization
   template<typename ArgFu>
-  ArgFu&& when_all(ArgFu &&arg) {
-    return static_cast<ArgFu&&>(arg);
+  auto when_all(ArgFu &&arg) -> decltype(detail::to_fast_future(arg)) {
+    return detail::to_fast_future(static_cast<ArgFu&&>(arg));
   }
   
 }
