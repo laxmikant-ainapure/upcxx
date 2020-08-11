@@ -5,7 +5,7 @@
 #include "os_env.hpp"
 
 #if UPCXX_BACKEND
-  #include <upcxx/backend.hpp>
+  #include <upcxx/upcxx.hpp>
 #endif
 
 #include <cstring>

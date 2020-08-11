@@ -2,8 +2,7 @@
 #include <cstdint>
 #include <deque>
 
-#include <upcxx/barrier.hpp>
-#include <upcxx/rpc.hpp>
+#include <upcxx/upcxx.hpp>
 
 #include "util.hpp"
 

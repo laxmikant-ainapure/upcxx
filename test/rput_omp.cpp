@@ -1,5 +1,4 @@
-#include <upcxx/upcxx.hpp> 
-#include <upcxx/os_env.hpp>
+#include <upcxx/upcxx.hpp>
 
 #include "util.hpp"
 

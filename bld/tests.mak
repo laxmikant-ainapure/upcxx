@@ -71,7 +71,6 @@ test_dirs = \
 #
 test_exclude_all = \
 	$(TEST_EXCLUDE_ALL) \
-	test/segment_allocator.cpp \
 	test/debug-codemode.cpp \
 	test/o3-codemode.cpp \
 	test/multifile.cpp \
@@ -113,7 +112,6 @@ test_exclude_compile_only = \
 test_exclude_all += \
 	test/hello.cpp \
 	test/hello_threads.cpp \
-	test/lpc_barrier.cpp \
 	test/uts/uts_omp.cpp \
 	test/uts/uts_threads.cpp
 

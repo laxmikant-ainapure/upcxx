@@ -1,6 +1,8 @@
+#if !UPCXX_BACKEND
 #include <upcxx/diagnostic.hpp>
 #include <upcxx/digest.hpp>
 #include <upcxx/os_env.hpp>
+#endif
 
 #include <cstdint>
 #include <cmath>
