@@ -58,11 +58,8 @@ Notable bug fixes:
 * issue #384: finalize can complete without invoking progress, leading to obscure leaks
 * issue #386: `upcxx_memberof_general` prohibits member designators that end with an array access
 * issue #389: `future::result*()` should assert readiness
-<<<<<<< HEAD
 * issue #392: Prevent silent use of by-value communication APIs for huge types
-=======
 * [spec issue #104](https://bitbucket.org/berkeleylab/upcxx-spec/issues/104): Provide a universal variadic factory for future
->>>>>>> Update ChangeLog
 * [spec issue #160](https://bitbucket.org/berkeleylab/upcxx-spec/issues/160): Deadlocks arising from synchronous collective calls with internal progress
 
 Breaking changes:
