@@ -20,7 +20,7 @@ int main() {
   unsigned **blobs = new unsigned*[max_blobs](/*null...*/);
 
   size_t total = 0;
-  size_t min_total = -1;
+  size_t min_total = (size_t)-1;
   size_t sum_total = 0;
   size_t fail_n = 0;
   
