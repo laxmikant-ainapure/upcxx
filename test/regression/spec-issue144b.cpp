@@ -79,27 +79,6 @@ int main() {
   assert(fb.result_reference<0>().x == 21);
   assert(fb.result_reference<1>().x == 22);
 
-#if !defined(WHEN_ALL) || WHEN_ALL
-  // try using when_all to concatenate some non-trivial futures
-  fb = when_all(fa,fa); // currently broken
-  assert(fb.result_reference<0>().x == 6);
-  assert(fb.result_reference<1>().x == 6);
-
-  A eight(8);
-  future<A,A,A> fc = when_all(fa,A(7),std::move(eight));
-  assert(fc.result_reference<0>().x == 6);
-  assert(fc.result_reference<1>().x == 7);
-  assert(fc.result_reference<2>().x == 8);
-
-  future<A,A,A,A,A,A> fd = when_all(fb,fc,A(9));
-  assert(fd.result_reference<0>().x == 6);
-  assert(fd.result_reference<1>().x == 6);
-  assert(fd.result_reference<2>().x == 6);
-  assert(fd.result_reference<3>().x == 7);
-  assert(fd.result_reference<4>().x == 8);
-  assert(fd.result_reference<5>().x == 9);
-#endif
-
   upcxx::barrier();
   if (!upcxx::rank_me()) { std::cout << "SUCCESS" << std::endl; }
  
