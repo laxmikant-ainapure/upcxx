@@ -1,6 +1,15 @@
 #ifndef _bcf4d64e_19bd_4080_86c4_57aaf780e98c
 #define _bcf4d64e_19bd_4080_86c4_57aaf780e98c
 
+// This version of this test deliberately avoids the UPC++/GASNet backend, 
+// but still uses some of the UPC++ internals to test them in isolation.
+// This is NOT in any way supported for user code!!
+#undef UPCXX_BACKEND
+#undef UPCXX_BACKEND_GASNET_PAR
+#if UPCXX_BACKEND_GASNET_SEQ
+#error thread-safe libupcxx is required
+#endif
+
 #include <upcxx/persona.hpp>
 #include <upcxx/os_env.hpp>
 
