@@ -34,7 +34,7 @@ void T::show_stats(const char *title, int expected_ctors, int expected_copies) {
 
   #if 1
   UPCXX_ASSERT_ALWAYS(ctors == expected_ctors, title<<": ctors="<<ctors<<" expected="<<expected_ctors);
-  UPCXX_ASSERT_ALWAYS(copies == expected_copies, title<<": copies="<<ctors<<" expected="<<expected_copies);
+  UPCXX_ASSERT_ALWAYS(copies == expected_copies, title<<": copies="<<copies<<" expected="<<expected_copies);
   UPCXX_ASSERT_ALWAYS(ctors+copies+moves == dtors, title<<": ctors - dtors != 0");
   #endif
   
@@ -52,11 +52,10 @@ int main() {
 
   int target = (upcxx::rank_me() + 1) % upcxx::rank_n();
 
-  // About the expected num of copies: unfortunately the future<T> returning cases
-  // involve extra copy due to backend::send_awaken_lpc requiring std::tuple<T>, but
-  // the future<T> is a heap shared type so it isnt safe for the runtime to move
-  // the T out to the tuple. In the future send_awaken_lpc should be changed
-  // to take a reference to T and serialize from that place.
+  // About the expected num of copies.
+  // Now that backend::send_awaken_lpc can take a std::tuple
+  // containing a reference to T and serialize from that place, it no
+  // longer involves an extra copy in the future<T> returning cases.
   
   upcxx::rpc(target,
     [](T &&x) -> T {
@@ -80,7 +79,7 @@ int main() {
     },
     T()
   ).wait_reference();
-  T::show_stats("T&& -> future<T>", 3, 1);
+  T::show_stats("T&& -> future<T>", 3, 0);
 
   upcxx::rpc(target,
     [](T const &x) -> upcxx::future<T> {
@@ -88,7 +87,7 @@ int main() {
     },
     T()
   ).wait_reference();
-  T::show_stats("T const& -> future<T>", 3, 2);
+  T::show_stats("T const& -> future<T>", 3, 1);
 
   // now with dist_object
 
@@ -114,7 +113,7 @@ int main() {
     },
     dob, T()
   ).wait_reference();
-  T::show_stats("dist_object + T&& -> future<T>", 3, 1);
+  T::show_stats("dist_object + T&& -> future<T>", 3, 0);
 
   upcxx::rpc(target,
     [](dist_object<int>&, T const &x) -> upcxx::future<T> {
@@ -122,7 +121,7 @@ int main() {
     },
     dob, T()
   ).wait_reference();
-  T::show_stats("dist_object + T const& -> future<T>", 3, 2);
+  T::show_stats("dist_object + T const& -> future<T>", 3, 1);
 
   print_test_success();
   upcxx::finalize();
