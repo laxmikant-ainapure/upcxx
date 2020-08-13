@@ -651,9 +651,7 @@ void upcxx::init() {
       world_tm,
       peer_ids, peer_n,
       nullptr, 0,
-      (peer_n == 1
-        ? GEX_FLAG_TM_SCRATCH_SIZE_MIN
-        : GEX_FLAG_TM_SCRATCH_SIZE_RECOMMENDED) |
+      GEX_FLAG_TM_SCRATCH_SIZE_RECOMMENDED |
       GEX_FLAG_TM_LOCAL_SCRATCH | GEX_FLAG_RANK_IS_JOBRANK
     );
   #else
@@ -661,9 +659,7 @@ void upcxx::init() {
       &local_tm, world_tm,
       /*color*/nbhd[0].gex_jobrank, /*key*/peer_me,
       nullptr, 0,
-      peer_n == 1
-        ? GEX_FLAG_TM_SCRATCH_SIZE_MIN
-        : GEX_FLAG_TM_SCRATCH_SIZE_RECOMMENDED
+      GEX_FLAG_TM_SCRATCH_SIZE_RECOMMENDED
     );
   #endif
     UPCXX_ASSERT_ALWAYS(local_scratch_sz);
