@@ -78,8 +78,8 @@ namespace upcxx {
       return (future_header_promise<T...>*)((char*)meta - offsetof(future_header_promise<T...>, pro_meta));
     }
     
-    template<typename ...T>
-    void promise_fulfill_result(future_header_promise<T...> *hdr, std::tuple<T...> &&values) {
+    template<typename ...T, typename ...U>
+    void promise_fulfill_result(future_header_promise<T...> *hdr, std::tuple<U...> &&values) {
       UPCXX_ASSERT(
         hdr->base_header_result.results_constructible(),
         "Attempted to call `fulfill_result` multiple times on the same promise."
@@ -159,7 +159,7 @@ namespace upcxx {
       
       template<typename ...U>
       void fulfill_result(U &&...values) const {
-        detail::promise_fulfill_result(this->header(), std::tuple<T...>(std::forward<U>(values)...));
+        detail::promise_fulfill_result(this->header(), std::tuple<U&&...>(std::forward<U>(values)...));
       }
       
       template<typename ...U>
