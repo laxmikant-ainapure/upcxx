@@ -582,14 +582,14 @@ power9.pgi:
 power9.gcc:
   extends: [ .generic, .new_gnu, .power9 ]
   variables:
-    CC:  /usr/local/pkg/gcc/10.1.0/bin/gcc
-    CXX: /usr/local/pkg/gcc/10.1.0/bin/g++
+    CC:  /usr/local/pkg/gcc/10.2.0/bin/gcc
+    CXX: /usr/local/pkg/gcc/10.2.0/bin/g++
 
 power9.clang:
   extends: [ .generic, .new_llvm, .power9 ]
   variables:
-    CC:  /usr/local/pkg/clang/10.0.0/bin/clang
-    CXX: /usr/local/pkg/clang/10.0.0/bin/clang++
+    CC:  /usr/local/pkg/clang/10.0.1/bin/clang
+    CXX: /usr/local/pkg/clang/10.0.1/bin/clang++
 
 power9.gcc_floor:
   extends: [ .generic, .old_gnu, .power9 ]
