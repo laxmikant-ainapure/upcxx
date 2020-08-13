@@ -23,7 +23,7 @@ New features/enhancements: (see specification and programmer's guide for full de
   Serializable.
 * Added a number of precondition sanity checks in debug mode, to help users find
   bugs in their code when compiling with `-codemode=debug` (aka, `upcxx -g`).
-* local_team() creation during `upcxx::init()` in multi-node runs is now more scalable
+* `local_team()` creation during `upcxx::init()` in multi-node runs is now more scalable
   in time and memory, providing noticeable improvements at large scale.
 * `team::destroy()` now frees GASNet-level team resources that were previously leaked.
 * `configure --enable-X` is now equivalent to `--with-X`, similarly for `--disable`/`--without`
@@ -50,17 +50,19 @@ Notable bug fixes:
 * issue #288: *partial fix* future producing calls like `upcxx::make_future` now
   return the type `future<T>` exactly (previously was `future1<???,T>`). Sole
   remaining exception is `when_all`.
-* issue #313: implement future::{result,wait}_reference.
-* issue #336: Add static_assert to prohibit massive types as top-level arguments to RPC
+* issue #313: implement `future::{result,wait}_reference`.
+* issue #336: Add `static_assert` to prohibit massive types as top-level arguments to RPC
 * issue #343: Guarantee equality for default-constructed invalid upcxx::team_id
 * issue #371: `team_id`s are not "universal" as documented
 * issue #373: No `python` in `$PATH` in recent Linux distros
+* issue #375: Improve error message for C array types by-value arguments to RPC
 * issue #369: `completion_cx::as_future()` typically leaks
 * issue #380: Compile regression on bulk upcxx::rput with source+operation completions
 * issue #384: finalize can complete without invoking progress, leading to obscure leaks
 * issue #386: `upcxx_memberof_general` prohibits member designators that end with an array access
 * issue #389: `future::result*()` should assert readiness
 * issue #392: Prevent silent use of by-value communication APIs for huge types
+* issue #393: Improve type check error for l-value reference args to RPC callbacks
 * [spec issue #104](https://bitbucket.org/berkeleylab/upcxx-spec/issues/104): Provide a universal variadic factory for future
 * [spec issue #160](https://bitbucket.org/berkeleylab/upcxx-spec/issues/160): Deadlocks arising from synchronous collective calls with internal progress
 
@@ -68,9 +70,9 @@ Breaking changes:
 
 * Configure-time envvar `CROSS` has been renamed to `UPCXX_CROSS`.
   For backwards compat, the former is still accepted when the latter is unset.
-* Build-time UPCXX_CODEMODE/-codemode value "O3" has been renamed to "opt".
+* Build-time `UPCXX_CODEMODE`/`-codemode` value "O3" has been renamed to "opt".
   For backwards compat, the former is still accepted.
-* Implementation of upcxx::team_id is no longer Trivial (was never guaranteed to be).
+* Implementation of `upcxx::team_id` is no longer Trivial (was never guaranteed to be).
   It remains DefaultConstructible, TriviallyCopyable, StandardLayoutType, EqualityComparable
 * `upcxx_memberof(gp, mem)` and `upcxx_memberof_general(gp, mem)` now
   produce a `global_ptr<T>` when `mem` names an array whose element
