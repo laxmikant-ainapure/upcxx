@@ -123,6 +123,32 @@ int main() {
   ).wait_reference();
   T::show_stats("dist_object + T const& -> future<T>", 3, 1);
 
+  // returning references
+
+  upcxx::rpc(target,
+    [](T &&x) -> T&& {
+      return std::move(x);
+    },
+    T()
+  ).wait_reference();
+  T::show_stats("T&& -> T&&", 3, 0);
+
+  upcxx::rpc(target,
+    [](T const &x) -> T const& {
+      return x;
+    },
+    T()
+  ).wait_reference();
+  T::show_stats("T const& -> T const&", 3, 0);
+
+  upcxx::rpc(target,
+    [](T const &x) -> upcxx::future<T const&> {
+      return upcxx::make_future<T const&>(x);
+    },
+    T()
+  ).wait_reference();
+  T::show_stats("T const& -> future<T const&>", 3, 0);
+
   print_test_success();
   upcxx::finalize();
 }

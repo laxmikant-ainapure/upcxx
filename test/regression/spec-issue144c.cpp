@@ -1,6 +1,8 @@
 #include <iostream>
 #include <upcxx/upcxx.hpp>
 
+#include "../util.hpp"
+
 struct A { // movable but not copyable type
   int x;
   A(int x_) : x(x_) {}
@@ -21,6 +23,8 @@ public:
 
 int main() {
   upcxx::init();
+  print_test_header();
+
   A a{upcxx::rank_me()};
   upcxx::global_ptr<int> ptr = upcxx::allocate<int>();
   bool send = upcxx::rank_me() == 0;
@@ -44,5 +48,7 @@ int main() {
   }
   upcxx::barrier();
   upcxx::deallocate(ptr);
+
+  print_test_success();
   upcxx::finalize();
 }
