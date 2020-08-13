@@ -63,6 +63,8 @@ Notable bug fixes:
 * issue #389: `future::result*()` should assert readiness
 * issue #392: Prevent silent use of by-value communication APIs for huge types
 * issue #393: Improve type check error for l-value reference args to RPC callbacks
+* issue #402: Cannot use promise<T>::fulfill_result() when T is not
+  MoveConstructible
 * [spec issue #104](https://bitbucket.org/berkeleylab/upcxx-spec/issues/104): Provide a universal variadic factory for future
 * [spec issue #160](https://bitbucket.org/berkeleylab/upcxx-spec/issues/160): Deadlocks arising from synchronous collective calls with internal progress
 
