@@ -310,10 +310,10 @@ namespace upcxx {
         ::new(handle.ptr) T(val);
       }
       
-      template<typename T>
+      template<typename T, bool AssertSerializable= true>
       void write(T const &x) {
         UPCXX_ASSERT_INIT();
-        static_assert(detail::is_serializable_type_or_array<T>::value,
+        static_assert(!AssertSerializable || detail::is_serializable_type_or_array<T>::value,
                      "Argument to write must either be Serializable or an array of Serializable elements.");
         upcxx::template serialization_traits<T>::serialize(*static_cast<Writer*>(this), x);
       }
@@ -622,10 +622,11 @@ namespace upcxx {
       
       void jump(std::uintptr_t delta) { head_ += delta; }
       
-      template<typename T, typename T1 = typename serialization_traits<T>::deserialized_type>
+      template<typename T, bool AssertSerializable = true,
+               typename T1 = typename serialization_traits<T>::deserialized_type>
       typename ::std::conditional<!::std::is_array<T1>::value, T1, void>::type read() {
         UPCXX_ASSERT_INIT();
-        static_assert(is_serializable<T>::value,
+        static_assert(!AssertSerializable || is_serializable<T>::value,
                      "Template argument of read must be Serializable.");
         static_assert(!::std::is_array<T1>::value,
                      "Cannot return array type from read -- use read_into or read_sequence_into instead.");
@@ -635,10 +636,11 @@ namespace upcxx {
         return raw.value_and_destruct();
       }
 
-      template<typename T, typename T1 = typename serialization_traits<T>::deserialized_type>
+      template<typename T, bool AssertSerializable = true,
+               typename T1 = typename serialization_traits<T>::deserialized_type>
       T1* read_into(void *raw) {
         UPCXX_ASSERT_INIT();
-        static_assert(detail::is_serializable_type_or_array<T>::value,
+        static_assert(!AssertSerializable || detail::is_serializable_type_or_array<T>::value,
                      "Template argument of read_into must either be Serializable or an array of Serializable elements.");
 
         return upcxx::template serialization_traits<T>::deserialize(*this, raw);
