@@ -19,11 +19,6 @@ struct A {
 };
 struct B : A {};
 
-template<typename T1, typename T2>
-struct assert_same {
-  static_assert(std::is_same<T1, T2>::value, "types differ");
-};
-
 #define CHECK_MEMBEROF_GUTS(accessor, suffix) {                 \
     auto gp_x = accessor(ptr, x) suffix;                        \
     auto gp_y = accessor(ptr, y) suffix;                        \
@@ -56,6 +51,11 @@ int main() {
   static_assert(std::is_same<global_ptr<const int>::element_type,
                              const int>::value,
                 "unexpected element_type");
+
+  assert_same<upcxx::deserialized_type_t<global_ptr<int>>,
+              global_ptr<int>>{};
+  assert_same<upcxx::deserialized_type_t<global_ptr<const int>>,
+              global_ptr<const int>>{};
 
   global_ptr<int> ptr;
   global_ptr<const int> cptr;

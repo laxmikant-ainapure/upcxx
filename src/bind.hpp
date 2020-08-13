@@ -222,7 +222,7 @@ namespace upcxx {
   template<typename Fn, typename ...B>
   struct serialization<bound_function<Fn,B...>> {
     static constexpr bool is_serializable =
-      serialization_traits<typename binding<Fn>::on_wire_type>::is_serializable &&
+      /* ignore serializability of Fn to allow for non-TriviallyCopyable lambdas */
       serialization_traits<std::tuple<typename binding<B>::on_wire_type...>>::is_serializable;
 
     template<typename Ub>
@@ -237,7 +237,7 @@ namespace upcxx {
     
     template<typename Writer>
     static void serialize(Writer &w, const bound_function<Fn,B...> &fn) {
-      w.template write<typename binding<Fn>::on_wire_type>(fn.fn_);
+      w.template write<typename binding<Fn>::on_wire_type, /*AssertSerializable=*/false>(fn.fn_);
       w.template write<std::tuple<typename binding<B>::on_wire_type...>>(fn.b_);
     }
 
@@ -263,7 +263,7 @@ namespace upcxx {
     template<typename Reader>
     static deserialized_type* deserialize(Reader &r, void *spot) {
       detail::raw_storage<deserialized_type_t<typename binding<Fn>::on_wire_type>> fn;
-      r.template read_into<typename binding<Fn>::on_wire_type>(&fn);
+      r.template read_into<typename binding<Fn>::on_wire_type, /*AssertSerializable=*/false>(&fn);
 
       detail::raw_storage<deserialized_type_t<std::tuple<typename binding<B>::on_wire_type...>>> b;
       //#warning "uncomment"

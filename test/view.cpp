@@ -138,11 +138,6 @@ template<typename T>
 using dt = upcxx::deserialized_type_t<T>;
 
 template<typename T, typename U>
-struct assert_same {
-  static_assert(std::is_same<T, U>::value, "differ");
-};
-
-template<typename T, typename U>
 struct check {
   using I1 = T;
   using I2 = in<I1>;
