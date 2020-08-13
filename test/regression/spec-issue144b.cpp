@@ -80,7 +80,7 @@ int main() {
   assert(fb.result_reference<1>().x == 22);
 
 
-#if 0 // currently broken on GCC 9 with -O
+#if 0 // currently broken on GCC 9 with -O (Issue #400)
   // now try rpc
   rpc(0,[](A const &a) { 
               assert(a.x == 10); 
