@@ -34,6 +34,9 @@ New features/enhancements: (see specification and programmer's guide for full de
   future concatenation. The main consequence is `when_all()` can now replace
   most uses of `make_future` and `to_future` for constructing trivially ready futures,
   and continue to serve as the future combinator.
+* Non-copyable (but movable) types can now be passed as lvalues to RPC and will
+  be serialized directly from the provided object
+* Non-copyable (but movable) types can now be returned from RPC by reference
 * ...
 
 Notable bug fixes:
