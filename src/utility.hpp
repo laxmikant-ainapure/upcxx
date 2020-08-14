@@ -163,6 +163,9 @@ namespace detail {
   // detail::construct_trivial: Constructs T objects from raw bytes. If
   // T doesn't have the appropriate constructors, this will cheat (UB!) by
   // copying the bytes and then *blessing* the memory as holding a valid T.
+  #ifndef UPCXX_ISSUE400_WORKAROUND
+  #define UPCXX_ISSUE400_WORKAROUND 1
+  #endif
   
   namespace help {
     template<typename T>
@@ -170,7 +173,14 @@ namespace detail {
       using T1 = typename std::remove_const<T>::type;
       T1 *ans = reinterpret_cast<T1*>(::new(dest) T1);
       detail::template memcpy_aligned<alignof(T1)>(ans, src, sizeof(T1));
-      return ans;
+      #if UPCXX_ISSUE400_WORKAROUND
+        // issue #400: based on our understanding of the C++ spec, launder should be unnecessary here
+        // because memcpy of a TriviallyCopyable type is sufficient to construct a valid object.
+        // However the GCC 7,8,9 optimizer needs this to avoid incorrect optimization in -O2+
+        return detail::launder_unconstructed<T1>(ans);
+      #else
+        return ans;
+      #endif
     }
     template<typename T>
     T* construct_trivial(void *dest, const void *src, std::true_type deft_ctor, std::false_type triv_copy) {
