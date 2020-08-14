@@ -108,7 +108,18 @@ namespace detail {
   // constructed as such.
   template<typename T>
   T* launder_unconstructed(T *p) noexcept {
-    asm("" : "+rm"(p) : "rm"(p) :);
+    #if __INTEL_COMPILER
+      // the intel compiler ICEs on gnu-style extended asm below,
+      // so use this more convoluted variant that means the same thing:
+      union faketype { T t; volatile char a[sizeof(T)]; };
+      asm volatile ("" : "+m"(*(faketype *)p) : "rm"(p) : );
+    #else
+      // the following says we are "killing" the contents of the bytes in memory
+      // for the object pointed-to by p, preventing the compiler analysis from reasoning
+      // about its contents across this point.
+      asm volatile ("" : "+m"(*(volatile char (*)[sizeof(T)])p) : "rm"(p) : );
+    #endif
+
     return p;
   }
 
