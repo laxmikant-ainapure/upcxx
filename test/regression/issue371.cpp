@@ -80,7 +80,7 @@ int main() {
  }
  barrier();
 
- if (!rank_me()) std::cout << "done." << std::endl;
+ if (!rank_me()) std::cout << "SUCCESS" << std::endl;
  barrier();
 
  finalize();
