@@ -704,11 +704,12 @@ namespace upcxx {
       template<typename Event>
       struct event_bound {
         template<typename ...V>
-        void operator()(completions_state &&me, V &&...vals) {
+        void operator()(deserialized_type_t<completions_state> &&me, V &&...vals) {
+          using dtype = deserialized_type_t<completions_state>;
           // fire the head element
-          static_cast<head_t&>(me).template operator()<Event>(std::forward<V>(vals)...);
+          static_cast<typename dtype::head_t&>(me).template operator()<Event>(std::forward<V>(vals)...);
           // recurse to fire remaining elements
-          static_cast<tail_t&>(me).template operator()<Event>(std::forward<V>(vals)...);
+          static_cast<typename dtype::tail_t&>(me).template operator()<Event>(std::forward<V>(vals)...);
         }
       };
       
@@ -849,8 +850,8 @@ namespace upcxx {
 
     template<typename Reader>
     static deserialized_type* deserialize(Reader &r, void *spot) {
-      typename type::head_t h = r.template read<typename type::head_t>();
-      typename type::tail_t t = r.template read<typename type::tail_t>();
+      auto h = r.template read<typename type::head_t>();
+      auto t = r.template read<typename type::tail_t>();
       return new(spot) deserialized_type(std::move(h), std::move(t));
     }
   };

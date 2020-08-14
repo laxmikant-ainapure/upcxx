@@ -117,46 +117,58 @@ namespace upcxx {
 
     template<typename ...T>
     void lpc_dormant<T...>::awaken(std::tuple<T...> &&results) {
+      // You'll see this thrown into if()'s to permit dead code detection by compiler
+      constexpr bool results_is_copyable = std::is_copy_constructible<std::tuple<T...>>::value;
+
+      // tuple<T...> const& if copyable otherwise tuple<T...>&&
+      using copyable_reference = typename std::conditional<results_is_copyable,
+          std::tuple<T...> const&,
+          std::tuple<T...>&&
+        >::type;
+
       persona_tls &tls = the_persona_tls;
       lpc_dormant *p = this;
-      
+
       do {
         lpc_dormant *next = static_cast<lpc_dormant*>(p->intruder.p.load(std::memory_order_relaxed));
         std::uintptr_t vtbl_u = reinterpret_cast<std::uintptr_t>(p->vtbl);
-        
+
         if(vtbl_u & 0x1) {
           auto *pro = reinterpret_cast<future_header_promise<T...>*>(vtbl_u ^ 0x1);
-          
-          if(next == nullptr)
+
+          if(next == nullptr || !results_is_copyable)
             pro->base_header_result.construct_results(std::move(results));
           else
-            pro->base_header_result.construct_results(results);
+            pro->base_header_result.construct_results(static_cast<copyable_reference>(results));
 
           tls.enqueue_quiesced_promise(
             *p->target, p->level,
             /*move ref*/pro, /*result*/1 + /*anon*/0,
             /*known_active=*/std::integral_constant<bool, !UPCXX_BACKEND_GASNET_PAR>()
           );
-          
+
           delete static_cast<lpc_dormant_qpromise<T...>*>(p);
         }
         else {
           auto *p1 = static_cast<lpc_dormant_fn_base<T...>*>(p);
-          
-          if(next == nullptr)
+
+          if(next == nullptr || !results_is_copyable)
             ::new(&p1->results) std::tuple<T...>(std::move(results));
           else
-            ::new(&p1->results) std::tuple<T...>(results);
-          
+            ::new(&p1->results) std::tuple<T...>(static_cast<copyable_reference>(results));
+
           tls.enqueue(
             *p->target, p->level, p,
             /*known_active=*/std::integral_constant<bool, !UPCXX_BACKEND_GASNET_PAR>()
           );
         }
-        
+
         p = next;
+
+        if(!results_is_copyable)
+          UPCXX_ASSERT(p == nullptr, "You have attempted to register multiple completions against a non-copyable results type.");
       }
-      while(p != nullptr);
+      while(p != nullptr && results_is_copyable);
     }
   }
 }

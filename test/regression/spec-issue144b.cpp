@@ -90,8 +90,6 @@ int main() {
               assert(a.x == 10); 
               assert(b.x == 11); 
         }, A(10), std::move(tmp)).wait(); // works in develop
-#endif
-#if 0 // currently broken due to extraneous copies in the return path of rpc
   future<A> fx = rpc((rank_me()+1)%rank_n(),[]() -> A&& {
                    static A a(13);
                    return std::move(a); 

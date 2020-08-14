@@ -515,8 +515,8 @@ namespace backend {
     #endif
   }
 
-  template<typename ...T>
-  void send_awaken_lpc(const team &tm, intrank_t recipient, detail::lpc_dormant<T...> *lpc, std::tuple<T...> &&vals) {
+  template<typename ...T, typename ...U>
+  void send_awaken_lpc(const team &tm, intrank_t recipient, detail::lpc_dormant<T...> *lpc, std::tuple<U...> &&vals) {
     auto am_buf(prepare_am(
       upcxx::bind([=](std::tuple<T...> &&vals) {
           lpc->awaken(std::move(vals));

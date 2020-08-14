@@ -69,7 +69,12 @@ namespace upcxx {
 
   // binding implicitly drops const and refs
   template<typename T>
-  struct binding<T&>: binding<T> {};
+  struct binding<T&>: binding<T> {
+    // now that references are Serializable, we can store a reference
+    // in a binding, and the referent gets serialized
+    using stripped_type = const T&;
+    using on_wire_type = const T&;
+  };
   template<typename T>
   struct binding<T&&>: binding<T> {};
   template<typename T>
