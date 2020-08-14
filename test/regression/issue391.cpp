@@ -1,5 +1,6 @@
 #include <upcxx/upcxx.hpp>
 #include <vector>
+#include "../util.hpp"
 
 struct foo {
   char a; int b; char c;
@@ -8,6 +9,8 @@ struct foo {
 
 int main() {
   upcxx::init();
+
+  print_test_header();
 
   std::vector<foo> data[2]{
     {{'a',0xb,0xc},{0xa,'b',0xc},{0xa,0xb,'c'}},
@@ -21,6 +24,8 @@ int main() {
     },
     upcxx::make_view(data, data+2)
   ).wait();
+
+  print_test_success();
   
   upcxx::finalize();
 }
