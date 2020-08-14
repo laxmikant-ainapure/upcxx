@@ -21,6 +21,8 @@ public:
   };
 };
 
+bool done = false;
+
 int main() {
   upcxx::init();
   print_test_header();
@@ -34,17 +36,22 @@ int main() {
                              UPCXX_ASSERT_ALWAYS(
                                b.x == (upcxx::rank_me()+upcxx::rank_n()-1)%upcxx::rank_n()
                              );
-                             return ptr;
+                             return upcxx::make_future<const A&, upcxx::global_ptr<int>>(b, ptr);
                            },
                            a);
-    upcxx::global_ptr<int> dst = fut.wait();
+    UPCXX_ASSERT_ALWAYS(fut.wait_reference<0>().x == a.x);
+    upcxx::global_ptr<int> dst = fut.wait<1>();
     upcxx::rput(a.x, dst,
                 upcxx::remote_cx::as_rpc(
                   [=](const A &b) {
                     UPCXX_ASSERT_ALWAYS(*ptr.local() == b.x);
+                    done = true;
                   },
                   a)
                 | upcxx::operation_cx::as_future()).wait();
+    while (!done) {
+      upcxx::progress();
+    }
   }
   upcxx::barrier();
   upcxx::deallocate(ptr);
