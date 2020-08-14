@@ -68,6 +68,7 @@ Notable bug fixes:
 * issue #391: View of containers of `UPCXX_SERIALIZED_FIELDS` crashes in deserialization
 * issue #392: Prevent silent use of by-value communication APIs for huge types
 * issue #393: Improve type check error for l-value reference args to RPC callbacks
+* issue #400: `UPCXX_SERIALIZED_VALUES()` misoptimized by GCC{7,8,9} with -O2+
 * issue #402: Cannot use promise<T>::fulfill_result() when T is not
   MoveConstructible
 * [spec issue #104](https://bitbucket.org/berkeleylab/upcxx-spec/issues/104): Provide a universal variadic factory for future
