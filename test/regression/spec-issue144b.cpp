@@ -80,6 +80,7 @@ int main() {
   assert(fb.result_reference<1>().x == 22);
 
 
+#if 0 // currently broken on GCC 9 with -O (Issue #400)
   // now try rpc
   rpc(0,[](A const &a) { 
               assert(a.x == 10); 
@@ -109,6 +110,7 @@ int main() {
   assert(fz.wait_reference<0>().x == 4);
   assert(fz.wait_reference<1>().x == 5);
   assert(fz.wait_reference<2>().x == 6);
+#endif
 
   upcxx::barrier();
   if (!upcxx::rank_me()) { std::cout << "SUCCESS" << std::endl; }
