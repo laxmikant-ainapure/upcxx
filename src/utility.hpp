@@ -89,6 +89,8 @@ namespace detail {
 
   template<std::size_t align>
   inline void memcpy_aligned(void *dst, void const *src, std::size_t sz) noexcept {
+    UPCXX_ASSERT((uintptr_t)src % align == 0);
+    UPCXX_ASSERT((uintptr_t)dst % align == 0);
   #if UPCXX_HAVE___BUILTIN_ASSUME_ALIGNED
     std::memcpy(__builtin_assume_aligned(dst, align),
                 __builtin_assume_aligned(src, align), sz);
