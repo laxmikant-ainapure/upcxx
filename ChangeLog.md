@@ -61,6 +61,7 @@ Notable bug fixes:
 * issue #384: finalize can complete without invoking progress, leading to obscure leaks
 * issue #386: `upcxx_memberof_general` prohibits member designators that end with an array access
 * issue #389: `future::result*()` should assert readiness
+* issue #391: View of containers of `UPCXX_SERIALIZED_FIELDS` crashes in deserialization
 * issue #392: Prevent silent use of by-value communication APIs for huge types
 * issue #393: Improve type check error for l-value reference args to RPC callbacks
 * issue #402: Cannot use promise<T>::fulfill_result() when T is not
