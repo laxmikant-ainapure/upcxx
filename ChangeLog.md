@@ -60,6 +60,7 @@ Notable bug fixes:
 * issue #380: Compile regression on bulk upcxx::rput with source+operation completions
 * issue #384: finalize can complete without invoking progress, leading to obscure leaks
 * issue #386: `upcxx_memberof_general` prohibits member designators that end with an array access
+* issue #388: `deserialized_value()` overflows buffer for massive static types.
 * issue #389: `future::result*()` should assert readiness
 * issue #391: View of containers of `UPCXX_SERIALIZED_FIELDS` crashes in deserialization
 * issue #392: Prevent silent use of by-value communication APIs for huge types

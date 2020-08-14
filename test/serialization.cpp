@@ -363,6 +363,11 @@ int main() {
   UPCXX_ASSERT_ALWAYS(upcxx::serialization_traits<int>::deserialized_value(0xbeef) == 0xbeef);
   UPCXX_ASSERT_ALWAYS(upcxx::serialization_traits<std::string>::deserialized_value(std::string(10000,'x')) == std::string(10000,'x'));
   {
+    std::array<int,1000> foo;
+    for(int i=0; i < 1000; i++) foo[i] = i*i;
+    UPCXX_ASSERT_ALWAYS((upcxx::serialization_traits<std::array<int,1000>>::deserialized_value(foo) == foo));
+  }
+  {
     std::forward_list<int> fwd0;
     for(int i=0; i < 10000; i++)
       fwd0.push_front(i);
