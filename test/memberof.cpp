@@ -4,11 +4,13 @@
 #include <cassert>
 #include <upcxx/upcxx.hpp>
 
+#include "util.hpp"
+
 #include <gasnet_portable_platform.h>
 #if (PLATFORM_COMPILER_PGI && PLATFORM_COMPILER_VERSION_LT(19,10,0)) && !defined(UPCXX_CODEMODE)
   // Older PGI compilers prior to 19.10 are known to ICE in debug mode
-  #error UPCXX_TEST_SKIPPED - PGI ICEs on memberof.cpp.  See issue #390.
-#endif
+  main_test_skipped("PGI ICEs on memberof.cpp.  See issue #390.")
+#else
 
 #if __cplusplus <= 201703
 using std::is_pod;
@@ -409,6 +411,7 @@ void check() {
 
 int main() {
   upcxx::init();
+  print_test_header();
 
   #if UPCXX_CUDA_ENABLED
     cuda_enabled = true;
@@ -437,7 +440,9 @@ int main() {
     delete gpu_alloc;
   }
 
-  upcxx::barrier();
-  if (!upcxx::rank_me()) std::cout << "SUCCESS" << std::endl;
+  print_test_success();
   upcxx::finalize();
 }
+
+#endif // test_skipped
+
