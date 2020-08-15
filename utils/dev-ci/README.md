@@ -29,6 +29,9 @@ have, or can obtain, access and an allocation of time (where necessary).
     Worth noting that PGI compilers for x86-64 and ppc64le have been
     seen to exhibit different bugs, and consequently have different
     oldest-supported versions.
++ `wombat-{clang,gcc}{,_old}`
+    An ARM64/InfiniBand cluster at ORNL.
+    Newest-available and oldest-supported versions of clang and gcc
 
 These scripts should also be considered as templates to be adapted to other
 systems, compilers, or conditions (such as known failures to be skipped).  For
