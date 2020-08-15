@@ -10,7 +10,7 @@ struct A {
   #else
     A(const A &) = delete; // non-copyable
   #endif
-  UPCXX_SERIALIZED_VALUES(x);
+  UPCXX_SERIALIZED_VALUES(x)
 };
 
 using namespace upcxx;
