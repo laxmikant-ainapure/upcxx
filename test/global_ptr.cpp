@@ -26,12 +26,18 @@ struct B : A {};
     auto gp_arr1 = accessor(ptr, arr1) suffix;                  \
     auto gp_arr2 = accessor(ptr, arr2) suffix;                  \
     auto gp_arr3 = accessor(ptr, arr3) suffix;                  \
-    assert_same<decltype(gp_x), global_ptr<Ex1>> as_x;          \
-    assert_same<decltype(gp_y), global_ptr<Ex2>> as_y;          \
-    assert_same<decltype(gp_z), global_ptr<Ex3>> as_z;          \
-    assert_same<decltype(gp_arr1), global_ptr<Ex1>> as_arr1;    \
-    assert_same<decltype(gp_arr2), global_ptr<Ex2>> as_arr2;    \
-    assert_same<decltype(gp_arr3), global_ptr<Ex3>> as_arr3;    \
+    assert_same<decltype(gp_x), global_ptr<Ex1>>{};             \
+    assert_same<decltype(gp_y), global_ptr<Ex2>>{};             \
+    assert_same<decltype(gp_z), global_ptr<Ex3>>{};             \
+    assert_same<decltype(gp_arr1), global_ptr<Ex1>>{};          \
+    assert_same<decltype(gp_arr2), global_ptr<Ex2>>{};          \
+    assert_same<decltype(gp_arr3), global_ptr<Ex3>>{};          \
+    UPCXX_ASSERT_ALWAYS(gp_x.where() == ptr.where());           \
+    UPCXX_ASSERT_ALWAYS(gp_y.where() == ptr.where());           \
+    UPCXX_ASSERT_ALWAYS(gp_z.where() == ptr.where());           \
+    UPCXX_ASSERT_ALWAYS(gp_arr1.where() == ptr.where());        \
+    UPCXX_ASSERT_ALWAYS(gp_arr2.where() == ptr.where());        \
+    UPCXX_ASSERT_ALWAYS(gp_arr3.where() == ptr.where());        \
   }
 
 template<typename Ex1, typename Ex2, typename Ex3, typename GP>
