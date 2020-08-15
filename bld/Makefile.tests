@@ -147,10 +147,10 @@ do-build-%: force
 	     done < "$$errc" ;                           \
 	     if [[ $$match == 1 ]]; then                 \
 	       $$MAKE $(MAKE_HERE) do-test-xml RESULT=compile-pass OUTPUT=$$output ; \
-	       printf 'Compiling %-30s SUCCESS\n' "$$exe"; \
+	       printf 'Compiling %-60s SUCCESS\n' "$$exe"; \
 	     else                                        \
 	       $$MAKE $(MAKE_HERE) do-test-xml RESULT=compile-fail OUTPUT=$$output ; \
-	       printf 'Compiling %-30s FAILED: compile error did not match expected pattern\n' "$$exe"; \
+	       printf 'Compiling %-60s FAILED: compile error did not match expected pattern\n' "$$exe"; \
 	       [[ -n "$$TEST_SENTINEL" ]] && touch $$TEST_SENTINEL; \
 	       exit 1;                                   \
 	     fi;                                         \
@@ -158,13 +158,13 @@ do-build-%: force
 	 else : expect compile pass ;                    \
 	   if [[ $$result == 0 ]]; then                  \
 	     $$MAKE $(MAKE_HERE) do-test-xml RESULT=compile-pass OUTPUT=$$output ; \
-	     printf 'Compiling %-30s SUCCESS\n' "$$exe"; \
+	     printf 'Compiling %-60s SUCCESS\n' "$$exe"; \
 	   elif grep -w UPCXX_TEST_SKIPPED $$output >& /dev/null; then \
 	     $$MAKE $(MAKE_HERE) do-test-xml RESULT=compile-skip OUTPUT=$$output ; \
-	     printf 'Compiling %-30s SKIPPED\n' "$$exe"; \
+	     printf 'Compiling %-60s SKIPPED\n' "$$exe"; \
 	   else                                          \
 	     $$MAKE $(MAKE_HERE) do-test-xml RESULT=compile-fail OUTPUT=$$output ; \
-	     printf 'Compiling %-30s FAILED\n' "$$exe";  \
+	     printf 'Compiling %-60s FAILED\n' "$$exe";  \
 	     head -n $(TEST_CERR_LIMIT) $$output ;       \
 	     [[ -n "$$TEST_SENTINEL" ]] && touch $$TEST_SENTINEL; \
 	     exit 1;                                     \
