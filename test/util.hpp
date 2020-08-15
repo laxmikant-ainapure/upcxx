@@ -6,7 +6,9 @@
 #endif
 
 #include <iostream>
+#include <sstream>
 #include <string>
+#include <stdio.h>
 
 #ifdef UPCXX_USE_COLOR
   // These test programs are not smart enough to properly honor termcap
@@ -22,8 +24,6 @@
   #define KLBLUE ""
 #endif
 
-#define print_test_header() print_test_header_(__FILE__)
-
 template<typename=void>
 std::string test_name(const char *file) {
     size_t pos = std::string{file}.rfind("/");
@@ -31,38 +31,90 @@ std::string test_name(const char *file) {
     return std::string{file + pos + 1};
 }
 
+template<typename=void>
+inline void flush_all_output() {
+    std::cout << std::flush;
+    std::cerr << std::flush;
+    fflush(0);
+}
+
+template<typename=void>
+void print_test_header_inner(const char *file) {
+    std::ostringstream oss;
+    oss << KLBLUE << "Test: " << test_name(file) << KNORM << "\n";
+    std::cout << oss.str() << std::flush;
+}
+
+template<typename=void>
+void print_test_success_inner(bool success=true) {
+    flush_all_output();
+    std::ostringstream oss;
+    oss << (success?KLGREEN:KLRED) << "Test result: "<< (success?"SUCCESS":"ERROR") << KNORM << "\n";
+    std::cout << oss.str() << std::flush;
+}
+
+template<typename=void>
+void print_test_skipped_inner(const char *reason, const char *success_msg="SUCCESS") {
+    flush_all_output();
+    std::ostringstream oss;
+    oss << KLBLUE << "Test result: "<< "SKIPPED" << KNORM << "\n";
+    oss << "UPCXX_TEST_SKIPPED: This test was skipped due to: " << reason << "\n";
+    oss << "Please ignore the following line which placates our automated test infrastructure:\n";
+    oss << success_msg << "\n";
+    std::cout << oss.str() << std::flush;
+}
+
 #if UPCXX_BACKEND
   template<typename=void>
   void print_test_header_(const char *file) {
-      if(!upcxx::initialized() || 0 == upcxx::rank_me()) {
-          std::cout << KLBLUE << "Test: " << test_name(file) << KNORM << std::endl;
+      if(!upcxx::initialized() || !upcxx::rank_me()) {
+          print_test_header_inner(file);
       }
-      if(upcxx::initialized() && 0 == upcxx::rank_me()) {
-          std::cout << KLBLUE << "Ranks: " << upcxx::rank_n() << KNORM << std::endl;
+      if(upcxx::initialized() && !upcxx::rank_me()) {
+          std::ostringstream oss;
+          oss << KLBLUE << "Ranks: " << upcxx::rank_n() << KNORM << "\n";
+          std::cout << oss.str() << std::flush;
       }
   }
+  #define print_test_header()   print_test_header_(__FILE__)
 
   template<typename=void>
   void print_test_success(bool success=true) {
       if(upcxx::initialized()) {
+          flush_all_output();
           // include a barrier to ensure all other threads have finished working.
-          // flush stdout to prevent any garbling of output
           upcxx::barrier();
+          // we could do a reduction here, but it's safer for rank 0 and any failing ranks to print
+          if (!upcxx::rank_me() || !success) print_test_success_inner(success); 
+      } else {
+          print_test_success_inner(success); 
       }
-      
-      std::cout << std::flush<< KLGREEN << "Test result: "<<(success?"SUCCESS":"ERROR") << KNORM << std::endl;
-  }
-#else
-  template<typename=void>
-  void print_test_header_(const char *file) {
-      std::cout << KLBLUE << "Test: " << test_name(file) << KNORM << std::endl;
   }
 
   template<typename=void>
-  void print_test_success(bool success=true) {
-      std::cout << std::flush<< KLGREEN << "Test result: "<<(success?"SUCCESS":"ERROR") << KNORM << std::endl;
+  void print_test_skipped(const char *reason, const char *success_msg="SUCCESS") {
+      if(upcxx::initialized()) {
+          flush_all_output();
+          // include a barrier to ensure all other threads have finished working.
+          upcxx::barrier();
+          if (!upcxx::rank_me()) print_test_skipped_inner(reason, success_msg);
+      } else {
+          print_test_skipped_inner(reason, success_msg);
+      }
   }
+#else
+  #define print_test_header()      print_test_header_inner(__FILE__)
+  #define print_test_success(...)  print_test_success_inner(__VA_ARGS__)
+  #define print_test_skipped(...)  print_test_skipped_inner(__VA_ARGS__)
 #endif
+
+#define main_test_skipped(.../* reason, success_msg */) \
+  int main() { \
+    upcxx::init(); \
+    print_test_header(); \
+    print_test_skipped(__VA_ARGS__); \
+    upcxx::finalize(); \
+  }
 
 template<typename T1, typename T2>
 struct assert_same {
