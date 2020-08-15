@@ -136,7 +136,6 @@ int main() {
     UPCXX_ASSERT_ALWAYS(res.wait() == z);
   }
 
-#if 0 // broken due to issue 394
   {
     auto res = upcxx::rpc((upcxx::rank_me() + 1) % upcxx::rank_n(),
       [=](std::pair<const D, const D> p) -> const S& {
@@ -149,7 +148,6 @@ int main() {
     assert_same<decltype(res), upcxx::future<D>>{};
     UPCXX_ASSERT_ALWAYS(res.wait().x == -1);
   }
-#endif
 
   {
     auto res = upcxx::rpc((upcxx::rank_me() + 1) % upcxx::rank_n(),
