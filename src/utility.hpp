@@ -163,9 +163,6 @@ namespace detail {
   // detail::construct_trivial: Constructs T objects from raw bytes. If
   // T doesn't have the appropriate constructors, this will cheat (UB!) by
   // copying the bytes and then *blessing* the memory as holding a valid T.
-  #ifndef UPCXX_ISSUE400_WORKAROUND
-  #define UPCXX_ISSUE400_WORKAROUND 1
-  #endif
   
   namespace help {
     template<typename T>
