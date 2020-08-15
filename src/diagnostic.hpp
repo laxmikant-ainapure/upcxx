@@ -1,6 +1,7 @@
 #ifndef _7949681d_8a89_4f83_afb9_de702bf1a46b
 #define _7949681d_8a89_4f83_afb9_de702bf1a46b
 
+#include <iostream>
 #include <sstream>
 
 namespace upcxx {
@@ -92,17 +93,18 @@ namespace upcxx {
 #endif
 
 namespace upcxx {
-  // ostream-like class which will print to standard error with as
-  // much atomicity as possible. Incluces current rank and trailing
-  // newline.
+  // ostream-like class which will print to the provided stream with an optional prefix and
+  // as much atomicity as possible. Includes trailing newline (if missing).
   // usage:
   //   upcxx::say() << "hello world";
   // prints:
   //   [0] hello world \n
   class say {
     std::stringstream ss;
+    std::ostream &target;
   public:
-    say();
+    say(std::ostream &output, const char *prefix="[%d] ");
+    say(const char *prefix="[%d] ") : say(std::cout, prefix) {}
     ~say();
     
     template<typename T>

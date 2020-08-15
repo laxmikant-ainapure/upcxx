@@ -72,13 +72,29 @@ void upcxx::assert_failed(const char *func, const char *file, int line, const ch
   upcxx::fatal_error(msg, "assertion failure", func, file, line);
 }
 
-upcxx::say::say() {
+upcxx::say::say(std::ostream &output, const char *prefix) : target(output) {
+  if (!prefix) return;
+  intrank_t myrank = -1;
   #ifdef UPCXX_BACKEND
-    ss << '[' << upcxx::backend::rank_me << "] ";
+    if (upcxx::initialized()) myrank = upcxx::rank_me();
   #endif
+  std::unique_ptr<char[]> buf;
+  if (strchr(prefix,'%')) {
+    if (myrank < 0) prefix = "";
+    else {
+      std::size_t sz = strlen(prefix)+10;
+      buf = std::unique_ptr<char[]>( new char[sz] );
+      snprintf(buf.get(), sz, prefix, myrank);
+      prefix = buf.get();
+    }
+  }
+  ss << prefix;
 }
 
 upcxx::say::~say() {
-  ss << std::endl;
-  std::cerr << ss.str();
+  std::string result = ss.str();
+  if (!result.empty()) {
+    if (result.back() != '\n') result.push_back('\n');
+    target << result << std::flush;
+  }
 }
