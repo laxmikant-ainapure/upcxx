@@ -364,13 +364,13 @@ do-run-tests: force
 	     run_wrapper= ;                                             \
 	   fi;                                                          \
 	 fi;                                                            \
-	 total=0; failed=0;                                             \
+	 total=0; failed=0; skipped=0;                                  \
 	 echo "Running tests with RANKS=$$ranks";                       \
 	 for test in $(call ALL_TESTS,$(NETWORKS)); do                  \
 	   [[ -x $$test ]] || continue;                                 \
 	   if ! [[ "$$test" =~ $(call TEST_PATTERN,$(TESTS)) ]] || \
 	        [[ "$$test" =~ $(call TEST_PATTERN,$(NO_TESTS) $(test_exclude_compile_only)) ]] ; then \
-	      echo Skipping filtered $$test ; continue ; \
+	      echo Skipping filtered $$test ; : $$((++skipped)); continue; \
            fi ; \
 	   echo "Running $$test"; : $$((++total));                      \
 	   if [[ -n '$(UPCXX_BINDIR)' ]]; then                          \
@@ -397,22 +397,34 @@ do-run-tests: force
 	     comment= ; \
 	     case $$exitcode in 124) comment=": probable timeout" ;; esac ; \
 	     echo "FAILED (exitcode=$$exitcode)$$comment"; : $$((++failed));     \
-	     $$MAKE $(MAKE_HERE) do-test-xml RESULT=run-fail OUTPUT=$$output ; \
+	     result=fail;                                               \
+	   elif grep -q UPCXX_TEST_SKIPPED $$output; then               \
+	     result=skip; : $$((++skipped));                            \
 	   else                                                         \
-	     $$MAKE $(MAKE_HERE) do-test-xml RESULT=run-pass OUTPUT=$$output ; \
+	     result=pass;                                               \
 	   fi;                                                          \
+	   $$MAKE $(MAKE_HERE) do-test-xml RESULT=run-$$result OUTPUT=$$output ; \
 	   if expr "$$run_wrapper" : '.*valgrind' > /dev/null &&        \
 	    ( [[ $$exitcode = 123 ]] || grep -q VALGRIND_ERROR $$output ) ; then \
 	     cat $$output;                                              \
 	   else                                                         \
-	     grep -i -e "Test result: " -e SUCCESS -e ERROR $$output | sort -u; \
+	     case "$$result" in                                         \
+	       skip) grep -e UPCXX_TEST_SKIPPED $$output ;;             \
+	       pass) grep -e "Test result:" -e SUCCESS $$output ;;      \
+	       fail) grep -e "Test result:" -e ERROR $$output ;;        \
+	     esac;                                                      \
 	   fi;                                                          \
 	 done;                                                          \
 	 echo -e "\nResult reports: $(TEST_OUTPUT)";                    \
-	 if [[ $$failed = 0 ]]; then                                    \
-	   echo "PASSED running $$total tests";                         \
+	 if [[ $$skipped = 0 ]]; then                                   \
+	   skip_msg="";                                                 \
 	 else                                                           \
-	   echo "FAILED running $$failed of $$total tests";             \
+	   skip_msg=" ($$skipped skipped)";                             \
+	 fi;                                                            \
+	 if [[ $$failed = 0 ]]; then                                    \
+	   echo "PASSED running $$total tests$$skip_msg";               \
+	 else                                                           \
+	   echo "FAILED running $$failed of $$total tests$$skip_msg";   \
 	   $(MAKE) failure TARGET=tests;                                \
 	 fi;                                                            \
 	 [[ $$failed = 0 ]] # exit code
@@ -439,6 +451,7 @@ do-test-xml: force
 	 case "$(RESULT)" in \
 	   compile-skip) skips=1;    outtype=failure ;; \
 	   compile-fail) failures=1; outtype=failure ;; \
+	   run-skip)     skips=1;    outtype=error   ;; \
 	   run-fail)     errors=1;   outtype=error   ;; \
 	 esac; \
 	 echo -e '<?xml version="1.0" encoding="UTF-8"?>\n' \
