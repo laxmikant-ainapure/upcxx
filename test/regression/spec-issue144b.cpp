@@ -7,7 +7,7 @@ struct A {
   A(int v) : x(v) {}
   A(A &&other) : x(other.x){} // move cons
   A(const A &) = delete; // non-copyable
-  UPCXX_SERIALIZED_VALUES(x);
+  UPCXX_SERIALIZED_VALUES(x)
 };
 
 using namespace upcxx;

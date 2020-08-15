@@ -44,7 +44,7 @@ struct U { // no serialization
 namespace upcxx {
   template<>
   struct is_trivially_serializable<::D> : ::std::true_type {};
-};
+}
 
 int z = 5;
 std::string s = "test";

@@ -1364,7 +1364,7 @@ namespace upcxx {
         // Write to space after our static storage to ensure we corrupt any
         // accidental overflow. This has negligible cost, is only to catch bugs
         // in testing, and this function probably isn't performance critical anyway.
-        *(char*)static_storage[1].storage() = 0x99;
+        *(std::uint8_t*)static_storage[1].storage() = 0x99;
         
         if(!w.contained_in_initial()) {
           storage_size = w.size();
