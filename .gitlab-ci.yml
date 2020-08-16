@@ -409,16 +409,18 @@ theta.PrgEnv-cray:
 ## Theta login node
 ##
 ## Host-specific note:
-##  These jobs do NOT run except by request (match to CI_NAME).
+##  So, these jobs do NOT run except by request (match to CI_{HOST,NAME}).
 ##  The Dirac jobs cover both older and newer compiler versions
 ##
 .theta.login:
   tags: [ shell, anl, ecp-theta ]
   rules:
+    - *when_host
     - *when_name
+    - *when_web
   variables:
     CI_MAKE_PARALLEL: "-j8"
-    CONFIGURE_ARGS: --without-cross
+    CONFIGURE_ARGS: --without-cross --without-mpicc
     GASNET_SPAWNFN: L
     MY_OS:   'linux'
     MY_CPU:  'x86_64'
