@@ -531,6 +531,7 @@ dirac.clang_floor:
     MY_HOST: 'catalina'
     GASNET_SPAWNFN: L
     GASNET_SUPERNODE_MAXSIZE: 2
+    UPCXX_RUN_TIME_LIMIT: 360
 
 catalina.xcode:
   extends: [ .dev_ci, .new_xcode, .catalina ]
@@ -557,6 +558,7 @@ catalina.gcc:
     MY_HOST: 'el-capitan'
     GASNET_SPAWNFN: L
     GASNET_SUPERNODE_MAXSIZE: 2
+    UPCXX_RUN_TIME_LIMIT: 360
 
 el-capitan.xcode_floor:
   extends: [ .dev_ci, .new_xcode, .el-capitan ]
