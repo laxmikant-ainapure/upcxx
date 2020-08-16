@@ -64,6 +64,7 @@ Notable bug fixes:
 * issue #373: No `python` in `$PATH` in recent Linux distros
 * issue #375: Improve error message for C array types by-value arguments to RPC
 * issue #369: `completion_cx::as_future()` typically leaks
+* issue #376: warnings from GCC 10.1 in reduce.hpp for boolean reductions
 * issue #380: Compile regression on bulk upcxx::rput with source+operation completions
 * issue #384: finalize can complete without invoking progress, leading to obscure leaks
 * issue #386: `upcxx_memberof_general` prohibits member designators that end with an array access
