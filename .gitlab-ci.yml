@@ -410,7 +410,7 @@ theta.PrgEnv-intel:
 
 # Theta PrgEnv-cray
 theta.PrgEnv-cray:
-  extends: [ .dev_ci, .new_cray, .theta.compute ]
+  extends: [ .dev_ci, .new_cray, .theta.compute, .rules_manual ]
   variables:
     ci_script: theta-llvm
   before_script:
