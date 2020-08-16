@@ -108,7 +108,18 @@ namespace detail {
   // constructed as such.
   template<typename T>
   T* launder_unconstructed(T *p) noexcept {
-    asm("" : "+rm"(p) : "rm"(p) :);
+    #if __INTEL_COMPILER
+      // the intel compiler ICEs on gnu-style extended asm below,
+      // so use this more convoluted variant that means the same thing:
+      union faketype { T t; volatile char a[sizeof(T)]; };
+      asm volatile ("" : "+m"(*(faketype *)p) : "rm"(p) : );
+    #else
+      // the following says we are "killing" the contents of the bytes in memory
+      // for the object pointed-to by p, preventing the compiler analysis from reasoning
+      // about its contents across this point.
+      asm volatile ("" : "+m"(*(volatile char (*)[sizeof(T)])p) : "rm"(p) : );
+    #endif
+
     return p;
   }
 
@@ -159,7 +170,14 @@ namespace detail {
       using T1 = typename std::remove_const<T>::type;
       T1 *ans = reinterpret_cast<T1*>(::new(dest) T1);
       detail::template memcpy_aligned<alignof(T1)>(ans, src, sizeof(T1));
-      return ans;
+      #if UPCXX_ISSUE400_WORKAROUND
+        // issue #400: based on our understanding of the C++ spec, launder should be unnecessary here
+        // because memcpy of a TriviallyCopyable type is sufficient to construct a valid object.
+        // However the GCC 7,8,9 optimizer needs this to avoid incorrect optimization in -O2+
+        return detail::launder_unconstructed<T1>(ans);
+      #else
+        return ans;
+      #endif
     }
     template<typename T>
     T* construct_trivial(void *dest, const void *src, std::true_type deft_ctor, std::false_type triv_copy) {
