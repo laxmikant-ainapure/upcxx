@@ -24,20 +24,72 @@ namespace detail {
         detail::apply_tupled(cleanup, std::move(a));
       }
     };
-    
+
+#ifndef UPCXX_RPC_STACK_MAX_FN_SIZE
+#define UPCXX_RPC_STACK_MAX_FN_SIZE 2048
+#endif
+
+    // Fn is stored on the stack if it is less than the size limit and
+    // does not return a future.
+    // - If Fn is too big, store it on the heap to avoid smashing the
+    //   stack.
+    // - If Fn returns a future, we need to extend its lifetime (along
+    //   with its bound arguments) until the future is ready. So we
+    //   store it on the heap and destroy it after the future is ready.
+    template<typename Fn,
+             typename Return = typename std::result_of<Fn&&()>::type,
+             bool unboxed = sizeof(Fn) <= UPCXX_RPC_STACK_MAX_FN_SIZE>
+    struct cmd_storage:
+      detail::raw_storage<typename serialization_traits<Fn>::deserialized_type> {
+      using storage_t =
+        detail::raw_storage<typename serialization_traits<Fn>::deserialized_type>;
+      storage_t *ptr() {
+        return this;
+      }
+      // cleanup done with a call to destruct(), so nothing to do here
+      template<typename Kind>
+      void attach_cleanup(future1<Kind> done) {}
+    };
+
+    template<typename Fn, typename Return>
+    struct cmd_storage<Fn, Return, false> { // too big
+      using storage_t =
+        detail::raw_storage<typename serialization_traits<Fn>::deserialized_type>;
+      storage_t *fnptr = ::new storage_t;
+      storage_t *ptr() {
+        return fnptr;
+      }
+      // cleanup must be deferred, so destruct() does nothing
+      void destruct() {}
+      template<typename Kind>
+      void attach_cleanup(future1<Kind> done) {
+        storage_t *fnptr = this->fnptr;
+        done.then([fnptr]() { // attach the actual cleanup to done
+                    fnptr->destruct();
+                    ::delete fnptr;
+                  });
+      }
+    };
+
+    template<typename Fn, typename Kind, typename ...T>
+    struct cmd_storage<Fn, future1<Kind, T...>, true>: // returns a future
+      cmd_storage<Fn, future1<Kind, T...>, false> {};
+
     template<typename Fn, detail::serialization_reader(*reader)(Arg...), void(*cleanup)(Arg...)>
     static void the_executor(Arg ...a) {
       detail::serialization_reader r = reader(a...);
       
       r.template read_trivial<executor_wire_t>();
-      
-      detail::raw_storage<typename serialization_traits<Fn>::deserialized_type> fn;
-      serialization_traits<Fn>::deserialize(r, &fn);
 
-      upcxx::apply_as_future(std::move(fn.value()))
-        .then(after_execute<cleanup>{std::tuple<Arg...>(a...)});
+      cmd_storage<Fn> storage;
+      serialization_traits<Fn>::deserialize(r, storage.ptr());
 
-      fn.destruct();
+      storage.attach_cleanup(
+        upcxx::apply_as_future(std::move(storage.ptr()->value()))
+          .then(after_execute<cleanup>{std::tuple<Arg...>(a...)})
+      );
+
+      storage.destruct();
     }
 
   public:
