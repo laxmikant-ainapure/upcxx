@@ -60,7 +60,7 @@
 #     can be set in order to limit runs to the subset mating the constraints:
 #     - CI_COMPILER: gnu, llvm, pgi, intel, cray, xcode
 #     - CI_AGE:      new, old
-#     - CI_CPU:      x86_64, knl, ppc64le
+#     - CI_CPU:      x86_64, knl, ppc64le, aarch64
 #     - CI_OS:       linux, cnl, macos
 #     - CI_HOST:     theta, theta-fe, dirac
 #     - CI_NAME:     name of a specific job, such as "theta.PrgEnv-llvm_floor"
@@ -620,3 +620,44 @@ power9.clang_floor:
   variables:
     CC:  /usr/local/pkg/clang/5.0.0-gcc640/bin/clang
     CXX: /usr/local/pkg/clang/5.0.0-gcc640/bin/clang++
+
+################################################################################
+##
+## AARCH64 VM runner (wombat)
+##
+## Host-specific note:
+##  There is no unattended gitlab-runner on this system.
+##  So, these jobs do NOT run except by request (match to CI_{HOST,NAME}).
+
+.wombat:
+  tags: [ shell, lbnl, class, aarch64 ]
+  rules:
+    - *when_host
+    - *when_name
+    - *when_web
+  variables:
+    CI_MAKE_PARALLEL: "-j16"
+    CI_NETWORKS: 'ibv'
+    MY_OS:   'linux'
+    MY_CPU:  'aarch64'
+    MY_HOST: 'wombat'
+
+wombat.gcc:
+  extends: [ .dev_ci, .new_gnu, .wombat ]
+  variables:
+    ci_script: wombat-gcc
+
+wombat.clang:
+  extends: [ .dev_ci, .new_llvm, .wombat ]
+  variables:
+    ci_script: wombat-clang
+
+wombat.gcc_floor:
+  extends: [ .dev_ci, .old_gnu, .wombat ]
+  variables:
+    ci_script: wombat-gcc_old
+
+wombat.clang_floor:
+  extends: [ .dev_ci, .old_llvm, .wombat ]
+  variables:
+    ci_script: wombat-clang_old
