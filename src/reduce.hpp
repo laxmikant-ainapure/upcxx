@@ -31,7 +31,7 @@ namespace upcxx {
   /* `detail::opfn_[add|...]` is the function object which actually implements
    * `operator()` and is used as the value for `OpFn` in `op_wrap`.
    */
-  #define UPCXX_INFIX_OP(tok, name, integral_only1) \
+  #define UPCXX_INFIX_OP(tok, tok_bool, name, integral_only1) \
     namespace detail {\
       struct opfn_##name {\
         static constexpr bool integral_only = integral_only1;\
@@ -40,16 +40,21 @@ namespace upcxx {
           a tok##= std::forward<Tb>(b);\
           return static_cast<T&&>(a);\
         }\
+        template<typename Tb>\
+        bool operator()(bool a, Tb &&b) const {\
+          a tok_bool##= std::forward<Tb>(b);\
+          return static_cast<bool&&>(a);\
+        }\
       };\
     }\
     constexpr detail::op_wrap<detail::opfn_##name, /*fast_demanded=*/false> op_##name = {};\
     constexpr detail::op_wrap<detail::opfn_##name, /*fast_demanded=*/true> op_fast_##name = {};
   
-  UPCXX_INFIX_OP(+, add, false)
-  UPCXX_INFIX_OP(*, mul, false)
-  UPCXX_INFIX_OP(&, bit_and, true)
-  UPCXX_INFIX_OP(|, bit_or, true)
-  UPCXX_INFIX_OP(^, bit_xor, true)
+  UPCXX_INFIX_OP(+, |, add, false)
+  UPCXX_INFIX_OP(*, &, mul, false)
+  UPCXX_INFIX_OP(&, &, bit_and, true)
+  UPCXX_INFIX_OP(|, |, bit_or, true)
+  UPCXX_INFIX_OP(^, ^, bit_xor, true)
   #undef UPCXX_INFIX_OP
   
   namespace detail {
