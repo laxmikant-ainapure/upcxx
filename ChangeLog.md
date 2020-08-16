@@ -13,6 +13,10 @@ New features/enhancements: (see specification and programmer's guide for full de
   derived from `std::bad_alloc`) which provides additional diagnostics about the failure.
 * Rpc's which return future values experience one less heap allocation and
   virtual dispatch in the runtime's critical path.
+* Rpc's which return future values no longer copy the underlying data prior to
+  serialization.
+* `dist_object<T>::fetch()` no longer copies the remote instance of the object
+  prior to serialization.
 * Improved compatability with heap analysis tools like Valgrind (at some
   potential performance cost) using new configure option --enable-valgrind
 * Tests run by `make check` and friends now enforce a 5m time limit by default

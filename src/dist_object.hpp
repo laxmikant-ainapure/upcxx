@@ -164,7 +164,10 @@ namespace upcxx {
     
     future<T> fetch(intrank_t rank) const {
       UPCXX_ASSERT_INIT();
-      return upcxx::rpc(*tm_, rank, [](dist_object<T> const &o) { return *o; }, *this);
+      return upcxx::rpc(*tm_, rank,
+                        [](dist_object<T> const &o) -> const T& {
+                          return *o;
+                        }, *this);
     }
   };
 }

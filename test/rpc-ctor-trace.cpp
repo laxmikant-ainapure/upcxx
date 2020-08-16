@@ -43,9 +43,13 @@ void T::show_stats(const char *title, int expected_ctors, int expected_copies) {
   upcxx::barrier();
 }
 
+T global;
+
 int main() {
   upcxx::init();
   print_test_header();
+
+  --T::ctors; // discount construction of global
 
   using upcxx::dist_object;
   dist_object<int> dob(3);
@@ -90,6 +94,13 @@ int main() {
   T::show_stats("T const& -> future<T>", 3, 1);
 
   // now with dist_object
+
+  {
+    dist_object<T> dobT(upcxx::world());
+    dobT.fetch(target).wait_reference();
+    upcxx::barrier();
+  }
+  T::show_stats("dist_object<T>::fetch()", 2, 0);
 
   upcxx::rpc(target,
     [](dist_object<int>&, T &&x) -> T {
@@ -148,6 +159,26 @@ int main() {
     T()
   ).wait_reference();
   T::show_stats("T const& -> future<T const&>", 3, 0);
+
+  upcxx::rpc(target,
+    [](upcxx::view<T> v) -> T const& {
+      auto storage =
+        new typename std::aligned_storage <sizeof(T),
+                                           alignof(T)>::type;
+      T *p = v.begin().deserialize_into(storage);
+      delete p;
+      return global;
+    },
+    upcxx::make_view(&global, &global+1)
+  ).wait_reference();
+  T::show_stats("view<T> -> T const&", 2, 0);
+
+  upcxx::rpc(target,
+    []() -> T const& {
+      return global;
+    }
+  ).wait_reference();
+  T::show_stats("-> T const&", 1, 0);
 
   print_test_success();
   upcxx::finalize();
