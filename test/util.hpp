@@ -40,28 +40,23 @@ inline void flush_all_output() {
 
 template<typename=void>
 void print_test_header_inner(const char *file) {
-    std::ostringstream oss;
-    oss << KLBLUE << "Test: " << test_name(file) << KNORM << "\n";
-    std::cout << oss.str() << std::flush;
+    upcxx::say("") << KLBLUE << "Test: " << test_name(file) << KNORM;
 }
 
 template<typename=void>
 void print_test_success_inner(bool success=true) {
     flush_all_output();
-    std::ostringstream oss;
-    oss << (success?KLGREEN:KLRED) << "Test result: "<< (success?"SUCCESS":"ERROR") << KNORM << "\n";
-    std::cout << oss.str() << std::flush;
+    upcxx::say("") << (success?KLGREEN:KLRED) << "Test result: "<< (success?"SUCCESS":"ERROR") << KNORM;
 }
 
 template<typename=void>
 void print_test_skipped_inner(const char *reason, const char *success_msg="SUCCESS") {
     flush_all_output();
-    std::ostringstream oss;
-    oss << KLBLUE << "Test result: "<< "SKIPPED" << KNORM << "\n";
-    oss << "UPCXX_TEST_SKIPPED: This test was skipped due to: " << reason << "\n";
-    oss << "Please ignore the following line which placates our automated test infrastructure:\n";
-    oss << success_msg << "\n";
-    std::cout << oss.str() << std::flush;
+    upcxx::say("")
+        << KLBLUE << "Test result: "<< "SKIPPED" << KNORM << "\n"
+        << "UPCXX_TEST_SKIPPED: This test was skipped due to: " << reason << "\n"
+        << "Please ignore the following line which placates our automated test infrastructure:\n"
+        << success_msg;
 }
 
 #if UPCXX_BACKEND
@@ -71,9 +66,7 @@ void print_test_skipped_inner(const char *reason, const char *success_msg="SUCCE
           print_test_header_inner(file);
       }
       if(upcxx::initialized() && !upcxx::rank_me()) {
-          std::ostringstream oss;
-          oss << KLBLUE << "Ranks: " << upcxx::rank_n() << KNORM << "\n";
-          std::cout << oss.str() << std::flush;
+          upcxx::say("") << KLBLUE << "Ranks: " << upcxx::rank_n() << KNORM;
       }
   }
   #define print_test_header()   print_test_header_(__FILE__)
