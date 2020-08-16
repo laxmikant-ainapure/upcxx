@@ -53,6 +53,15 @@ namespace upcxx {
 // Assert that will only happen in debug-mode.
 #if UPCXX_ASSERT_ENABLED
   #define UPCXX_ASSERT(...) UPCXX_ASSERT_DISPATCH(__VA_ARGS__, UPCXX_ASSERT_2, UPCXX_ASSERT_1, _DUMMY)(__VA_ARGS__)
+#elif __PGI
+  // PGI's warning #174-D "expression has no effect" is too stoopid to ignore `((void)0)` 
+  // when it appears in an expression context before a comma operator.
+  // This silly replacement seems sufficient to make it shut up, 
+  // and should still add no runtime overhead post-inlining.
+  namespace upcxx { namespace detail {
+    static inline void noop(){}
+  }}
+  #define UPCXX_ASSERT(...) (upcxx::detail::noop())
 #else
   #define UPCXX_ASSERT(...) ((void)0)
 #endif
