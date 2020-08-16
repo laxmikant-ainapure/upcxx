@@ -134,8 +134,11 @@ variables:
       { if: '$CI_NAME     != "" && $CI_NAME     != $CI_JOB_NAME', when: never }
     - &when_web
       { if: '$CI_PIPELINE_SOURCE == "web"', when: always }
-    - &when_push
+    - &when_push1
       if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_REF_NAME =~ /\/(dev-)?check\//'
+      when: always
+    - &when_push2
+      if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_REF_NAME == "develop"'
       when: always
   variables: &old_gnu   { MY_COMPILER: 'gnu',   MY_AGE: 'old', UPCXX_HAVE_OPENMP: 1 }
   variables: &new_gnu   { MY_COMPILER: 'gnu',   MY_AGE: 'new', UPCXX_HAVE_OPENMP: 1 }
@@ -262,7 +265,8 @@ variables:
     - *when_host
     - *when_name
     - *when_web
-    - *when_push
+    - *when_push1
+    - *when_push2
   artifacts:
     name: "gitlab-ci.$CI_COMMIT_SHORT_SHA.$CI_PIPELINE_ID.$CI_JOB_NAME"
     paths:
