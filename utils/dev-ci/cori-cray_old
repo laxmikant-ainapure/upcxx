@@ -33,7 +33,7 @@ fi
 ## RUN
 if [[ $STAGES =~ ,run, ]]; then
   unset TMPDIR
-  time salloc -C haswell -t 90 -q interactive -N 2 -- time $GMAKE dev-run-tests || touch .pipe-fail
+  time salloc -C haswell -t 120 -q interactive -N 2 -- time $GMAKE dev-run-tests || touch .pipe-fail
 fi
 
 ## DONE
