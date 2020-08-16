@@ -91,6 +91,13 @@ int main() {
 
   // now with dist_object
 
+  {
+    dist_object<T> dobT(upcxx::world());
+    dobT.fetch(target).wait_reference();
+    upcxx::barrier();
+  }
+  T::show_stats("dist_object<T>::fetch()", 2, 0);
+
   upcxx::rpc(target,
     [](dist_object<int>&, T &&x) -> T {
       return std::move(x);
