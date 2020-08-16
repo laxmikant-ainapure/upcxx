@@ -251,12 +251,9 @@ variables:
 .new_xcode: { variables: *new_xcode }
 
 #
-# Job templates (use with extends)
+# Rules templates (use with extends)
 #
-
-# Generic job (single-stage pipeline)
-.generic:
-  stage: build
+.rules_auto:
   rules:
     - *when_cc
     - *when_age
@@ -267,6 +264,20 @@ variables:
     - *when_web
     - *when_push1
     - *when_push2
+.rules_manual:
+  rules:
+    - *when_host
+    - *when_name
+    - *when_web
+
+#
+# Job templates (use with extends)
+#
+
+# Generic job (single-stage pipeline)
+.generic:
+  extends: [ .rules_auto ]
+  stage: build
   artifacts:
     name: "gitlab-ci.$CI_COMMIT_SHORT_SHA.$CI_PIPELINE_ID.$CI_JOB_NAME"
     paths:
@@ -418,10 +429,7 @@ theta.PrgEnv-cray:
 ##
 .theta.login:
   tags: [ shell, anl, ecp-theta ]
-  rules:
-    - *when_host
-    - *when_name
-    - *when_web
+  extends: [ .rules_manual ]
   variables:
     CI_MAKE_PARALLEL: "-j8"
     CONFIGURE_ARGS: --without-cross --without-mpicc
@@ -635,10 +643,7 @@ power9.clang_floor:
 
 .wombat:
   tags: [ shell, lbnl, class, aarch64 ]
-  rules:
-    - *when_host
-    - *when_name
-    - *when_web
+  extends: [ .rules_manual ]
   variables:
     CI_MAKE_PARALLEL: "-j16"
     CI_NETWORKS: 'ibv'
