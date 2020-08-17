@@ -29,8 +29,6 @@ int main() {
   int data[10] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
   A v{-1};
   global_ptr<int> ptr = new_<int>(0);
-  dist_object<global_ptr<int>> dptr(ptr);
-  global_ptr<int> dst = dptr.fetch(target).wait();
   rpc(target,
       [](view<int> items, const A &a, global_ptr<int> src) {
         return rget(src).then(
