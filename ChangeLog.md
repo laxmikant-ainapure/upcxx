@@ -7,76 +7,76 @@ For information on installing UPC++, see: [INSTALL.md](INSTALL.md)
 
 ### 20XX.YY.ZZ: PENDING
 
-New features/enhancements: (see specification and programmer's guide for full details)
+General features/enhancements: (see specification and programmer's guide for full details)
 
-* Shared heap exhaustion in `upcxx::new_(array)` now throws `upcxx::bad_shared_alloc` (a type
-  derived from `std::bad_alloc`) which provides additional diagnostics about the failure.
-* Rpc's which return future values experience one less heap allocation and
-  virtual dispatch in the runtime's critical path.
-* Rpc's which return future values no longer copy the underlying data prior to
-  serialization.
-* `dist_object<T>::fetch()` no longer copies the remote instance of the object
-  prior to serialization.
-* Improved compatability with heap analysis tools like Valgrind (at some
-  potential performance cost) using new configure option --enable-valgrind
-* Tests run by `make check` and friends now enforce a 5m time limit by default
 * Added support for `global_ptr<const T>` with implicit conversion
   from `global_ptr<T>` to `global_ptr<const T>`. Communication
   operations now take a `global_ptr<const T>` where appropriate.
-* Added support for serialization of reference types where the referent is
-  Serializable.
-* Added a number of precondition sanity checks in debug mode, to help users find
-  bugs in their code when compiling with `-codemode=debug` (aka, `upcxx -g`).
 * `local_team()` creation during `upcxx::init()` in multi-node runs is now more scalable
   in time and memory, providing noticeable improvements at large scale.
 * `team::destroy()` now frees GASNet-level team resources that were previously leaked.
-* `configure --enable-X` is now equivalent to `--with-X`, similarly for `--disable`/`--without`
-* Added `deserializing_iterator<T>::deserialize_into` to avoid copying large
-  objects when iterating over a `view` of non-TriviallySerializable elements.
 * `when_all(...)` now additionally accepts non-future arguments and implicitly
   promotes them to trivially ready futures (as with `to_future`) before performing
   future concatenation. The main consequence is `when_all()` can now replace
   most uses of `make_future` and `to_future` for constructing trivially ready futures,
   and continue to serve as the future combinator.
+* Added many precondition sanity checks in debug mode, to help users find
+  bugs in their code when compiling with `-codemode=debug` (aka, `upcxx -g`).
+* Shared heap exhaustion in `upcxx::new_(array)` now throws `upcxx::bad_shared_alloc` (a type
+  derived from `std::bad_alloc`) which provides additional diagnostics about the failure.
+
+Improvements to RPC and Serialization:
+
+* Added support for serialization of reference types where the referent is Serializable.
+* Rpc's which return future values experience one less heap allocation and
+  virtual dispatch in the runtime's critical path.
+* Rpc's which return future values no longer copy the underlying data prior to serialization.
+* `dist_object<T>::fetch()` no longer copies the remote object prior to serialization.
+* Added `deserializing_iterator<T>::deserialize_into` to avoid copying large
+  objects when iterating over a `view` of non-TriviallySerializable elements.
 * Non-copyable (but movable) types can now be passed as lvalues to RPC and will
   be serialized directly from the provided object
 * Non-copyable (but movable) types can now be returned from RPC by reference
-* ...
+
+Build system changes:
+
+* Improved compatibility with heap analysis tools like Valgrind (at some
+  potential performance cost) using new configure option --enable-valgrind
+* `configure --enable-X` is now equivalent to `--with-X`, similarly for `--disable`/`--without`
+* Tests run by `make check` and friends now enforce a 5m time limit by default
 
 Notable bug fixes:
 
+* issue #288: (partial fix) future-producing calls like `upcxx::make_future` now
+  return the exact type `future<T>`. Sole remaining exception is `when_all`.
+* issue #313: implement `future::{result,wait}_reference`
+* issue #336: Add `static_assert` to prohibit massive types as top-level arguments to RPC
+* issue #343: Guarantee equality for default-constructed invalid `upcxx::team_id`
 * issue #344: poor handling for `make install prefix=relative-path`
 * issue #345: configure with single-dash arguments
 * issue #346: `configure --cross=cray*` ignores `--with-cc/--with-cxx`
-* [spec issue #158](https://bitbucket.org/berkeleylab/upcxx-spec/issues/158): prohibit reference types in global_ptr and upcxx_memberof_general
 * issue #353: configure: automatically cross-compile on Cray XC
 * issue #355: `upcxx::view<T>` broken with asymmetric deserialization of `T`
 * issue #356: `SERIALIZED_{FIELDS|VALUES}` incorrectly require public constructors
+* issue #361: upcxx::rpc broken when mixing arguments of `T&&` and `dist_object&`
 * issue #364: Stray "-e" output on macOS and possibly elsewhere
-* issue #361: upcxx::rpc broken when mixing arguments of T&& and dist_object& 
-* issue #288: *partial fix* future producing calls like `upcxx::make_future` now
-  return the type `future<T>` exactly (previously was `future1<???,T>`). Sole
-  remaining exception is `when_all`.
-* issue #313: implement `future::{result,wait}_reference`.
-* issue #336: Add `static_assert` to prohibit massive types as top-level arguments to RPC
-* issue #343: Guarantee equality for default-constructed invalid upcxx::team_id
+* issue #369: `completion_cx::as_future()` typically leaks
 * issue #371: `team_id`s are not "universal" as documented
 * issue #373: No `python` in `$PATH` in recent Linux distros
 * issue #375: Improve error message for C array types by-value arguments to RPC
-* issue #369: `completion_cx::as_future()` typically leaks
 * issue #376: warnings from GCC 10.1 in reduce.hpp for boolean reductions
-* issue #380: Compile regression on bulk upcxx::rput with source+operation completions
+* issue #380: Compile regression on bulk `upcxx::rput` with source+operation completions
 * issue #384: finalize can complete without invoking progress, leading to obscure leaks
 * issue #386: `upcxx_memberof_general` prohibits member designators that end with an array access
-* issue #388: `deserialized_value()` overflows buffer for massive static types.
+* issue #388: `deserialized_value()` overflows buffer for massive static types
 * issue #389: `future::result*()` should assert readiness
 * issue #391: View of containers of `UPCXX_SERIALIZED_FIELDS` crashes in deserialization
 * issue #392: Prevent silent use of by-value communication APIs for huge types
 * issue #393: Improve type check error for l-value reference args to RPC callbacks
 * issue #400: `UPCXX_SERIALIZED_VALUES()` misoptimized by GCC{7,8,9} with -O2+
-* issue #402: Cannot use promise<T>::fulfill_result() when T is not
-  MoveConstructible
+* issue #402: Cannot use `promise<T>::fulfill_result()` when T is not MoveConstructible
 * [spec issue #104](https://bitbucket.org/berkeleylab/upcxx-spec/issues/104): Provide a universal variadic factory for future
+* [spec issue #158](https://bitbucket.org/berkeleylab/upcxx-spec/issues/158): prohibit reference types in `global_ptr` and `upcxx_memberof_general`
 * [spec issue #160](https://bitbucket.org/berkeleylab/upcxx-spec/issues/160): Deadlocks arising from synchronous collective calls with internal progress
 
 Breaking changes:
@@ -87,9 +87,8 @@ Breaking changes:
   For backwards compat, the former is still accepted.
 * Implementation of `upcxx::team_id` is no longer Trivial (was never guaranteed to be).
   It remains DefaultConstructible, TriviallyCopyable, StandardLayoutType, EqualityComparable
-* `upcxx_memberof(gp, mem)` and `upcxx_memberof_general(gp, mem)` now
-  produce a `global_ptr<T>` when `mem` names an array whose element
-  type is `T`.
+* `upcxx_memberof(_general)(gp, mem)` now produce a `global_ptr<T>` when `mem` 
+  names an array whose element type is `T`.
 * `atomic_domain` construction now has user-level progress
 
 ### 2020.03.12: Release 2020.3.0
