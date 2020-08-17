@@ -72,6 +72,7 @@
 #     - CI_MAKE            /usr/local/bin/make
 #     - CI_MAKE_PARALLEL   -j6
 #     - CI_CONFIGURE_ARGS  [UNIMPLMENTED]
+#     - CI_EXTRAFLAGS      -Werror
 #   - The following per-host/per-job variables provide additional fine-grained
 #     control:
 #     - CI_THETA_RUN_ALL_PRGENV
@@ -112,6 +113,7 @@ variables:
   CI_MAKE: make
   CI_MAKE_PARALLEL: ""
   CI_DEV_CHECK: ""
+  CI_EXTRAFLAGS: "-Werror"
 
 #
 # Dummy job for defining YAML anchors to be used elsewhere
@@ -176,7 +178,7 @@ variables:
         printf "%20s = '%s'\n" $var "${!var}"
       done
       echo "==== CI CONTROL VARS ===="
-      for var in CI_NETWORKS CI_RANKS CI_MAKE CI_MAKE_PARALLEL CI_DEV_CHECK; do
+      for var in CI_NETWORKS CI_RANKS CI_MAKE CI_MAKE_PARALLEL CI_DEV_CHECK CI_EXTRAFLAGS; do
         printf "%20s = '%s'\n" $var "${!var}"
       done
       echo "===="
@@ -306,12 +308,12 @@ variables:
         export NETWORKS=$net
         if (( $CI_DEV_CHECK )); then
           for codemode in opt debug; do
-            $DO_MAKE dev-tests-$codemode || touch .pipe-failed
+            $DO_MAKE dev-tests-$codemode EXTRAFLAGS="$CI_EXTRAFLAGS" || touch .pipe-failed
             $DO_MAKE dev-run-tests || touch .pipe-failed
             (set +x; rm -rf test-*-*)
           done
         else
-          $DO_MAKE tests || touch .pipe-failed
+          $DO_MAKE tests EXTRAFLAGS="$CI_EXTRAFLAGS" || touch .pipe-failed
           $DO_MAKE run-tests || touch .pipe-failed
           (set +x; rm -rf test-*-*)
         fi
@@ -341,6 +343,7 @@ variables:
       fi
       DEV_CI_STAGES="${DEV_CI_STAGES:-configure,build,tests,run}"
       export NETWORKS="$CI_NETWORKS"
+      export EXTRAFLAGS="$CI_EXTRAFLAGS"
       ./utils/dev-ci/$ci_script --stages="$DEV_CI_STAGES" --dir=. && touch .pipe-passed
 
 ################################################################################
