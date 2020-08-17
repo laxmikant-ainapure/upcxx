@@ -124,6 +124,7 @@ do-build-%: force
 	   $(UPCXX_BINDIR)/upcxx $(upcxx_src)/$$src      \
 	                         $${!flags}              \
 	                         $(UPCXX_COLOR_CXXFLAGS) \
+				 $(EXTRAFLAGS)           \
 	                         -o $$exe$(EXESUFFIX)    \
 				 2> $$output );          \
 	 result=$$?;                                     \
