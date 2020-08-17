@@ -49,15 +49,13 @@ int main() {
   rput(1, dst,
        remote_cx::as_rpc(cx_fn, make_view(data, data+10), v, ptr) |
        remote_cx::as_rpc(cx_fn, make_view(data, data+10), v, ptr));
-#if 0 // currently broken
   rput(1, dst,
        operation_cx::as_future() |
        remote_cx::as_rpc(cx_fn, make_view(data, data+10), v, ptr));
-#endif
   rput(1, dst,
        remote_cx::as_rpc(cx_fn, make_view(data, data+10), v, ptr) |
        operation_cx::as_future());
-  while (done != 4) {
+  while (done != 5) {
     progress();
   }
   delete_(ptr);

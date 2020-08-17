@@ -735,75 +735,99 @@ namespace upcxx {
       
       tail_t& tail() { return static_cast<tail_t&>(*this); }
       tail_t const& tail() const { return *this; }
-      
-      template<typename Event, typename ...V>
-      void operator()(V &&...vals) {
-        // fire the head element
-        head_t::template operator()<Event>(
+
+      // return type of firing off the given completions_state
+      template<typename Event, typename CS, bool do_move,
+               typename ...V>
+      using rettype = decltype(
+        std::declval<CS&>().template operator()<Event>(
+          std::declval<typename std::conditional<do_move, V&&, V const&>::type>()...
+        )
+      );
+
+      // fire off a completions_state, converting non-future return
+      // type to cx_non_future_return
+      template<typename Event, typename CSOut, bool do_move,
+               typename CSIn, typename ...V>
+      static typename std::enable_if<
+        detail::is_future1<
+          typename std::decay<rettype<Event, CSOut, do_move, V...>>::type
+        >::value,
+        rettype<Event, CSOut, do_move, V...>
+      >::type
+      fire(CSIn &&me, V &&...vals) {
+        return actually_fire<Event, CSOut, do_move>(
+          static_cast<CSIn&&>(me), static_cast<V&&>(vals)...
+        );
+      }
+
+      // fire off a completions_state, preserving the future return
+      template<typename Event, typename CSOut, bool do_move,
+               typename CSIn, typename ...V>
+      static typename std::enable_if<
+        !detail::is_future1<
+          typename std::decay<rettype<Event, CSOut, do_move, V...>>::type
+        >::value,
+        cx_non_future_return
+      >::type
+      fire(CSIn &&me, V &&...vals) {
+        actually_fire<Event, CSOut, do_move>(
+          static_cast<CSIn&&>(me), static_cast<V&&>(vals)...
+        );
+        return cx_non_future_return{};
+      }
+
+      template<typename Event, typename CSOut, bool do_move,
+               typename CSIn, typename ...V>
+      static rettype<Event, CSOut, do_move, V...>
+      actually_fire(CSIn &&me, V &&...vals) {
+        return static_cast<CSOut&>(me).template operator()<Event>(
           static_cast<
               // An empty tail means we are the lucky one who gets the
               // opportunity to move-out the given values (if caller supplied
               // reference type permits, thank you reference collapsing).
-              typename std::conditional<tail_t::empty, V&&, V const&>::type
+              typename std::conditional<do_move, V&&, V const&>::type
             >(vals)...
         );
-        // recurse to fire remaining elements
-        tail_t::template operator()<Event>(static_cast<V&&>(vals)...);
+      }
+
+      template<typename Event, typename ...V>
+      auto operator()(V &&...vals)
+        UPCXX_RETURN_DECLTYPE(
+          cx_result_combine(
+            fire<Event, head_t, tail_t::empty>(*this, static_cast<V&&>(vals)...),
+            fire<Event, tail_t, false>(*this, static_cast<V&&>(vals)...)
+          )
+        ) {
+        return cx_result_combine(
+          // fire the head element
+          fire<Event, head_t, tail_t::empty>(*this, static_cast<V&&>(vals)...),
+          // recurse to fire remaining elements
+          fire<Event, tail_t, false>(*this, static_cast<V&&>(vals)...)
+        );
       }
 
       template<typename Event>
       struct event_bound {
         using dtype = deserialized_type_t<completions_state>;
 
-        // return type of firing off the given completions_state
-        template<typename CS, typename ...V>
-        using rettype = decltype(
-          std::declval<CS&>().template operator()<Event>(std::declval<V&&>()...)
-        );
-
-        // fire off a completions_state, converting non-future return
-        // type to cx_non_future_return
-        template<typename CS, typename ...V>
-        typename std::enable_if<
-          detail::is_future1<
-            typename std::decay<rettype<CS, V...>>::type
-          >::value,
-          rettype<CS, V...>
-        >::type
-        fire(dtype &&me, V &&...vals) {
-          return static_cast<CS&>(me).template operator()<Event>(std::forward<V>(vals)...);
-        }
-
-        // fire off a completions_state, preserving the future return
-        template<typename CS, typename ...V>
-        typename std::enable_if<
-          !detail::is_future1<
-            typename std::decay<rettype<CS, V...>>::type
-          >::value,
-          cx_non_future_return
-        >::type
-        fire(dtype &&me, V &&...vals) {
-          static_cast<CS&>(me).template operator()<Event>(std::forward<V>(vals)...);
-          return cx_non_future_return{};
-        }
-
         template<typename ...V>
         auto operator()(dtype &&me, V &&...vals)
           UPCXX_RETURN_DECLTYPE(
             cx_result_combine(
-              fire<typename dtype::head_t>(std::forward<dtype>(me),
-                                           std::forward<V>(vals)...),
-              fire<typename dtype::tail_t>(std::forward<dtype>(me),
-                                           std::forward<V>(vals)...)
+              fire<Event, typename dtype::head_t, true>(std::forward<dtype>(me),
+                                                        std::forward<V>(vals)...),
+              fire<Event, typename dtype::tail_t, true>(std::forward<dtype>(me),
+                                                        std::forward<V>(vals)...)
             )
           ) {
           return cx_result_combine(
             // fire the head element
-            fire<typename dtype::head_t>(std::forward<dtype>(me),
-                                         std::forward<V>(vals)...),
+            fire<Event, typename dtype::head_t, true>(std::forward<dtype>(me),
+                                                      std::forward<V>(vals)...),
             // recurse to fire remaining elements
-            fire<typename dtype::tail_t>(std::forward<dtype>(me),
-                                         std::forward<V>(vals)...)
+            fire<Event, typename dtype::tail_t, true>(std::forward<dtype>(me),
+                                                      std::forward<V>(vals)...)
           );
         }
       };
