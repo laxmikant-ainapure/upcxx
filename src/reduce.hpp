@@ -256,6 +256,11 @@ namespace upcxx {
         (detail::completions_has_event<Cxs, operation_cx_event>::value),
         "Not requesting operation completion is surely an error."
       );
+      UPCXX_ASSERT_ALWAYS(
+        (!detail::completions_has_event<Cxs, source_cx_event>::value &&
+         !detail::completions_has_event<Cxs, remote_cx_event>::value),
+        "Reductions do not support source or remote completion."
+      );
       
       using cxs_state_here_t = detail::completions_state<
         /*EventPredicate=*/detail::event_is_here,
@@ -317,6 +322,22 @@ namespace upcxx {
         const team &tm = upcxx::world(),
         Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
       ) {
+      static_assert(
+        upcxx::is_trivially_serializable<T>::value,
+        "`upcxx::reduce_[all|one]<T>` only permitted for TriviallySerializable T. "
+        "Consider using `upcxx::reduce_[all|one]_nontrivial<T>` instead "
+        "(experimental feature, use at own risk)."
+      );
+
+      UPCXX_ASSERT_ALWAYS(
+        (detail::completions_has_event<Cxs, operation_cx_event>::value),
+        "Not requesting operation completion is surely an error."
+      );
+      UPCXX_ASSERT_ALWAYS(
+        (!detail::completions_has_event<Cxs, source_cx_event>::value &&
+         !detail::completions_has_event<Cxs, remote_cx_event>::value),
+        "Reductions do not support source or remote completion."
+      );
       
       using cxs_state_here_t = detail::completions_state<
         /*EventPredicate=*/detail::event_is_here,
@@ -469,6 +490,15 @@ namespace upcxx {
         Cxs cxs,
         std::false_type trivial_no
       ) {
+      UPCXX_ASSERT_ALWAYS(
+        (detail::completions_has_event<Cxs, operation_cx_event>::value),
+        "Not requesting operation completion is surely an error."
+      );
+      UPCXX_ASSERT_ALWAYS(
+        (!detail::completions_has_event<Cxs, source_cx_event>::value &&
+         !detail::completions_has_event<Cxs, remote_cx_event>::value),
+        "Reductions do not support source or remote completion."
+      );
       
       using reduce_state = detail::reduce_state<T,BinaryOp,/*one_not_all=*/true,Cxs>;
       
@@ -592,6 +622,16 @@ namespace upcxx {
         std::false_type trivial_no
       ) {
       UPCXX_ASSERT_INIT();
+      UPCXX_ASSERT_ALWAYS(
+        (detail::completions_has_event<Cxs, operation_cx_event>::value),
+        "Not requesting operation completion is surely an error."
+      );
+      UPCXX_ASSERT_ALWAYS(
+        (!detail::completions_has_event<Cxs, source_cx_event>::value &&
+         !detail::completions_has_event<Cxs, remote_cx_event>::value),
+        "Reductions do not support source or remote completion."
+      );
+
       using reduce_state = detail::reduce_state<T,BinaryOp,/*one_not_all=*/false,Cxs>;
       
       typename reduce_state::cxs_state_t cxs_st{std::move(cxs)};

@@ -191,6 +191,11 @@ namespace upcxx {
       "way of ever knowing when then the source or target memory are safe to "
       "access again without incurring a data race."
     );
+    /* rget supports remote completion, contrary to the spec */
+    UPCXX_ASSERT_ALWAYS(
+      (!detail::completions_has_event<Cxs, source_cx_event>::value),
+      "rget does not support source completion."
+    );
   
     UPCXX_ASSERT_INIT();
     UPCXX_GPTR_CHK(gp_s);
@@ -265,6 +270,11 @@ namespace upcxx {
       "Not requesting operation completion is surely an error. You'll have no "
       "way of ever knowing when then the source or target memory are safe to "
       "access again without incurring a data race."
+    );
+    /* rget supports remote completion, contrary to the spec */
+    UPCXX_ASSERT_ALWAYS(
+      (!detail::completions_has_event<Cxs, source_cx_event>::value),
+      "rget does not support source completion."
     );
     
     UPCXX_ASSERT_INIT();
