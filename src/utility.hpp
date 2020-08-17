@@ -111,8 +111,10 @@ namespace detail {
     #if __INTEL_COMPILER
       // the intel compiler ICEs on gnu-style extended asm below,
       // so use this more convoluted variant that means the same thing:
+      // (Note in particular that C++ [basic.lval] aliasing rules permit
+      // modification via char type, which we exploit here)
       union faketype { T t; volatile char a[sizeof(T)]; };
-      asm volatile ("" : "+m"(*(faketype *)p) : "rm"(p) : );
+      asm volatile ("" : "+m"(((faketype *)p)->a) : "rm"(p) : );
     #else
       // the following says we are "killing" the contents of the bytes in memory
       // for the object pointed-to by p, preventing the compiler analysis from reasoning
