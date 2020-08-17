@@ -106,7 +106,7 @@ export MAKE # $$MAKE in the rule below avoids a jobserver warning bug in make 4.
 # We encode '/' as '..' to allow this pattern rule to work
 
 do-build-%: force
-	@export MAKEFLAGS="--no-print-directory" ;       \
+	@-export MAKEFLAGS="--no-print-directory" ;       \
 	 IFS=+ read name threadmode network <<<$*;       \
 	 src=$${name//..//};                             \
 	 errc="$(upcxx_src)/$${src%.c*}.errc";           \
@@ -202,7 +202,7 @@ do-tests: force
 	 rm -f $$TEST_SENTINEL $$TEST_WARNING_SENTINEL;      \
 	 if [[ -n '$(filter -j%,$(MAKEFLAGS))' ]]; then      \
 	   rm -f $$TEST_SENTINEL;                            \
-	   $(MAKE) $(MAKE_HERE) -k $$targets;                \
+	   $(MAKE) $(MAKE_HERE) -k -s $$targets;             \
 	   echo -e "\nResult reports: $(TEST_OUTPUT)";       \
 	   if [[ -e $$TEST_WARNING_SENTINEL ]]; then         \
 	     rm -f $$TEST_WARNING_SENTINEL;                  \
@@ -216,7 +216,7 @@ do-tests: force
 	 else                                                \
 	   total=0; failed=0; warned=0;                      \
 	   for target in $$targets; do                       \
-	     $(MAKE) $(MAKE_HERE) $$target;                  \
+	     $(MAKE) $(MAKE_HERE) -s $$target;               \
 	     : $$((total += 1));                             \
 	     if [[ -e $$TEST_SENTINEL ]]; then               \
 	       rm -f $$TEST_SENTINEL;                        \
