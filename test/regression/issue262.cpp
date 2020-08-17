@@ -58,6 +58,7 @@ int main() {
   while (done != 5) {
     progress();
   }
+  barrier();
   delete_(ptr);
 
   print_test_success();
