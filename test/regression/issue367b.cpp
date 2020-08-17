@@ -5,8 +5,6 @@
 
 using namespace upcxx;
 
-bool done = false;
-
 struct A {
   int x;
   ~A() {
@@ -29,26 +27,25 @@ int main() {
   int data[10] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
   A v{-1};
   global_ptr<int> ptr = new_<int>(0);
-  rpc(target,
+  auto fut =
+    rpc(target,
       [](view<int> items, const A &a, global_ptr<int> src) {
         return rget(src).then(
-          [items,&a](int) {
+          [items,&a](int) -> const A& {
             say() << "processing items, &a = " << &a;
             UPCXX_ASSERT_ALWAYS(a.x == -1);
             auto p = items.begin();
             for (int i = 0; p < items.end(); ++i, ++p) {
               UPCXX_ASSERT_ALWAYS(*p == i);
             }
-            done = true;
+            return a;
           });
       },
       make_view(data, data+10),
       v,
       ptr
-  );
-  while (!done) {
-    progress();
-  }
+    );
+  UPCXX_ASSERT_ALWAYS(fut.wait_reference().x == -1);
   delete_(ptr);
 
   print_test_success();
