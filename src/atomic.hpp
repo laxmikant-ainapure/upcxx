@@ -214,7 +214,8 @@ namespace upcxx {
         UPCXX_ASSERT_ALWAYS(
           (!detail::completions_has_event<Cxs, source_cx_event>::value &&
            !detail::completions_has_event<Cxs, remote_cx_event>::value),
-          "Atomic operations do not support source or remote completion."
+          "Atomic operation '" << detail::atomic_op_str(aop) << "'"
+          " does not support source or remote completion."
         );
 
         
@@ -269,7 +270,8 @@ namespace upcxx {
         UPCXX_ASSERT_ALWAYS(
           (!detail::completions_has_event<Cxs, source_cx_event>::value &&
            !detail::completions_has_event<Cxs, remote_cx_event>::value),
-          "Atomic operations do not support source or remote completion."
+          "Atomic operation '" << detail::atomic_op_str(aop) << "'"
+          " does not support source or remote completion."
         );
         
         // we only have local completion, not remote
