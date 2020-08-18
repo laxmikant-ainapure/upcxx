@@ -221,7 +221,8 @@ or slow job launch). The simplest workaround in such cases is to set
 
 Variables `TESTS` and `NO_TESTS` can optionally be set to a space-delimited
 list of test name substrings used as a filter to select or discard a subset
-of tests to be compiled/run.
+of tests to be compiled/run. Variable `EXTRAFLAGS` can optionally inject 
+upcxx compile options, eg `EXTRAFLAGS=-Werror`.
 
 If it is not possible to both compile and run parallel applications in the
 same environment, then one may apply the following two steps in place of

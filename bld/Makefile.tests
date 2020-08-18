@@ -106,7 +106,7 @@ export MAKE # $$MAKE in the rule below avoids a jobserver warning bug in make 4.
 # We encode '/' as '..' to allow this pattern rule to work
 
 do-build-%: force
-	@export MAKEFLAGS="--no-print-directory" ;       \
+	@-export MAKEFLAGS="--no-print-directory" ;       \
 	 IFS=+ read name threadmode network <<<$*;       \
 	 src=$${name//..//};                             \
 	 errc="$(upcxx_src)/$${src%.c*}.errc";           \
@@ -124,12 +124,14 @@ do-build-%: force
 	   $(UPCXX_BINDIR)/upcxx $(upcxx_src)/$$src      \
 	                         $${!flags}              \
 	                         $(UPCXX_COLOR_CXXFLAGS) \
+				 $(EXTRAFLAGS)           \
 	                         -o $$exe$(EXESUFFIX)    \
 				 2> $$output );          \
 	 result=$$?;                                     \
 	 if [[ -f $$errc ]]; then : expect compile error ; \
 	   if [[ $$result == 0 ]]; then                  \
 	     $$MAKE $(MAKE_HERE) do-test-xml RESULT=compile-fail OUTPUT=$$output ; \
+	     head -n $(TEST_CERR_LIMIT) $$output ;       \
 	     printf 'Compiling %-30s FAILED: expected compile error, got success\n' "$$exe"; \
 	     rm -f "$$exe$(EXESUFFIX)";                  \
 	     [[ -n "$$TEST_SENTINEL" ]] && touch $$TEST_SENTINEL; \
@@ -150,6 +152,7 @@ do-build-%: force
 	       printf 'Compiling %-60s SUCCESS\n' "$$exe"; \
 	     else                                        \
 	       $$MAKE $(MAKE_HERE) do-test-xml RESULT=compile-fail OUTPUT=$$output ; \
+	       head -n $(TEST_CERR_LIMIT) $$output ;       \
 	       printf 'Compiling %-60s FAILED: compile error did not match expected pattern\n' "$$exe"; \
 	       [[ -n "$$TEST_SENTINEL" ]] && touch $$TEST_SENTINEL; \
 	       exit 1;                                   \
@@ -158,14 +161,20 @@ do-build-%: force
 	 else : expect compile pass ;                    \
 	   if [[ $$result == 0 ]]; then                  \
 	     $$MAKE $(MAKE_HERE) do-test-xml RESULT=compile-pass OUTPUT=$$output ; \
-	     printf 'Compiling %-60s SUCCESS\n' "$$exe"; \
+	     if grep -i -q -w warning $$output ; then      \
+	       head -n $(TEST_CERR_LIMIT) $$output ;       \
+	       printf 'Compiling %-60s WARNING\n' "$$exe"; \
+	       [[ -n "$$TEST_WARNING_SENTINEL" ]] && touch $$TEST_WARNING_SENTINEL; \
+	     else                                          \
+	       printf 'Compiling %-60s SUCCESS\n' "$$exe"; \
+	     fi;                                           \
 	   elif grep -w UPCXX_TEST_SKIPPED $$output >& /dev/null; then \
 	     $$MAKE $(MAKE_HERE) do-test-xml RESULT=compile-skip OUTPUT=$$output ; \
 	     printf 'Compiling %-60s SKIPPED\n' "$$exe"; \
 	   else                                          \
 	     $$MAKE $(MAKE_HERE) do-test-xml RESULT=compile-fail OUTPUT=$$output ; \
-	     printf 'Compiling %-60s FAILED\n' "$$exe";  \
 	     head -n $(TEST_CERR_LIMIT) $$output ;       \
+	     printf 'Compiling %-60s FAILED\n' "$$exe";  \
 	     [[ -n "$$TEST_SENTINEL" ]] && touch $$TEST_SENTINEL; \
 	     exit 1;                                     \
 	   fi;                                           \
@@ -188,27 +197,46 @@ do-tests: force
 	   done;                                             \
 	 done;                                               \
 	 mkdir -p "$(TEST_OUTPUT)" ;                         \
+	 export TEST_SENTINEL=.tests_failed_$$$$;            \
+	 export TEST_WARNING_SENTINEL=.tests_warning_$$$$;   \
+	 rm -f $$TEST_SENTINEL $$TEST_WARNING_SENTINEL;      \
 	 if [[ -n '$(filter -j%,$(MAKEFLAGS))' ]]; then      \
-	   export TEST_SENTINEL=.tests_failed_$$$$;          \
 	   rm -f $$TEST_SENTINEL;                            \
-	   $(MAKE) $(MAKE_HERE) -k $$targets;                \
+	   $(MAKE) $(MAKE_HERE) -k -s $$targets;             \
 	   echo -e "\nResult reports: $(TEST_OUTPUT)";       \
-	   if [[ $$? -ne 0 || -e $$TEST_SENTINEL ]]; then    \
+	   if [[ -e $$TEST_WARNING_SENTINEL ]]; then         \
+	     rm -f $$TEST_WARNING_SENTINEL;                  \
+	     echo -e "\nGot WARNING compiling at least one test\n";\
+	   fi;                                               \
+	   if [[ -e $$TEST_SENTINEL ]]; then                 \
 	     rm -f $$TEST_SENTINEL;                          \
 	     echo -e "\nFAILED to compile at least one test\n";\
 	     exit 1;                                         \
 	   fi;                                               \
 	 else                                                \
-	   total=0; failed=0;                                \
+	   total=0; failed=0; warned=0;                      \
 	   for target in $$targets; do                       \
-	     $(MAKE) $(MAKE_HERE) $$target;                  \
-	     : $$((failed += ($$? != 0))) $$((total += 1));  \
+	     $(MAKE) $(MAKE_HERE) -s $$target;               \
+	     : $$((total += 1));                             \
+	     if [[ -e $$TEST_SENTINEL ]]; then               \
+	       rm -f $$TEST_SENTINEL;                        \
+	       : $$((failed += 1)) ;                         \
+	     fi;                                             \
+	     if [[ -e $$TEST_WARNING_SENTINEL ]]; then       \
+	       rm -f $$TEST_WARNING_SENTINEL;                \
+	       : $$((warned += 1)) ;                         \
+	     fi;                                             \
 	   done;                                             \
 	   echo -e "\nResult reports: $(TEST_OUTPUT)";       \
+           if [[ $$warned = 0 ]]; then                       \
+             warn_msg="";                                    \
+           else                                              \
+             warn_msg=" (Got WARNING on $$warned tests)";    \
+           fi;                                               \
 	   if [[ $$failed = 0 ]]; then                       \
-	     echo -e "\nPASSED compiling $$total tests\n";   \
+	     echo -e "\nPASSED compiling $$total tests$$warn_msg\n"; \
 	   else                                              \
-	     echo -e "\nFAILED to compile $$failed of $$total tests\n";\
+	     echo -e "\nFAILED to compile $$failed of $$total tests$$warn_msg\n";\
 	     exit 1;                                         \
 	   fi;                                               \
 	 fi

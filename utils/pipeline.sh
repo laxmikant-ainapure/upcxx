@@ -13,6 +13,7 @@
 #  CI_PREFIX : override default install prefix
 #  CI_SRCDIR : override location of source tree (default .)
 #  CI_BLDDIR : override location of source tree (default .)
+#  CI_EXTRAFLAGS : extra flags for test compile (default "-Werror")
 
 if test -n "$BITBUCKET_COMMIT" ; then
 echo "----------------------------------------------"
@@ -50,6 +51,8 @@ CI_BLDDIR=$(mkdir -p "$CI_BLDDIR" && cd "$CI_BLDDIR" && pwd -P || echo "$CI_BLDD
 echo "CI_BLDDIR=$CI_BLDDIR"
 CI_PREFIX="${CI_PREFIX:-$CI_BLDDIR/inst}"
 echo "CI_PREFIX=$CI_PREFIX"
+CI_EXTRAFLAGS="${CI_EXTRAFLAGS:--Werror}"
+echo "CI_EXTRAFLAGS=$CI_EXTRAFLAGS"
 echo "----------------------------------------------"
 
 MAKE="$CI_MAKE $CI_MAKE_PARALLEL"
@@ -83,10 +86,10 @@ time $MAKE install
 
 time $MAKE test_install || touch .pipe-fail
 
-time $MAKE ${DEV}tests NETWORKS="$CI_NETWORKS" "$CI_TESTS" "$CI_NO_TESTS" || touch .pipe-fail      # compile tests
+time $MAKE ${DEV}tests NETWORKS="$CI_NETWORKS" "$CI_TESTS" "$CI_NO_TESTS" EXTRAFLAGS="$CI_EXTRAFLAGS" || touch .pipe-fail      # compile tests
 
 if ! (( "$CI_DEV_CHECK" )) ; then # build negative compile tests, even when not doing full dev-check
-  time $MAKE dev-tests-debug NETWORKS=smp TESTS=neg- "$CI_NO_TESTS" || touch .pipe-fail
+  time $MAKE dev-tests-debug NETWORKS=smp TESTS=neg- "$CI_NO_TESTS" EXTRAFLAGS="$CI_EXTRAFLAGS" || touch .pipe-fail
 fi
 
 if (( "$CI_RUN_TESTS" )) ; then
