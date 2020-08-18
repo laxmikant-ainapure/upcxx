@@ -670,3 +670,67 @@ wombat.clang_floor:
   extends: [ .dev_ci, .old_llvm, .wombat ]
   variables:
     ci_script: wombat-clang_old
+
+################################################################################
+##
+## Cori Haswell compute nodes
+##
+## Host-specific note:
+##  There is no unattended gitlab-runner on this system.
+##  So, these jobs do NOT run except by request (match to CI_{HOST,NAME}).
+
+.cori_hsw.compute:
+  tags: [ shell, nersc, cori_hsw, user_hargrove ]
+  extends: [ .rules_manual ]
+  variables:
+    ci_script: cori-cray
+    CI_MAKE_PARALLEL: "-j8"
+    CI_NETWORKS: "aries"
+    MY_OS:   'cnl'
+    MY_CPU:  'x86_64'
+    MY_HOST: 'cori_hsw'
+
+# Cori PrgEnv-cray
+cori_hsw.PrgEnv-cray:
+  extends: [ .dev_ci, .new_cray, .cori_hsw.compute ]
+
+# Cori PrgEnv-intel
+cori_hsw.PrgEnv-intel:
+  extends: [ .dev_ci, .new_intel, .cori_hsw.compute ]
+  before_script:
+    - export DEV_CI_PRGENV=intel
+    - export DEV_CI_COMPILER=$(module -t avail intel |& sort -rV | grep -m1 ^intel) # newest
+
+# Cori PrgEnv-gnu
+cori_hsw.PrgEnv-gnu:
+  extends: [ .dev_ci, .new_gnu, .cori_hsw.compute ]
+  before_script:
+    - export DEV_CI_PRGENV=gnu
+    - export DEV_CI_COMPILER=$(module -t avail gcc |& sort -rV | grep -m1 ^gcc) # newest
+
+# Cori PrgEnv-cray_floor
+cori_hsw.PrgEnv-cray_floor:
+  extends: [ .dev_ci, .old_cray, .cori_hsw.compute ]
+  before_script:
+    - export DEV_CI_COMPILER=cce/9.0.0
+    # COMPILER_PATH is a hack to replace broken linker in out-of-date cce/9.0.0
+    - export COMPILER_PATH=/opt/cray/pe/cce/default/binutils/x86_64/bin
+
+# Cori PrgEnv-intel_floor
+cori_hsw.PrgEnv-intel_floor:
+  extends: [ .dev_ci, .old_intel, .cori_hsw.compute ]
+  before_script:
+    - export DEV_CI_PRGENV=intel
+    - export DEV_CI_COMPILER=intel/18.0.1.163
+    - module use /global/common/sw/pe/opt/modulefiles
+    - module load gcc/7.1.0
+    # GXX_INCLUDE is a hack to get archived Intel and GCC versions working together
+    - export GXX_INCLUDE=$(dirname $(dirname $(which g++)))/snos/include/g++
+
+# Cori PrgEnv-gnu_floor
+cori_hsw.PrgEnv-gnu_floor:
+  extends: [ .dev_ci, .old_gnu, .cori_hsw.compute ]
+  before_script:
+    - export DEV_CI_PRGENV=gnu
+    - export DEV_CI_COMPILER=gcc/7.1.0
+    - module use /global/common/sw/pe/opt/modulefiles
