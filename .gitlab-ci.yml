@@ -269,7 +269,7 @@ variables:
 .rules_manual:
   rules:
     - { if: '$CI_HOST == $MY_HOST', when: always }
-    - { if: '$CI_NAME == $MY_NAME', when: always }
+    - { if: '$CI_NAME == $CI_JOB_NAME', when: always }
     - when: never
 
 #
