@@ -268,9 +268,9 @@ variables:
     - *when_push2
 .rules_manual:
   rules:
-    - *when_host
-    - *when_name
-    - *when_web
+    - { if: '$CI_HOST == $MY_HOST', when: always }
+    - { if: '$CI_NAME == $MY_NAME', when: always }
+    - when: never
 
 #
 # Job templates (use with extends)
