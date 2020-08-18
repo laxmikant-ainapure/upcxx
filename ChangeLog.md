@@ -47,6 +47,8 @@ Build system changes:
 
 Notable bug fixes:
 
+* issue #151: Validate requested completions against the events supported by an
+  operation
 * issue #288: (partial fix) future-producing calls like `upcxx::make_future` now
   return the exact type `future<T>`. Sole remaining exception is `when_all`.
 * issue #313: implement `future::{result,wait}_reference`

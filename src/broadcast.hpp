@@ -48,6 +48,15 @@ namespace upcxx {
     UPCXX_ASSERT_INIT();
     UPCXX_ASSERT(root >= 0 && root < tm.rank_n(),
       "broadcast_nontrivial(..., root, team) requires root in [0, team.rank_n()-1] == [0, " << tm.rank_n()-1 << "], but given: " << root);
+    UPCXX_ASSERT_ALWAYS(
+      (detail::completions_has_event<Cxs, operation_cx_event>::value),
+      "Not requesting operation completion is surely an error."
+    );
+    UPCXX_ASSERT_ALWAYS(
+      (!detail::completions_has_event<Cxs, source_cx_event>::value &&
+       !detail::completions_has_event<Cxs, remote_cx_event>::value),
+      "Broadcasts do not support source or remote completion."
+    );
 
     using cxs_state_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_here,
@@ -140,6 +149,15 @@ namespace upcxx {
     UPCXX_ASSERT_INIT();
     UPCXX_ASSERT(root >= 0 && root < tm.rank_n(),
       "broadcast(..., root, team) requires root in [0, team.rank_n()-1] == [0, " << tm.rank_n()-1 << "], but given: " << root);
+    UPCXX_ASSERT_ALWAYS(
+      (detail::completions_has_event<Cxs, operation_cx_event>::value),
+      "Not requesting operation completion is surely an error."
+    );
+    UPCXX_ASSERT_ALWAYS(
+      (!detail::completions_has_event<Cxs, source_cx_event>::value &&
+       !detail::completions_has_event<Cxs, remote_cx_event>::value),
+      "Broadcasts do not support source or remote completion."
+    );
 
     struct broadcast_cb final: backend::gasnet::handle_cb {
       detail::completions_state<
@@ -194,6 +212,15 @@ namespace upcxx {
     UPCXX_ASSERT_INIT();
     UPCXX_ASSERT(root >= 0 && root < tm.rank_n(),
       "broadcast(..., root, team) requires root in [0, team.rank_n()-1] == [0, " << tm.rank_n()-1 << "], but given: " << root);
+    UPCXX_ASSERT_ALWAYS(
+      (detail::completions_has_event<Cxs, operation_cx_event>::value),
+      "Not requesting operation completion is surely an error."
+    );
+    UPCXX_ASSERT_ALWAYS(
+      (!detail::completions_has_event<Cxs, source_cx_event>::value &&
+       !detail::completions_has_event<Cxs, remote_cx_event>::value),
+      "Broadcasts do not support source or remote completion."
+    );
 
     struct broadcast_cb final: backend::gasnet::handle_cb {
       T value;

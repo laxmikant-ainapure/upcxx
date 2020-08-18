@@ -530,6 +530,11 @@ namespace upcxx
                  "Not requesting either operation or remote completion is surely an "
                  "error. You'll have know way of ever knowing when the target memory is "
                  "safe to read or write again.");
+    /* rget_irregular supports remote completion, contrary to the spec */
+    UPCXX_ASSERT_ALWAYS(
+      (!detail::completions_has_event<Cxs, source_cx_event>::value),
+      "rget_irregular does not support source completion."
+    );
 
     
     using cxs_here_t = detail::completions_state<
@@ -727,6 +732,11 @@ namespace upcxx
                  "Not requesting either operation or remote completion is surely an "
                  "error. You'll have know way of ever knowing when the target memory is "
                  "safe to read or write again.");
+    /* rget_regular supports remote completion, contrary to the spec */
+    UPCXX_ASSERT_ALWAYS(
+      (!detail::completions_has_event<Cxs, source_cx_event>::value),
+      "rget_regular does not support source completion."
+    );
     
 
     static_assert( is_trivially_serializable<T>::value,
@@ -896,6 +906,11 @@ namespace upcxx
                  "Not requesting either operation or remote completion is surely an "
                  "error. You'll have know way of ever knowing when the target memory is "
                  "safe to read or write again.");
+    /* rget_strided supports remote completion, contrary to the spec */
+    UPCXX_ASSERT_ALWAYS(
+      (!detail::completions_has_event<Cxs, source_cx_event>::value),
+      "rget_strided does not support source completion."
+    );
  
     UPCXX_GPTR_CHK(src_base);
     UPCXX_ASSERT(src_base && dest_base, "pointer arguments to rget_strided may not be null");

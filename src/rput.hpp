@@ -442,6 +442,10 @@ namespace upcxx {
     UPCXX_ASSERT_INIT();
     UPCXX_GPTR_CHK(gp_d);
     UPCXX_ASSERT(gp_d, "pointer arguments to rput may not be null");
+    UPCXX_ASSERT_ALWAYS(
+      (!detail::completions_has_event<Cxs, source_cx_event>::value),
+      "Scalar rput does not support source completion."
+    );
     
     object_t *o = new object_t(std::move(cxs));
     

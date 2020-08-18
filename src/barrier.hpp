@@ -33,6 +33,15 @@ namespace upcxx {
     ) {
     UPCXX_ASSERT_INIT();
     UPCXX_ASSERT_MASTER();
+    UPCXX_ASSERT_ALWAYS(
+      (detail::completions_has_event<Cxs, operation_cx_event>::value),
+      "Not requesting operation completion is surely an error."
+    );
+    UPCXX_ASSERT_ALWAYS(
+      (!detail::completions_has_event<Cxs, source_cx_event>::value &&
+       !detail::completions_has_event<Cxs, remote_cx_event>::value),
+      "barrier_async does not support source or remote completion."
+    );
 
     struct barrier_cb final: backend::gasnet::handle_cb {
       detail::completions_state<
