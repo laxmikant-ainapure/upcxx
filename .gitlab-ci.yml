@@ -408,7 +408,7 @@ theta.PrgEnv-intel:
     - *do_ci_dev_check
     - *theta-dev-ci
     - perl -pi -e 's/-llvm/-intel/;'
-               -e 's/ load xalt/ load xalt gcc/;'
+               -e 's/ load xalt/ load xalt/;'
         -- utils/dev-ci/$ci_script
 
 # Theta PrgEnv-cray
@@ -452,7 +452,7 @@ theta.gnu:
 theta.intel:
   extends: [ .generic, .new_intel, .theta.login ]
   before_script:
-    - module load gcc intel
+    - module load intel
     - export CC=icc CXX=icpc
 
 # Theta login node LLVM
