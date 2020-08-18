@@ -23,6 +23,7 @@ definitions:
             - Makefile
             - config.log
             - bld/gasnet.*/config.*
+            - test-results/**
           script:
             - utils/pipeline.sh
           after-script:
