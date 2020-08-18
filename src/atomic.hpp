@@ -209,7 +209,8 @@ namespace upcxx {
               detail::opset_to_string(this->atomic_gex_ops) << "'\n");
         UPCXX_ASSERT_ALWAYS(
           (detail::completions_has_event<Cxs, operation_cx_event>::value),
-          "Not requesting operation completion is surely an error."
+          "Not requesting operation completion for '" <<
+          detail::atomic_op_str(aop) << "' is surely an error."
         );
         UPCXX_ASSERT_ALWAYS(
           (!detail::completions_has_event<Cxs, source_cx_event>::value &&
