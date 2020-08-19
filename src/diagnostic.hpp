@@ -62,7 +62,7 @@ namespace upcxx {
   namespace upcxx { namespace detail {
     static inline void noop(){}
   }}
-  #define UPCXX_ASSERT(...) (upcxx::detail::noop())
+  #define UPCXX_ASSERT(...) (::upcxx::detail::noop())
 #else
   #define UPCXX_ASSERT(...) ((void)0)
 #endif
