@@ -194,6 +194,7 @@ namespace upcxx {
 
       // generic fetching atomic operation
       template<typename Cxs = FUTURE_CX>
+      UPCXX_NODISCARD
       FETCH_RTYPE<Cxs> fop(atomic_op aop, global_ptr<T> gptr, std::memory_order order,
                            T val1 = 0, T val2 = 0, Cxs cxs = Cxs{{}}) const {
         UPCXX_ASSERT_INIT();
@@ -251,6 +252,7 @@ namespace upcxx {
 
       // generic non-fetching atomic operation
       template<typename Cxs = FUTURE_CX>
+      UPCXX_NODISCARD
       NOFETCH_RTYPE<Cxs> op(atomic_op aop, global_ptr<T> gptr, std::memory_order order,
                             T val1 = 0, T val2 = 0, Cxs cxs = Cxs{{}}) const {
         UPCXX_ASSERT_INIT();
@@ -354,37 +356,44 @@ namespace upcxx {
       ~atomic_domain() {}
       
       template<typename Cxs = FUTURE_CX>
+      UPCXX_NODISCARD
       NOFETCH_RTYPE<Cxs> store(global_ptr<T> gptr, T val, std::memory_order order,
                                Cxs cxs = Cxs{{}}) const {
         UPCXX_ASSERT_INIT();
         return op(atomic_op::store, gptr, order, val, (T)0, cxs);
       }
       template<typename Cxs = FUTURE_CX>
+      UPCXX_NODISCARD
       FETCH_RTYPE<Cxs> load(global_ptr<const T> gptr, std::memory_order order, Cxs cxs = Cxs{{}}) const {
         UPCXX_ASSERT_INIT();
         return fop(atomic_op::load, const_pointer_cast<T>(gptr), order, (T)0, (T)0, cxs);
       }
       template<typename Cxs = FUTURE_CX>
+      UPCXX_NODISCARD
       NOFETCH_RTYPE<Cxs> inc(global_ptr<T> gptr, std::memory_order order, Cxs cxs = Cxs{{}}) const {
         UPCXX_ASSERT_INIT();
         return op(atomic_op::inc, gptr, order, (T)0, (T)0, cxs);
       }
       template<typename Cxs = FUTURE_CX>
+      UPCXX_NODISCARD
       NOFETCH_RTYPE<Cxs> dec(global_ptr<T> gptr, std::memory_order order, Cxs cxs = Cxs{{}}) const {
         UPCXX_ASSERT_INIT();
         return op(atomic_op::dec,gptr, order, (T)0, (T)0, cxs);
       }
       template<typename Cxs = FUTURE_CX>
+      UPCXX_NODISCARD
       FETCH_RTYPE<Cxs> fetch_inc(global_ptr<T> gptr, std::memory_order order, Cxs cxs = Cxs{{}}) const {
         UPCXX_ASSERT_INIT();
         return fop(atomic_op::fetch_inc, gptr, order, (T)0, (T)0, cxs);
       }
       template<typename Cxs = FUTURE_CX>
+      UPCXX_NODISCARD
       FETCH_RTYPE<Cxs> fetch_dec(global_ptr<T> gptr, std::memory_order order, Cxs cxs = Cxs{{}}) const {
         UPCXX_ASSERT_INIT();
         return fop(atomic_op::fetch_dec, gptr, order, (T)0, (T)0, cxs);
       }
       template<typename Cxs = FUTURE_CX>
+      UPCXX_NODISCARD
       FETCH_RTYPE<Cxs> compare_exchange(global_ptr<T> gptr, T val1, T val2, std::memory_order order,
                                         Cxs cxs = Cxs{{}}) const {
         UPCXX_ASSERT_INIT();
@@ -393,6 +402,7 @@ namespace upcxx {
       
       #define UPCXX_AD_METHODS(name, constraint)\
         template<typename Cxs = FUTURE_CX>\
+        UPCXX_NODISCARD \
         constraint(FETCH_RTYPE<Cxs>) \
 	fetch_##name(global_ptr<T> gptr, T val, std::memory_order order,\
                                       Cxs cxs = Cxs{{}}) const {\
@@ -400,6 +410,7 @@ namespace upcxx {
           return fop(atomic_op::fetch_##name, gptr, order, val, (T)0, cxs);\
         }\
         template<typename Cxs = FUTURE_CX>\
+        UPCXX_NODISCARD \
         constraint(NOFETCH_RTYPE<Cxs>) \
 	name(global_ptr<T> gptr, T val, std::memory_order order,\
                                 Cxs cxs = Cxs{{}}) const {\

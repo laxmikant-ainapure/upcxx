@@ -427,6 +427,7 @@ namespace upcxx {
 
   template<typename T,
            typename Cxs = completions<future_cx<operation_cx_event>>>
+  UPCXX_NODISCARD
   typename detail::rput_traits<Cxs, /*by_val=*/true>::return_t
   rput(T value_s,
        global_ptr<T> gp_d,
@@ -466,6 +467,7 @@ namespace upcxx {
   
   template<typename T,
            typename Cxs = completions<future_cx<operation_cx_event>>>
+  UPCXX_NODISCARD
   typename detail::rput_traits<Cxs, /*by_val=*/false>::return_t
   rput(T const *buf_s,
        global_ptr<T> gp_d,

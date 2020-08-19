@@ -166,6 +166,7 @@ namespace upcxx {
   
   template<typename T,
            typename Cxs = completions<future_cx<operation_cx_event>>>
+  UPCXX_NODISCARD
   typename detail::completions_returner<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::rget_byval_event_values<T>,
@@ -247,6 +248,7 @@ namespace upcxx {
   
   template<typename T,
            typename Cxs = completions<future_cx<operation_cx_event>>>
+  UPCXX_NODISCARD
   typename detail::completions_returner<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::rget_byref_event_values,

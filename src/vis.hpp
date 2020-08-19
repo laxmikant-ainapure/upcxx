@@ -409,6 +409,7 @@ namespace upcxx
   
   template<typename SrcIter, typename DestIter,
            typename Cxs=decltype(operation_cx::as_future())>
+  UPCXX_NODISCARD
   typename detail::completions_returner<
     /*EventPredicate=*/detail::event_is_here,
     /*EventValues=*/detail::rput_event_values,
@@ -503,6 +504,7 @@ namespace upcxx
 
   template<typename SrcIter, typename DestIter,
   typename Cxs=decltype(operation_cx::as_future())>
+    UPCXX_NODISCARD
     typename detail::completions_returner<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::rget_byref_event_values,
@@ -601,6 +603,7 @@ namespace upcxx
   
   template<typename SrcIter, typename DestIter,
            typename Cxs=decltype(operation_cx::as_future())>
+  UPCXX_NODISCARD
   typename detail::completions_returner<
     /*EventPredicate=*/detail::event_is_here,
     /*EventValues=*/detail::rput_event_values,
@@ -702,6 +705,7 @@ namespace upcxx
   
   template<typename SrcIter, typename DestIter,
            typename Cxs=decltype(operation_cx::as_future())>
+  UPCXX_NODISCARD
   typename detail::completions_returner<
     /*EventPredicate=*/detail::event_is_here,
     /*EventValues=*/detail::rget_byref_event_values,
@@ -805,6 +809,7 @@ namespace upcxx
   
   template<std::size_t Dim, typename T,
            typename Cxs=decltype(operation_cx::as_future())>
+  UPCXX_NODISCARD
   typename detail::completions_returner<
     /*EventPredicate=*/detail::event_is_here,
     /*EventValues=*/detail::rput_event_values,
@@ -866,6 +871,7 @@ namespace upcxx
 
   template<std::size_t Dim, typename T,
            typename Cxs=decltype(operation_cx::as_future())>
+  UPCXX_NODISCARD
   typename detail::completions_returner<
     /*EventPredicate=*/detail::event_is_here,
     /*EventValues=*/detail::rput_event_values,
@@ -885,6 +891,7 @@ namespace upcxx
   
   template<std::size_t Dim, typename T,
            typename Cxs=decltype(operation_cx::as_future())>
+  UPCXX_NODISCARD
   typename detail::completions_returner<
     /*EventPredicate=*/detail::event_is_here,
     /*EventValues=*/detail::rput_event_values,
@@ -946,6 +953,7 @@ namespace upcxx
 
   template<std::size_t Dim, typename T,
            typename Cxs=decltype(operation_cx::as_future())>
+  UPCXX_NODISCARD
   typename detail::completions_returner<
     /*EventPredicate=*/detail::event_is_here,
     /*EventValues=*/detail::rput_event_values,
