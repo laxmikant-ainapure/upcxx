@@ -608,33 +608,33 @@ el-capitan.gcc_floor:
 
 power9.pgi:
   extends: [ .generic, .new_pgi, .power9 ]
-  variables:
-    CC:  /opt/pgi/linuxpower/19.10/bin/pgcc
-    CXX: /opt/pgi/linuxpower/19.10/bin/pgc++
+  before_script:
+    - module load pgi
+    - export CC=pgcc CXX=pgc++
 
 power9.gcc:
   extends: [ .generic, .new_gnu, .power9 ]
-  variables:
-    CC:  /usr/local/pkg/gcc/10.2.0/bin/gcc
-    CXX: /usr/local/pkg/gcc/10.2.0/bin/g++
+  before_script:
+    - module load gcc
+    - export CC=gcc CXX=g++
 
 power9.clang:
   extends: [ .generic, .new_llvm, .power9 ]
-  variables:
-    CC:  /usr/local/pkg/clang/10.0.1/bin/clang
-    CXX: /usr/local/pkg/clang/10.0.1/bin/clang++
+  before_script:
+    - module load clang
+    - export CC=clang CXX=clang++
 
 power9.gcc_floor:
   extends: [ .generic, .old_gnu, .power9 ]
-  variables:
-    CC:  /usr/local/pkg/gcc/6.4.0/bin/gcc
-    CXX: /usr/local/pkg/gcc/6.4.0/bin/g++
+  before_script:
+    - module load gcc/6.4.0
+    - export CC=gcc CXX=g++
 
 power9.clang_floor:
   extends: [ .generic, .old_llvm, .power9 ]
-  variables:
-    CC:  /usr/local/pkg/clang/5.0.0-gcc640/bin/clang
-    CXX: /usr/local/pkg/clang/5.0.0-gcc640/bin/clang++
+  before_script:
+    - module load clang/5.0.0-gcc640
+    - export CC=clang CXX=clang++
 
 ################################################################################
 ##
