@@ -16,11 +16,16 @@ namespace detail {
   class command {
     using executor_wire_t = global_fnptr<void(Arg...)>;
     
-    template<void(*cleanup)(Arg...)>
+    template<typename Storage, void(*cleanup)(Arg...)>
     struct after_execute {
+      Storage *storage; // storage that needs to be cleaned up
       std::tuple<Arg...> a;
       template<typename ...T>
       void operator()(T&&...) {
+        if (storage) {
+          storage->destruct();
+          ::delete storage;
+        }
         detail::apply_tupled(cleanup, std::move(a));
       }
     };
@@ -30,15 +35,18 @@ namespace detail {
 #endif
 
     // Fn is stored on the stack if it is less than the size limit and
-    // does not return a future.
+    // does not return a non-ready future.
     // - If Fn is too big, store it on the heap to avoid smashing the
     //   stack.
-    // - If Fn returns a future, we need to extend its lifetime (along
-    //   with its bound arguments) until the future is ready. So we
-    //   store it on the heap and destroy it after the future is ready.
+    // - If Fn returns a non-ready future, we need to extend its
+    //   lifetime (along with its bound arguments) until the future is
+    //   ready. So we store it on the heap and destroy it after the
+    //   future is ready.
     template<typename Fn,
-             typename Return = typename std::result_of<Fn&&()>::type,
-             bool unboxed = sizeof(Fn) <= UPCXX_RPC_STACK_MAX_FN_SIZE>
+             bool is_trivial = future_is_trivially_ready<
+                 typename detail::apply_variadic_as_future<Fn&&>::return_type
+               >::value,
+             bool is_small = sizeof(Fn) <= UPCXX_RPC_STACK_MAX_FN_SIZE>
     struct cmd_storage:
       detail::raw_storage<typename serialization_traits<Fn>::deserialized_type> {
       using storage_t =
@@ -46,13 +54,14 @@ namespace detail {
       storage_t *ptr() {
         return this;
       }
-      // cleanup done with a call to destruct(), so nothing to do here
-      template<typename Kind>
-      void attach_cleanup(future1<Kind> done) {}
+      // cleanup done with a call to destruct(), so nothing to clean up
+      storage_t *deferred_cleanup_ptr() {
+        return nullptr;
+      }
     };
 
-    template<typename Fn, typename Return>
-    struct cmd_storage<Fn, Return, false> { // too big
+    template<typename Fn, bool is_trivial>
+    struct cmd_storage<Fn, is_trivial, false> { // too big
       using storage_t =
         detail::raw_storage<typename serialization_traits<Fn>::deserialized_type>;
       storage_t *fnptr = ::new storage_t;
@@ -61,19 +70,14 @@ namespace detail {
       }
       // cleanup must be deferred, so destruct() does nothing
       void destruct() {}
-      template<typename Kind>
-      void attach_cleanup(future1<Kind> done) {
-        storage_t *fnptr = this->fnptr;
-        done.then([fnptr]() { // attach the actual cleanup to done
-                    fnptr->destruct();
-                    ::delete fnptr;
-                  });
+      storage_t *deferred_cleanup_ptr() {
+        return fnptr; // clean this up later
       }
     };
 
-    template<typename Fn, typename Kind, typename ...T>
-    struct cmd_storage<Fn, future1<Kind, T...>, true>: // returns a future
-      cmd_storage<Fn, future1<Kind, T...>, false> {};
+    template<typename Fn>
+    struct cmd_storage<Fn, false, true>: // returns a non-ready future
+      cmd_storage<Fn, false, false> {};
 
     template<typename Fn, detail::serialization_reader(*reader)(Arg...), void(*cleanup)(Arg...)>
     static void the_executor(Arg ...a) {
@@ -84,10 +88,10 @@ namespace detail {
       cmd_storage<Fn> storage;
       serialization_traits<Fn>::deserialize(r, storage.ptr());
 
-      storage.attach_cleanup(
-        upcxx::apply_as_future(std::move(storage.ptr()->value()))
-          .then(after_execute<cleanup>{std::tuple<Arg...>(a...)})
-      );
+      upcxx::apply_as_future(std::move(storage.ptr()->value()))
+        .then(after_execute<typename cmd_storage<Fn>::storage_t, cleanup>{
+          storage.deferred_cleanup_ptr(), std::tuple<Arg...>(a...)
+        });
 
       storage.destruct();
     }
