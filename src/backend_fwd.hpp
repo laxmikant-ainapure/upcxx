@@ -22,6 +22,7 @@
  */
 
 #include <upcxx/future/fwd.hpp>
+#include <upcxx/diagnostic.hpp>
 
 #include <cstddef>
 #include <cstdint>
@@ -194,8 +195,6 @@ namespace backend {
 
 ////////////////////////////////////////////////////////////////////////
 // Public API implementations:
-
-#include <upcxx/diagnostic.hpp>
 
 #if UPCXX_BACKEND
   #define UPCXX_ASSERT_INIT_NAMED(fnname) \

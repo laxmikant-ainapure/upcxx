@@ -92,6 +92,25 @@ namespace upcxx {
   #define UPCXX_ASSERT_MASTER_IFSEQ() ((void)0)
 #endif
 
+// UPCXX_NODISCARD: The C++17 [[nodiscard]] attribute, when supported/enabled
+// Auto-detection can be overridden by -DUPCXX_USE_NODISCARD=1/0
+#ifndef UPCXX_USE_NODISCARD
+  // general case: trust __has_cpp_attribute when available
+  // This *should* be sufficient for any C++11-compliant compiler
+  #ifdef __has_cpp_attribute
+    #if __has_cpp_attribute(nodiscard)
+      #define UPCXX_USE_NODISCARD 1
+    #endif
+  #endif
+  // exceptions:
+  // (currently none in our supported compiler set)
+#endif // !defined(UPCXX_USE_NODISCARD)
+#if UPCXX_USE_NODISCARD
+  #define UPCXX_NODISCARD [[nodiscard]]
+#else
+  #define UPCXX_NODISCARD 
+#endif
+
 namespace upcxx {
   // ostream-like class which will print to the provided stream with an optional prefix and
   // as much atomicity as possible. Includes trailing newline (if missing).
