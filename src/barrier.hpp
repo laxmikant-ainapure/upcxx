@@ -22,6 +22,7 @@ namespace upcxx {
   void barrier(const team &tm = upcxx::world());
   
   template<typename Cxs = completions<future_cx<operation_cx_event>>>
+  UPCXX_NODISCARD
   typename detail::completions_returner<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::barrier_event_values,
