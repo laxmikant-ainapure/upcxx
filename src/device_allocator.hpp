@@ -65,6 +65,7 @@ namespace upcxx {
     }
 
     template<typename T>
+    UPCXX_NODISCARD
     global_ptr<T,Device::kind> allocate(std::size_t n=1,
                                         std::size_t align = Device::template default_alignment<T>()) {
       UPCXX_ASSERT_INIT();
