@@ -357,10 +357,16 @@ do-tests-success: force
 ALL_TESTS = $(foreach test, $(notdir $(testprograms_seq) $(testprograms_par)), \
             $(foreach network, $(1), test-$(basename $(test))-$(network)))
 
+# Split the tests-clean rule to avoid over-long command lines (issue #406)
+do-tests-clean: force
+	@echo 'Removing tests for $(CONDUIT).'
+	@rm -f $(call ALL_TESTS,$(CONDUIT))
 tests-clean: force
-	rm -f $(call ALL_TESTS,$(ALL_CONDUITS))
+	@for conduit in $(CONDUITS); do \
+	   $$MAKE $(MAKE_HERE) do-tests-clean CONDUIT=$$conduit || exit $$?; \
+	done
 
-.PHONY: do-tests test_install tests tests-clean
+.PHONY: do-tests test_install tests tests-clean do-tests-clean
 
 # Variables for controlling run wrappers
 VALGRIND ?= valgrind
