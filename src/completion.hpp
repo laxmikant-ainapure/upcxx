@@ -362,11 +362,11 @@ namespace upcxx {
     auto cx_result_combine(future1<Kind1, T1...> &&v1,
                            future1<Kind2, T2...> &&v2)
       UPCXX_RETURN_DECLTYPE(
-        when_all(std::forward<future1<Kind1, T1...>>(v1),
-                 std::forward<future1<Kind2, T2...>>(v2))
+        detail::when_all_fast(std::forward<future1<Kind1, T1...>>(v1),
+                              std::forward<future1<Kind2, T2...>>(v2))
       ) {
-      return when_all(std::forward<future1<Kind1, T1...>>(v1),
-                      std::forward<future1<Kind2, T2...>>(v2));
+      return detail::when_all_fast(std::forward<future1<Kind1, T1...>>(v1),
+                                   std::forward<future1<Kind2, T2...>>(v2));
     }
   }
 
@@ -745,8 +745,7 @@ namespace upcxx {
         )
       );
 
-      // fire off a completions_state, converting non-future return
-      // type to cx_non_future_return
+      // fire off a completions_state, preserving the future return
       template<typename Event, typename CSOut, bool do_move,
                typename CSIn, typename ...V>
       static typename std::enable_if<
@@ -761,7 +760,13 @@ namespace upcxx {
         );
       }
 
-      // fire off a completions_state, preserving the future return
+      // fire off a completions_state, converting non-future return
+      // type to cx_non_future_return
+      // The main purpose of this is actually to deal with a void
+      // return type. We need a return value so that it can be passed
+      // to cx_result_combine(). Since the return type is not a
+      // future, we don't care about the return value in the non-void
+      // case and just return a cx_non_future_return unconditionally.
       template<typename Event, typename CSOut, bool do_move,
                typename CSIn, typename ...V>
       static typename std::enable_if<
