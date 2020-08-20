@@ -63,7 +63,7 @@ namespace upcxx {
     UPCXX_ASSERT_INIT();
     UPCXX_GPTR_CHK(dest);
     UPCXX_ASSERT(src && dest, "pointer arguments to copy may not be null");
-    return detail::copy( detail::host_device, upcxx::rank_me(), const_cast<void*>(src),
+    return detail::copy( detail::host_device, upcxx::rank_me(), const_cast<T*>(src),
                          dest.device_, dest.rank_, dest.raw_ptr_,
                          n * sizeof(T), std::move(cxs) );
   }
