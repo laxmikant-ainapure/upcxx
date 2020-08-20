@@ -72,7 +72,8 @@ namespace upcxx {
   
   intrank_t rank_n();
   intrank_t rank_me();
-  
+ 
+  UPCXX_NODISCARD 
   void* allocate(std::size_t size,
                  std::size_t alignment = alignof(std::max_align_t));
   void deallocate(void *p);
