@@ -132,6 +132,7 @@ namespace upcxx {
   
   public:
     template<typename Fn>
+    UPCXX_NODISCARD
     auto lpc(Fn fn)
       -> typename detail::future_from_tuple_t<
         detail::future_kind_shref<detail::future_header_ops_general>, // the default future kind
@@ -406,6 +407,7 @@ namespace upcxx {
   }
   
   template<typename Fn>
+  UPCXX_NODISCARD
   auto persona::lpc(Fn fn)
     -> typename detail::future_from_tuple_t<
       detail::future_kind_shref<detail::future_header_ops_general>, // the default future kind
