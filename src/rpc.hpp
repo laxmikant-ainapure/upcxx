@@ -158,6 +158,7 @@ namespace upcxx {
 
   // explicit completions
   template<typename Cxs, typename Fn, typename ...Arg>
+  UPCXX_NODISCARD
   auto rpc_ff(const team &tm, intrank_t recipient, Cxs cxs, Fn &&fn, Arg &&...args)
     // computes our return type, but SFINAE's out if cxs is not a completions type
     -> typename std::enable_if<
@@ -232,6 +233,7 @@ namespace upcxx {
   }
   
   template<typename Cxs, typename Fn, typename ...Arg>
+  UPCXX_NODISCARD
   auto rpc_ff(intrank_t recipient, Cxs cxs, Fn &&fn, Arg &&...args)
     // computes our return type, but SFINAE's out if cxs is not a completions type
     -> typename std::enable_if<
@@ -432,6 +434,7 @@ namespace upcxx {
   }
 
   template<typename Cxs, typename Fn, typename ...Arg>
+  UPCXX_NODISCARD
   auto rpc(const team &tm, intrank_t recipient, Cxs cxs, Fn &&fn, Arg &&...args)
     // computes our return type, but SFINAE's out if cxs is not a completions type
     -> typename std::enable_if<
@@ -450,6 +453,7 @@ namespace upcxx {
   }
   
   template<typename Cxs, typename Fn, typename ...Arg>
+  UPCXX_NODISCARD
   auto rpc(intrank_t recipient, Cxs cxs, Fn &&fn, Arg &&...args)
     // computes our return type, but SFINAE's out if cxs is not a completions type
     -> typename std::enable_if<
@@ -469,6 +473,7 @@ namespace upcxx {
   
   // rpc: default completions variant
   template<typename Fn, typename ...Arg>
+  UPCXX_NODISCARD
   auto rpc(const team &tm, intrank_t recipient, Fn &&fn, Arg &&...args)
     // computes our return type, but SFINAE's out if fn is a completions type
     -> typename std::enable_if<
@@ -487,6 +492,7 @@ namespace upcxx {
   }
   
   template<typename Fn, typename ...Arg>
+  UPCXX_NODISCARD
   auto rpc(intrank_t recipient, Fn &&fn, Arg &&...args)
     // computes our return type, but SFINAE's out if fn is a completions type
     -> typename std::enable_if<

@@ -34,6 +34,7 @@ namespace upcxx {
   
   template<typename T, memory_kind Ks,
            typename Cxs = completions<future_cx<operation_cx_event>>>
+  UPCXX_NODISCARD
   inline
   typename detail::completions_returner<
       /*EventPredicate=*/detail::event_is_here,
@@ -52,6 +53,7 @@ namespace upcxx {
 
   template<typename T, memory_kind Kd,
            typename Cxs = completions<future_cx<operation_cx_event>>>
+  UPCXX_NODISCARD
   inline
   typename detail::completions_returner<
       /*EventPredicate=*/detail::event_is_here,
@@ -70,6 +72,7 @@ namespace upcxx {
   
   template<typename T, memory_kind Ks, memory_kind Kd,
            typename Cxs = completions<future_cx<operation_cx_event>>>
+  UPCXX_NODISCARD
   inline
   typename detail::completions_returner<
       /*EventPredicate=*/detail::event_is_here,

@@ -299,6 +299,7 @@ namespace upcxx {
       struct reserve_handle { void *ptr; };
 
       template<typename T>
+      UPCXX_NODISCARD
       reserve_handle<T> reserve() {
         UPCXX_ASSERT_INIT();
         return reserve_handle<T>{this->place(storage_size_of<T>())};

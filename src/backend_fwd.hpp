@@ -22,6 +22,7 @@
  */
 
 #include <upcxx/future/fwd.hpp>
+#include <upcxx/diagnostic.hpp>
 
 #include <cstddef>
 #include <cstdint>
@@ -71,7 +72,8 @@ namespace upcxx {
   
   intrank_t rank_n();
   intrank_t rank_me();
-  
+ 
+  UPCXX_NODISCARD 
   void* allocate(std::size_t size,
                  std::size_t alignment = alignof(std::max_align_t));
   void deallocate(void *p);
@@ -194,8 +196,6 @@ namespace backend {
 
 ////////////////////////////////////////////////////////////////////////
 // Public API implementations:
-
-#include <upcxx/diagnostic.hpp>
 
 #if UPCXX_BACKEND
   #define UPCXX_ASSERT_INIT_NAMED(fnname) \

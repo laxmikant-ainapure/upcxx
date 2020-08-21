@@ -162,6 +162,7 @@ namespace upcxx {
     const upcxx::team& team() const { return *tm_; }
     dist_id<T> id() const { return dist_id<T>{id_}; }
     
+    UPCXX_NODISCARD
     future<T> fetch(intrank_t rank) const {
       UPCXX_ASSERT_INIT();
       return upcxx::rpc(*tm_, rank,

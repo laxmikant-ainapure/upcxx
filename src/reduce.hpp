@@ -412,6 +412,7 @@ namespace upcxx {
   template<typename T1, typename BinaryOp,
            typename Cxs = completions<future_cx<operation_cx_event>>,
            typename T = typename std::decay<T1>::type>
+  UPCXX_NODISCARD
   typename detail::completions_returner<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::reduce_scalar_event_values<T>,
@@ -435,6 +436,7 @@ namespace upcxx {
   
   template<typename T, typename BinaryOp,
            typename Cxs = completions<future_cx<operation_cx_event>>>
+  UPCXX_NODISCARD
   typename detail::completions_returner<
         /*EventPredicate=*/detail::event_is_here,
         /*EventValues=*/detail::reduce_vector_event_values,
@@ -523,6 +525,7 @@ namespace upcxx {
   template<typename T1, typename BinaryOp,
            typename Cxs = completions<future_cx<operation_cx_event>>,
            typename T = typename std::decay<T1>::type>
+  UPCXX_NODISCARD
   typename detail::completions_returner<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::reduce_scalar_event_values<T>,
@@ -549,6 +552,7 @@ namespace upcxx {
   template<typename T1, typename BinaryOp,
            typename Cxs = completions<future_cx<operation_cx_event>>,
            typename T = typename std::decay<T1>::type>
+  UPCXX_NODISCARD
   typename detail::completions_returner<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::reduce_scalar_event_values<T>,
@@ -568,6 +572,7 @@ namespace upcxx {
   
   template<typename T, typename BinaryOp,
            typename Cxs = completions<future_cx<operation_cx_event>>>
+  UPCXX_NODISCARD
   typename detail::completions_returner<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::reduce_vector_event_values,
@@ -592,6 +597,7 @@ namespace upcxx {
     template<typename T1, typename BinaryOp,
              typename Cxs = completions<future_cx<operation_cx_event>>,
              typename T = typename std::decay<T1>::type>
+    UPCXX_NODISCARD
     typename detail::completions_returner<
         /*EventPredicate=*/detail::event_is_here,
         /*EventValues=*/detail::reduce_scalar_event_values<T>,
@@ -610,6 +616,7 @@ namespace upcxx {
     template<typename T1, typename BinaryOp,
              typename Cxs = completions<future_cx<operation_cx_event>>,
              typename T = typename std::decay<T1>::type>
+    UPCXX_NODISCARD
     typename detail::completions_returner<
         /*EventPredicate=*/detail::event_is_here,
         /*EventValues=*/detail::reduce_scalar_event_values<T>,
@@ -656,6 +663,7 @@ namespace upcxx {
   template<typename T1, typename BinaryOp,
            typename Cxs = completions<future_cx<operation_cx_event>>,
            typename T = typename std::decay<T1>::type>
+  UPCXX_NODISCARD
   typename detail::completions_returner<
         /*EventPredicate=*/detail::event_is_here,
         /*EventValues=*/detail::reduce_scalar_event_values<T>,

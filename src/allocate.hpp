@@ -53,6 +53,7 @@ namespace upcxx {
   //////////////////////////////////////////////////////////////////////
   
   template<typename T>
+  UPCXX_NODISCARD
   global_ptr<T> allocate(std::size_t n = 1, std::size_t alignment = alignof(T)) {
     UPCXX_ASSERT_INIT();
     void *p = upcxx::allocate(n * sizeof(T), alignment);
@@ -108,12 +109,14 @@ namespace upcxx {
   }
 
   template<typename T, typename ...Args>
+  UPCXX_NODISCARD
   global_ptr<T> new_(Args &&...args) {
     UPCXX_ASSERT_INIT();
     return detail::new_</*throws=*/true, T>(std::forward<Args>(args)...);
   }
 
   template<typename T, typename ...Args>
+  UPCXX_NODISCARD
   global_ptr<T> new_(const std::nothrow_t &tag, Args &&...args) {
     UPCXX_ASSERT_INIT();
     return detail::new_</*throws=*/false, T>(std::forward<Args>(args)...);
@@ -171,12 +174,14 @@ namespace upcxx {
   }
 
   template<typename T>
+  UPCXX_NODISCARD
   global_ptr<T> new_array(std::size_t n) {
     UPCXX_ASSERT_INIT();
     return detail::new_array</*throws=*/true, T>(n);
   }
 
   template<typename T>
+  UPCXX_NODISCARD
   global_ptr<T> new_array(std::size_t n, const std::nothrow_t &tag) {
     UPCXX_ASSERT_INIT();
     return detail::new_array</*throws=*/false, T>(n);
