@@ -70,13 +70,20 @@ int main(void) {
                 assert(r_r.scratch_space[N-1] == 27);
             }, std::move(*r)).wait();
   #else
-    // This approach partially avoids the problem by using a view, which
+    // This approach avoids the problem by using a view, which
     // avoids unnecessary copies on the initiator.
-    // However it's still not great because the view's deserializing_iterator forces
-    // the large object to be instantiated and returned by value, which still leads
-    // to stack overflows on many platforms.
     upcxx::rpc(0, [] (upcxx::view<massive> r_view) {
-                static massive const & r_r = *r_view.begin();
+        #if UPCXX_SPEC_VERSION <= 20200300L
+              // Prior to 2020.3.8, this was still not great because the view's deserializing_iterator
+              // forced the large object to be instantiated and returned by value, which still leads
+              // to stack overflows on many platforms.
+              static massive const & r_r = *r_view.begin();
+        #else
+              // Starting in 2020.3.8, we can use deserializing_iterator::deserialize_into()
+              // thereby avoiding all object copies:
+              static massive r_r;
+              r_view.begin().deserialize_into(&r_r);
+        #endif
                 /*
                  * Validate that this is a deserialized instance 
                  * and that the entire object was not sent.
