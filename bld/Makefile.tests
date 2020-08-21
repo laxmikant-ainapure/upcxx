@@ -445,7 +445,7 @@ do-run-tests: force
 	     case "$$result" in                                         \
 	       skip) grep -e UPCXX_TEST_SKIPPED $$output ;;             \
 	       pass) grep -e "Test result:" -e SUCCESS $$output ;;      \
-	       fail) grep -e "Test result:" -e ERROR $$output ;;        \
+	       fail) grep -e "Test result:" -e ERROR -e 'Caught a signal ' $$output ;; \
 	     esac;                                                      \
 	   fi;                                                          \
 	 done;                                                          \
