@@ -20,6 +20,8 @@ General features/enhancements: (see specification and programmer's guide for ful
   future concatenation. The main consequence is `when_all()` can now replace
   most uses of `make_future` and `to_future` for constructing trivially ready futures,
   and continue to serve as the future combinator.
+* Static checking has been strengthened in a number of places, to help provide or improve
+  compile-time diagnostics for incorrect or otherwise problematic use cases.
 * Added many precondition sanity checks in debug mode, to help users find
   bugs in their code when compiling with `-codemode=debug` (aka, `upcxx -g`).
 * Shared heap exhaustion in `upcxx::new_(array)` now throws `upcxx::bad_shared_alloc` (a type
@@ -34,8 +36,8 @@ Improvements to RPC and Serialization:
 * `dist_object<T>::fetch()` no longer copies the remote object prior to serialization.
 * Added `deserializing_iterator<T>::deserialize_into` to avoid copying large
   objects when iterating over a `view` of non-TriviallySerializable elements.
-* Non-copyable (but movable) types can now be passed as lvalues to RPC and will
-  be serialized directly from the provided object
+* Objects passed as lvalues to RPC and will now be serialized directly from the provided 
+  object, reducing copy overhead and enabling passing of non-copyable (but movable) types.
 * Non-copyable (but movable) types can now be returned from RPC by reference
 
 Build system changes:
