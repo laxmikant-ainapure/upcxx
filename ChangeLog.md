@@ -84,6 +84,13 @@ Notable bug fixes:
 * [spec issue #158](https://bitbucket.org/berkeleylab/upcxx-spec/issues/158): prohibit reference types in `global_ptr` and `upcxx_memberof_general`
 * [spec issue #160](https://bitbucket.org/berkeleylab/upcxx-spec/issues/160): Deadlocks arising from synchronous collective calls with internal progress
 
+This library release mostly conforms to the
+[UPC++ v1.0 Specification, Revision 2020.8.1-draft](docs/spec.pdf).
+The following features from that specification are not yet implemented:
+
+* view buffer lifetime extension for `remote_cx::as_rpc` (issue #262)
+* `boost_serialization` adapter class is not yet implemented (issue #330)
+
 Breaking changes:
 
 * Configure-time envvar `CROSS` has been renamed to `UPCXX_CROSS`.
