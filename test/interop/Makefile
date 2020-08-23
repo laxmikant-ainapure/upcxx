@@ -5,16 +5,31 @@
 
 SHELL = /bin/bash
 
+# optional settings overridable from environment or command-line
 UPCXX_NETWORK ?= smp
-OPTLVL ?= -g
-
-UPC_FLAGS=
-UPCXX_FLAGS=
-
-UPCC  ?= upcc
-UPCXX ?= upcxx
-
 UPCXX_THREADMODE ?= seq
+
+OPTLVL ?= -g
+CFLAGS ?= 
+CXXFLAGS ?= 
+
+# ----------------------------------------------------------------
+ifeq ($(UPCXX_INSTALL)$(UPCXX),)
+  $(warning UPCXX_INSTALL environment variable is not set, assuming upcxx is in the PATH)
+  UPCXX = upcxx
+else
+  UPCXX ?= $(UPCXX_INSTALL)/bin/upcxx
+endif
+ifeq ($(UPC_INSTALL)$(UPCC),)
+  $(warning UPC_INSTALL environment variable is not set, assuming upcc is in the PATH)
+  UPCC = upcc
+else
+  UPCC ?= $(UPC_INSTALL)/bin/upcc
+endif
+
+UPC_FLAGS= $(CFLAGS)
+UPCXX_FLAGS= $(CXXFLAGS)
+
 ifeq ($(strip $(UPCXX_THREADMODE)),seq)
   UPC_THREAD_FLAGS = -nopthreads
 else
@@ -55,7 +70,7 @@ pth_%: force
 else
 .INTERMEDIATE: pth_*.upc
 pth_%.upc: %.upc
-	ln -s $^ $@
+	ln -sf $^ $@
 endif
 
 %_upc: %_upc.o $(TEST_OBJS)
