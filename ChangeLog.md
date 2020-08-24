@@ -36,7 +36,7 @@ Improvements to RPC and Serialization:
 * `dist_object<T>::fetch()` no longer copies the remote object prior to serialization.
 * Added `deserializing_iterator<T>::deserialize_into` to avoid copying large
   objects when iterating over a `view` of non-TriviallySerializable elements.
-* Objects passed as lvalues to RPC and will now be serialized directly from the provided 
+* Objects passed as lvalues to RPC will now be serialized directly from the provided 
   object, reducing copy overhead and enabling passing of non-copyable (but movable) types.
 * Non-copyable (but movable) types can now be returned from RPC by reference
 
