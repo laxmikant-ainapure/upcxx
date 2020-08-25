@@ -222,6 +222,202 @@ namespace upcxx {
       typename binding<Fn>::stripped_type,
       typename binding<B>::stripped_type...
     >;
+
+  /*////////////////////////////////////////////////////////////////////////////
+  deserialized_bound_function: The result of deserializing a bound_function.
+
+  A bound_function<Fn, B...> deserializes as a
+  deserialized_bound_function<Fn, B...> -- the type arguments match.
+
+  Differences between bound_function and deserialized_bound_function:
+  1) bound_function stores the arguments pre-serialization, while
+     deserialized_bound_function stores them post-serialization.
+  2) deserialized_bound_function can avoid moves by deserializing the
+     components directly into raw internal storage rather than reading
+     them into temporary storage and then moving them internally.
+  */////////////////////////////////////////////////////////////////////////////
+
+  namespace detail {
+    template<
+      typename Fn, typename BndTup/*std::tuple<B...>*/,
+
+      typename BndIxs = detail::make_index_sequence<std::tuple_size<BndTup>::value>,
+
+      // whether all of Fn and B... immediately available off-wire?
+      bool all_immediate = binding<Fn>::immediate
+                        && detail::binding_all_immediate<BndTup>::value
+      >
+    struct deserialized_bound_function_base;
+
+    template<typename Fn, typename ...B, int ...bi>
+    struct deserialized_bound_function_base<
+        Fn, std::tuple<B...>, detail::index_sequence<bi...>,
+        /*all_immediate=*/true
+      > {
+
+      template<typename T>
+      using on_wire_type = typename binding<T>::on_wire_type;
+      template<typename T>
+      using stored_type = deserialized_type_t<on_wire_type<T>>;
+
+      // raw storage for Fn and B...
+      detail::raw_storage<stored_type<Fn>> raw_fn_;
+      std::tuple<raw_storage<stored_type<B>>...> raw_b_;
+
+      // clean pointers to the constructed Fn and B...
+      stored_type<Fn> *fn_p_;
+      std::tuple<stored_type<B>*...> b_p_;
+
+      // deserialize the components directly into the internal raw
+      // storage, but also store poointers to the reconstituted
+      // components in fn_p_ and b_p_
+      template<typename Reader>
+      deserialized_bound_function_base(Reader &r) {
+        fn_p_ =
+          r.template read_into<on_wire_type<Fn>,
+                               /*AssertSerializable=*/false>(&raw_fn_);
+        int dummy[sizeof...(bi)] = {
+          ((std::get<bi>(b_p_) =
+            r.template read_into<on_wire_type<B>>(&std::get<bi>(raw_b_))),
+           0)...
+        };
+      }
+
+      deserialized_bound_function_base(const deserialized_bound_function_base&) = delete;
+
+      // because we use raw storage for the components, we have to
+      // manually do all the work in the move constructor and
+      // destructor
+      deserialized_bound_function_base(deserialized_bound_function_base &&other) {
+        fn_p_ = new(&raw_fn_) stored_type<Fn>(std::move(*other.fn_p_));
+        int dummy[sizeof...(bi)] = {
+          ((std::get<bi>(b_p_) =
+            new(&std::get<bi>(raw_b_)) stored_type<B>(
+              std::move(*std::get<bi>(other.b_p_))
+            )),
+           0)...
+        };
+      }
+
+      ~deserialized_bound_function_base() {
+        raw_fn_.destruct();
+        int dummy[sizeof...(bi)] = {
+          (std::get<bi>(raw_b_).destruct(), 0)...
+        };
+      }
+
+      typename std::result_of<
+          typename binding<Fn>::off_wire_type&&(
+            typename binding<B>::off_wire_type&&...
+          )
+        >::type
+      operator()() && {
+        return binding<Fn>::off_wire(std::move(*fn_p_)).operator()(
+            binding<B>::off_wire(std::move(*std::get<bi>(b_p_)))...
+          );
+      }
+
+      // TODO: operator()() &
+      // TODO: operator()() const&
+    };
+
+    template<typename Fn, typename ...B, int ...bi>
+    struct deserialized_bound_function_base<
+        Fn, std::tuple<B...>, detail::index_sequence<bi...>,
+        /*all_immediate=*/false
+      > {
+
+      template<typename T>
+      using on_wire_type = typename binding<T>::on_wire_type;
+      template<typename T>
+      using stored_type = deserialized_type_t<on_wire_type<T>>;
+
+      // see the comments in the prior specialization of
+      // deserialization_bound_function_base for how all this works
+      detail::raw_storage<stored_type<Fn>> raw_fn_;
+      std::tuple<raw_storage<stored_type<B>>...> raw_b_;
+
+      stored_type<Fn> *fn_p_;
+      std::tuple<stored_type<B>*...> b_p_;
+
+      template<typename Reader>
+      deserialized_bound_function_base(Reader &r) {
+        fn_p_ =
+          r.template read_into<on_wire_type<Fn>,
+                               /*AssertSerializable=*/false>(&raw_fn_);
+        int dummy[sizeof...(bi)] = {
+          ((std::get<bi>(b_p_) =
+            r.template read_into<on_wire_type<B>>(&std::get<bi>(raw_b_))),
+           0)...
+        };
+      }
+
+      deserialized_bound_function_base(const deserialized_bound_function_base&) = delete;
+
+      deserialized_bound_function_base(deserialized_bound_function_base &&other) {
+        fn_p_ = new(&raw_fn_) stored_type<Fn>(std::move(*other.fn_p_));
+        int dummy[sizeof...(bi)] = {
+          ((std::get<bi>(b_p_) =
+            new(&std::get<bi>(raw_b_)) stored_type<B>(
+              std::move(*std::get<bi>(other.b_p_))
+            )),
+           0)...
+        };
+      }
+
+      ~deserialized_bound_function_base() {
+        raw_fn_.destruct();
+        int dummy[sizeof...(bi)] = {
+          (std::get<bi>(raw_b_).destruct(), 0)...
+        };
+      }
+
+      auto operator()() &&
+        UPCXX_RETURN_DECLTYPE(
+          std::declval<future1<
+            detail::future_kind_when_all<
+              typename binding<Fn>::off_wire_future_type,
+              typename binding<B>::off_wire_future_type...
+            >,
+            typename binding<Fn>::off_wire_type,
+            typename binding<B>::off_wire_type...
+          >>()
+          .then_lazy(bound_function_applicator<
+              typename binding<Fn>::off_wire_type,
+              typename binding<B>::off_wire_type...
+            >()
+          )
+        ) {
+        return detail::when_all_fast(
+            binding<Fn>::off_wire_future(std::move(*fn_p_)),
+            binding<B>::off_wire_future(std::move(*std::get<bi>(b_p_)))...
+          ).then_lazy(bound_function_applicator<
+              typename binding<Fn>::off_wire_type,
+              typename binding<B>::off_wire_type...
+            >()
+          );
+      }
+      // TODO: operator()() &
+      // TODO: operator()() const&
+    };
+  }
+
+  template<typename Fn, typename ...B>
+  struct deserialized_bound_function:
+      detail::deserialized_bound_function_base<Fn, std::tuple<B...>> {
+
+    using base_type =
+      detail::deserialized_bound_function_base<Fn, std::tuple<B...>>;
+
+    template<typename Reader>
+    deserialized_bound_function(Reader &r) : base_type(r) {}
+    deserialized_bound_function(const deserialized_bound_function&) = delete;
+    deserialized_bound_function(deserialized_bound_function&&) = default;
+
+    // inherits operator()
+  };
+
+  /////////////////////////////////////////////////////////////////////////////
   
   // make `bound_function` serializable
   template<typename Fn, typename ...B>
@@ -246,10 +442,7 @@ namespace upcxx {
       w.template write<std::tuple<typename binding<B>::on_wire_type...>>(fn.b_);
     }
 
-    using deserialized_type = bound_function<
-        typename binding<Fn>::off_wire_type,
-        typename binding<B>::off_wire_type...
-      >;
+    using deserialized_type = deserialized_bound_function<Fn, B...>;
     
     static constexpr bool references_buffer = 
       serialization_traits<typename binding<Fn>::on_wire_type>::references_buffer ||
@@ -267,17 +460,8 @@ namespace upcxx {
 
     template<typename Reader>
     static deserialized_type* deserialize(Reader &r, void *spot) {
-      detail::raw_storage<deserialized_type_t<typename binding<Fn>::on_wire_type>> fn;
-      r.template read_into<typename binding<Fn>::on_wire_type, /*AssertSerializable=*/false>(&fn);
-
-      detail::raw_storage<deserialized_type_t<std::tuple<typename binding<B>::on_wire_type...>>> b;
-      //#warning "uncomment"
-      r.template read_into<std::tuple<typename binding<B>::on_wire_type...>>(&b);
-      
-      return ::new(spot) deserialized_type(
-        fn.value_and_destruct(),
-        b.value_and_destruct()
-      );
+      // deserialized_bound_function handles all its own deserialization
+      return new(spot) deserialized_type(r);
     }
   };
 }
