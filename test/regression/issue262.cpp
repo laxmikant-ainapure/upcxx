@@ -49,10 +49,10 @@ int main() {
   rput(1, dst,
        remote_cx::as_rpc(cx_fn, make_view(data, data+10), v, ptr) |
        remote_cx::as_rpc(cx_fn, make_view(data, data+10), v, ptr));
-  rput(1, dst,
+  (void)rput(1, dst,
        operation_cx::as_future() |
        remote_cx::as_rpc(cx_fn, make_view(data, data+10), v, ptr));
-  rput(1, dst,
+  (void)rput(1, dst,
        remote_cx::as_rpc(cx_fn, make_view(data, data+10), v, ptr) |
        operation_cx::as_future());
   while (done != 5) {
