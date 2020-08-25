@@ -16,7 +16,7 @@ struct A {
   operator int() const {
     return x;
   }
-  UPCXX_SERIALIZED_FIELDS(x);
+  UPCXX_SERIALIZED_FIELDS(x)
 };
 
 int main() {
