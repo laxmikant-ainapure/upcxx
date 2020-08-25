@@ -16,28 +16,64 @@ namespace detail {
   class command {
     using executor_wire_t = global_fnptr<void(Arg...)>;
     
-    template<void(*cleanup)(Arg...)>
+    template<typename Fn, bool fn_on_heap, void(*cleanup)(Arg...)>
     struct after_execute {
+      Fn *fn; // to be cleaned up
       std::tuple<Arg...> a;
       template<typename ...T>
       void operator()(T&&...) {
+        fn->~Fn();
+        if (fn_on_heap) {
+          ::operator delete(fn);
+        }
         detail::apply_tupled(cleanup, std::move(a));
       }
     };
-    
+
+#ifndef UPCXX_RPC_STACK_MAX_FN_SIZE
+#define UPCXX_RPC_STACK_MAX_FN_SIZE 2048
+#endif
+
     template<typename Fn, detail::serialization_reader(*reader)(Arg...), void(*cleanup)(Arg...)>
     static void the_executor(Arg ...a) {
       detail::serialization_reader r = reader(a...);
       
       r.template read_trivial<executor_wire_t>();
-      
-      detail::raw_storage<typename serialization_traits<Fn>::deserialized_type> fn;
-      serialization_traits<Fn>::deserialize(r, &fn);
 
-      upcxx::apply_as_future(std::move(fn.value()))
-        .then(after_execute<cleanup>{std::tuple<Arg...>(a...)});
+      using FnDez = typename serialization_traits<Fn>::deserialized_type;
 
-      fn.destruct();
+      // FnDez is stored on the stack if it is less than the size
+      // limit and does not return a non-ready future.
+      // - If FnDez is too big, store it on the heap to avoid smashing
+      //   the stack.
+      // - If FnDez returns a non-ready future, we need to extend its
+      //   lifetime (along with its bound arguments) until the future
+      //   is ready. So we store it on the heap and destroy it after
+      //   the future is ready.
+      constexpr bool is_trivial =
+        future_is_trivially_ready<
+          typename detail::apply_variadic_as_future<FnDez&&>::return_type
+        >::value;
+      constexpr bool is_small =
+        sizeof(FnDez) <= UPCXX_RPC_STACK_MAX_FN_SIZE;
+      constexpr bool on_stack = is_trivial && is_small;
+      using local_storage_t =
+        typename std::conditional<on_stack,
+                                  detail::raw_storage<FnDez>,
+                                  int>::type;
+
+      local_storage_t storage;
+      void *spot = on_stack ? (void*)&storage : ::operator new(sizeof(FnDez));
+      FnDez *fn = serialization_traits<Fn>::deserialize(r, spot);
+
+      // after_execute<...>() will cleanup fn. This will happen
+      // immediately after fn is invoked if fn returns a non-future or
+      // ready future, otherwise it is deferred until after the future
+      // returned by fn is ready.
+      upcxx::apply_as_future(std::move(*fn))
+        .then(after_execute<FnDez, !on_stack, cleanup>{
+          fn, std::tuple<Arg...>(a...)
+        });
     }
 
   public:
