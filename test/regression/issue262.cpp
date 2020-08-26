@@ -44,18 +44,32 @@ int main() {
           ++done;
         });
     };
+  auto void_fn = [](){};
+  auto non_fut_fn = []() { return 1; };
   rput(1, dst,
        remote_cx::as_rpc(cx_fn, make_view(data, data+10), v, ptr));
   rput(1, dst,
        remote_cx::as_rpc(cx_fn, make_view(data, data+10), v, ptr) |
        remote_cx::as_rpc(cx_fn, make_view(data, data+10), v, ptr));
+  rput(1, dst,
+       remote_cx::as_rpc(void_fn) |
+       remote_cx::as_rpc(cx_fn, make_view(data, data+10), v, ptr));
+  rput(1, dst,
+       remote_cx::as_rpc(cx_fn, make_view(data, data+10), v, ptr) |
+       remote_cx::as_rpc(void_fn));
+  rput(1, dst,
+       remote_cx::as_rpc(non_fut_fn) |
+       remote_cx::as_rpc(cx_fn, make_view(data, data+10), v, ptr));
+  rput(1, dst,
+       remote_cx::as_rpc(cx_fn, make_view(data, data+10), v, ptr) |
+       remote_cx::as_rpc(non_fut_fn));
   (void)rput(1, dst,
        operation_cx::as_future() |
        remote_cx::as_rpc(cx_fn, make_view(data, data+10), v, ptr));
   (void)rput(1, dst,
        remote_cx::as_rpc(cx_fn, make_view(data, data+10), v, ptr) |
        operation_cx::as_future());
-  while (done != 5) {
+  while (done != 9) {
     progress();
   }
   barrier();
