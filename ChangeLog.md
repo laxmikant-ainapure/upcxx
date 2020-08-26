@@ -83,6 +83,7 @@ Notable bug fixes:
 * [spec issue #104](https://bitbucket.org/berkeleylab/upcxx-spec/issues/104): Provide a universal variadic factory for future
 * [spec issue #158](https://bitbucket.org/berkeleylab/upcxx-spec/issues/158): prohibit reference types in `global_ptr` and `upcxx_memberof_general`
 * [spec issue #160](https://bitbucket.org/berkeleylab/upcxx-spec/issues/160): Deadlocks arising from synchronous collective calls with internal progress
+* [spec issue #167](https://bitbucket.org/berkeleylab/upcxx-spec/issues/167): `dist_object<T>::fetch` does not correctly handle `T` with asymmetric serialization
 
 This library release mostly conforms to the
 [UPC++ v1.0 Specification, Revision 2020.8.1-draft](docs/spec.pdf).
