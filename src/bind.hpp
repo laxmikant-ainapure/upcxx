@@ -264,21 +264,13 @@ namespace upcxx {
       detail::raw_storage<stored_type<Fn>> raw_fn_;
       std::tuple<raw_storage<stored_type<B>>...> raw_b_;
 
-      // clean pointers to the constructed Fn and B...
-      stored_type<Fn> *fn_p_;
-      std::tuple<stored_type<B>*...> b_p_;
-
-      // deserialize the components directly into the internal raw
-      // storage, but also store poointers to the reconstituted
-      // components in fn_p_ and b_p_
+      // deserialize the components directly into the internal raw storage
       template<typename Reader>
       deserialized_bound_function_base(Reader &r) {
-        fn_p_ =
-          r.template read_into<on_wire_type<Fn>,
-                               /*AssertSerializable=*/false>(&raw_fn_);
+        r.template read_into<on_wire_type<Fn>,
+                             /*AssertSerializable=*/false>(raw_fn_.raw());
         int dummy[sizeof...(bi)] = {
-          ((std::get<bi>(b_p_) =
-            r.template read_into<on_wire_type<B>>(&std::get<bi>(raw_b_))),
+          (r.template read_into<on_wire_type<B>>(std::get<bi>(raw_b_).raw()),
            0)...
         };
       }
@@ -286,16 +278,13 @@ namespace upcxx {
       deserialized_bound_function_base(const deserialized_bound_function_base&) = delete;
 
       // because we use raw storage for the components, we have to
-      // manually do all the work in the move constructor and
-      // destructor
+      // manually do all the work in the move constructor and destructor
       deserialized_bound_function_base(deserialized_bound_function_base &&other) {
-        fn_p_ = new(&raw_fn_) stored_type<Fn>(std::move(*other.fn_p_));
+        new(raw_fn_.raw()) stored_type<Fn>(std::move(other.raw_fn_.value()));
         int dummy[sizeof...(bi)] = {
-          ((std::get<bi>(b_p_) =
-            new(&std::get<bi>(raw_b_)) stored_type<B>(
-              std::move(*std::get<bi>(other.b_p_))
-            )),
-           0)...
+          (new(std::get<bi>(raw_b_).raw()) stored_type<B>(
+             std::move(std::get<bi>(other.raw_b_).value())
+           ), 0)...
         };
       }
 
@@ -312,8 +301,8 @@ namespace upcxx {
           )
         >::type
       operator()() && {
-        return binding<Fn>::off_wire(std::move(*fn_p_)).operator()(
-            binding<B>::off_wire(std::move(*std::get<bi>(b_p_)))...
+        return binding<Fn>::off_wire(std::move(raw_fn_.value())).operator()(
+            binding<B>::off_wire(std::move(std::get<bi>(raw_b_).value()))...
           );
       }
 
@@ -337,17 +326,12 @@ namespace upcxx {
       detail::raw_storage<stored_type<Fn>> raw_fn_;
       std::tuple<raw_storage<stored_type<B>>...> raw_b_;
 
-      stored_type<Fn> *fn_p_;
-      std::tuple<stored_type<B>*...> b_p_;
-
       template<typename Reader>
       deserialized_bound_function_base(Reader &r) {
-        fn_p_ =
-          r.template read_into<on_wire_type<Fn>,
-                               /*AssertSerializable=*/false>(&raw_fn_);
+        r.template read_into<on_wire_type<Fn>,
+                             /*AssertSerializable=*/false>(raw_fn_.raw());
         int dummy[sizeof...(bi)] = {
-          ((std::get<bi>(b_p_) =
-            r.template read_into<on_wire_type<B>>(&std::get<bi>(raw_b_))),
+          (r.template read_into<on_wire_type<B>>(std::get<bi>(raw_b_).raw()),
            0)...
         };
       }
@@ -355,13 +339,11 @@ namespace upcxx {
       deserialized_bound_function_base(const deserialized_bound_function_base&) = delete;
 
       deserialized_bound_function_base(deserialized_bound_function_base &&other) {
-        fn_p_ = new(&raw_fn_) stored_type<Fn>(std::move(*other.fn_p_));
+        new(raw_fn_.raw()) stored_type<Fn>(std::move(other.raw_fn_.value()));
         int dummy[sizeof...(bi)] = {
-          ((std::get<bi>(b_p_) =
-            new(&std::get<bi>(raw_b_)) stored_type<B>(
-              std::move(*std::get<bi>(other.b_p_))
-            )),
-           0)...
+          (new(std::get<bi>(raw_b_).raw()) stored_type<B>(
+             std::move(std::get<bi>(other.raw_b_).value())
+           ), 0)...
         };
       }
 
@@ -389,8 +371,8 @@ namespace upcxx {
           )
         ) {
         return detail::when_all_fast(
-            binding<Fn>::off_wire_future(std::move(*fn_p_)),
-            binding<B>::off_wire_future(std::move(*std::get<bi>(b_p_)))...
+            binding<Fn>::off_wire_future(std::move(raw_fn_.value())),
+            binding<B>::off_wire_future(std::move(std::get<bi>(raw_b_).value()))...
           ).then_lazy(bound_function_applicator<
               typename binding<Fn>::off_wire_type,
               typename binding<B>::off_wire_type...
