@@ -163,8 +163,12 @@ namespace upcxx {
     dist_id<T> id() const { return dist_id<T>{id_}; }
     
     UPCXX_NODISCARD
-    future<T> fetch(intrank_t rank) const {
+    future<deserialized_type_t<T>> fetch(intrank_t rank) const {
       UPCXX_ASSERT_INIT();
+      static_assert(
+        is_serializable<T>::value,
+        "T must be Serializable for dist_object<T>::fetch."
+      );
       return upcxx::rpc(*tm_, rank,
                         [](dist_object<T> const &o) -> const T& {
                           return *o;
