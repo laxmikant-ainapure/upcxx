@@ -744,6 +744,16 @@ namespace upcxx {
           std::declval<typename std::conditional<do_move, V&&, V const&>::type>()...
         )
       );
+      // converted return type (used for making PGI happy)
+      template<typename Event, typename CS, bool do_move,
+               typename ...V>
+      using converted_rettype = typename std::conditional<
+        detail::is_future1<
+          typename std::decay<rettype<Event, CS, do_move, V...>>::type
+        >::value,
+        rettype<Event, CS, do_move, V...>,
+        cx_non_future_return
+      >::type;
 
       // fire off a completions_state, preserving the future return
       template<typename Event, typename CSOut, bool do_move,
@@ -800,8 +810,8 @@ namespace upcxx {
       auto operator()(V &&...vals)
         UPCXX_RETURN_DECLTYPE(
           cx_result_combine(
-            fire<Event, head_t, tail_t::empty>(*this, static_cast<V&&>(vals)...),
-            fire<Event, tail_t, false>(*this, static_cast<V&&>(vals)...)
+            std::declval<converted_rettype<Event, head_t, tail_t::empty, V...>>(),
+            std::declval<converted_rettype<Event, tail_t, false, V...>>()
           )
         ) {
         return cx_result_combine(
@@ -820,10 +830,8 @@ namespace upcxx {
         auto operator()(dtype &&me, V &&...vals)
           UPCXX_RETURN_DECLTYPE(
             cx_result_combine(
-              fire<Event, typename dtype::head_t, true>(std::forward<dtype>(me),
-                                                        std::forward<V>(vals)...),
-              fire<Event, typename dtype::tail_t, true>(std::forward<dtype>(me),
-                                                        std::forward<V>(vals)...)
+              std::declval<converted_rettype<Event, typename dtype::head_t, true, V...>>(),
+              std::declval<converted_rettype<Event, typename dtype::tail_t, true, V...>>()
             )
           ) {
           return cx_result_combine(
