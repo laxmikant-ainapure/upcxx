@@ -38,7 +38,7 @@ int main() {
   print_test_header();
 
   upcxx::rpc(0,[](B const &a) {
-                 assert(a.x == 10); 
+                 assert(a.x == 10);
                }, A{10}).wait();
 
   print_test_success();

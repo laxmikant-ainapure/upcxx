@@ -87,10 +87,14 @@ namespace upcxx {
   struct binding<R(&)(A...)>: binding_trivial<R(&)(A...)> {};
   
   /*////////////////////////////////////////////////////////////////////////////
-  bound_function: Packable callable wrapping an internal callable and _all_
+  bound_function: Packable type wrapping an internal callable and _all_
   bound arguments expected by callable (partial binds of just leading arugments
   is no longer supported). The "on-wire" type of each thing is stored in this
-  object. Calling the object invokes "off-wire" translation to produce futures,
+  object.
+
+  A bound_function is not intended to be invoked. It is for sending over the
+  wire, and it comes out as a deserialized_bound_function, which can then be
+  invoked. Calling the object invokes "off-wire" translation to produce futures,
   and when those are all ready, then the callable is applied to the bound
   arguments. A future of the internal callable's return value is returned. If
   all of the callable and the bound arguments are trivially-binding, then the
@@ -98,7 +102,7 @@ namespace upcxx {
   just like invoking its internal callable against leading bound arguments, no
   future returned by this level.
 
-  Currently, bound_function only supports being called as an rvalue (only
+  Currently, deserialized_bound_function only supports being called as an rvalue (only
   `operator()() &&` is defined). Semantically, this makes it a one-shot deal,
   thus allowing it to move the inner callable and arguments into the call
   operation for max performance. This is all our use-cases need, since rpc's
@@ -106,6 +110,17 @@ namespace upcxx {
   user to expecxt anything else. The other call types ought to be supported,
   but I've deferred that as it seemed to be breaking compilation with overload
   resolution issues.
+
+  A bound_function<Fn, B...> deserializes as a
+  deserialized_bound_function<Fn, B...> -- the type arguments match.
+
+  Differences between bound_function and deserialized_bound_function:
+  1) bound_function stores the arguments pre-serialization, while
+     deserialized_bound_function stores them post-deserialization.
+  2) deserialized_bound_function can avoid moves by deserializing the
+     components directly into raw internal storage rather than reading
+     them into temporary storage and then moving them internally.
+  3) deserialized_bound_function is invokable, but bound_function is not.
   */////////////////////////////////////////////////////////////////////////////
   
   namespace detail {
@@ -127,134 +142,14 @@ namespace upcxx {
       bool all_immediate = binding<Fn>::immediate
                         && detail::binding_all_immediate<BndTup>::value
       >
-    struct bound_function_base;
-    
-    template<typename Fn, typename ...B, int ...bi>
-    struct bound_function_base<
-        Fn, std::tuple<B...>, detail::index_sequence<bi...>,
-        /*all_immediate=*/true
-      > {
-      
-      typename binding<Fn>::on_wire_type fn_;
-      std::tuple<typename binding<B>::on_wire_type...> b_;
-      
-      typename std::result_of<
-          typename binding<Fn>::off_wire_type&&(
-            typename binding<B>::off_wire_type&&...
-          )
-        >::type
-      operator()() && {
-        return binding<Fn>::off_wire(std::move(fn_)).operator()(
-            binding<B>::off_wire(std::get<bi>(std::move(b_)))...
-          );
-      }
-      
-      // TODO: operator()() &
-      // TODO: operator()() const&
-    };
-    
-    template<typename Fn_off_wire, typename ...B_off_wire>
-    struct bound_function_applicator {
-      template<typename Fn1, typename ...B1>
-      typename std::result_of<Fn_off_wire(B_off_wire...)>::type
-      operator()(Fn1 &&fn, B1 &&...b) const {
-        return static_cast<Fn1&&>(fn)(static_cast<B1&&>(b)...);
-      }
-    };
-    
-    template<typename Fn, typename ...B, int ...bi>
-    struct bound_function_base<
-        Fn, std::tuple<B...>, detail::index_sequence<bi...>,
-        /*all_immediate=*/false
-      > {
-      
-      typename binding<Fn>::on_wire_type fn_;
-      std::tuple<typename binding<B>::on_wire_type...> b_;
-      
-      auto operator()() &&
-        UPCXX_RETURN_DECLTYPE(
-          std::declval<future1<
-            detail::future_kind_when_all<
-              typename binding<Fn>::off_wire_future_type,
-              typename binding<B>::off_wire_future_type...
-            >,
-            typename binding<Fn>::off_wire_type,
-            typename binding<B>::off_wire_type...
-          >>()
-          .then_lazy(bound_function_applicator<
-              typename binding<Fn>::off_wire_type,
-              typename binding<B>::off_wire_type...
-            >()
-          )
-        ) {
-        return detail::when_all_fast(
-            binding<Fn>::off_wire_future(std::move(fn_)),
-            binding<B>::off_wire_future(std::get<bi>(std::move(b_)))...
-          ).then_lazy(bound_function_applicator<
-              typename binding<Fn>::off_wire_type,
-              typename binding<B>::off_wire_type...
-            >()
-          );
-      }
-      // TODO: operator()() &
-      // TODO: operator()() const&
-    };
-  }
-  
-  template<typename Fn, typename ...B>
-  struct bound_function:
-      detail::bound_function_base<Fn, std::tuple<B...>> {
-    
-    using base_type = detail::bound_function_base<Fn, std::tuple<B...>>;
-    
-    bound_function(
-        typename binding<Fn>::on_wire_type &&fn,
-        std::tuple<typename binding<B>::on_wire_type...> &&b
-      ):
-      base_type{std::move(fn), std::move(b)} {
-    }
-
-    // inherits operator()
-  };
-
-  template<typename Fn, typename ...B>
-  using bound_function_of = bound_function<
-      typename binding<Fn>::stripped_type,
-      typename binding<B>::stripped_type...
-    >;
-
-  /*////////////////////////////////////////////////////////////////////////////
-  deserialized_bound_function: The result of deserializing a bound_function.
-
-  A bound_function<Fn, B...> deserializes as a
-  deserialized_bound_function<Fn, B...> -- the type arguments match.
-
-  Differences between bound_function and deserialized_bound_function:
-  1) bound_function stores the arguments pre-serialization, while
-     deserialized_bound_function stores them post-serialization.
-  2) deserialized_bound_function can avoid moves by deserializing the
-     components directly into raw internal storage rather than reading
-     them into temporary storage and then moving them internally.
-  */////////////////////////////////////////////////////////////////////////////
-
-  namespace detail {
-    template<
-      typename Fn, typename BndTup/*std::tuple<B...>*/,
-
-      typename BndIxs = detail::make_index_sequence<std::tuple_size<BndTup>::value>,
-
-      // whether all of Fn and B... immediately available off-wire?
-      bool all_immediate = binding<Fn>::immediate
-                        && detail::binding_all_immediate<BndTup>::value
-      >
     struct deserialized_bound_function_base;
-
+    
     template<typename Fn, typename ...B, int ...bi>
     struct deserialized_bound_function_base<
         Fn, std::tuple<B...>, detail::index_sequence<bi...>,
         /*all_immediate=*/true
       > {
-
+      
       template<typename T>
       using on_wire_type = typename binding<T>::on_wire_type;
       template<typename T>
@@ -305,17 +200,26 @@ namespace upcxx {
             binding<B>::off_wire(std::move(std::get<bi>(raw_b_).value()))...
           );
       }
-
+      
       // TODO: operator()() &
       // TODO: operator()() const&
     };
-
+    
+    template<typename Fn_off_wire, typename ...B_off_wire>
+    struct bound_function_applicator {
+      template<typename Fn1, typename ...B1>
+      typename std::result_of<Fn_off_wire(B_off_wire...)>::type
+      operator()(Fn1 &&fn, B1 &&...b) const {
+        return static_cast<Fn1&&>(fn)(static_cast<B1&&>(b)...);
+      }
+    };
+    
     template<typename Fn, typename ...B, int ...bi>
     struct deserialized_bound_function_base<
         Fn, std::tuple<B...>, detail::index_sequence<bi...>,
         /*all_immediate=*/false
       > {
-
+      
       template<typename T>
       using on_wire_type = typename binding<T>::on_wire_type;
       template<typename T>
@@ -382,24 +286,41 @@ namespace upcxx {
       // TODO: operator()() &
       // TODO: operator()() const&
     };
+
+    template<typename Fn, typename ...B>
+    struct deserialized_bound_function:
+        detail::deserialized_bound_function_base<Fn, std::tuple<B...>> {
+
+      using base_type =
+        detail::deserialized_bound_function_base<Fn, std::tuple<B...>>;
+
+      template<typename Reader>
+      deserialized_bound_function(Reader &r) : base_type(r) {}
+      deserialized_bound_function(const deserialized_bound_function&) = delete;
+      deserialized_bound_function(deserialized_bound_function&&) = default;
+
+      // inherits operator()
+    };
   }
-
+  
   template<typename Fn, typename ...B>
-  struct deserialized_bound_function:
-      detail::deserialized_bound_function_base<Fn, std::tuple<B...>> {
+  struct bound_function {
+    typename binding<Fn>::on_wire_type fn_;
+    std::tuple<typename binding<B>::on_wire_type...> b_;
 
-    using base_type =
-      detail::deserialized_bound_function_base<Fn, std::tuple<B...>>;
-
-    template<typename Reader>
-    deserialized_bound_function(Reader &r) : base_type(r) {}
-    deserialized_bound_function(const deserialized_bound_function&) = delete;
-    deserialized_bound_function(deserialized_bound_function&&) = default;
-
-    // inherits operator()
+    // This declaration is here for reasoning about the invocation
+    // post-deserialization. It is not intended to actually be called.
+    decltype(
+      std::declval<detail::deserialized_bound_function<Fn, B...>&&>()()
+    )
+    operator()() &&;
   };
 
-  /////////////////////////////////////////////////////////////////////////////
+  template<typename Fn, typename ...B>
+  using bound_function_of = bound_function<
+      typename binding<Fn>::stripped_type,
+      typename binding<B>::stripped_type...
+    >;
   
   // make `bound_function` serializable
   template<typename Fn, typename ...B>
@@ -438,7 +359,7 @@ namespace upcxx {
       };
     }
 
-    using deserialized_type = deserialized_bound_function<Fn, B...>;
+    using deserialized_type = detail::deserialized_bound_function<Fn, B...>;
     
     static constexpr bool references_buffer = 
       serialization_traits<typename binding<Fn>::on_wire_type>::references_buffer ||
