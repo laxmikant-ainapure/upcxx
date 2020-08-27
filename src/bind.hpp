@@ -421,7 +421,21 @@ namespace upcxx {
     template<typename Writer>
     static void serialize(Writer &w, const bound_function<Fn,B...> &fn) {
       w.template write<typename binding<Fn>::on_wire_type, /*AssertSerializable=*/false>(fn.fn_);
-      w.template write<std::tuple<typename binding<B>::on_wire_type...>>(fn.b_);
+      serialize_args(w, fn, detail::make_index_sequence<sizeof...(B)>());
+    }
+
+    template<typename Writer, int ...bi>
+    static void serialize_args(Writer &w, const bound_function<Fn,B...> &fn,
+                               detail::index_sequence<bi...>) {
+      // Since we deserialize each argument individually, we have to
+      // serialize them individually as well. Otherwise, behavior
+      // would depend on the representation of a std::tuple in the
+      // TriviallySerializable case.
+      int dummy[sizeof...(B)] = {
+        (w.template write<typename binding<B>::on_wire_type>(
+           std::get<bi>(fn.b_)
+         ), 0)...
+      };
     }
 
     using deserialized_type = deserialized_bound_function<Fn, B...>;
