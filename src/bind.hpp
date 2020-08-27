@@ -164,7 +164,7 @@ namespace upcxx {
       deserialized_bound_function_base(Reader &r) {
         r.template read_into<on_wire_type<Fn>,
                              /*AssertSerializable=*/false>(raw_fn_.raw());
-        int dummy[sizeof...(bi)] = {
+        (void)std::initializer_list<int>{
           (r.template read_into<on_wire_type<B>,
                                 /*AssertSerializable=*/false>(std::get<bi>(raw_b_).raw()),
            0)...
@@ -177,7 +177,7 @@ namespace upcxx {
       // manually do all the work in the move constructor and destructor
       deserialized_bound_function_base(deserialized_bound_function_base &&other) {
         new(raw_fn_.raw()) stored_type<Fn>(std::move(other.raw_fn_.value()));
-        int dummy[sizeof...(bi)] = {
+        (void)std::initializer_list<int>{
           (new(std::get<bi>(raw_b_).raw()) stored_type<B>(
              std::move(std::get<bi>(other.raw_b_).value())
            ), 0)...
@@ -186,7 +186,7 @@ namespace upcxx {
 
       ~deserialized_bound_function_base() {
         raw_fn_.destruct();
-        int dummy[sizeof...(bi)] = {
+        (void)std::initializer_list<int>{
           (std::get<bi>(raw_b_).destruct(), 0)...
         };
       }
@@ -235,7 +235,7 @@ namespace upcxx {
       deserialized_bound_function_base(Reader &r) {
         r.template read_into<on_wire_type<Fn>,
                              /*AssertSerializable=*/false>(raw_fn_.raw());
-        int dummy[sizeof...(bi)] = {
+        (void)std::initializer_list<int>{
           (r.template read_into<on_wire_type<B>,
                                 /*AssertSerializable=*/false>(std::get<bi>(raw_b_).raw()),
            0)...
@@ -246,7 +246,7 @@ namespace upcxx {
 
       deserialized_bound_function_base(deserialized_bound_function_base &&other) {
         new(raw_fn_.raw()) stored_type<Fn>(std::move(other.raw_fn_.value()));
-        int dummy[sizeof...(bi)] = {
+        (void)std::initializer_list<int>{
           (new(std::get<bi>(raw_b_).raw()) stored_type<B>(
              std::move(std::get<bi>(other.raw_b_).value())
            ), 0)...
@@ -255,7 +255,7 @@ namespace upcxx {
 
       ~deserialized_bound_function_base() {
         raw_fn_.destruct();
-        int dummy[sizeof...(bi)] = {
+        (void)std::initializer_list<int>{
           (std::get<bi>(raw_b_).destruct(), 0)...
         };
       }
@@ -352,7 +352,7 @@ namespace upcxx {
       // serialize them individually as well. Otherwise, behavior
       // would depend on the representation of a std::tuple in the
       // TriviallySerializable case.
-      int dummy[sizeof...(B)] = {
+      (void)std::initializer_list<int>{
         (w.template write<typename binding<B>::on_wire_type,
                           /*AssertSerializable=*/false>(
            std::get<bi>(fn.b_)
