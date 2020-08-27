@@ -46,10 +46,6 @@ The current release is known to work on the following configurations:
     Note that gcc- and clang-based toolchains from Arm Ltd. exist, but have
     not been tested with UPC++.
 
-    Support for InfiniBand on Linux/aarch64 should be considered experimental.
-    For more information, please see
-    [GASNet bug 3997](https://gasnet-bugs.lbl.gov/bugzilla/show_bug.cgi?id=3997).
-
 * Cray XC/x86\_64 with one of the following PrgEnv environment modules and
   its dependencies (smp and aries conduits):
     - PrgEnv-gnu with gcc/6.4.0 (or later) loaded.
