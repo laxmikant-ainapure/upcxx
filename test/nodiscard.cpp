@@ -3,6 +3,11 @@
 
 using namespace upcxx;
 
+#include <gasnet_portable_platform.h>
+#if (PLATFORM_COMPILER_PGI && PLATFORM_COMPILER_VERSION_LT(19,4,0)) && !defined(UPCXX_CODEMODE)
+  #error UPCXX_TEST_SKIPPED - Older PGI compilers prior to 19.4 are known to ICE in debug mode
+#endif
+
 bool false_val() { static volatile bool fval = false; return fval; }
 
 int main() {
