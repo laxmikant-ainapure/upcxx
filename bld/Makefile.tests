@@ -113,7 +113,8 @@ do-build-%: force
 	 exe="$(TEST_EXE_PATTERN)";                      \
 	 if ! [[ "$$exe" =~ $(call TEST_PATTERN,$(TESTS)) ]] || \
 	      [[ "$$exe" =~ $(call TEST_PATTERN,$(NO_TESTS)) ]] ; then \
-	     echo Skipping filtered $$exe ; exit 0 ; \
+	     [[ '$(UPCXX_VERBOSE)' == 1 ]] && echo Skipping filtered $$exe ; \
+	     exit 0 ; \
          fi ; \
 	 flags=TEST_FLAGS_$$(basename $$src .cpp | tr '[a-z]-' '[A-Z]_'); \
 	 output=$(TEST_OUTPUT)/$${exe}-compile.out ;     \
@@ -404,7 +405,8 @@ do-run-tests: force
 	   [[ -x $$test ]] || continue;                                 \
 	   if ! [[ "$$test" =~ $(call TEST_PATTERN,$(TESTS)) ]] || \
 	        [[ "$$test" =~ $(call TEST_PATTERN,$(NO_TESTS) $(test_exclude_compile_only)) ]] ; then \
-	      echo Skipping filtered $$test ; : $$((++skipped)); continue; \
+	      [[ '$(UPCXX_VERBOSE)' == 1 ]] && echo Skipping filtered $$test ; \
+	      : $$((++skipped)); continue;                              \
            fi ; \
 	   echo "Running $$test"; : $$((++total));                      \
 	   if [[ -n '$(UPCXX_BINDIR)' ]]; then                          \
