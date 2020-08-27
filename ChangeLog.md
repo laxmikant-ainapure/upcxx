@@ -51,6 +51,7 @@ Notable bug fixes:
 
 * issue #151: Validate requested completions against the events supported by an
   operation
+* issue #262: Implement view buffer lifetime extension for `remote_cx::as_rpc`
 * issue #288: (partial fix) future-producing calls like `upcxx::make_future` now
   return the exact type `future<T>`. Sole remaining exception is `when_all`.
 * issue #313: implement `future::{result,wait}_reference`
@@ -89,7 +90,6 @@ This library release mostly conforms to the
 [UPC++ v1.0 Specification, Revision 2020.8.1-draft](docs/spec.pdf).
 The following features from that specification are not yet implemented:
 
-* view buffer lifetime extension for `remote_cx::as_rpc` (issue #262)
 * `boost_serialization` adapter class is not yet implemented (issue #330)
 
 Breaking changes:

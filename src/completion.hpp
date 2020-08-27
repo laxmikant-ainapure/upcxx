@@ -332,7 +332,45 @@ namespace upcxx {
   
   struct remote_cx:
     detail::support_as_rpc<remote_cx_event> {};
-  
+
+  //////////////////////////////////////////////////////////////////////
+  // cx_non_future_return and cx_result_combine: Collect results of
+  // as_rpc invocations. The purpose is to ensure that returned
+  // futures are propagated all the way out to the top-level binding,
+  // so that view-buffer and input-argument lifetime extension can be
+  // applied.
+
+  namespace detail {
+    struct cx_non_future_return {};
+
+    // collect futures
+    template<typename T1, typename T2>
+    cx_non_future_return cx_result_combine(T1 &&v1, T2 &&v2) {
+      return cx_non_future_return{};
+    }
+    template<typename T1, typename Kind2, typename ...T2>
+    future1<Kind2, T2...> cx_result_combine(T1 &&v1,
+                                            future1<Kind2, T2...> &&v2) {
+      return std::forward<future1<Kind2, T2...>>(v2);
+    }
+    template<typename Kind1, typename ...T1, typename T2>
+    future1<Kind1, T1...> cx_result_combine(future1<Kind1, T1...> &&v1,
+                                            T2 &&v2) {
+      return std::forward<future1<Kind1, T1...>>(v1);
+    }
+    template<typename Kind1, typename ...T1, typename Kind2, typename ...T2>
+    auto cx_result_combine(future1<Kind1, T1...> &&v1,
+                           future1<Kind2, T2...> &&v2)
+      UPCXX_RETURN_DECLTYPE(
+        detail::when_all_fast(std::forward<future1<Kind1, T1...>>(v1),
+                              std::forward<future1<Kind2, T2...>>(v2))
+      ) {
+      return detail::when_all_fast(std::forward<future1<Kind1, T1...>>(v1),
+                                   std::forward<future1<Kind2, T2...>>(v2));
+    }
+  }
+
+
   //////////////////////////////////////////////////////////////////////
   // cx_state: Per action state that survives until the event
   // is triggered. For future_cx's this holds a promise instance which
@@ -605,9 +643,12 @@ namespace upcxx {
       }
       
       template<typename ...V>
-      void operator_case(std::integral_constant<bool,true>, V &&...vals) {
+      auto operator_case(std::integral_constant<bool,true>, V &&...vals)
+        UPCXX_RETURN_DECLTYPE(
+          state_.operator()(std::forward<V>(vals)...)
+        ) {
         // Event matches CxH::event_t
-        state_.operator()(std::forward<V>(vals)...);
+        return state_.operator()(std::forward<V>(vals)...);
       }
       template<typename ...V>
       void operator_case(std::integral_constant<bool,false>, V &&...vals) {
@@ -616,8 +657,17 @@ namespace upcxx {
 
       // fire state if Event == CxH::event_t
       template<typename Event, typename ...V>
-      void operator()(V &&...vals) {
-        this->operator_case(
+      auto operator()(V &&...vals)
+        UPCXX_RETURN_DECLTYPE(
+          this->operator_case(
+            std::integral_constant<
+              bool,
+              std::is_same<Event, typename Cx::event_t>::value
+            >{},
+            std::forward<V>(vals)...
+          )
+        ) {
+        return this->operator_case(
           std::integral_constant<
             bool,
             std::is_same<Event, typename Cx::event_t>::value
@@ -685,31 +735,113 @@ namespace upcxx {
       
       tail_t& tail() { return static_cast<tail_t&>(*this); }
       tail_t const& tail() const { return *this; }
-      
-      template<typename Event, typename ...V>
-      void operator()(V &&...vals) {
-        // fire the head element
-        head_t::template operator()<Event>(
+
+      // return type of firing off the given completions_state
+      template<typename Event, typename CS, bool do_move,
+               typename ...V>
+      using rettype = decltype(
+        std::declval<CS&>().template operator()<Event>(
+          std::declval<typename std::conditional<do_move, V&&, V const&>::type>()...
+        )
+      );
+      // converted return type (used for making PGI happy)
+      template<typename Event, typename CS, bool do_move,
+               typename ...V>
+      using converted_rettype = typename std::conditional<
+        detail::is_future1<
+          typename std::decay<rettype<Event, CS, do_move, V...>>::type
+        >::value,
+        rettype<Event, CS, do_move, V...>,
+        cx_non_future_return
+      >::type;
+
+      // fire off a completions_state, preserving the future return
+      template<typename Event, typename CSOut, bool do_move,
+               typename CSIn, typename ...V>
+      static typename std::enable_if<
+        detail::is_future1<
+          typename std::decay<rettype<Event, CSOut, do_move, V...>>::type
+        >::value,
+        rettype<Event, CSOut, do_move, V...>
+      >::type
+      fire(CSIn &&me, V &&...vals) {
+        return actually_fire<Event, CSOut, do_move>(
+          static_cast<CSIn&&>(me), static_cast<V&&>(vals)...
+        );
+      }
+
+      // fire off a completions_state, converting non-future return
+      // type to cx_non_future_return
+      // The main purpose of this is actually to deal with a void
+      // return type. We need a return value so that it can be passed
+      // to cx_result_combine(). Since the return type is not a
+      // future, we don't care about the return value in the non-void
+      // case and just return a cx_non_future_return unconditionally.
+      template<typename Event, typename CSOut, bool do_move,
+               typename CSIn, typename ...V>
+      static typename std::enable_if<
+        !detail::is_future1<
+          typename std::decay<rettype<Event, CSOut, do_move, V...>>::type
+        >::value,
+        cx_non_future_return
+      >::type
+      fire(CSIn &&me, V &&...vals) {
+        actually_fire<Event, CSOut, do_move>(
+          static_cast<CSIn&&>(me), static_cast<V&&>(vals)...
+        );
+        return cx_non_future_return{};
+      }
+
+      template<typename Event, typename CSOut, bool do_move,
+               typename CSIn, typename ...V>
+      static rettype<Event, CSOut, do_move, V...>
+      actually_fire(CSIn &&me, V &&...vals) {
+        return static_cast<CSOut&>(me).template operator()<Event>(
           static_cast<
               // An empty tail means we are the lucky one who gets the
               // opportunity to move-out the given values (if caller supplied
               // reference type permits, thank you reference collapsing).
-              typename std::conditional<tail_t::empty, V&&, V const&>::type
+              typename std::conditional<do_move, V&&, V const&>::type
             >(vals)...
         );
-        // recurse to fire remaining elements
-        tail_t::template operator()<Event>(static_cast<V&&>(vals)...);
+      }
+
+      template<typename Event, typename ...V>
+      auto operator()(V &&...vals)
+        UPCXX_RETURN_DECLTYPE(
+          cx_result_combine(
+            std::declval<converted_rettype<Event, head_t, tail_t::empty, V...>>(),
+            std::declval<converted_rettype<Event, tail_t, false, V...>>()
+          )
+        ) {
+        return cx_result_combine(
+          // fire the head element
+          fire<Event, head_t, tail_t::empty>(*this, static_cast<V&&>(vals)...),
+          // recurse to fire remaining elements
+          fire<Event, tail_t, false>(*this, static_cast<V&&>(vals)...)
+        );
       }
 
       template<typename Event>
       struct event_bound {
+        using dtype = deserialized_type_t<completions_state>;
+
         template<typename ...V>
-        void operator()(deserialized_type_t<completions_state> &&me, V &&...vals) {
-          using dtype = deserialized_type_t<completions_state>;
-          // fire the head element
-          static_cast<typename dtype::head_t&>(me).template operator()<Event>(std::forward<V>(vals)...);
-          // recurse to fire remaining elements
-          static_cast<typename dtype::tail_t&>(me).template operator()<Event>(std::forward<V>(vals)...);
+        auto operator()(dtype &&me, V &&...vals)
+          UPCXX_RETURN_DECLTYPE(
+            cx_result_combine(
+              std::declval<converted_rettype<Event, typename dtype::head_t, true, V...>>(),
+              std::declval<converted_rettype<Event, typename dtype::tail_t, true, V...>>()
+            )
+          ) {
+          return cx_result_combine(
+            // fire the head element
+            fire<Event, typename dtype::head_t, true>(std::forward<dtype>(me),
+                                                      std::forward<V>(vals)...),
+            // recurse to fire remaining elements
+            fire<Event, typename dtype::tail_t, true>(std::forward<dtype>(me),
+                                                      std::forward<V>(vals)...)
+          );
         }
       };
       
