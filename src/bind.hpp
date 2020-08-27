@@ -165,7 +165,8 @@ namespace upcxx {
         r.template read_into<on_wire_type<Fn>,
                              /*AssertSerializable=*/false>(raw_fn_.raw());
         int dummy[sizeof...(bi)] = {
-          (r.template read_into<on_wire_type<B>>(std::get<bi>(raw_b_).raw()),
+          (r.template read_into<on_wire_type<B>,
+                                /*AssertSerializable=*/false>(std::get<bi>(raw_b_).raw()),
            0)...
         };
       }
@@ -235,7 +236,8 @@ namespace upcxx {
         r.template read_into<on_wire_type<Fn>,
                              /*AssertSerializable=*/false>(raw_fn_.raw());
         int dummy[sizeof...(bi)] = {
-          (r.template read_into<on_wire_type<B>>(std::get<bi>(raw_b_).raw()),
+          (r.template read_into<on_wire_type<B>,
+                                /*AssertSerializable=*/false>(std::get<bi>(raw_b_).raw()),
            0)...
         };
       }
@@ -351,7 +353,8 @@ namespace upcxx {
       // would depend on the representation of a std::tuple in the
       // TriviallySerializable case.
       int dummy[sizeof...(B)] = {
-        (w.template write<typename binding<B>::on_wire_type>(
+        (w.template write<typename binding<B>::on_wire_type,
+                          /*AssertSerializable=*/false>(
            std::get<bi>(fn.b_)
          ), 0)...
       };
