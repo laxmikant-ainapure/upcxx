@@ -382,13 +382,19 @@ namespace upcxx {
       intrank_t initiator = backend::rank_me;
       auto *op_lpc = static_cast<cxs_state_t&&>(state).template to_lpc_dormant<operation_cx_event>();
 
+      // Manually globalize fn to avoid paying for an extra move
+      // incurred by nested bind calls.
+      using fn_stripped_t = typename binding<Fn&&>::stripped_type;
+      using globalized_fn_t = typename globalize_fnptr_return<fn_stripped_t>::type;
+      globalized_fn_t gfn = globalize_fnptr(static_cast<Fn&&>(fn));
+
       backend::template send_am_master<progress_level::user>(
         tm, recipient,
         upcxx::bind(
-          [=](typename binding<Fn>::off_wire_type &&fn,
+          [=](typename binding<globalized_fn_t>::off_wire_type &&fn,
               typename binding<Arg>::off_wire_type &&...arg) {
             return upcxx::apply_as_future(
-                static_cast<typename binding<Fn>::off_wire_type&&>(fn),
+                static_cast<typename binding<globalized_fn_t>::off_wire_type&&>(fn),
                 static_cast<typename binding<Arg>::off_wire_type&&>(arg)...
               ).then_lazy(
                 // Wish we could just use a lambda here, but since it has
@@ -400,7 +406,8 @@ namespace upcxx {
                 }
               );
           },
-          static_cast<Fn&&>(fn), static_cast<Arg&&>(args)...
+          // pass globalized fn separately rather than binding it to args
+          std::move(gfn), static_cast<Arg&&>(args)...
         )
       );
       
