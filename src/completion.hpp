@@ -97,10 +97,12 @@ namespace upcxx {
   };
   
   // RPC completion. Arguments are already bound into fn_ (via upcxx::bind).
-  template<typename Event, typename Fn>
+  template<typename Event, typename Fn, bool received = false>
   struct rpc_cx {
     using event_t = Event;
-    using deserialized_cx = rpc_cx<Event, typename serialization_traits<Fn>::deserialized_type>;
+    using deserialized_cx =
+      rpc_cx<Event, typename serialization_traits<Fn>::deserialized_type,
+             /*received=*/true>;
     
     Fn fn_;
     rpc_cx(Fn fn): fn_(std::move(fn)) {}
@@ -567,10 +569,22 @@ namespace upcxx {
     // cx_state<rpc_cx<...>> does not fit the usual mold since the event isn't
     // triggered locally.
     template<typename Event, typename Fn, typename ...T>
-    struct cx_state<rpc_cx<Event,Fn>, std::tuple<T...>> {
+    struct cx_state<rpc_cx<Event,Fn,/*received=*/false>, std::tuple<T...>> {
+      Fn fn_;
+
+      cx_state(rpc_cx<Event,Fn,/*received=*/false> &&cx):
+        fn_(static_cast<Fn&&>(cx.fn_)) {
+      }
+
+      // cannot invoke on initiator; fn_ is a bound_function, which is
+      // not callable prior to (de)serialization
+    };
+
+    template<typename Event, typename Fn, typename ...T>
+    struct cx_state<rpc_cx<Event,Fn,/*received=*/true>, std::tuple<T...>> {
       Fn fn_;
       
-      cx_state(rpc_cx<Event,Fn> &&cx):
+      cx_state(rpc_cx<Event,Fn,/*received=*/true> &&cx):
         fn_(static_cast<Fn&&>(cx.fn_)) {
       }
       
@@ -991,7 +1005,8 @@ namespace upcxx {
 
     using deserialized_type = detail::completions_state_head<
         true, EventValues,
-        rpc_cx<Event, typename serialization_traits<Fn>::deserialized_type>,
+        rpc_cx<Event, typename serialization_traits<Fn>::deserialized_type,
+               /*received=*/true>,
         ordinal
       >;
     
