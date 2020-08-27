@@ -381,15 +381,15 @@ namespace upcxx {
       
       intrank_t initiator = backend::rank_me;
       auto *op_lpc = static_cast<cxs_state_t&&>(state).template to_lpc_dormant<operation_cx_event>();
-      
-      using fn_bound_t = typename detail::bind<Fn&&, Arg&&...>::return_type;
 
       backend::template send_am_master<progress_level::user>(
         tm, recipient,
         upcxx::bind(
-          [=](deserialized_type_t<fn_bound_t> &&fn_bound) {
+          [=](typename binding<Fn>::off_wire_type &&fn,
+              typename binding<Arg>::off_wire_type &&...arg) {
             return upcxx::apply_as_future(
-                static_cast<deserialized_type_t<fn_bound_t>&&>(fn_bound)
+                static_cast<typename binding<Fn>::off_wire_type&&>(fn),
+                static_cast<typename binding<Arg>::off_wire_type&&>(arg)...
               ).then_lazy(
                 // Wish we could just use a lambda here, but since it has
                 // to take variadic Arg... we have to call to an outlined
@@ -400,7 +400,7 @@ namespace upcxx {
                 }
               );
           },
-          upcxx::bind(static_cast<Fn&&>(fn), static_cast<Arg&&>(args)...)
+          static_cast<Fn&&>(fn), static_cast<Arg&&>(args)...
         )
       );
       

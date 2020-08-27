@@ -70,14 +70,14 @@ int main() {
     },
     T()
   ).wait_reference();
-  T::show_stats("T&& ->", 2, 0, 2);
+  T::show_stats("T&& ->", 2, 0, 1);
 
   upcxx::rpc(target,
     [](T const &x) {
     },
     T()
   ).wait_reference();
-  T::show_stats("T const& ->", 2, 0, 2);
+  T::show_stats("T const& ->", 2, 0, 1);
 
   upcxx::rpc(target,
     []() -> T {
@@ -92,7 +92,7 @@ int main() {
     },
     T()
   ).wait_reference();
-  T::show_stats("T&& -> T", 3, 0, 7);
+  T::show_stats("T&& -> T", 3, 0, 6);
 
   upcxx::rpc(target,
     [](T const &x) -> T {
@@ -100,7 +100,7 @@ int main() {
     },
     T()
   ).wait_reference();
-  T::show_stats("T const& -> T", 3, 1, 6);
+  T::show_stats("T const& -> T", 3, 1, 5);
 
   upcxx::rpc(target,
     [](T &&x) -> upcxx::future<T> {
@@ -108,7 +108,7 @@ int main() {
     },
     T()
   ).wait_reference();
-  T::show_stats("T&& -> future<T>", 3, 0, 7);
+  T::show_stats("T&& -> future<T>", 3, 0, 6);
 
   upcxx::rpc(target,
     [](T const &x) -> upcxx::future<T> {
@@ -116,7 +116,7 @@ int main() {
     },
     T()
   ).wait_reference();
-  T::show_stats("T const& -> future<T>", 3, 1, 6);
+  T::show_stats("T const& -> future<T>", 3, 1, 5);
 
   // now with dist_object
 
@@ -133,7 +133,7 @@ int main() {
     },
     dob, T()
   ).wait_reference();
-  T::show_stats("dist_object + T&& -> T", 3, 0, 19);
+  T::show_stats("dist_object + T&& -> T", 3, 0, 16);
 
   upcxx::rpc(target,
     [](dist_object<int>&, T const &x) -> T {
@@ -141,7 +141,7 @@ int main() {
     },
     dob, T()
   ).wait_reference();
-  T::show_stats("dist_object + T const& -> T", 3, 1, 18);
+  T::show_stats("dist_object + T const& -> T", 3, 1, 15);
 
   upcxx::rpc(target,
     [](dist_object<int>&, T &&x) -> upcxx::future<T> {
@@ -149,7 +149,7 @@ int main() {
     },
     dob, T()
   ).wait_reference();
-  T::show_stats("dist_object + T&& -> future<T>", 3, 0, 19);
+  T::show_stats("dist_object + T&& -> future<T>", 3, 0, 16);
 
   upcxx::rpc(target,
     [](dist_object<int>&, T const &x) -> upcxx::future<T> {
@@ -157,7 +157,7 @@ int main() {
     },
     dob, T()
   ).wait_reference();
-  T::show_stats("dist_object + T const& -> future<T>", 3, 1, 18);
+  T::show_stats("dist_object + T const& -> future<T>", 3, 1, 15);
 
   // returning references
 
@@ -167,7 +167,7 @@ int main() {
     },
     T()
   ).wait_reference();
-  T::show_stats("T&& -> T&&", 3, 0, 4);
+  T::show_stats("T&& -> T&&", 3, 0, 3);
 
   upcxx::rpc(target,
     [](T const &x) -> T const& {
@@ -175,7 +175,7 @@ int main() {
     },
     T()
   ).wait_reference();
-  T::show_stats("T const& -> T const&", 3, 0, 4);
+  T::show_stats("T const& -> T const&", 3, 0, 3);
 
   upcxx::rpc(target,
     [](T const &x) -> upcxx::future<T const&> {
@@ -183,7 +183,7 @@ int main() {
     },
     T()
   ).wait_reference();
-  T::show_stats("T const& -> future<T const&>", 3, 0, 4);
+  T::show_stats("T const& -> future<T const&>", 3, 0, 3);
 
   upcxx::rpc(target,
     [](upcxx::view<T> v) -> T const& {
