@@ -132,7 +132,56 @@ namespace upcxx {
     struct binding_all_immediate<std::tuple<T,Ts...>> {
       static constexpr bool value = binding<T>::immediate && binding_all_immediate<std::tuple<Ts...>>::value;
     };
-    
+
+    template<typename Fn, typename BndTup, typename BndIxs>
+    struct deserialized_bound_function_storage;
+
+    template<typename Fn, typename ...B, int ...bi>
+    struct deserialized_bound_function_storage<
+        Fn, std::tuple<B...>, detail::index_sequence<bi...>
+      > {
+      template<typename T>
+      using on_wire_type = typename binding<T>::on_wire_type;
+      template<typename T>
+      using stored_type = deserialized_type_t<on_wire_type<T>>;
+
+      // raw storage for Fn and B...
+      detail::raw_storage<stored_type<Fn>> raw_fn_;
+      std::tuple<raw_storage<stored_type<B>>...> raw_b_;
+
+      // deserialize the components directly into the internal raw storage
+      template<typename Reader>
+      deserialized_bound_function_storage(Reader &r) {
+        r.template read_into<on_wire_type<Fn>,
+                             /*AssertSerializable=*/false>(raw_fn_.raw());
+        (void)std::initializer_list<int>{
+          (r.template read_into<on_wire_type<B>,
+                                /*AssertSerializable=*/false>(std::get<bi>(raw_b_).raw()),
+           0)...
+        };
+      }
+
+      deserialized_bound_function_storage(const deserialized_bound_function_storage&) = delete;
+
+      // because we use raw storage for the components, we have to
+      // manually do all the work in the move constructor and destructor
+      deserialized_bound_function_storage(deserialized_bound_function_storage &&other) {
+        new(raw_fn_.raw()) stored_type<Fn>(std::move(other.raw_fn_.value()));
+        (void)std::initializer_list<int>{
+          (new(std::get<bi>(raw_b_).raw()) stored_type<B>(
+             std::move(std::get<bi>(other.raw_b_).value())
+           ), 0)...
+        };
+      }
+
+      ~deserialized_bound_function_storage() {
+        raw_fn_.destruct();
+        (void)std::initializer_list<int>{
+          (std::get<bi>(raw_b_).destruct(), 0)...
+        };
+      }
+    };
+
     template<
       typename Fn, typename BndTup/*std::tuple<B...>*/,
 
@@ -148,48 +197,16 @@ namespace upcxx {
     struct deserialized_bound_function_base<
         Fn, std::tuple<B...>, detail::index_sequence<bi...>,
         /*all_immediate=*/true
-      > {
-      
-      template<typename T>
-      using on_wire_type = typename binding<T>::on_wire_type;
-      template<typename T>
-      using stored_type = deserialized_type_t<on_wire_type<T>>;
+      >: deserialized_bound_function_storage<
+           Fn, std::tuple<B...>, detail::index_sequence<bi...>
+         > {
 
-      // raw storage for Fn and B...
-      detail::raw_storage<stored_type<Fn>> raw_fn_;
-      std::tuple<raw_storage<stored_type<B>>...> raw_b_;
+      using base_type = deserialized_bound_function_storage<
+          Fn, std::tuple<B...>, detail::index_sequence<bi...>
+        >;
 
-      // deserialize the components directly into the internal raw storage
       template<typename Reader>
-      deserialized_bound_function_base(Reader &r) {
-        r.template read_into<on_wire_type<Fn>,
-                             /*AssertSerializable=*/false>(raw_fn_.raw());
-        (void)std::initializer_list<int>{
-          (r.template read_into<on_wire_type<B>,
-                                /*AssertSerializable=*/false>(std::get<bi>(raw_b_).raw()),
-           0)...
-        };
-      }
-
-      deserialized_bound_function_base(const deserialized_bound_function_base&) = delete;
-
-      // because we use raw storage for the components, we have to
-      // manually do all the work in the move constructor and destructor
-      deserialized_bound_function_base(deserialized_bound_function_base &&other) {
-        new(raw_fn_.raw()) stored_type<Fn>(std::move(other.raw_fn_.value()));
-        (void)std::initializer_list<int>{
-          (new(std::get<bi>(raw_b_).raw()) stored_type<B>(
-             std::move(std::get<bi>(other.raw_b_).value())
-           ), 0)...
-        };
-      }
-
-      ~deserialized_bound_function_base() {
-        raw_fn_.destruct();
-        (void)std::initializer_list<int>{
-          (std::get<bi>(raw_b_).destruct(), 0)...
-        };
-      }
+      deserialized_bound_function_base(Reader &r) : base_type(r) {}
 
       typename std::result_of<
           typename binding<Fn>::off_wire_type&&(
@@ -197,8 +214,8 @@ namespace upcxx {
           )
         >::type
       operator()() && {
-        return binding<Fn>::off_wire(std::move(raw_fn_.value())).operator()(
-            binding<B>::off_wire(std::move(std::get<bi>(raw_b_).value()))...
+        return binding<Fn>::off_wire(std::move(base_type::raw_fn_.value())).operator()(
+            binding<B>::off_wire(std::move(std::get<bi>(base_type::raw_b_).value()))...
           );
       }
       
@@ -219,46 +236,16 @@ namespace upcxx {
     struct deserialized_bound_function_base<
         Fn, std::tuple<B...>, detail::index_sequence<bi...>,
         /*all_immediate=*/false
-      > {
-      
-      template<typename T>
-      using on_wire_type = typename binding<T>::on_wire_type;
-      template<typename T>
-      using stored_type = deserialized_type_t<on_wire_type<T>>;
+      >: deserialized_bound_function_storage<
+           Fn, std::tuple<B...>, detail::index_sequence<bi...>
+         > {
 
-      // see the comments in the prior specialization of
-      // deserialization_bound_function_base for how all this works
-      detail::raw_storage<stored_type<Fn>> raw_fn_;
-      std::tuple<raw_storage<stored_type<B>>...> raw_b_;
+      using base_type = deserialized_bound_function_storage<
+          Fn, std::tuple<B...>, detail::index_sequence<bi...>
+        >;
 
       template<typename Reader>
-      deserialized_bound_function_base(Reader &r) {
-        r.template read_into<on_wire_type<Fn>,
-                             /*AssertSerializable=*/false>(raw_fn_.raw());
-        (void)std::initializer_list<int>{
-          (r.template read_into<on_wire_type<B>,
-                                /*AssertSerializable=*/false>(std::get<bi>(raw_b_).raw()),
-           0)...
-        };
-      }
-
-      deserialized_bound_function_base(const deserialized_bound_function_base&) = delete;
-
-      deserialized_bound_function_base(deserialized_bound_function_base &&other) {
-        new(raw_fn_.raw()) stored_type<Fn>(std::move(other.raw_fn_.value()));
-        (void)std::initializer_list<int>{
-          (new(std::get<bi>(raw_b_).raw()) stored_type<B>(
-             std::move(std::get<bi>(other.raw_b_).value())
-           ), 0)...
-        };
-      }
-
-      ~deserialized_bound_function_base() {
-        raw_fn_.destruct();
-        (void)std::initializer_list<int>{
-          (std::get<bi>(raw_b_).destruct(), 0)...
-        };
-      }
+      deserialized_bound_function_base(Reader &r) : base_type(r) {}
 
       // Rather than moving the function and arguments into the
       // resulting future, we rely on rpc lifetime extension and store
@@ -282,8 +269,8 @@ namespace upcxx {
           )
         ) {
         return detail::when_all_fast(
-            binding<Fn>::off_wire_future(std::move(raw_fn_.value())),
-            binding<B>::off_wire_future(std::move(std::get<bi>(raw_b_).value()))...
+            binding<Fn>::off_wire_future(std::move(base_type::raw_fn_.value())),
+            binding<B>::off_wire_future(std::move(std::get<bi>(base_type::raw_b_).value()))...
           ).then_lazy(bound_function_applicator<
               typename binding<Fn>::off_wire_type,
               typename binding<B>::off_wire_type...
@@ -303,8 +290,6 @@ namespace upcxx {
 
       template<typename Reader>
       deserialized_bound_function(Reader &r) : base_type(r) {}
-      deserialized_bound_function(const deserialized_bound_function&) = delete;
-      deserialized_bound_function(deserialized_bound_function&&) = default;
 
       // inherits operator()
     };
