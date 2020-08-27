@@ -258,6 +258,11 @@ namespace upcxx {
         };
       }
 
+      // Rather than moving the function and arguments into the
+      // resulting future, we rely on rpc lifetime extension and store
+      // them as rvalue references instead. They will live until after
+      // the callback invocation, and the invocation receives the
+      // arguments as rvalue references as required.
       auto operator()() &&
         UPCXX_RETURN_DECLTYPE(
           std::declval<future1<
