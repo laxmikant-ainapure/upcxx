@@ -299,6 +299,13 @@ namespace upcxx {
   struct bound_function {
     typename binding<Fn>::on_wire_type fn_;
     std::tuple<typename binding<B>::on_wire_type...> b_;
+
+    // This declaration is here for reasoning about the invocation
+    // post-deserialization. It is not intended to actually be called.
+    decltype(
+      std::declval<detail::deserialized_bound_function<Fn, B...>&&>()()
+    )
+    operator()() &&;
   };
 
   template<typename Fn, typename ...B>
