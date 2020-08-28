@@ -6,14 +6,23 @@ struct T {
   static void show_stats(char const *title, int expected_ctors, int expected_copies,
                          int expected_moves=-1);
   
+  bool valid = true;
   T() { ctors++; }
   T(T const &that) {
+    UPCXX_ASSERT_ALWAYS(that.valid, "copying from an invalidated object");
     copies++;
   }
-  T(T &&that) { moves++; }
-  ~T() { dtors++; }
+  T(T &&that) {
+    UPCXX_ASSERT_ALWAYS(that.valid, "moving from an invalidated object");
+    that.valid = false;
+    moves++;
+  }
+  ~T() {
+    valid = false;
+    dtors++;
+  }
 
-  UPCXX_SERIALIZED_FIELDS()
+  UPCXX_SERIALIZED_FIELDS(valid)
 };
 
 int T::ctors = 0;
@@ -79,6 +88,13 @@ int main() {
     T()
   ).wait_reference();
   T::show_stats("T&& ->", 2, 0, 2);
+
+  upcxx::rpc(target,
+    [](T const &x) {
+    },
+    global
+  ).wait_reference();
+  T::show_stats("T& ->", 1, 0, 0);
 
   upcxx::rpc(target,
     [](T const &x) {
@@ -178,6 +194,14 @@ int main() {
   T::show_stats("T&& -> T&&", 3, 0, 4);
 
   upcxx::rpc(target,
+    [](T const &x) -> T& {
+      return global;
+    },
+    global
+  ).wait_reference();
+  T::show_stats("T& -> T&", 2, 0, 2);
+
+  upcxx::rpc(target,
     [](T const &x) -> T const& {
       return x;
     },
@@ -205,6 +229,13 @@ int main() {
     upcxx::make_view(&global, &global+1)
   ).wait_reference();
   T::show_stats("view<T> -> T const&", 2, 0, 2);
+
+  upcxx::rpc(target,
+    []() -> T& {
+      return global;
+    }
+  ).wait_reference();
+  T::show_stats("-> T&", 1, 0, 2);
 
   upcxx::rpc(target,
     []() -> T const& {
@@ -240,6 +271,17 @@ int main() {
   done = false;
   upcxx::barrier();
   T::show_stats("(rpc_ff) T&& ->", 2, 0, 1);
+
+  upcxx::rpc_ff(target,
+    [](T const &x) {
+      done = true;
+    },
+    global
+  );
+  while (!done) { upcxx::progress(); }
+  done = false;
+  upcxx::barrier();
+  T::show_stats("(rpc_ff) T& ->", 1, 0, 0);
 
   upcxx::rpc_ff(target,
     [](T const &x) {
