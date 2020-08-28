@@ -155,8 +155,7 @@ namespace upcxx {
         r.template read_into<on_wire_type<Fn>,
                              /*AssertSerializable=*/false>(raw_fn_.raw());
         (void)std::initializer_list<int>{
-          (r.template read_into<on_wire_type<B>,
-                                /*AssertSerializable=*/false>(std::get<bi>(raw_b_).raw()),
+          (r.template read_into<on_wire_type<B>>(std::get<bi>(raw_b_).raw()),
            0)...
         };
       }
@@ -345,8 +344,7 @@ namespace upcxx {
       // would depend on the representation of a std::tuple in the
       // TriviallySerializable case.
       (void)std::initializer_list<int>{
-        (w.template write<typename binding<B>::on_wire_type,
-                          /*AssertSerializable=*/false>(
+        (w.template write<typename binding<B>::on_wire_type>(
            std::get<bi>(fn.b_)
          ), 0)...
       };
