@@ -414,10 +414,8 @@ namespace upcxx {
       operator()(Fn fn, B ...b) const {
         using globalized_fn_t = typename detail::globalize_fnptr_return<FnStripped>::type;
 
-        globalized_fn_t gfn = detail::globalize_fnptr(std::forward<Fn>(fn));
-        
         return bound_function_of<globalized_fn_t, B...>{
-          binding<globalized_fn_t>::on_wire(static_cast<globalized_fn_t>(gfn)),
+          binding<globalized_fn_t>::on_wire(detail::globalize_fnptr(std::forward<Fn>(fn))),
           std::tuple<typename binding<B>::on_wire_type...>{
             binding<B>::on_wire(std::forward<B>(b))...
           }

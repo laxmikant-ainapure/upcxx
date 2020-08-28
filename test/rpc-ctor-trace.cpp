@@ -265,7 +265,7 @@ int main() {
   while (!done) { upcxx::progress(); }
   done = false;
   upcxx::barrier();
-  T::show_stats("(rpc_ff) Fn&& ->", 3, 1, 2);
+  T::show_stats("(rpc_ff) Fn&& ->", 3, 0, 1);
 
   print_test_success();
   upcxx::finalize();
