@@ -386,7 +386,6 @@ namespace upcxx {
       // incurred by nested bind calls.
       using fn_stripped_t = typename binding<Fn&&>::stripped_type;
       using globalized_fn_t = typename globalize_fnptr_return<fn_stripped_t>::type;
-      globalized_fn_t gfn = globalize_fnptr(static_cast<Fn&&>(fn));
 
       backend::template send_am_master<progress_level::user>(
         tm, recipient,
@@ -407,7 +406,8 @@ namespace upcxx {
               );
           },
           // pass globalized fn separately rather than binding it to args
-          std::move(gfn), static_cast<Arg&&>(args)...
+          globalize_fnptr(static_cast<Fn&&>(fn)),
+          static_cast<Arg&&>(args)...
         )
       );
       
