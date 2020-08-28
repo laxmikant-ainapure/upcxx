@@ -8,8 +8,8 @@
 
 #include <sched.h>
 
-#if !UPCXX_BACKEND_GASNET_PAR
-  #error "UPCXX_BACKEND=gasnet_par required."
+#if !UPCXX_THREADMODE
+  #error This test may only be compiled in PAR threadmode
 #endif
 
 using namespace std; 

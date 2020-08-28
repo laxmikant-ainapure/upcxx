@@ -2,6 +2,10 @@
 
 #include "util.hpp"
 
+#if !UPCXX_THREADMODE
+  #error This test may only be compiled in PAR threadmode
+#endif
+
 #include <atomic>
 #include <deque>
 #include <list>
