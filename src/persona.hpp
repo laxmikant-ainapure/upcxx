@@ -351,7 +351,11 @@ namespace upcxx {
       // on this thread, but don't think anything would break if it isn't.
       int burst_internal(persona&);
       int burst_user(persona&);
-      
+
+      // A miniature progress engine that reaps the queues for all active
+      // personas. Not used by the runtime since it has more things to do
+      // per-persona than just the queues (also whatever is in backend_state).
+      // Only used by persona-aware unit tests.
       int persona_only_progress();
     };
     

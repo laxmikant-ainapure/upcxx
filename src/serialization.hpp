@@ -348,7 +348,7 @@ namespace upcxx {
       std::size_t size() const { return size_; }
       std::size_t align() const { return align_; }
 
-      bool contained_in_initial() const {
+      /*TODO: constexpr*/ bool contained_in_initial() const {
         return true;
       }
 
@@ -1308,7 +1308,8 @@ namespace upcxx {
     };
     template<typename T>
     struct serialization_traits_deserialized_value<T,
-        // this specialization fails if deserilized_value has an invalid signature
+        // this specialization fails if deserilized_value() would have a non-returnable
+        // return type
         typename std::conditional<true, void, typename serialization_traits2<T>::deserialized_type(*)()>::type
       > {
       static typename serialization_traits2<T>::deserialized_type
