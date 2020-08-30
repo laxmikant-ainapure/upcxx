@@ -63,6 +63,8 @@ bool done = false;
 struct Fn {
   T t;
   void operator()() { done = true; }
+  Fn() {}
+  Fn(const Fn&) = delete;
   UPCXX_SERIALIZED_FIELDS(t)
 };
 
@@ -87,7 +89,7 @@ int main() {
     },
     T()
   ).wait_reference();
-  T::show_stats("T&& ->", 2, 0, 2);
+  T::show_stats("T&& ->", 2, 0, 0);
 
   upcxx::rpc(target,
     [](T const &x) {
@@ -116,7 +118,7 @@ int main() {
     },
     T()
   ).wait_reference();
-  T::show_stats("T&& -> T", 3, 0, 7);
+  T::show_stats("T&& -> T", 3, 0, 5);
 
   upcxx::rpc(target,
     [](T const &x) -> T {
@@ -132,7 +134,7 @@ int main() {
     },
     T()
   ).wait_reference();
-  T::show_stats("T&& -> future<T>", 3, 0, 7);
+  T::show_stats("T&& -> future<T>", 3, 0, 5);
 
   upcxx::rpc(target,
     [](T const &x) -> upcxx::future<T> {
@@ -157,7 +159,7 @@ int main() {
     },
     dob, T()
   ).wait_reference();
-  T::show_stats("dist_object + T&& -> T", 3, 0, 7);
+  T::show_stats("dist_object + T&& -> T", 3, 0, 5);
 
   upcxx::rpc(target,
     [](dist_object<int>&, T const &x) -> T {
@@ -173,7 +175,7 @@ int main() {
     },
     dob, T()
   ).wait_reference();
-  T::show_stats("dist_object + T&& -> future<T>", 3, 0, 7);
+  T::show_stats("dist_object + T&& -> future<T>", 3, 0, 5);
 
   upcxx::rpc(target,
     [](dist_object<int>&, T const &x) -> upcxx::future<T> {
@@ -191,7 +193,7 @@ int main() {
     },
     T()
   ).wait_reference();
-  T::show_stats("T&& -> T&&", 3, 0, 4);
+  T::show_stats("T&& -> T&&", 3, 0, 2);
 
   upcxx::rpc(target,
     [](T const &x) -> T& {
@@ -253,7 +255,7 @@ int main() {
   T::show_stats("Fn& ->", 3, 0, 0);
 
   upcxx::rpc(target, Fn()).wait_reference();
-  T::show_stats("Fn&& ->", 3, 0, 2);
+  T::show_stats("Fn&& ->", 3, 0, 0);
 
   // rpc_ff
 
@@ -270,7 +272,7 @@ int main() {
   while (!done) { upcxx::progress(); }
   done = false;
   upcxx::barrier();
-  T::show_stats("(rpc_ff) T&& ->", 2, 0, 1);
+  T::show_stats("(rpc_ff) T&& ->", 2, 0, 0);
 
   upcxx::rpc_ff(target,
     [](T const &x) {
@@ -307,7 +309,7 @@ int main() {
   while (!done) { upcxx::progress(); }
   done = false;
   upcxx::barrier();
-  T::show_stats("(rpc_ff) Fn&& ->", 3, 0, 1);
+  T::show_stats("(rpc_ff) Fn&& ->", 3, 0, 0);
 
   print_test_success();
   upcxx::finalize();
