@@ -485,8 +485,7 @@ $(all_libupcxx): force
 # This variable lists headers that should be installed but can't be crawled from there
 # (for example because they aren't guaranteed to pass preprocess at install time)
 
-UPCXX_NOCRAWL_INSTALL_HEADERS = \
-	boost.hpp
+UPCXX_NOCRAWL_INSTALL_HEADERS = # none
 
 do-upcxx-all: force
 	@$(MAKE) do-gasnet-configure

@@ -86,11 +86,10 @@ Notable bug fixes:
 * [spec issue #160](https://bitbucket.org/berkeleylab/upcxx-spec/issues/160): Deadlocks arising from synchronous collective calls with internal progress
 * [spec issue #167](https://bitbucket.org/berkeleylab/upcxx-spec/issues/167): `dist_object<T>::fetch` does not correctly handle `T` with asymmetric serialization
 
-This library release mostly conforms to the
+This library release conforms to the
 [UPC++ v1.0 Specification, Revision 2020.8.1-draft](docs/spec.pdf).
-The following features from that specification are not yet implemented:
-
-* `boost_serialization` adapter class is not yet implemented (issue #330)
+All currently specified features are fully implemented.
+See the [UPC++ issue tracker](https://upcxx-bugs.lbl.gov) for status of known bugs.
 
 Breaking changes:
 
