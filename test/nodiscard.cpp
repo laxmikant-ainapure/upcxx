@@ -142,8 +142,8 @@ int main() {
   
   std::pair<int *,size_t> lpp(lp,sz);
   std::pair<global_ptr<int>,size_t> gpp(gp,sz);
-  std::array<std::ptrdiff_t,1> a_stride = {4};
-  std::array<std::size_t,1> a_ext = {1};
+  std::array<std::ptrdiff_t,1> a_stride = {{4}};
+  std::array<std::size_t,1> a_ext = {{1}};
   std::ptrdiff_t stride[1] = {4};
   std::size_t ext[1] = {1};
 
