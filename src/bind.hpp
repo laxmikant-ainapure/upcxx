@@ -385,21 +385,9 @@ namespace upcxx {
 
 namespace upcxx {
   namespace detail {
-    // `upcxx::bind` defers to `upcxx::detail::bind` class which specializes
-    // on `binding<Fn>::type` to detect the case of
-    // `bind(bind(f, a...), b...)` and flattens it to `bind(f,a...,b...)`.
-    // This optimization results in fewer chained futures for non-trivial
-    // bindings.
-
-    template<typename Fn, typename FnStripped, typename ...B>
-    struct bind1;
-    
     template<typename Fn, typename ...B>
-    struct bind: bind1<Fn, typename binding<Fn>::stripped_type, B...> {};
-
-    // general case
-    template<typename Fn, typename FnStripped, typename ...B>
-    struct bind1 {
+    struct bind {
+      using FnStripped = typename binding<Fn>::stripped_type;
       using return_type = bound_function_of<
           typename detail::globalize_fnptr_return<FnStripped>::type,
           B...
@@ -417,25 +405,6 @@ namespace upcxx {
           std::tuple<typename binding<B>::on_wire_type...>{
             binding<B>::on_wire(std::forward<B>(b))...
           }
-        };
-      }
-    };
-
-    // nested bind(bind(...),...) case.
-    template<typename Bf, typename Fn0, typename ...B0, typename ...B1>
-    struct bind<Bf, bound_function<Fn0, B0...>, B1...> {
-      using return_type = bound_function_of<Fn0, B0..., B1...>;
-      
-      bound_function_of<Fn0, B0..., B1...>
-      operator()(Bf bf, B1 ...b1) const {
-        return bound_function_of<Fn0, B0..., B1...>{
-          std::forward<Bf>(bf).fn_,
-          std::tuple_cat(
-            std::forward<Bf>(bf).b_, 
-            std::tuple<typename binding<B1>::on_wire_type...>{
-              binding<B1>::on_wire(std::forward<B1>(b1))...
-            }
-          )
         };
       }
     };
