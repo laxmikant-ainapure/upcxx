@@ -150,8 +150,7 @@ namespace upcxx {
       std::tuple<raw_storage<stored_type<B>>...> raw_b_;
 
       // deserialize the components directly into the internal raw storage
-      template<typename Reader>
-      deserialized_bound_function_storage(Reader &r) {
+      deserialized_bound_function_storage(serialization_reader &r) {
         r.template read_into<on_wire_type<Fn>,
                              /*AssertSerializable=*/false>(raw_fn_.raw());
         (void)std::initializer_list<int>{
@@ -204,8 +203,7 @@ namespace upcxx {
           Fn, std::tuple<B...>, detail::index_sequence<bi...>
         >;
 
-      template<typename Reader>
-      deserialized_bound_function_base(Reader &r) : base_type(r) {}
+      deserialized_bound_function_base(serialization_reader &r) : base_type(r) {}
 
       typename std::result_of<
           typename binding<Fn>::off_wire_type&&(
@@ -243,8 +241,7 @@ namespace upcxx {
           Fn, std::tuple<B...>, detail::index_sequence<bi...>
         >;
 
-      template<typename Reader>
-      deserialized_bound_function_base(Reader &r) : base_type(r) {}
+      deserialized_bound_function_base(serialization_reader &r) : base_type(r) {}
 
       // Rather than moving the function and arguments into the
       // resulting future, we rely on rpc lifetime extension and store
@@ -287,8 +284,7 @@ namespace upcxx {
       using base_type =
         detail::deserialized_bound_function_base<Fn, std::tuple<B...>>;
 
-      template<typename Reader>
-      deserialized_bound_function(Reader &r) : base_type(r) {}
+      deserialized_bound_function(serialization_reader &r) : base_type(r) {}
 
       // inherits operator()
     };
