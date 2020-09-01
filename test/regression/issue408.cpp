@@ -7,8 +7,6 @@ struct T {
   int x;
   T() {}
   T(int x_) : x(x_) {}
-  T(const T&) = delete;
-  T(T&&) = default;
   UPCXX_SERIALIZED_FIELDS(x)
 };
 

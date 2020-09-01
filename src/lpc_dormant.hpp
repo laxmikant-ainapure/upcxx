@@ -124,10 +124,10 @@ namespace upcxx {
     class serialization_reader;
 
     // [de]serialized_raw_tuple allow the arguments of a dormant lpc
-    // to be deserialized on demand. This reduces the number of moves,
-    // but more importantly, it allows multiple completions to be
-    // registered against a non-copyable result type. Each completion
-    // receives its own copy deserialized from scratch.
+    // to be deserialized on demand. This reduces the number of moves
+    // in the common case that there is only one completion registered
+    // against a result. In that case, the result is deserialized
+    // directly into the completion's result cell.
     // Note that this implementation relies on two assumptions:
     // 1) A serialized_raw_tuple does not outlive its underlying tuple
     //    object. This is satisfied because send_awaken_lpc
@@ -178,16 +178,40 @@ namespace upcxx {
     template<typename ...T>
     template<typename ...U>
     void lpc_dormant<T...>::awaken(deserialized_raw_tuple<U...> &&results) {
+      // You'll see this thrown into if()'s to permit dead code detection by compiler
+      constexpr bool results_is_copyable = std::is_copy_constructible<std::tuple<T...>>::value;
+
+      // tuple<T...> const& if copyable otherwise tuple<T...>&&
+      using copyable_reference = typename std::conditional<results_is_copyable,
+          std::tuple<T...> const&,
+          std::tuple<T...>&&
+        >::type;
+
       persona_tls &tls = the_persona_tls;
       lpc_dormant *p = this;
+      detail::raw_storage<std::tuple<T...>> storage;
+      std::tuple<T...> *deserialized = nullptr;
 
       do {
         lpc_dormant *next = static_cast<lpc_dormant*>(p->intruder.p.load(std::memory_order_relaxed));
         std::uintptr_t vtbl_u = reinterpret_cast<std::uintptr_t>(p->vtbl);
 
+        if(deserialized == nullptr && next != nullptr) {
+          // multiple completions; deserialize into a new tuple and
+          // then copy from there for each completion
+          results.read_into_tuple(*static_cast<std::tuple<T...>*>(storage.raw()));
+          deserialized = &storage.value();
+        }
+
         if(vtbl_u & 0x1) {
           auto *pro = reinterpret_cast<future_header_promise<T...>*>(vtbl_u ^ 0x1);
-          results.read_into_future_header_result(pro->base_header_result);
+
+          if(deserialized == nullptr)
+            results.read_into_future_header_result(pro->base_header_result);
+          else if(next == nullptr || !results_is_copyable)
+            pro->base_header_result.construct_results(std::move(*deserialized));
+          else
+            pro->base_header_result.construct_results(static_cast<copyable_reference>(*deserialized));
 
           tls.enqueue_quiesced_promise(
             *p->target, p->level,
@@ -199,7 +223,13 @@ namespace upcxx {
         }
         else {
           auto *p1 = static_cast<lpc_dormant_fn_base<T...>*>(p);
-          results.read_into_tuple(p1->results);
+
+          if(deserialized == nullptr)
+            results.read_into_tuple(p1->results);
+          else if(next == nullptr || !results_is_copyable)
+            ::new(&p1->results) std::tuple<T...>(std::move(*deserialized));
+          else
+            ::new(&p1->results) std::tuple<T...>(static_cast<copyable_reference>(*deserialized));
 
           tls.enqueue(
             *p->target, p->level, p,
@@ -208,8 +238,13 @@ namespace upcxx {
         }
 
         p = next;
+
+        if(!results_is_copyable)
+          UPCXX_ASSERT(p == nullptr, "You have attempted to register multiple completions against a non-copyable results type.");
       }
-      while(p != nullptr);
+      while(p != nullptr && results_is_copyable);
+
+      if(deserialized) storage.destruct();
     }
   }
 }
