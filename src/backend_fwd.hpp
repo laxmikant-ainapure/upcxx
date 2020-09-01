@@ -118,6 +118,10 @@ namespace upcxx {
   namespace detail {
     template<typename ...T>
     struct lpc_dormant;
+    template<typename ...T>
+    struct serialized_raw_tuple;
+    template<typename ...T>
+    struct deserialized_raw_tuple;
   }
   
   void init();
