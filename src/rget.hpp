@@ -86,7 +86,7 @@ namespace upcxx {
         backend::send_am_master<progress_level::user>(
           upcxx::world(), rank_s,
           upcxx::bind(
-            [](CxStateRemote &&st) {
+            [](deserialized_type_t<CxStateRemote> &&st) {
               return st.template operator()<remote_cx_event>();
             },
             std::move(state_remote)
