@@ -327,6 +327,86 @@ namespace upcxx {
       static const bool value = true;
     };
   }
+
+  namespace detail {
+    // send_rpc_reply is instrumented to avoid much of the machinery
+    // of futures on the receiver. BoundFn is the type of the bound
+    // callback on the initiator, After is the reply (an
+    // rpc_recipient_after), BoundFnDez is the type of the
+    // deserialized callback on the receiver.
+    // We condition on whether BoundFnDez returns void, a future, or a
+    // non-void, non-future type.
+
+    // non-void, non-future: call after() directly on the results of
+    // the callback
+    template<typename BoundFnDez,
+             typename Return = typename std::result_of<BoundFnDez&&()>::type,
+             bool return_is_void = std::is_void<Return>::value>
+    struct send_rpc_apply_dispatch {
+      template<typename After, typename FnBound>
+      void operator()(intrank_t recipient,
+                      After &&after, FnBound &&fn) {
+        backend::template send_am_master<progress_level::user>(
+          recipient,
+          upcxx::bind_rvalue_as_lvalue(
+            [=](BoundFnDez &&fn_bound) {
+              after(static_cast<BoundFnDez&&>(fn_bound)());
+            },
+            fn
+          )
+        );
+      }
+    };
+
+    // void: call after() immediately after the callback
+    template<typename BoundFnDez, typename Return>
+    struct send_rpc_apply_dispatch<BoundFnDez, Return, true> {
+      template<typename After, typename FnBound>
+      void operator()(intrank_t recipient,
+                      After &&after, FnBound &&fn) {
+        backend::template send_am_master<progress_level::user>(
+          recipient,
+          upcxx::bind_rvalue_as_lvalue(
+            [=](BoundFnDez &&fn_bound) {
+              static_cast<BoundFnDez&&>(fn_bound)();
+              after();
+            },
+            fn
+          )
+        );
+      }
+    };
+
+    // future: chain after() on the callback
+    template<typename BoundFnDez, typename Kind, typename ...T>
+    struct send_rpc_apply_dispatch<BoundFnDez, future1<Kind, T...>, false> {
+      template<typename After, typename FnBound>
+      void operator()(intrank_t recipient,
+                      After &&after, FnBound &&fn) {
+        backend::template send_am_master<progress_level::user>(
+          recipient,
+          upcxx::bind_rvalue_as_lvalue(
+            [=](BoundFnDez &&fn_bound) {
+              return upcxx::apply_as_future(
+                  static_cast<BoundFnDez&&>(fn_bound)
+                ).then_lazy(after);
+            },
+            fn
+          )
+        );
+      }
+    };
+
+    template<typename After, typename BoundFn>
+    void send_rpc_reply(intrank_t recipient,
+                        After &&after, BoundFn &&fn) {
+      using BoundFnDez = deserialized_type_t<BoundFn>;
+      send_rpc_apply_dispatch<BoundFnDez>()(
+          recipient,
+          std::forward<After>(after), std::forward<BoundFn>(fn)
+        );
+    }
+  }
   
   namespace detail {
     template<typename Cxs, typename Fn, typename ...Arg>
@@ -382,26 +462,17 @@ namespace upcxx {
       intrank_t initiator = backend::rank_me;
       auto *op_lpc = static_cast<cxs_state_t&&>(state).template to_lpc_dormant<operation_cx_event>();
       
-      using fn_bound_t = typename detail::bind<const Fn&, const Arg&...>::return_type;
-
-      backend::template send_am_master<progress_level::user>( recipient,
-        upcxx::bind_rvalue_as_lvalue(
-          [=](deserialized_type_t<fn_bound_t> &&fn_bound) {
-            return upcxx::apply_as_future(
-                static_cast<deserialized_type_t<fn_bound_t>&&>(fn_bound)
-              ).then_lazy(
-                // Wish we could just use a lambda here, but since it has
-                // to take variadic Arg... we have to call to an outlined
-                // class. I'm not sure if even C++14's allowance of `auto`
-                // lambda args would be enough.
-                detail::rpc_recipient_after<decltype(op_lpc)>{
-                  initiator, op_lpc
-                }
-              );
+      detail::send_rpc_reply(
+          recipient,
+          // Wish we could just use a lambda here, but since it has
+          // to take variadic Arg... we have to call to an outlined
+          // class. I'm not sure if even C++14's allowance of `auto`
+          // lambda args would be enough.
+          detail::rpc_recipient_after<decltype(op_lpc)>{
+            initiator, op_lpc
           },
           upcxx::bind_rvalue_as_lvalue(static_cast<Fn&&>(fn), static_cast<Arg&&>(args)...)
-        )
-      );
+        );
       
       // send_am_master doesn't support async source-completion, so we know
       // its trivially satisfied.

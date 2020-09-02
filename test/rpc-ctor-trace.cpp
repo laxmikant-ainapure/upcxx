@@ -140,7 +140,7 @@ int main() {
       return T();
     }
   ).wait_reference();
-  SHOW("-> T", 2, 0, 3);
+  SHOW("-> T", 2, 0, 1);
 
   upcxx::rpc(target,
     [](T &&x) -> T {
@@ -148,7 +148,7 @@ int main() {
     },
     T()
   ).wait_reference();
-  SHOW("T&& -> T", 3, 0, 4);
+  SHOW("T&& -> T", 3, 0, 2);
 
   upcxx::rpc(target,
     [](T const &x) -> T {
@@ -156,7 +156,7 @@ int main() {
     },
     static_cast<T const&>(global)
   ).wait_reference();
-  SHOW("T const& -> T", 2, 1, 3);
+  SHOW("T const& -> T", 2, 1, 1);
 
   upcxx::rpc(target,
     [](T &&x) -> upcxx::future<T> {
