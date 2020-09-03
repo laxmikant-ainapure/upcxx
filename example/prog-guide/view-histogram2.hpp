@@ -32,7 +32,7 @@ histogram2 my_histo2;
 upcxx::future<> send_histo2_byview(histogram2 const &histo) {
   histogram2::const_iterator run_begin = histo.begin();
   
-  upcxx::promise<> *all_done = new upcxx::promise<>;
+  upcxx::promise<> all_done;
   
   while(run_begin != histo.end()) {
     histogram2::const_iterator run_end = run_begin;
@@ -43,7 +43,7 @@ upcxx::future<> send_histo2_byview(histogram2 const &histo) {
       ++run_end;
     
     upcxx::rpc(owner,
-      upcxx::operation_cx::as_promise(*all_done),
+      upcxx::operation_cx::as_promise(all_done),
       
       [](upcxx::view<std::pair<const std::string, double>> histo_view) {
         // Traverse key-values directly in network buffer.
@@ -57,8 +57,6 @@ upcxx::future<> send_histo2_byview(histogram2 const &histo) {
     run_begin = run_end;
   }
   
-  return all_done->finalize().then(
-    [=]() { delete all_done; }
-  );
+  return all_done.finalize();
 }
 //SNIPPET

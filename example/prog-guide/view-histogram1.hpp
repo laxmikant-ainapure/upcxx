@@ -25,12 +25,12 @@ upcxx::future<> send_histo1_byval(histogram1 const &histo) {
   for(auto const &kv: histo)
     clusters[owner_of(kv.first)].insert(kv);
   
-  upcxx::promise<> *all_done = new upcxx::promise<>;
+  upcxx::promise<> all_done;
   
   // Send per-owner histogram clusters.
   for(auto const &cluster: clusters) {
     upcxx::rpc(cluster.first,
-      upcxx::operation_cx::as_promise(*all_done),
+      upcxx::operation_cx::as_promise(all_done),
       
       [](histogram1 const &histo) {
         // Pain point: UPC++ already traversed the key-values once to build the
@@ -45,9 +45,7 @@ upcxx::future<> send_histo1_byval(histogram1 const &histo) {
     );
   }
   
-  return all_done->finalize().then(
-    [=]() { delete all_done; }
-  );
+  return all_done.finalize();
 }
 
 // Sending histogram updates by view.
@@ -58,12 +56,12 @@ upcxx::future<> send_histo1_byview(histogram1 const &histo) {
   for(auto const &kv: histo)
     clusters[owner_of(kv.first)].insert(kv);
   
-  upcxx::promise<> *all_done = new upcxx::promise<>;
+  upcxx::promise<> all_done;
   
   // Send per-owner histogram clusters.
   for(auto const &cluster: clusters) {
     upcxx::rpc(cluster.first,
-      upcxx::operation_cx::as_promise(*all_done),
+      upcxx::operation_cx::as_promise(all_done),
       
       [](upcxx::view<std::pair<const std::string, double>> histo_view) {
         // Pain point from `send_histo1_byval`: Eliminated.
@@ -78,8 +76,6 @@ upcxx::future<> send_histo1_byview(histogram1 const &histo) {
     );
   }
   
-  return all_done->finalize().then(
-    [=]() { delete all_done; }
-  );
+  return all_done.finalize();
 }
 //SNIPPET
