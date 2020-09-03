@@ -317,6 +317,63 @@ int main() {
   upcxx::barrier();
   T::show_stats("(rpc_ff) Fn&& ->", 3, 0, 0);
 
+
+  // as_rpc
+
+  { dist_object<upcxx::global_ptr<int>> dobj(upcxx::new_<int>(0));
+    upcxx::global_ptr<int> gp = dobj.fetch(target).wait();
+
+    {
+      Fn fn;
+      upcxx::rput(42, gp, upcxx::remote_cx::as_rpc(fn));
+    }
+    while (!done) { upcxx::progress(); }
+    done = false;
+    upcxx::barrier();
+    T::show_stats("as_rpc(Fn&)&& ->", 3, 0, 5);
+
+    { Fn fn;
+      auto cx = upcxx::remote_cx::as_rpc(fn);
+      upcxx::rput(42, gp, cx);
+    }
+    while (!done) { upcxx::progress(); }
+    done = false;
+    upcxx::barrier();
+    T::show_stats("as_rpc(Fn&)& ->", 3, 0, 5);
+
+    { Fn fn;
+      auto const cx = upcxx::remote_cx::as_rpc(fn);
+      upcxx::rput(42, gp, cx);
+    }
+    while (!done) { upcxx::progress(); }
+    done = false;
+    upcxx::barrier();
+    T::show_stats("as_rpc(Fn&) const & ->", 3, 0, 5);
+
+    upcxx::rput(42, gp, upcxx::remote_cx::as_rpc(Fn()));
+    while (!done) { upcxx::progress(); }
+    done = false;
+    upcxx::barrier();
+    T::show_stats("as_rpc(Fn&&)&& ->", 3, 0, 10);
+
+    { auto cx = upcxx::remote_cx::as_rpc(Fn());
+      upcxx::rput(42, gp, cx);
+    }
+    while (!done) { upcxx::progress(); }
+    done = false;
+    upcxx::barrier();
+    T::show_stats("as_rpc(Fn&&)& ->", 3, 1, 10);
+
+    { auto const cx = upcxx::remote_cx::as_rpc(Fn());
+      upcxx::rput(42, gp, cx);
+    }
+    while (!done) { upcxx::progress(); }
+    done = false;
+    upcxx::barrier();
+    T::show_stats("as_rpc(Fn&&) const & ->", 3, 1, 10);
+
+  }
+ 
   print_test_success();
   upcxx::finalize();
 }
