@@ -81,10 +81,10 @@ namespace upcxx {
     
   public:
     template<typename Fn>
-    void lpc_ff(detail::persona_tls &tls, Fn fn);
+    void lpc_ff(detail::persona_tls &tls, Fn &&fn);
     
     template<typename Fn>
-    void lpc_ff(Fn fn);
+    void lpc_ff(Fn &&fn);
   
   private:
     template<typename Results, typename Promise>
@@ -133,10 +133,10 @@ namespace upcxx {
   public:
     template<typename Fn>
     UPCXX_NODISCARD
-    auto lpc(Fn fn)
+    auto lpc(Fn &&fn)
       -> typename detail::future_from_tuple_t<
         detail::future_kind_shref<detail::future_header_ops_general>, // the default future kind
-        typename decltype(upcxx::apply_as_future(fn))::results_type
+        typename decltype(upcxx::apply_as_future(typename std::decay<Fn>::type(fn)))::results_type
       >;
   };
   
@@ -397,29 +397,30 @@ namespace upcxx {
   }
 
   template<typename Fn>
-  void persona::lpc_ff(Fn fn) {
+  void persona::lpc_ff(Fn &&fn) {
     UPCXX_ASSERT_INIT();
     this->lpc_ff(detail::the_persona_tls, std::forward<Fn>(fn));
   }
   
   template<typename Fn>
-  void persona::lpc_ff(detail::persona_tls &tls, Fn fn) {
+  void persona::lpc_ff(detail::persona_tls &tls, Fn &&fn) {
     if(this->active_with_caller(tls))
-      this->self_inbox_[(int)progress_level::user].send(std::move(fn));
+      this->self_inbox_[(int)progress_level::user].send(std::forward<Fn>(fn));
     else
-      this->peer_inbox_[(int)progress_level::user].send(std::move(fn));
+      this->peer_inbox_[(int)progress_level::user].send(std::forward<Fn>(fn));
   }
   
   template<typename Fn>
   UPCXX_NODISCARD
-  auto persona::lpc(Fn fn)
+  auto persona::lpc(Fn &&fn)
     -> typename detail::future_from_tuple_t<
       detail::future_kind_shref<detail::future_header_ops_general>, // the default future kind
-      typename decltype(upcxx::apply_as_future(fn))::results_type
+      typename decltype(upcxx::apply_as_future(typename std::decay<Fn>::type(fn)))::results_type
     > {
     UPCXX_ASSERT_INIT();
     
-    using results_type = typename decltype(upcxx::apply_as_future(fn))::results_type;
+    using decay_fn = typename std::decay<Fn>::type;
+    using results_type = typename decltype(upcxx::apply_as_future(decay_fn(fn)))::results_type;
     using results_promise = detail::tuple_types_into_t<results_type, promise>;
     
     detail::persona_tls &tls = detail::the_persona_tls;
@@ -428,10 +429,10 @@ namespace upcxx {
     auto ans = pro->get_future();
     
     this->lpc_ff(tls,
-      lpc_recipient_execute<Fn, results_promise>{
+      lpc_recipient_execute<typename std::decay<Fn>::type, results_promise>{
         /*initiator*/tls.get_top_persona(),
         /*promise*/pro,
-        /*fn*/std::move(fn)
+        /*fn*/std::forward<Fn>(fn)
       }
     );
       

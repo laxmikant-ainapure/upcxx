@@ -36,8 +36,9 @@ namespace upcxx {
       
       Fn fn_;
       
-      lpc_impl_fn(Fn fn):
-        fn_(static_cast<Fn&&>(fn)) {
+      template<typename Fn1>
+      lpc_impl_fn(Fn1 &&fn, int): // extra argument to distinguish from copy ctor
+        fn_(static_cast<Fn1&&>(fn)) {
         this->vtbl = &the_vtbl;
       }
     };
@@ -47,7 +48,7 @@ namespace upcxx {
 
     template<typename Fn1, typename Fn = typename std::decay<Fn1>::type>
     lpc_impl_fn<Fn>* make_lpc(Fn1 &&fn) {
-      return new lpc_impl_fn<Fn>(std::forward<Fn1>(fn));
+      return new lpc_impl_fn<Fn>(std::forward<Fn1>(fn), 0);
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -104,8 +105,7 @@ namespace upcxx {
       
       template<typename Fn1>
       void send(Fn1 &&fn) {
-        using Fn = typename std::decay<Fn1>::type;
-        q_.enqueue(new lpc_impl_fn<Fn>{std::forward<Fn1>(fn)});
+        q_.enqueue(make_lpc(std::forward<Fn1>(fn)));
       }
       
       void enqueue(lpc_base *m) {
