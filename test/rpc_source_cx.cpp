@@ -41,8 +41,6 @@ int main() {
   print_test_header();
 
   int target = (upcxx::rank_me() + 1) % upcxx::rank_n();
-  T local(target + 100);
-  Fn fn(target + 200);
 
   {
     // rvalue, default completions
@@ -60,14 +58,32 @@ int main() {
 
   {
     // lvalue, default completions
+    T *tmp = new T(target + 100);
     auto fut = upcxx::rpc(target,
                  [](const T &x) -> const T& {
                    UPCXX_ASSERT_ALWAYS(x.valid);
                    UPCXX_ASSERT_ALWAYS(x.value == upcxx::rank_me() + 100);
                    return x;
                  },
-                 local
+                 *tmp
                );
+    delete tmp;
+    UPCXX_ASSERT_ALWAYS(fut.wait_reference().valid);
+    UPCXX_ASSERT_ALWAYS(fut.wait_reference().value == target + 100);
+  }
+
+  {
+    // view, default completions
+    T *tmp = new T(target + 100);
+    auto fut = upcxx::rpc(target,
+                 [](upcxx::view<T> x) {
+                   UPCXX_ASSERT_ALWAYS((*x.begin()).valid);
+                   UPCXX_ASSERT_ALWAYS((*x.begin()).value == upcxx::rank_me() + 100);
+                   return *x.begin();
+                 },
+                 upcxx::make_view(tmp, tmp + 1)
+               );
+    delete tmp;
     UPCXX_ASSERT_ALWAYS(fut.wait_reference().valid);
     UPCXX_ASSERT_ALWAYS(fut.wait_reference().value == target + 100);
   }
@@ -81,7 +97,9 @@ int main() {
 
   {
     // function object lvalue, default completions
-    auto fut = upcxx::rpc(target, fn);
+    Fn *tmp = new Fn(target + 200);
+    auto fut = upcxx::rpc(target, *tmp);
+    delete tmp;
     UPCXX_ASSERT_ALWAYS(fut.wait_reference().valid);
     UPCXX_ASSERT_ALWAYS(fut.wait_reference().value == target + 201);
   }
@@ -108,14 +126,33 @@ int main() {
 
   {
     // rpc_ff, lvalue, default completions
+    T *tmp = new T(target + 100);
     upcxx::rpc_ff(target,
       [](const T &x) {
         UPCXX_ASSERT_ALWAYS(x.valid);
         UPCXX_ASSERT_ALWAYS(x.value == upcxx::rank_me() + 100);
         done = true;
       },
-      local
+      *tmp
     );
+    delete tmp;
+    while (!done) { upcxx::progress(); }
+    done = false;
+    upcxx::barrier();
+  }
+
+  {
+    // rpc_ff, view, default completions
+    T *tmp = new T(target + 100);
+    upcxx::rpc_ff(target,
+      [](upcxx::view<T> x) {
+        UPCXX_ASSERT_ALWAYS((*x.begin()).valid);
+        UPCXX_ASSERT_ALWAYS((*x.begin()).value == upcxx::rank_me() + 100);
+        done = true;
+      },
+      upcxx::make_view(tmp, tmp + 1)
+    );
+    delete tmp;
     while (!done) { upcxx::progress(); }
     done = false;
     upcxx::barrier();
@@ -131,7 +168,9 @@ int main() {
 
   {
     // rpc_ff, lvalue function object, default completions
-    upcxx::rpc_ff(target, fn);
+    Fn *tmp = new Fn(target + 200);
+    upcxx::rpc_ff(target, *tmp);
+    delete tmp;
     while (!done) { upcxx::progress(); }
     done = false;
     upcxx::barrier();
@@ -169,6 +208,24 @@ int main() {
                     return x;
                   },
                   *tmp
+                );
+    std::get<0>(futs).wait();
+    delete tmp;
+    UPCXX_ASSERT_ALWAYS(std::get<1>(futs).wait_reference().valid);
+    UPCXX_ASSERT_ALWAYS(std::get<1>(futs).wait_reference().value == target + 100);
+  }
+
+  {
+    // view, source_cx::as_future
+    T *tmp = new T(target + 100);
+    auto futs = upcxx::rpc(target,
+                  sc_op_cx,
+                  [](upcxx::view<T> x) {
+                    UPCXX_ASSERT_ALWAYS((*x.begin()).valid);
+                    UPCXX_ASSERT_ALWAYS((*x.begin()).value == upcxx::rank_me() + 100);
+                    return *x.begin();
+                  },
+                  upcxx::make_view(tmp, tmp + 1)
                 );
     std::get<0>(futs).wait();
     delete tmp;
@@ -227,6 +284,25 @@ int main() {
                    done = true;
                  },
                  *tmp
+               );
+    fut.wait();
+    delete tmp;
+    while (!done) { upcxx::progress(); }
+    done = false;
+    upcxx::barrier();
+  }
+
+  {
+    // rpc_ff, view, source_cx::as_future
+    T *tmp = new T(target + 100);
+    auto fut = upcxx::rpc_ff(target,
+                 sc_cx,
+                 [](upcxx::view<T> x) {
+                   UPCXX_ASSERT_ALWAYS((*x.begin()).valid);
+                   UPCXX_ASSERT_ALWAYS((*x.begin()).value == upcxx::rank_me() + 100);
+                   done = true;
+                 },
+                 upcxx::make_view(tmp, tmp + 1)
                );
     fut.wait();
     delete tmp;
