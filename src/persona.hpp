@@ -105,7 +105,11 @@ namespace upcxx {
       
       template<typename ...Args>
       void operator()(Args &&...args) {
-        std::tuple<typename std::decay<Args>::type...> results{
+        std::tuple<typename std::conditional<
+            std::is_rvalue_reference<Args>::value,
+            typename std::decay<Args>::type,
+            Args
+          >::type...> results{
           std::forward<Args>(args)...
         };
         
