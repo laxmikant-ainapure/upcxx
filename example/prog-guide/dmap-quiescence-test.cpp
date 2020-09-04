@@ -9,7 +9,8 @@ using namespace std;
 int main(int argc, char *argv[])
 {
   upcxx::init();
-  const long N = 100000;
+  long N = 10000;
+  if (argc > 1) N = std::atol(argv[1]);
   DistrMap dmap;
 //SNIPPET  
   // distributed object to keep track of number of inserts expected at this process
