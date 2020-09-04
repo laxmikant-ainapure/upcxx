@@ -137,7 +137,7 @@ int main() {
     auto f = target.lpc([]() -> T const & { return global; });
     f.wait_reference();
   }
-  SHOW("lpc([]&&) -> T const &", 0, 1, 2);
+  SHOW("lpc([]&&) -> T const &", 0, 0, 0);
 
   { 
     T t;
@@ -165,14 +165,14 @@ int main() {
     auto f = target.lpc([&t]() -> T const & { return t; });
     f.wait_reference();
   }
-  SHOW("lpc([]&&) T& -> T const &", 1, 1, 2);
+  SHOW("lpc([]&&) T& -> T const &", 1, 0, 0);
 
   { 
     T t;
     auto f = target.lpc([t]() -> T const & { return t; });
     f.wait_reference();
   }
-  SHOW("lpc([]&&) T -> T const &", 1, 2, 4);
+  SHOW("lpc([]&&) T -> T const &", 1, 1, 2);
 
   // as_lpc
 
