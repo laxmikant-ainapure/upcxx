@@ -60,11 +60,17 @@ T global;
 
 bool done = false;
 
-struct Fn {
+struct Fn { // movable and copyable function object
   T t;
   void operator()() { done = true; }
-  Fn() {}
-  Fn(const Fn&) = delete;
+  UPCXX_SERIALIZED_FIELDS(t)
+};
+
+struct NmNcFn { // non-movable/non-copyable function object
+  T t;
+  void operator()() { done = true; }
+  NmNcFn() {}
+  NmNcFn(const NmNcFn&) = delete;
   UPCXX_SERIALIZED_FIELDS(t)
 };
 
@@ -249,13 +255,13 @@ int main() {
   // function object
 
   {
-    Fn fn;
+    NmNcFn fn;
     upcxx::rpc(target, fn).wait_reference();
   }
-  T::show_stats("Fn& ->", 3, 0, 0);
+  T::show_stats("NmNcFn& ->", 3, 0, 0);
 
-  upcxx::rpc(target, Fn()).wait_reference();
-  T::show_stats("Fn&& ->", 3, 0, 0);
+  upcxx::rpc(target, NmNcFn()).wait_reference();
+  T::show_stats("NmNcFn&& ->", 3, 0, 0);
 
   // rpc_ff
 
