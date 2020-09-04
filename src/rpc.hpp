@@ -137,7 +137,7 @@ namespace upcxx {
 
     backend::template send_am_master<progress_level::user>(
       tm, recipient,
-      upcxx::bind(std::forward<Fn>(fn), std::forward<Arg>(args)...)
+      upcxx::bind_rvalue_as_lvalue(std::forward<Fn>(fn), std::forward<Arg>(args)...)
     );
   }
   
@@ -222,7 +222,7 @@ namespace upcxx {
     
     backend::template send_am_master<progress_level::user>(
       tm, recipient,
-      upcxx::bind(std::forward<Fn>(fn), std::forward<Arg>(args)...)
+      upcxx::bind_rvalue_as_lvalue(std::forward<Fn>(fn), std::forward<Arg>(args)...)
     );
     
     // send_am_master doesn't support async source-completion, so we know
@@ -382,11 +382,11 @@ namespace upcxx {
       intrank_t initiator = backend::rank_me;
       auto *op_lpc = static_cast<cxs_state_t&&>(state).template to_lpc_dormant<operation_cx_event>();
       
-      using fn_bound_t = typename detail::bind<Fn&&, Arg&&...>::return_type;
+      using fn_bound_t = typename detail::bind<const Fn&, const Arg&...>::return_type;
 
       backend::template send_am_master<progress_level::user>(
         tm, recipient,
-        upcxx::bind(
+        upcxx::bind_rvalue_as_lvalue(
           [=](deserialized_type_t<fn_bound_t> &&fn_bound) {
             return upcxx::apply_as_future(
                 static_cast<deserialized_type_t<fn_bound_t>&&>(fn_bound)
@@ -400,7 +400,7 @@ namespace upcxx {
                 }
               );
           },
-          upcxx::bind(static_cast<Fn&&>(fn), static_cast<Arg&&>(args)...)
+          upcxx::bind_rvalue_as_lvalue(static_cast<Fn&&>(fn), static_cast<Arg&&>(args)...)
         )
       );
       

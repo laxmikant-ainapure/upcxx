@@ -378,6 +378,15 @@ namespace upcxx {
 // and all bound arguments have trivial binding traits, then the returned
 // callable has a return type equal to that of the wrapped callable. Otherwise,
 // the returned callable will have a future return type.
+//
+// bind is intended to be used in contexts that do not immediately serialize
+// the result, while bind_rvalue_as_lvalue is for the cases that pass the result
+// directly (i.e. as a temporary) to a function that serializes it.
+// The difference is that bind_rvalue_as_lvalue stores rvalues as const lvalue
+// references, allowing them to be serialized through the reference, while bind
+// moves the referent internally. Thus, bind_rvalue_as_lvalue incurs fewer
+// moves than bind, but it may only be used in contexts that guarantee that the
+// rvalue arguments live long enough to be serialized.
 
 namespace upcxx {
   namespace detail {
@@ -411,6 +420,14 @@ namespace upcxx {
   bind(Fn &&fn, B &&...b) {
     return detail::bind<Fn&&, B&&...>()(
       std::forward<Fn>(fn), std::forward<B>(b)...
+    );
+  }
+
+  template<typename Fn, typename ...B>
+  typename detail::template bind<const Fn&, const B&...>::return_type
+  bind_rvalue_as_lvalue(Fn &&fn, B &&...b) {
+    return detail::bind<const Fn&, const B&...>()(
+      static_cast<const Fn&>(fn), static_cast<const B&>(b)...
     );
   }
 }
