@@ -1,12 +1,18 @@
+#include <iomanip>
 #include <upcxx/upcxx.hpp>
 #include "util.hpp"
 
+// This test measures the number of copies/moves invoked on objects passed to
+// various UPC++ routines. The results asserted by this test are only indicative
+// of the current implementation and should NOT be construed as a guarantee of
+// future copy/move behavior. 
+// Consult the UPC++ Specification for guaranteed copy/move behaviors.
+
 struct T {
-  static int ctors, dtors, copies, moves;
-  static void show_stats(char const *title, int expected_ctors, int expected_copies,
+  static void show_stats(int line, char const *title, int expected_ctors, int expected_copies,
                          int expected_moves=-1);
-  
-  bool valid = true;
+  static void reset_counts() { ctors = copies = moves = dtors = 0; }
+
   T() { ctors++; }
   T(T const &that) {
     UPCXX_ASSERT_ALWAYS(that.valid, "copying from an invalidated object");
@@ -22,6 +28,11 @@ struct T {
     dtors++;
   }
 
+  private:
+  static int ctors, dtors, copies, moves;
+  bool valid = true;
+
+  public:
   UPCXX_SERIALIZED_FIELDS(valid)
 };
 
@@ -30,31 +41,43 @@ int T::dtors = 0;
 int T::copies = 0;
 int T::moves = 0;
 
-void T::show_stats(const char *title, int expected_ctors, int expected_copies,
+bool success = true;
+
+void T::show_stats(int line, const char *title, int expected_ctors, int expected_copies,
                    int expected_moves) {
   upcxx::barrier();
   
+  #if !SKIP_OUTPUT
   if(upcxx::rank_me() == 0) {
-    std::cout<<title<<std::endl;
+    std::cout<<std::left<<std::setw(50)<<title<< " \t(line " << line << ")" << std::endl;
     std::cout<<"  T::ctors = "<<ctors<<std::endl;
     std::cout<<"  T::copies = "<<copies<<std::endl;
     std::cout<<"  T::moves = "<<moves<<std::endl;
     std::cout<<"  T::dtors = "<<dtors<<std::endl;
     std::cout<<std::endl;
   }
-
-  #if 1
-  UPCXX_ASSERT_ALWAYS(ctors == expected_ctors, title<<": ctors="<<ctors<<" expected="<<expected_ctors);
-  UPCXX_ASSERT_ALWAYS(copies == expected_copies, title<<": copies="<<copies<<" expected="<<expected_copies);
-  UPCXX_ASSERT_ALWAYS(expected_moves == -1 || moves == expected_moves,
-                      title<<": moves="<<moves<<" expected="<<expected_moves);
-  UPCXX_ASSERT_ALWAYS(ctors+copies+moves == dtors, title<<": ctors - dtors != 0");
   #endif
+
+  #define CHECK(prop, ...) do { \
+    if (!(prop)) { \
+      success = false; \
+      if (!upcxx::rank_me()) \
+        std::cerr << "ERROR: failed check: " << #prop << "\n" \
+                  << title << ": " << __VA_ARGS__ << "\n" << std::endl; \
+    } \
+  } while (0)
+
+  CHECK(ctors == expected_ctors, "ctors="<<ctors<<" expected="<<expected_ctors);
+  CHECK(copies == expected_copies, "copies="<<copies<<" expected="<<expected_copies);
+  CHECK(expected_moves == -1 || moves == expected_moves,
+                      "moves="<<moves<<" expected="<<expected_moves);
+  CHECK(ctors+copies+moves == dtors, "ctors - dtors != 0");
   
-  ctors = copies = moves = dtors = 0;
+  T::reset_counts();
 
   upcxx::barrier();
 }
+#define SHOW(...) T::show_stats(__LINE__, __VA_ARGS__)
 
 T global;
 
@@ -78,7 +101,7 @@ int main() {
   upcxx::init();
   print_test_header();
 
-  --T::ctors; // discount construction of global
+  T::reset_counts(); // discount construction of global
 
   using upcxx::dist_object;
   dist_object<int> dob(3);
@@ -95,28 +118,28 @@ int main() {
     },
     T()
   ).wait_reference();
-  T::show_stats("T&& ->", 2, 0, 0);
+  SHOW("T&& ->", 2, 0, 0);
 
   upcxx::rpc(target,
     [](T const &x) {
     },
     global
   ).wait_reference();
-  T::show_stats("T& ->", 1, 0, 0);
+  SHOW("T& ->", 1, 0, 0);
 
   upcxx::rpc(target,
     [](T const &x) {
     },
     static_cast<T const&>(global)
   ).wait_reference();
-  T::show_stats("T const& ->", 1, 0, 0);
+  SHOW("T const& ->", 1, 0, 0);
 
   upcxx::rpc(target,
     []() -> T {
       return T();
     }
   ).wait_reference();
-  T::show_stats("-> T", 2, 0, 4);
+  SHOW("-> T", 2, 0, 4);
 
   upcxx::rpc(target,
     [](T &&x) -> T {
@@ -124,7 +147,7 @@ int main() {
     },
     T()
   ).wait_reference();
-  T::show_stats("T&& -> T", 3, 0, 5);
+  SHOW("T&& -> T", 3, 0, 5);
 
   upcxx::rpc(target,
     [](T const &x) -> T {
@@ -132,7 +155,7 @@ int main() {
     },
     static_cast<T const&>(global)
   ).wait_reference();
-  T::show_stats("T const& -> T", 2, 1, 4);
+  SHOW("T const& -> T", 2, 1, 4);
 
   upcxx::rpc(target,
     [](T &&x) -> upcxx::future<T> {
@@ -140,7 +163,7 @@ int main() {
     },
     T()
   ).wait_reference();
-  T::show_stats("T&& -> future<T>", 3, 0, 5);
+  SHOW("T&& -> future<T>", 3, 0, 5);
 
   upcxx::rpc(target,
     [](T const &x) -> upcxx::future<T> {
@@ -148,7 +171,7 @@ int main() {
     },
     static_cast<T const&>(global)
   ).wait_reference();
-  T::show_stats("T const& -> future<T>", 2, 1, 4);
+  SHOW("T const& -> future<T>", 2, 1, 4);
 
   // now with dist_object
 
@@ -157,7 +180,7 @@ int main() {
     dobT.fetch(target).wait_reference();
     upcxx::barrier();
   }
-  T::show_stats("dist_object<T>::fetch()", 2, 0, 2);
+  SHOW("dist_object<T>::fetch()", 2, 0, 2);
 
   upcxx::rpc(target,
     [](dist_object<int>&, T &&x) -> T {
@@ -165,7 +188,7 @@ int main() {
     },
     dob, T()
   ).wait_reference();
-  T::show_stats("dist_object + T&& -> T", 3, 0, 5);
+  SHOW("dist_object + T&& -> T", 3, 0, 5);
 
   upcxx::rpc(target,
     [](dist_object<int>&, T const &x) -> T {
@@ -173,7 +196,7 @@ int main() {
     },
     dob, static_cast<T const&>(global)
   ).wait_reference();
-  T::show_stats("dist_object + T const& -> T", 2, 1, 4);
+  SHOW("dist_object + T const& -> T", 2, 1, 4);
 
   upcxx::rpc(target,
     [](dist_object<int>&, T &&x) -> upcxx::future<T> {
@@ -181,7 +204,7 @@ int main() {
     },
     dob, T()
   ).wait_reference();
-  T::show_stats("dist_object + T&& -> future<T>", 3, 0, 5);
+  SHOW("dist_object + T&& -> future<T>", 3, 0, 5);
 
   upcxx::rpc(target,
     [](dist_object<int>&, T const &x) -> upcxx::future<T> {
@@ -189,7 +212,7 @@ int main() {
     },
     dob, static_cast<T const&>(global)
   ).wait_reference();
-  T::show_stats("dist_object + T const& -> future<T>", 2, 1, 4);
+  SHOW("dist_object + T const& -> future<T>", 2, 1, 4);
 
   // returning references
 
@@ -199,7 +222,7 @@ int main() {
     },
     T()
   ).wait_reference();
-  T::show_stats("T&& -> T&&", 3, 0, 2);
+  SHOW("T&& -> T&&", 3, 0, 2);
 
   upcxx::rpc(target,
     [](T const &x) -> T& {
@@ -207,7 +230,7 @@ int main() {
     },
     global
   ).wait_reference();
-  T::show_stats("T& -> T&", 2, 0, 2);
+  SHOW("T& -> T&", 2, 0, 2);
 
   upcxx::rpc(target,
     [](T const &x) -> T const& {
@@ -215,7 +238,7 @@ int main() {
     },
     static_cast<T const&>(global)
   ).wait_reference();
-  T::show_stats("T const& -> T const&", 2, 0, 2);
+  SHOW("T const& -> T const&", 2, 0, 2);
 
   upcxx::rpc(target,
     [](T const &x) -> upcxx::future<T const&> {
@@ -223,7 +246,7 @@ int main() {
     },
     static_cast<T const&>(global)
   ).wait_reference();
-  T::show_stats("T const& -> future<T const&>", 2, 0, 2);
+  SHOW("T const& -> future<T const&>", 2, 0, 2);
 
   upcxx::rpc(target,
     [](upcxx::view<T> v) -> T const& {
@@ -236,21 +259,21 @@ int main() {
     },
     upcxx::make_view(&global, &global+1)
   ).wait_reference();
-  T::show_stats("view<T> -> T const&", 2, 0, 2);
+  SHOW("view<T> -> T const&", 2, 0, 2);
 
   upcxx::rpc(target,
     []() -> T& {
       return global;
     }
   ).wait_reference();
-  T::show_stats("-> T&", 1, 0, 2);
+  SHOW("-> T&", 1, 0, 2);
 
   upcxx::rpc(target,
     []() -> T const& {
       return global;
     }
   ).wait_reference();
-  T::show_stats("-> T const&", 1, 0, 2);
+  SHOW("-> T const&", 1, 0, 2);
 
   // function object
 
@@ -258,10 +281,10 @@ int main() {
     NmNcFn fn;
     upcxx::rpc(target, fn).wait_reference();
   }
-  T::show_stats("NmNcFn& ->", 3, 0, 0);
+  SHOW("NmNcFn& ->", 3, 0, 0);
 
   upcxx::rpc(target, NmNcFn()).wait_reference();
-  T::show_stats("NmNcFn&& ->", 3, 0, 0);
+  SHOW("NmNcFn&& ->", 3, 0, 0);
 
   // rpc_ff
 
@@ -278,7 +301,7 @@ int main() {
   while (!done) { upcxx::progress(); }
   done = false;
   upcxx::barrier();
-  T::show_stats("(rpc_ff) T&& ->", 2, 0, 0);
+  SHOW("(rpc_ff) T&& ->", 2, 0, 0);
 
   upcxx::rpc_ff(target,
     [](T const &x) {
@@ -289,7 +312,7 @@ int main() {
   while (!done) { upcxx::progress(); }
   done = false;
   upcxx::barrier();
-  T::show_stats("(rpc_ff) T& ->", 1, 0, 0);
+  SHOW("(rpc_ff) T& ->", 1, 0, 0);
 
   upcxx::rpc_ff(target,
     [](T const &x) {
@@ -300,7 +323,7 @@ int main() {
   while (!done) { upcxx::progress(); }
   done = false;
   upcxx::barrier();
-  T::show_stats("(rpc_ff) T const& ->", 1, 0, 0);
+  SHOW("(rpc_ff) T const& ->", 1, 0, 0);
 
   {
     Fn fn;
@@ -309,13 +332,13 @@ int main() {
   while (!done) { upcxx::progress(); }
   done = false;
   upcxx::barrier();
-  T::show_stats("(rpc_ff) Fn& ->", 3, 0, 0);
+  SHOW("(rpc_ff) Fn& ->", 3, 0, 0);
 
   upcxx::rpc_ff(target, Fn());
   while (!done) { upcxx::progress(); }
   done = false;
   upcxx::barrier();
-  T::show_stats("(rpc_ff) Fn&& ->", 3, 0, 0);
+  SHOW("(rpc_ff) Fn&& ->", 3, 0, 0);
 
 
   // as_rpc
@@ -330,7 +353,7 @@ int main() {
     while (!done) { upcxx::progress(); }
     done = false;
     upcxx::barrier();
-    T::show_stats("as_rpc(Fn&)&& ->", 3, 0, 5);
+    SHOW("as_rpc(Fn&)&& ->", 3, 0, 5);
 
     { Fn fn;
       auto cx = upcxx::remote_cx::as_rpc(fn);
@@ -339,7 +362,7 @@ int main() {
     while (!done) { upcxx::progress(); }
     done = false;
     upcxx::barrier();
-    T::show_stats("as_rpc(Fn&)& ->", 3, 0, 5);
+    SHOW("as_rpc(Fn&)& ->", 3, 0, 5);
 
     { Fn fn;
       auto const cx = upcxx::remote_cx::as_rpc(fn);
@@ -348,13 +371,13 @@ int main() {
     while (!done) { upcxx::progress(); }
     done = false;
     upcxx::barrier();
-    T::show_stats("as_rpc(Fn&) const & ->", 3, 0, 5);
+    SHOW("as_rpc(Fn&) const & ->", 3, 0, 5);
 
     upcxx::rput(42, gp, upcxx::remote_cx::as_rpc(Fn()));
     while (!done) { upcxx::progress(); }
     done = false;
     upcxx::barrier();
-    T::show_stats("as_rpc(Fn&&)&& ->", 3, 0, 10);
+    SHOW("as_rpc(Fn&&)&& ->", 3, 0, 10);
 
     { auto cx = upcxx::remote_cx::as_rpc(Fn());
       upcxx::rput(42, gp, cx);
@@ -362,7 +385,7 @@ int main() {
     while (!done) { upcxx::progress(); }
     done = false;
     upcxx::barrier();
-    T::show_stats("as_rpc(Fn&&)& ->", 3, 1, 10);
+    SHOW("as_rpc(Fn&&)& ->", 3, 1, 10);
 
     { auto const cx = upcxx::remote_cx::as_rpc(Fn());
       upcxx::rput(42, gp, cx);
@@ -370,10 +393,10 @@ int main() {
     while (!done) { upcxx::progress(); }
     done = false;
     upcxx::barrier();
-    T::show_stats("as_rpc(Fn&&) const & ->", 3, 1, 10);
+    SHOW("as_rpc(Fn&&) const & ->", 3, 1, 10);
 
   }
  
-  print_test_success();
+  print_test_success(success);
   upcxx::finalize();
 }
