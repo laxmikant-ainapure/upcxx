@@ -91,6 +91,7 @@ int main() {
 
   T::reset_counts(); // discount construction of global
 
+  int peer = (upcxx::rank_me() + 1) % upcxx::rank_n();
   upcxx::persona &target = upcxx::current_persona();
 
   // lpc
@@ -172,6 +173,45 @@ int main() {
     f.wait_reference();
   }
   SHOW("lpc([]&&) T -> T const &", 1, 2, 4);
+
+  // as_lpc
+
+  using upcxx::operation_cx;
+  using upcxx::source_cx;
+
+  upcxx::dist_object<upcxx::global_ptr<int>> dobj(upcxx::new_<int>(0));
+  upcxx::global_ptr<int> gp = dobj.fetch(peer).wait();
+  int x = 0; int *lp = &x;
+
+  { 
+    Fn fn;
+    upcxx::rput(42, gp, operation_cx::as_lpc(target, fn));
+    while (!done) { upcxx::progress(); }
+  }
+  done = false;
+  SHOW("operation_cx::as_lpc(Fn&) ->", 1, 1, 4);
+
+  { 
+    upcxx::rput(42, gp, operation_cx::as_lpc(target, Fn()));
+    while (!done) { upcxx::progress(); }
+  }
+  done = false;
+  SHOW("operation_cx::as_lpc(Fn&&) ->", 1, 0, 5);
+
+  { 
+    Fn fn;
+    upcxx::rput(lp, gp, 1, source_cx::as_lpc(target, fn)|operation_cx::as_future()).wait();
+    while (!done) { upcxx::progress(); }
+  }
+  done = false;
+  SHOW("source_cx::as_lpc(Fn&) ->", 1, 1, 6);
+
+  { 
+    upcxx::rput(lp, gp, 1, source_cx::as_lpc(target, Fn())|operation_cx::as_future()).wait();
+    while (!done) { upcxx::progress(); }
+  }
+  done = false;
+  SHOW("source_cx::as_lpc(Fn&&) ->", 1, 0, 7);
 
   // then
   using upcxx::future;
