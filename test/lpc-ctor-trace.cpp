@@ -100,14 +100,14 @@ int main() {
     f.wait_reference();
   }
   done = false;
-  SHOW("lpc(Fn&) ->", 1, 1, 3);
+  SHOW("lpc(Fn&) ->", 1, 1, 1);
 
   { 
     auto f = target.lpc(Fn());
     f.wait_reference();
   }
   done = false;
-  SHOW("lpc(Fn&&) ->", 1, 0, 3);
+  SHOW("lpc(Fn&&) ->", 1, 0, 2);
 
   // lpc_ff
   { 
@@ -116,62 +116,62 @@ int main() {
     while (!done) { upcxx::progress(); }
   }
   done = false;
-  SHOW("lpc_ff(Fn&) ->", 1, 1, 3);
+  SHOW("lpc_ff(Fn&) ->", 1, 1, 0);
 
   { 
     target.lpc_ff(Fn());
     while (!done) { upcxx::progress(); }
   }
   done = false;
-  SHOW("lpc_ff(Fn&&) ->", 1, 0, 3);
+  SHOW("lpc_ff(Fn&&) ->", 1, 0, 1);
 
   // exercise lpc return path
   { 
     auto f = target.lpc([]() -> T { return global; });
     f.wait_reference();
   }
-  SHOW("lpc([]&&) -> T", 0, 1, 8);
+  SHOW("lpc([]&&) -> T", 0, 1, 6);
 
   { 
     auto f = target.lpc([]() -> T const & { return global; });
     f.wait_reference();
   }
-  SHOW("lpc([]&&) -> T const &", 0, 1, 4);
+  SHOW("lpc([]&&) -> T const &", 0, 1, 2);
 
   { 
     T t;
     auto f = target.lpc([&t]() -> T&& { return std::move(t); });
     f.wait_reference();
   }
-  SHOW("lpc([]&&) T& -> T&&", 1, 0, 5);
+  SHOW("lpc([]&&) T& -> T&&", 1, 0, 3);
 
   { 
     T t;
     auto f = target.lpc([&t]() -> T { return t; });
     f.wait_reference();
   }
-  SHOW("lpc([]&&) T& -> T", 1, 1, 8);
+  SHOW("lpc([]&&) T& -> T", 1, 1, 6);
 
   { 
     T t;
     auto f = target.lpc([t]() -> T { return t; });
     f.wait_reference();
   }
-  SHOW("lpc([]&&) T -> T", 1, 2, 11);
+  SHOW("lpc([]&&) T -> T", 1, 2, 8);
 
   { 
     T t;
     auto f = target.lpc([&t]() -> T const & { return t; });
     f.wait_reference();
   }
-  SHOW("lpc([]&&) T& -> T const &", 1, 1, 4);
+  SHOW("lpc([]&&) T& -> T const &", 1, 1, 2);
 
   { 
     T t;
     auto f = target.lpc([t]() -> T const & { return t; });
     f.wait_reference();
   }
-  SHOW("lpc([]&&) T -> T const &", 1, 2, 7);
+  SHOW("lpc([]&&) T -> T const &", 1, 2, 4);
 
   // then
   using upcxx::future;
