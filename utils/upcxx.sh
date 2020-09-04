@@ -56,6 +56,7 @@ export UPCXX_CODEMODE
 dolink=1
 doversion=
 dodebug=
+purgeoption=
 doopt=
 codemode_override=
 docc=
@@ -80,6 +81,12 @@ for ((i = 1 ; i <= $# ; i++)); do
       eval set_upcxx_var UPCXX_"$var" "$val"
       # swallow current and next arg
       set -- "${@:1:i-1}" "${@:i+2}"
+      i=$((i-1))
+    ;;
+    -purge-option=*)
+      purgeoption="${arg#*=}"
+      # swallow current arg
+      set -- "${@:1:i-1}" "${@:i+1}"
       i=$((i-1))
     ;;
     -Wc,*) # -Wc,anything : anything is passed-thru uninterpreted
@@ -152,6 +159,14 @@ done
 
 source $UPCXX_META SET
 [[ -z "$CC" ]] && error "failure in UPCXX_META=$UPCXX_META"
+
+if [[ -n "$purgeoption" ]] ; then
+  for var in CC CFLAGS CXX CXXFLAGS CPPFLAGS LDFLAGS LIBS ; do 
+    set -x
+    eval $var="\${$var//$purgeoption/}"
+  done
+fi
+
 for var in CC CFLAGS CXX CXXFLAGS CPPFLAGS LDFLAGS LIBS ; do 
   eval verbose "$var: \$$var"
 done
