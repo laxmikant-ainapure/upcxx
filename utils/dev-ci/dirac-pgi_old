@@ -30,7 +30,8 @@ fi
 
 ## TESTS
 if [[ $STAGES =~ ,tests, ]]; then
-  time $MAKE_CMD dev-tests || touch .pipe-fail
+  # PGI floor frontend ICEs when encountering too many debug symbols
+  time $MAKE_CMD dev-tests PGI_DEBUG_SYMBOLS_BROKEN=1 || touch .pipe-fail
 fi
 
 ## RUN

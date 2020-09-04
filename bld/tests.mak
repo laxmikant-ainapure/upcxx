@@ -192,6 +192,17 @@ TEST_FLAGS_MEMBEROF_GNU=-Wno-invalid-offsetof
 TEST_FLAGS_MEMBEROF_Clang=-Wno-invalid-offsetof
 export TEST_FLAGS_MEMBEROF=$(TEST_FLAGS_MEMBEROF_$(GASNET_CXX_FAMILY))
 
+ifeq ($(strip $(PGI_DEBUG_SYMBOLS_BROKEN)),1)
+# issue #390: the following tests are known to ICE PGI floor version when debugging symbols are enabled
+# this compiler lacks a '-g0' option, so we use our home-grown alternative to strip off -g
+test_pgi_debug_symbols_broken = \
+	RPC_CTOR_TRACE \
+	NODISCARD \
+	MEMBEROF \
+	ISSUE138
+endif
+$(foreach test,$(test_pgi_debug_symbols_broken),$(eval export TEST_FLAGS_$(test):=$(TEST_FLAGS_$(test)) -purge-option=-g))
+
 #
 # End of configuration
 #
