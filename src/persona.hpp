@@ -106,7 +106,7 @@ namespace upcxx {
       template<typename ...Args>
       void operator()(Args &&...args) {
         std::tuple<typename std::conditional<
-            std::is_rvalue_reference<Args>::value,
+            !std::is_lvalue_reference<Args>::value,
             typename std::decay<Args>::type,
             Args
           >::type...> results{
