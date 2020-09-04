@@ -90,9 +90,10 @@ namespace upcxx {
     persona *target_;
     Fn fn_;
 
-    lpc_cx(persona &target, Fn fn):
+    template<typename Fn1>
+    lpc_cx(persona &target, Fn1 &&fn):
       target_(&target),
-      fn_(std::move(fn)) {
+      fn_(std::forward<Fn1>(fn)) {
     }
   };
   
@@ -296,9 +297,10 @@ namespace upcxx {
     template<typename Event>
     struct support_as_lpc {
       template<typename Fn>
-      static constexpr completions<lpc_cx<Event, Fn>> as_lpc(persona &target, Fn func) {
+      static constexpr completions<lpc_cx<Event, typename std::decay<Fn>::type>>
+      as_lpc(persona &target, Fn &&func) {
         return {
-          lpc_cx<Event, Fn>{target, std::forward<Fn>(func)}
+          lpc_cx<Event, typename std::decay<Fn>::type>{target, std::forward<Fn>(func)}
         };
       }
     };
