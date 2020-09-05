@@ -179,7 +179,8 @@ variables:
         printf "%20s = '%s'\n" $var "${!var}"
       done
       echo "==== CI CONTROL VARS ===="
-      for var in CI_NETWORKS CI_RANKS CI_MAKE CI_MAKE_PARALLEL CI_DEV_CHECK CI_EXTRAFLAGS CI_RUN_TESTS; do
+      for var in CI_NETWORKS CI_RANKS CI_MAKE CI_MAKE_PARALLEL CI_DEV_CHECK CI_EXTRAFLAGS \
+                 CI_RUN_TESTS CI_TESTS CI_NO_TESTS; do
         printf "%20s = '%s'\n" $var "${!var}"
       done
       echo "===="
@@ -299,27 +300,33 @@ variables:
     - *start_logging
     - *do_ci_vars
     - |-
+      # TODO: the following vars are an opportunity for more customization
+      DO_BUILD="time $DO_MAKE"
+      DO_INSTALL="time $DO_MAKE"
+      DO_TEST_INSTALL="time $DO_MAKE"
+      DO_COMPILE="time $DO_MAKE EXTRAFLAGS='$CI_EXTRAFLAGS' ${CI_TESTS:+TESTS='$CI_TESTS'} ${CI_NO_TESTS:+NO_TESTS='$CI_NO_TESTS'}"
+      if (( $CI_RUN_TESTS )); then
+        DO_RUN="time $DO_MAKE"
+      else
+        DO_RUN=':'
+      fi
       set -e -x
       ./configure --prefix=inst $CONFIGURE_ARGS
-      $DO_MAKE all
-      $DO_MAKE install
-      $DO_MAKE test_install || touch .pipe-failed
+      eval $DO_BUILD all
+      eval $DO_INSTALL install
+      eval $DO_TEST_INSTALL test_install || touch .pipe-failed
       # split to reduce peak storage requirement:
       for net in $CI_NETWORKS; do
         export NETWORKS=$net
         if (( $CI_DEV_CHECK )); then
           for codemode in opt debug; do
-            $DO_MAKE dev-tests-$codemode EXTRAFLAGS="$CI_EXTRAFLAGS" || touch .pipe-failed
-            if (( $CI_RUN_TESTS )); then
-              $DO_MAKE dev-run-tests || touch .pipe-failed
-            fi
+            eval $DO_COMPILE dev-tests-$codemode || touch .pipe-failed
+            eval $DO_RUN dev-run-tests || touch .pipe-failed
             (set +x; rm -rf test-*-*)
           done
         else
-          $DO_MAKE tests EXTRAFLAGS="$CI_EXTRAFLAGS" || touch .pipe-failed
-          if (( $CI_RUN_TESTS )); then
-            $DO_MAKE run-tests || touch .pipe-failed
-          fi
+          eval $DO_COMPILE tests || touch .pipe-failed
+          eval $DO_RUN run-tests || touch .pipe-failed
           (set +x; rm -rf test-*-*)
         fi
       done
