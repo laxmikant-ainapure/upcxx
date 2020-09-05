@@ -515,6 +515,7 @@ dirac.pgi_floor:
   before_script:
     - module load PrgEnv/pgi/19.1
     - export CC=pgcc CXX=pgc++
+    - export PGI_DEBUG_SYMBOLS_BROKEN=1
 
 dirac.intel_floor:
   extends: [ .generic, .old_intel, .dirac ]
