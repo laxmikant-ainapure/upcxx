@@ -162,7 +162,6 @@ source $UPCXX_META SET
 
 if [[ -n "$purgeoption" ]] ; then
   for var in CC CFLAGS CXX CXXFLAGS CPPFLAGS LDFLAGS LIBS ; do 
-    set -x
     eval $var="\${$var//$purgeoption/}"
   done
 fi
