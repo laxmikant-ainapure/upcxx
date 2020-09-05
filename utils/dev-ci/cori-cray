@@ -21,18 +21,18 @@ fi
 
 ## BUILD
 if [[ $STAGES =~ ,build, ]]; then
-  time $MAKE_CMD all
+  eval $DO_BUILD
 fi
 
 ## TESTS
 if [[ $STAGES =~ ,tests, ]]; then
-  time $MAKE_CMD dev-tests || touch .pipe-fail
+  eval $DO_COMPILE || touch .pipe-fail
 fi
 
 ## RUN
 if [[ $STAGES =~ ,run, ]]; then
   unset TMPDIR
-  time salloc -C haswell -t 120 -q interactive -N 2 -- time $GMAKE dev-run-tests || touch .pipe-fail
+  time salloc -C haswell -t 120 -q interactive -N 2 -- time $GMAKE ${MAYBE_DEV}run-tests || touch .pipe-fail
 fi
 
 ## DONE

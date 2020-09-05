@@ -28,18 +28,18 @@ fi
 
 ## BUILD
 if [[ $STAGES =~ ,build, ]]; then
-  time $MAKE_CMD all
+  eval $DO_BUILD
 fi
 
 ## TESTS
 if [[ $STAGES =~ ,tests, ]]; then
-  time $MAKE_CMD dev-tests || touch .pipe-fail
+  eval $DO_COMPILE || touch .pipe-fail
 fi
 
 ## RUN
 if [[ $STAGES =~ ,run, ]]; then
   unset TMPDIR
-  time bsub -W 30 -nnodes 4 -P csc296 -I "time $GMAKE dev-run-tests NETWORKS='$NETWORKS' || touch .pipe-fail"
+  time bsub -W 30 -nnodes 4 -P csc296 -I "time $GMAKE ${MAYBE_DEV}run-tests NETWORKS='$NETWORKS' || touch .pipe-fail"
 fi
 
 ## DONE

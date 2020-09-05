@@ -25,19 +25,19 @@ fi
 
 ## BUILD
 if [[ $STAGES =~ ,build, ]]; then
-  time $MAKE_CMD all
+  eval $DO_BUILD
 fi
 
 ## TESTS
 if [[ $STAGES =~ ,tests, ]]; then
   # PGI floor frontend ICEs when encountering too many debug symbols
-  time $MAKE_CMD dev-tests PGI_DEBUG_SYMBOLS_BROKEN=1 || touch .pipe-fail
+  eval $DO_COMPILE PGI_DEBUG_SYMBOLS_BROKEN=1 || touch .pipe-fail
 fi
 
 ## RUN
 unset TMPDIR
 if [[ $STAGES =~ ,run, ]]; then
-  time $GMAKE dev-run-tests || touch .pipe-fail
+  time $GMAKE ${MAYBE_DEV}run-tests || touch .pipe-fail
 fi
 
 ## DONE

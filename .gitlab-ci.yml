@@ -91,7 +91,6 @@
 #     - Provides implementation CI_CONFIGURE_ARGS
 #   - Implement CI_CONFIGURE_ARGS in .dev_ci:script
 #     - Probably should use improvements to utils/dev-ci
-#     - Also opportunity to implement CI_DEV_CHECK w/o "patching"
 
 
 #
@@ -348,16 +347,11 @@ variables:
     - *start_logging
     - *do_ci_vars
     - |-
-      if ! (( $CI_DEV_CHECK )); then
-        perl -pi -e 's/dev-((run-)?tests)/\1/' -- utils/dev-ci/$ci_script
-      fi
       if (( $CI_RUN_TESTS )); then
         DEV_CI_STAGES="${DEV_CI_STAGES:-configure,build,tests,run}"
       else
         DEV_CI_STAGES="${DEV_CI_STAGES:-configure,build,tests}"
       fi
-      export NETWORKS="$CI_NETWORKS"
-      export EXTRAFLAGS="$CI_EXTRAFLAGS"
       ./utils/dev-ci/$ci_script --stages="$DEV_CI_STAGES" --dir=. && touch .pipe-passed
 
 ################################################################################
@@ -376,12 +370,9 @@ variables:
     MY_OS:   'cnl'
     MY_CPU:  'knl'
     MY_HOST: 'theta'
-  before_script: # "defeat" Theta-specific codemode split
+  before_script:
     - *do_ci_dev_check
     - &theta-dev-ci |-
-      if ! (( $CI_DEV_CHECK )); then
-        perl -pi -e 's/ln|mv|rm -rf|opt debug/:/' -- utils/dev-ci/$ci_script
-      fi
       if ! (( $CI_THETA_RUN_ALL_PRGENV )); then
         DEV_CI_STAGES="${DEV_CI_STAGES:-configure,build,tests}"
       fi
