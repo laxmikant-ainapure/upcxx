@@ -287,6 +287,20 @@ int main() {
   tfr.then([](T const &t) -> T const & { return t; }).wait_reference();
   SHOW("future<T&>::then T const & -> T const &", 0, 0, 0);
 
+  future<> vf = make_future();
+
+  { future<T> f = vf.then([]() { return global; }); f.wait_reference(); }
+  SHOW("future<>::then -> T", 0, 1, 3);
+
+  { future<T> f = vf.then([]() { return T(); }); f.wait_reference(); }
+  SHOW("future<>::then -> T", 1, 0, 3);
+
+  { future<T&> f = vf.then([]() -> T & { return global; }); f.wait_reference(); }
+  SHOW("future<>::then -> T &", 0, 0, 0);
+
+  { future<const T&> f = vf.then([]() -> T const & { return global; }); f.wait_reference(); }
+  SHOW("future<>::then -> T const &", 0, 0, 0);
+
   print_test_success(success);
   upcxx::finalize();
 }
