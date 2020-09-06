@@ -301,6 +301,40 @@ int main() {
   { future<const T&> f = vf.then([]() -> T const & { return global; }); f.wait_reference(); }
   SHOW("future<>::then -> T const &", 0, 0, 0);
 
+  { future<T> f = vf.then([&tf]() { return tf; }); 
+    f.wait_reference(); 
+  }
+  SHOW("future<>::then -> ready future<T>", 0, 0, 0);
+
+  { future<T&> f = vf.then([&tfr]() { return tfr; }); 
+    f.wait_reference(); 
+  }
+  SHOW("future<>::then -> ready future<T&>", 0, 0, 0);
+
+  { future<T> f = vf.then([]() { return make_future(global); }); 
+    f.wait_reference(); 
+  }
+  SHOW("future<>::then -> make_future<T>", 0, 1, 2);
+
+  { future<T&> f = vf.then([]() { return make_future<T&>(global); }); 
+    f.wait_reference(); 
+  }
+  SHOW("future<>::then -> make_future<T&>", 0, 0, 0);
+
+  { promise<T> p;
+    future<T> f = vf.then([p]() { return p.get_future(); }); 
+    p.fulfill_result(T());
+    f.wait_reference(); 
+  }
+  SHOW("future<>::then -> non-ready future<T>", 1, 0, 1);
+
+  { promise<T&> p;
+    future<T&> f = vf.then([p]() { return p.get_future(); }); 
+    p.fulfill_result(global);
+    f.wait_reference(); 
+  }
+  SHOW("future<>::then -> non-ready future<T&>", 0, 0, 0);
+
   print_test_success(success);
   upcxx::finalize();
 }
