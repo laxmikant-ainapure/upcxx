@@ -1,6 +1,7 @@
 #include <upcxx/upcxx.hpp>
 #include <cassert>
 #include <iostream>
+#include <memory>
 
 /*
  * This example illustrates the use of UPCXX_SERIALIZED_FIELDS to serialize a 
@@ -80,8 +81,11 @@ int main(void) {
               static massive const & r_r = *r_view.begin();
         #else
               // Starting in 2020.3.8, we can use deserializing_iterator::deserialize_into()
-              // thereby avoiding all object copies:
-              static massive r_r;
+              // thereby avoiding all object copies.
+              // This also allows us to exclusively use heap memory for our object
+              // (some systems get finicky about static objects this size, even in static data)
+              std::unique_ptr<massive> p(new massive);
+              massive &r_r = *p;
               r_view.begin().deserialize_into(&r_r);
         #endif
                 /*
