@@ -83,6 +83,8 @@ Notable bug fixes:
 * issue #405: regression: `upcxx::copy(T*,global_ptr<T>,size_t)` fails to compile
 * issue #407: RPC breaks if an argument asymmetrically deserializes to a type that
   itself has asymmetric deserialization
+* issue #413: LPC callback that returns a reference produces a future containing
+  a dangling reference
 * [spec issue #104](https://bitbucket.org/berkeleylab/upcxx-spec/issues/104): Provide a universal variadic factory for future
 * [spec issue #158](https://bitbucket.org/berkeleylab/upcxx-spec/issues/158): prohibit reference types in `global_ptr` and `upcxx_memberof_general`
 * [spec issue #160](https://bitbucket.org/berkeleylab/upcxx-spec/issues/160): Deadlocks arising from synchronous collective calls with internal progress

@@ -131,48 +131,48 @@ int main() {
     auto f = target.lpc([]() -> T { return global; });
     f.wait_reference();
   }
-  SHOW("lpc([]&&) -> T", 0, 1, 6);
+  SHOW("lpc([]&&) -> T", 0, 1, 5);
 
   { 
     auto f = target.lpc([]() -> T const & { return global; });
     f.wait_reference();
   }
-  SHOW("lpc([]&&) -> T const &", 0, 1, 2);
+  SHOW("lpc([]&&) -> T const &", 0, 0, 0);
 
   { 
     T t;
     auto f = target.lpc([&t]() -> T&& { return std::move(t); });
     f.wait_reference();
   }
-  SHOW("lpc([]&&) T& -> T&&", 1, 0, 3);
+  SHOW("lpc([]&&) T& -> T&&", 1, 0, 2);
 
   { 
     T t;
     auto f = target.lpc([&t]() -> T { return t; });
     f.wait_reference();
   }
-  SHOW("lpc([]&&) T& -> T", 1, 1, 6);
+  SHOW("lpc([]&&) T& -> T", 1, 1, 5);
 
   { 
     T t;
     auto f = target.lpc([t]() -> T { return t; });
     f.wait_reference();
   }
-  SHOW("lpc([]&&) T -> T", 1, 2, 8);
+  SHOW("lpc([]&&) T -> T", 1, 2, 7);
 
   { 
     T t;
     auto f = target.lpc([&t]() -> T const & { return t; });
     f.wait_reference();
   }
-  SHOW("lpc([]&&) T& -> T const &", 1, 1, 2);
+  SHOW("lpc([]&&) T& -> T const &", 1, 0, 0);
 
   { 
     T t;
     auto f = target.lpc([t]() -> T const & { return t; });
     f.wait_reference();
   }
-  SHOW("lpc([]&&) T -> T const &", 1, 2, 4);
+  SHOW("lpc([]&&) T -> T const &", 1, 1, 2);
 
   // as_lpc
 

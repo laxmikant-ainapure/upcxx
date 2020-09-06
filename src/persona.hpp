@@ -105,13 +105,15 @@ namespace upcxx {
       
       template<typename ...Args>
       void operator()(Args &&...args) {
-        std::tuple<typename std::decay<Args>::type...> results{
-          std::forward<Args>(args)...
-        };
+        using results_t = std::tuple<typename std::conditional<
+            !std::is_lvalue_reference<Args>::value,
+            typename std::decay<Args>::type,
+            Args
+          >::type...>;
         
         initiator_->lpc_ff(
-          lpc_initiator_finish<decltype(results), Promise>{
-            std::move(results),
+          lpc_initiator_finish<results_t, Promise>{
+            results_t{std::forward<Args>(args)...},
             pro_
           }
         );
