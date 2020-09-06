@@ -85,10 +85,10 @@ Notable bug fixes:
   itself has asymmetric deserialization
 * issue #413: LPC callback that returns a reference produces a future containing
   a dangling reference
-* [spec issue #104](https://bitbucket.org/berkeleylab/upcxx-spec/issues/104): Provide a universal variadic factory for future
-* [spec issue #158](https://bitbucket.org/berkeleylab/upcxx-spec/issues/158): prohibit reference types in `global_ptr` and `upcxx_memberof_general`
-* [spec issue #160](https://bitbucket.org/berkeleylab/upcxx-spec/issues/160): Deadlocks arising from synchronous collective calls with internal progress
-* [spec issue #167](https://bitbucket.org/berkeleylab/upcxx-spec/issues/167): `dist_object<T>::fetch` does not correctly handle `T` with asymmetric serialization
+* spec issue 104: Provide a universal variadic factory for future
+* spec issue 158: prohibit reference types in `global_ptr` and `upcxx_memberof_general`
+* spec issue 160: Deadlocks arising from synchronous collective calls with internal progress
+* spec issue 167: `dist_object<T>::fetch` does not correctly handle `T` with asymmetric serialization
 
 This library release conforms to the
 [UPC++ v1.0 Specification, Revision 2020.8.1-draft](docs/spec.pdf).
@@ -156,8 +156,8 @@ Notable bug fixes:
 * issue #304: Bad behavior for misspelled CC or CXX
 * issue #323: Incorrect behavior for `global_ptr<T>(nullptr).is_local()` in multi-node jobs
 * issue #333: Multiply defined symbol `detail::device_allocator_core<cuda_device>::min_alignment` w/ std=c++2a
-* [spec issue #148](https://bitbucket.org/berkeleylab/upcxx-spec/issues/148): Missing `const` qualifiers on team and other API objects
-* [spec issue #155](https://bitbucket.org/berkeleylab/upcxx-spec/issues/155): value argument type to value collectives is changed to a simple by-value T
+* spec issue 148: Missing `const` qualifiers on team and other API objects
+* spec issue 155: value argument type to value collectives is changed to a simple by-value T
 
 This library release mostly conforms to the
 [UPC++ v1.0 Specification, Revision 2020.3.0](https://bitbucket.org/berkeleylab/upcxx/downloads/upcxx-spec-2020.3.0.pdf).
@@ -233,8 +233,8 @@ Notable bug fixes:
 * issue #260: `GASNET_CONFIGURE_ARGS` can break UPC++ build
 * issue #264: `upcxx-meta CXX` and `CC` are not full-path expanded
 * issue #268: Completion handlers can't accept `&&` references
-* [spec issue #141](https://bitbucket.org/berkeleylab/upcxx-spec/issues/141): resolve empty transfer ambiguities (count=0 RMA)
-* [spec issue #142](https://bitbucket.org/berkeleylab/upcxx-spec/issues/142): add `persona::active_with_caller()`
+* spec issue 141: resolve empty transfer ambiguities (count=0 RMA)
+* spec issue 142: add `persona::active_with_caller()`
 
 This library release mostly conforms to the
 [UPC++ v1.0 Specification, Revision 2019.9.0](https://bitbucket.org/berkeleylab/upcxx/downloads/upcxx-spec-2019.9.0.pdf).
