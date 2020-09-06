@@ -46,12 +46,13 @@ namespace detail {
     }
 
     template<typename ThenFn>
-    using then_lazy_return_type = void;
+    using then_lazy_return_type =
+      typename apply_variadic_as_future<ThenFn>::return_type;
 
     template<typename ThenFn>
-    void call_then_lazy(FnRef fn, ThenFn &&then_fn, ArgRef ...arg) {
+    then_lazy_return_type<ThenFn&&> call_then_lazy(FnRef fn, ThenFn &&then_fn, ArgRef ...arg) {
       static_cast<FnRef>(fn)(static_cast<ArgRef>(arg)...);
-      static_cast<ThenFn&&>(then_fn)();
+      return apply_variadic_as_future<ThenFn&&>()(static_cast<ThenFn&&>(then_fn));
     }
   };
   
@@ -91,11 +92,13 @@ namespace detail {
     }
 
     template<typename ThenFn>
-    using then_lazy_return_type = void;
+    using then_lazy_return_type =
+      typename apply_variadic_as_future<ThenFn, Return&&>::return_type;
 
     template<typename ThenFn>
-    void call_then_lazy(FnRef fn, ThenFn &&then_fn, ArgRef ...arg) {
-      static_cast<ThenFn&&>(then_fn)(
+    then_lazy_return_type<ThenFn&&> call_then_lazy(FnRef fn, ThenFn &&then_fn, ArgRef ...arg) {
+      return apply_variadic_as_future<ThenFn&&, Return&&>()(
+        static_cast<ThenFn&&>(then_fn),
         static_cast<FnRef>(fn)(static_cast<ArgRef>(arg)...)
       );
     }
