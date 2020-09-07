@@ -66,6 +66,15 @@ empty:=
 space:= $(empty) $(empty)
 TEST_PATTERN = ($(subst $(space),|,$(strip $(subst $(comma),$(space),$(1)))))
 
+# This ban-list is used to filter known-benign compiler outputs containing "warning",
+# that would otherwise be flagged as a WARNING result by the test builder.
+# Entries in this banlist should be separated with '|', avoiding extra spaces
+# Special-characters in the set ['!] should be matched using '.'
+WARNING_BANLIST = (DUMMY-PATTERN\
+|warning: Using .getaddrinfo. in statically linked applications requires at runtime the shared libraries\
+)
+WARNING_FILTER = $(PERL) -ne 'print unless m!$(WARNING_BANLIST)!'
+
 # Compile prerequisites for 'check' or 'tests'
 # Build is restricted to single codemode and the networks in $(NETWORKS)
 # We take care in case $(NETWORKS) is empty (when GASNet has not been configured)
@@ -162,7 +171,7 @@ do-build-%: force
 	 else : expect compile pass ;                    \
 	   if [[ $$result == 0 ]]; then                  \
 	     $$MAKE $(MAKE_HERE) do-test-xml RESULT=compile-pass OUTPUT=$$output ; \
-	     if grep -i -q -w warning $$output ; then      \
+	     if $(WARNING_FILTER) $$output | grep -i -q -w warning ; then \
 	       head -n $(TEST_CERR_LIMIT) $$output ;       \
 	       printf 'Compiling %-60s WARNING\n' "$$exe"; \
 	       [[ -n "$$TEST_WARNING_SENTINEL" ]] && touch $$TEST_WARNING_SENTINEL; \
