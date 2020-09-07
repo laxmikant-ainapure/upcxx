@@ -161,8 +161,16 @@ source $UPCXX_META SET
 [[ -z "$CC" ]] && error "failure in UPCXX_META=$UPCXX_META"
 
 if [[ -n "$purgeoption" ]] ; then
+  # Yuk: BASH regex is horribly broken and non-portable.
+  # For details, see: https://stackoverflow.com/questions/9792702/
+  # However, we want to use the shell facilities to avoid worse problems with inner quoting
+  # The following is NOT perfect, but should be sufficient for the cases we care about
   for var in CC CFLAGS CXX CXXFLAGS CPPFLAGS LDFLAGS LIBS ; do 
-    eval $var="\${$var//$purgeoption/}"
+    space=' '
+    eval $var="\$space\${$var}\$space"    # surround start/end with space to avoid anchors
+    eval $var="\${$var// $purgeoption / }" # space is our option boundary
+    eval $var="\${$var%% }" # strip the space we added
+    eval $var="\${$var## }" # strip the space we added
   done
 fi
 
