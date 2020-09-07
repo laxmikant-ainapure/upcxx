@@ -104,7 +104,6 @@ namespace upcxx {
     using deserialized_cx = rpc_cx<Event, typename serialization_traits<Fn>::deserialized_type>;
     
     Fn fn_;
-    rpc_cx(Fn fn): fn_(std::move(fn)) {}
   };
   
   //////////////////////////////////////////////////////////////////////////////
@@ -118,22 +117,33 @@ namespace upcxx {
   struct completions<> {};
   template<typename H, typename ...T>
   struct completions<H,T...>: completions<T...> {
-    H head;
+    H head_;
+
+    H& head() { return head_; }
+    const H& head() const { return head_; }
+    completions<T...>& tail() { return *this; }
+    const completions<T...>& tail() const { return *this; }
 
     H&& head_moved() {
-      return static_cast<H&&>(head);
+      return static_cast<H&&>(head_);
     }
     completions<T...>&& tail_moved() {
       return static_cast<completions<T...>&&>(*this);
     }
-    
-    constexpr completions(H head, T ...tail):
+
+    constexpr completions(H &&head, T &&...tail):
       completions<T...>(std::move(tail)...),
-      head(std::move(head)) {
+      head_(std::move(head)) {
     }
-    constexpr completions(H head, completions<T...> tail):
+    template<typename H1>
+    constexpr completions(H1 &&head, completions<T...> &&tail):
       completions<T...>(std::move(tail)),
-      head(std::move(head)) {
+      head_(std::forward<H1>(head)) {
+    }
+    template<typename H1>
+    constexpr completions(H1 &&head, const completions<T...> &tail):
+      completions<T...>(tail),
+      head_(std::forward<H1>(head)) {
     }
   };
 
@@ -141,19 +151,56 @@ namespace upcxx {
   // operator "|": Concatenates two completions lists.
   
   template<typename ...B>
-  constexpr completions<B...> operator|(
-      completions<> a, completions<B...> b
+  constexpr completions<B...>&& operator|(
+      completions<> a, completions<B...> &&b
+    ) {
+    return std::move(b);
+  }
+  template<typename ...B>
+  constexpr const completions<B...>& operator|(
+      completions<> a, const completions<B...> &b
     ) {
     return b;
   }
+
   template<typename Ah, typename ...At, typename ...B>
   constexpr completions<Ah,At...,B...> operator|(
-      completions<Ah,At...> a,
-      completions<B...> b
+      completions<Ah,At...> &&a,
+      completions<B...> &&b
     ) {
     return completions<Ah,At...,B...>{
       a.head_moved(),
       a.tail_moved() | std::move(b)
+    };
+  }
+  template<typename Ah, typename ...At, typename ...B>
+  constexpr completions<Ah,At...,B...> operator|(
+      completions<Ah,At...> &&a,
+      const completions<B...> &b
+    ) {
+    return completions<Ah,At...,B...>{
+      a.head_moved(),
+      a.tail_moved() | b
+    };
+  }
+  template<typename Ah, typename ...At, typename ...B>
+  constexpr completions<Ah,At...,B...> operator|(
+      const completions<Ah,At...> &a,
+      completions<B...> &&b
+    ) {
+    return completions<Ah,At...,B...>{
+      a.head(),
+      a.tail() | std::move(b)
+    };
+  }
+  template<typename Ah, typename ...At, typename ...B>
+  constexpr completions<Ah,At...,B...> operator|(
+      const completions<Ah,At...> &a,
+      const completions<B...> &b
+    ) {
+    return completions<Ah,At...,B...>{
+      a.head(),
+      a.tail() | b
     };
   }
 
@@ -471,6 +518,8 @@ namespace upcxx {
         pro_(static_cast<promise_cx<Event,T...>&&>(cx).pro_.steal_header()) {
         detail::promise_require_anonymous(pro_, 1);
       }
+      cx_state(const promise_cx<Event,T...> &cx):
+        cx_state(promise_cx<Event,T...>(cx)) {}
 
       lpc_dormant<T...>* to_lpc_dormant(lpc_dormant<T...> *tail) && {
         future_header_promise<T...> *pro = /*move ref*/pro_;
@@ -500,6 +549,8 @@ namespace upcxx {
         pro_(static_cast<promise_cx<Event,T...>&&>(cx).pro_.steal_header()) {
         detail::promise_require_anonymous(pro_, 1);
       }
+      cx_state(const promise_cx<Event,T...> &cx):
+        cx_state(promise_cx<Event,T...>(cx)) {}
       
       lpc_dormant<>* to_lpc_dormant(lpc_dormant<> *tail) && {
         future_header_promise<T...> *pro = /*move ref*/pro_;
@@ -525,6 +576,8 @@ namespace upcxx {
         pro_(static_cast<promise_cx<Event>&&>(cx).pro_.steal_header()) {
         detail::promise_require_anonymous(pro_, 1);
       }
+      cx_state(const promise_cx<Event> &cx):
+        cx_state(promise_cx<Event>(cx)) {}
 
       lpc_dormant<>* to_lpc_dormant(lpc_dormant<> *tail) && {
         future_header_promise<> *pro = /*move ref*/pro_;
@@ -552,6 +605,11 @@ namespace upcxx {
         fn_(static_cast<Fn&&>(cx.fn_)) {
         upcxx::current_persona().undischarged_n_ += 1;
       }
+      cx_state(const lpc_cx<Event,Fn> &cx):
+        target_(cx.target_),
+        fn_(cx.fn_) {
+        upcxx::current_persona().undischarged_n_ += 1;
+      }
 
       lpc_dormant<T...>* to_lpc_dormant(lpc_dormant<T...> *tail) && {
         upcxx::current_persona().undischarged_n_ -= 1;
@@ -574,6 +632,9 @@ namespace upcxx {
       
       cx_state(rpc_cx<Event,Fn> &&cx):
         fn_(static_cast<Fn&&>(cx.fn_)) {
+      }
+      cx_state(const rpc_cx<Event,Fn> &cx):
+        fn_(cx.fn_) {
       }
       
       typename std::result_of<Fn&&(T&&...)>::type
@@ -705,6 +766,7 @@ namespace upcxx {
       static constexpr bool empty = true;
 
       completions_state_head(Cx &&cx) {}
+      completions_state_head(const Cx &cx) {}
       
       template<typename Event, typename ...V>
       void operator()(V&&...) {/*nop*/}
@@ -724,6 +786,9 @@ namespace upcxx {
       
       completions_state_head(Cx &&cx):
         state_(std::move(cx)) {
+      }
+      completions_state_head(const Cx &cx):
+        state_(cx) {
       }
       
       template<typename ...V>
@@ -811,6 +876,10 @@ namespace upcxx {
         head_t(cxs.head_moved()),
         tail_t(cxs.tail_moved()) {
       }
+      completions_state(const completions<CxH,CxT...> &cxs):
+        head_t(cxs.head()),
+        tail_t(cxs.tail()) {
+      }
       completions_state(head_t &&head, tail_t &&tail):
         head_t(std::move(head)),
         tail_t(std::move(tail)) {
@@ -882,7 +951,7 @@ namespace upcxx {
                typename CSIn, typename ...V>
       static rettype<Event, CSOut, do_move, V...>
       actually_fire(CSIn &&me, V &&...vals) {
-        return static_cast<CSOut&>(me).template operator()<Event>(
+        return static_cast<CSOut&&>(me).template operator()<Event>(
           static_cast<
               // An empty tail means we are the lucky one who gets the
               // opportunity to move-out the given values (if caller supplied
@@ -932,8 +1001,8 @@ namespace upcxx {
       };
       
       template<typename Event>
-      typename detail::template bind<event_bound<Event>, completions_state>::return_type
-      bind_event() && {
+      auto bind_event() &&
+        -> decltype(upcxx::bind_rvalue_as_lvalue(event_bound<Event>(), std::move(*this))) {
         /* This is gross. We are moving our entire instance into this bound
         callable instead of just the items related to Event. This limits the
         applicability of bind_event to completion_state's with only a single
@@ -943,7 +1012,7 @@ namespace upcxx {
         TODO: we should at least assert no events besides Event are enabled by
         our predicate.
         */
-        return upcxx::bind(event_bound<Event>(), std::move(*this));
+        return upcxx::bind_rvalue_as_lvalue(event_bound<Event>(), std::move(*this));
       }
 
       template<typename Event>
@@ -991,9 +1060,11 @@ namespace upcxx {
       w.template write<Fn>(s.state_.fn_);
     }
 
+    using deserialized_rpc_cx_t =
+      rpc_cx<Event, typename serialization_traits<Fn>::deserialized_type>;
     using deserialized_type = detail::completions_state_head<
         true, EventValues,
-        rpc_cx<Event, typename serialization_traits<Fn>::deserialized_type>,
+        deserialized_rpc_cx_t,
         ordinal
       >;
     
@@ -1007,7 +1078,7 @@ namespace upcxx {
 
     template<typename Reader>
     static deserialized_type* deserialize(Reader &r, void *spot) {
-      return new(spot) deserialized_type(r.template read<Fn>());
+      return new(spot) deserialized_type(deserialized_rpc_cx_t{r.template read<Fn>()});
     }
   };
 

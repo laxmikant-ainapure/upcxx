@@ -60,7 +60,8 @@ void T::show_stats(int line, const char *title, int expected_ctors, int expected
       success = false; \
       if (!upcxx::rank_me()) \
         std::cerr << "ERROR: failed check: " << #prop << "\n" \
-                  << title << ": " << __VA_ARGS__ << "\n" << std::endl; \
+                  << title << ": " << __VA_ARGS__ \
+                  << " \t(line " << line << ")" << "\n" << std::endl; \
     } \
   } while (0)
   CHECK(ctors == expected_ctors, "ctors="<<ctors<<" expected="<<expected_ctors);
@@ -204,14 +205,14 @@ int main() {
     while (!done) { upcxx::progress(); }
   }
   done = false;
-  SHOW("source_cx::as_lpc(Fn&) ->", 1, 1, 6);
+  SHOW("source_cx::as_lpc(Fn&) ->", 1, 1, 5);
 
   { 
     upcxx::rput(lp, gp, 1, source_cx::as_lpc(target, Fn())|operation_cx::as_future()).wait();
     while (!done) { upcxx::progress(); }
   }
   done = false;
-  SHOW("source_cx::as_lpc(Fn&&) ->", 1, 0, 7);
+  SHOW("source_cx::as_lpc(Fn&&) ->", 1, 0, 6);
 
   // then
   using upcxx::future;

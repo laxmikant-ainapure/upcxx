@@ -380,6 +380,9 @@ namespace upcxx {
       rput_obj(Cxs &&cxs):
         cx_state_here(std::move(cxs)) {
       }
+      rput_obj(const Cxs &cxs):
+        cx_state_here(cxs) {
+      }
     };
 
     ////////////////////////////////////////////////////////////////////////////
@@ -428,13 +431,14 @@ namespace upcxx {
   template<typename T,
            typename Cxs = completions<future_cx<operation_cx_event>>>
   UPCXX_NODISCARD
-  typename detail::rput_traits<Cxs, /*by_val=*/true>::return_t
+  typename detail::rput_traits<typename std::decay<Cxs>::type, /*by_val=*/true>::return_t
   rput(T value_s,
        global_ptr<T> gp_d,
-       Cxs cxs = completions<future_cx<operation_cx_event>>{{}}) {
+       Cxs &&cxs = completions<future_cx<operation_cx_event>>{{}}) {
 
-    using traits_t = detail::rput_traits<Cxs, /*by_val=*/true>;
-    using object_t = detail::rput_obj<Cxs, traits_t>;
+    using CxsDecayed = typename std::decay<Cxs>::type;
+    using traits_t = detail::rput_traits<CxsDecayed, /*by_val=*/true>;
+    using object_t = detail::rput_obj<CxsDecayed, traits_t>;
     
     traits_t::template assert_sane<T>();
 
@@ -444,21 +448,21 @@ namespace upcxx {
     UPCXX_GPTR_CHK(gp_d);
     UPCXX_ASSERT(gp_d, "pointer arguments to rput may not be null");
     UPCXX_ASSERT_ALWAYS(
-      (!detail::completions_has_event<Cxs, source_cx_event>::value),
+      (!detail::completions_has_event<CxsDecayed, source_cx_event>::value),
       "Scalar rput does not support source completion."
     );
     
-    object_t *o = new object_t(std::move(cxs));
+    object_t *o = new object_t(std::forward<Cxs>(cxs));
     
     detail::completions_returner<
         /*EventPredicate=*/detail::event_is_here,
         /*EventValues=*/detail::rput_event_values,
-        Cxs
+        CxsDecayed
       > returner(o->cx_state_here);
     
     detail::rma_put_sync sync_done = o->inject(
       gp_d.rank_, gp_d.raw_ptr_, &value_s, sizeof(T),
-      typename traits_t::cx_state_remote_t(std::move(cxs))
+      typename traits_t::cx_state_remote_t(std::forward<Cxs>(cxs))
         .template bind_event<remote_cx_event>()
     );
     detail::template rput_post_inject<object_t, traits_t>(o, sync_done);
@@ -468,14 +472,15 @@ namespace upcxx {
   template<typename T,
            typename Cxs = completions<future_cx<operation_cx_event>>>
   UPCXX_NODISCARD
-  typename detail::rput_traits<Cxs, /*by_val=*/false>::return_t
+  typename detail::rput_traits<typename std::decay<Cxs>::type, /*by_val=*/false>::return_t
   rput(T const *buf_s,
        global_ptr<T> gp_d,
        std::size_t n,
-       Cxs cxs = completions<future_cx<operation_cx_event>>{{}}) {
+       Cxs &&cxs = completions<future_cx<operation_cx_event>>{{}}) {
 
-    using traits_t = detail::rput_traits<Cxs, /*by_val=*/false>;
-    using object_t = detail::rput_obj<Cxs, traits_t>;
+    using CxsDecayed = typename std::decay<Cxs>::type;
+    using traits_t = detail::rput_traits<CxsDecayed, /*by_val=*/false>;
+    using object_t = detail::rput_obj<CxsDecayed, traits_t>;
     
     traits_t::template assert_sane<T>();
 
@@ -483,7 +488,7 @@ namespace upcxx {
     UPCXX_GPTR_CHK(gp_d);
     UPCXX_ASSERT(buf_s && gp_d, "pointer arguments to rput may not be null");
     
-    object_t *o = new object_t(std::move(cxs));
+    object_t *o = new object_t(std::forward<Cxs>(cxs));
     
     detail::completions_returner<
         /*EventPredicate=*/detail::event_is_here,
@@ -493,7 +498,7 @@ namespace upcxx {
     
     detail::rma_put_sync sync_done = o->inject(
       gp_d.rank_, gp_d.raw_ptr_, buf_s, n*sizeof(T),
-      typename traits_t::cx_state_remote_t(std::move(cxs))
+      typename traits_t::cx_state_remote_t(std::forward<Cxs>(cxs))
         .template bind_event<remote_cx_event>()
     );
     detail::template rput_post_inject<object_t, traits_t>(o, sync_done);
