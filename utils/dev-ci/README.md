@@ -101,8 +101,8 @@ conditional:
     launch, as well as `--with-cuda` where supported.
 
 4.  Build (stage name `build`)  
-    This is `make -jN all` for some system-dependent default `N` (more on that
-    below).
+    This is `make -jN all ...` for some system-dependent default `N` (more on
+    that below), plus some `CI_*` variables converted to make variables.
 
 5.  Compile tests (stage name `tests`)  
     This is `make -jN dev-tests`
@@ -116,18 +116,18 @@ conditional:
     for output file(s).
 
 On Theta, the Compile and Run steps are split into `opt` and `debug` sub-steps
-(interleaved: Compile,Run,Compile,Run) due to queue policies which make running
-the entire suite of tests in one job impractical.
+due to queue policies which make running the entire suite of tests in one job
+impractical.
 
-If any of these steps fail, the script terminates immediately and the build
+If any of the steps 1...4 fail, the script terminates immediately and the build
 directory (printed in the final lines of output) is left intact.  This is a
 "normal" build directory in which one can proceed to debug any failures.  One
 should consult the ENVIRONMENT section of the individual scripts for any
 environment modules or other settings necessary to use the build directory.
 
-If the script completes all steps (excluding the Run step if passed `--norun`)
-without failure, then the test executables are removed but the build directory
-is left otherwise intact (no `make clean`, for instance).
+If the script completes all of the enabled steps without failure, then the test
+executables are removed but the build directory is left otherwise intact (no
+`make clean`, for instance).
 
 ## Environment
 
@@ -144,6 +144,16 @@ is left otherwise intact (no `make clean`, for instance).
 * `CI_NETWORKS`  
   Used to override the per-target default set of networks to set.
   For instance `CI_NETWORKS="smp mpi"`.
+
+* `CI_EXTRAFLAGS`, `CI_TESTS` and `CI_NO_TESTS`  
+  Passed to the `make dev-tests` command without the `CI_` prefix.
+  See [build-devel.md](../../docs/build-devel.md) for description of
+  `TESTS` and `NO_TESTS`.
+
+* `CI_DEV_CHECK`  
+  If set to `0` these scripts will replace the default `dev-tests` and
+  `dev-run-tests` make targets with `tests` and `run-tests`.  This reduces
+  these scripts' behavioral equivalent from `make dev-check` to `make check`.
 
 ## Random notes
 

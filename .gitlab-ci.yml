@@ -66,13 +66,18 @@
 #     - CI_NAME:     name of a specific job, such as "theta.PrgEnv-llvm_floor"
 #   - The following control what is tested or how, with example legal values
 #     - CI_DEV_CHECK       Must be 0 or 1 (or blank/unset for the default)
-#     - CI_RUN_TESTS       [UNIMPLMENTED]
+#     - CI_RUN_TESTS       Must be 0 or 1 (or blank/unset for the default)
 #     - CI_NETWORKS        smp udp
 #     - CI_RANKS           4
 #     - CI_MAKE            /usr/local/bin/make
 #     - CI_MAKE_PARALLEL   -j6
 #     - CI_CONFIGURE_ARGS  [UNIMPLMENTED]
-#     - CI_EXTRAFLAGS      -Werror
+#     - CI_EXTRAFLAGS      Sets make variable EXTRAFLAGS when building tests
+#                          Default is "-Werror"
+#     - CI_TESTS           Sets make variable CI_TESTS when building tests
+#                          Default is unset
+#     - CI_NO_TESTS        Sets make variable CI_NO_TESTS when building tests
+#                          Default is unset
 #   - The following per-host/per-job variables provide additional fine-grained
 #     control:
 #     - CI_THETA_RUN_ALL_PRGENV
@@ -88,10 +93,9 @@
 # - TODO:
 #   - Wrap pipeline.sh in .generic:script
 #     - Simplifies the script and maintenance
-#     - Provides implementation of CI_RUN_TESTS and CI_CONFIGURE_ARGS
-#   - Implement CI_RUN_TESTS and CI_CONFIGURE_ARGS in .dev_ci:script
+#     - Provides implementation CI_CONFIGURE_ARGS
+#   - Implement CI_CONFIGURE_ARGS in .dev_ci:script
 #     - Probably should use improvements to utils/dev-ci
-#     - Also opportunity to implement CI_DEV_CHECK w/o "patching"
 
 
 #
@@ -169,6 +173,7 @@ variables:
     - &do_ci_vars |-
       # Reporting and re-exporting of $CI_* variables
       # Should follow do_ci_dev_check
+      CI_RUN_TESTS="${CI_RUN_TESTS:-1}"
       echo "==== CI SYSTEM VARS ===="
       for var in CI_JOB_URL CI_JOB_NAME CI_COMMIT_REF_NAME CI_COMMIT_SHA CI_PIPELINE_SOURCE; do
         printf "%20s = '%s'\n" $var "${!var}"
@@ -178,12 +183,14 @@ variables:
         printf "%20s = '%s'\n" $var "${!var}"
       done
       echo "==== CI CONTROL VARS ===="
-      for var in CI_NETWORKS CI_RANKS CI_MAKE CI_MAKE_PARALLEL CI_DEV_CHECK CI_EXTRAFLAGS; do
+      for var in CI_NETWORKS CI_RANKS CI_MAKE CI_MAKE_PARALLEL CI_DEV_CHECK CI_EXTRAFLAGS \
+                 CI_RUN_TESTS CI_TESTS CI_NO_TESTS; do
         printf "%20s = '%s'\n" $var "${!var}"
       done
       echo "===="
       export CONFIGURE_ARGS+=" --with-default-network=${CI_NETWORKS%% *}"
       export RANKS="$CI_RANKS"
+      export TEST_CERR_LIMIT=${TEST_CERR_LIMIT:-50}
       if [[ $GASNET_SPAWNFN == 'L' ]]; then
         # TEMPORARY workaround for bug 4079
         export TIMEOUT=${TIMEOUT:-$(type -p timeout)}
@@ -298,25 +305,36 @@ variables:
     - *start_logging
     - *do_ci_vars
     - |-
+      # TODO: the following vars are an opportunity for more customization
+      DO_BUILD="time $DO_MAKE"
+      DO_INSTALL="time $DO_MAKE"
+      DO_TEST_INSTALL="time $DO_MAKE"
+      DO_COMPILE="time $DO_MAKE EXTRAFLAGS='$CI_EXTRAFLAGS' ${CI_TESTS:+TESTS='$CI_TESTS'} ${CI_NO_TESTS:+NO_TESTS='$CI_NO_TESTS'}"
+      if (( $CI_RUN_TESTS )); then
+        DO_RUN="time $DO_MAKE"
+      else
+        DO_RUN=':'
+      fi
       set -e -x
       ./configure --prefix=inst $CONFIGURE_ARGS
-      $DO_MAKE all
-      $DO_MAKE install
-      $DO_MAKE test_install || touch .pipe-failed
-      # split to reduce peak storage requirement:
+      eval $DO_BUILD all
+      eval $DO_INSTALL install
+      eval $DO_TEST_INSTALL test_install || touch .pipe-failed
+      # Test compile and run steps are sub-divided to reduce peak storage requirement:
+      if (( $CI_DEV_CHECK )); then
+        maybe_dev='dev-'
+        modes="-opt -debug"
+      else
+        maybe_dev=''
+        modes="''" # non-empty when seen by `for` but empty when subject to `eval`
+      fi
       for net in $CI_NETWORKS; do
         export NETWORKS=$net
-        if (( $CI_DEV_CHECK )); then
-          for codemode in opt debug; do
-            $DO_MAKE dev-tests-$codemode EXTRAFLAGS="$CI_EXTRAFLAGS" || touch .pipe-failed
-            $DO_MAKE dev-run-tests || touch .pipe-failed
-            (set +x; rm -rf test-*-*)
-          done
-        else
-          $DO_MAKE tests EXTRAFLAGS="$CI_EXTRAFLAGS" || touch .pipe-failed
-          $DO_MAKE run-tests || touch .pipe-failed
+        for mode in $modes; do
+          eval $DO_COMPILE ${maybe_dev}tests${mode} || touch .pipe-failed
+          eval $DO_RUN     ${maybe_dev}run-tests    || touch .pipe-failed
           (set +x; rm -rf test-*-*)
-        fi
+        done
       done
       test ! -f .pipe-failed
       touch .pipe-passed
@@ -329,8 +347,6 @@ variables:
 # Variant using utils/dev-ci scripts
 .dev_ci:
   extends: [ .generic ]
-  variables:
-    CI_DEV_CI_STAGES: 'configure,build,tests,run'
   script:
     - *do_ci_dev_check
     - STATE=INPROGRESS
@@ -338,12 +354,11 @@ variables:
     - *start_logging
     - *do_ci_vars
     - |-
-      if ! (( $CI_DEV_CHECK )); then
-        perl -pi -e 's/dev-((run-)?tests)/\1/' -- utils/dev-ci/$ci_script
+      if (( $CI_RUN_TESTS )); then
+        DEV_CI_STAGES="${DEV_CI_STAGES:-configure,build,tests,run}"
+      else
+        DEV_CI_STAGES="${DEV_CI_STAGES:-configure,build,tests}"
       fi
-      DEV_CI_STAGES="${DEV_CI_STAGES:-configure,build,tests,run}"
-      export NETWORKS="$CI_NETWORKS"
-      export EXTRAFLAGS="$CI_EXTRAFLAGS"
       ./utils/dev-ci/$ci_script --stages="$DEV_CI_STAGES" --dir=. && touch .pipe-passed
 
 ################################################################################
@@ -362,12 +377,9 @@ variables:
     MY_OS:   'cnl'
     MY_CPU:  'knl'
     MY_HOST: 'theta'
-  before_script: # "defeat" Theta-specific codemode split
+  before_script:
     - *do_ci_dev_check
     - &theta-dev-ci |-
-      if ! (( $CI_DEV_CHECK )); then
-        perl -pi -e 's/ln|mv|rm -rf|opt debug/:/' -- utils/dev-ci/$ci_script
-      fi
       if ! (( $CI_THETA_RUN_ALL_PRGENV )); then
         DEV_CI_STAGES="${DEV_CI_STAGES:-configure,build,tests}"
       fi
