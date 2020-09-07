@@ -159,12 +159,13 @@ namespace upcxx {
   // explicit completions
   template<typename Cxs, typename Fn, typename ...Arg>
   UPCXX_NODISCARD
-  auto rpc_ff(const team &tm, intrank_t recipient, Cxs cxs, Fn &&fn, Arg &&...args)
+  auto rpc_ff(const team &tm, intrank_t recipient, Cxs &&cxs, Fn &&fn, Arg &&...args)
     // computes our return type, but SFINAE's out if cxs is not a completions type
     -> typename std::enable_if<
-         detail::is_completions<Cxs>::value,
-         typename detail::rpc_ff_return_no_sfinae<Fn(Arg...), Cxs>::type
+         detail::is_completions<typename std::decay<Cxs>::type>::value,
+         typename detail::rpc_ff_return_no_sfinae<Fn(Arg...), typename std::decay<Cxs>::type>::type
        >::type {
+    using CxsDecayed = typename std::decay<Cxs>::type;
 
     static_assert(
       detail::trait_forall<
@@ -184,7 +185,7 @@ namespace upcxx {
     );
       
     static_assert(
-      detail::rpc_ff_return_no_sfinae<Fn(Arg...), Cxs>::value,
+      detail::rpc_ff_return_no_sfinae<Fn(Arg...), CxsDecayed>::value,
       "function object provided to rpc_ff cannot be invoked on the given arguments as rvalue references "
       "(after deserialization of the function object and arguments). "
       "Note: make sure that the function object does not have any non-const lvalue-reference parameters."
@@ -203,21 +204,21 @@ namespace upcxx {
       "rpc_ff(team, recipient, ...) requires recipient in [0, team.rank_n()-1] == [0, " << tm.rank_n()-1 << "], but given: " << recipient);
 
     UPCXX_ASSERT_ALWAYS(
-      (!detail::completions_has_event<Cxs, remote_cx_event>::value &&
-       !detail::completions_has_event<Cxs, operation_cx_event>::value),
+      (!detail::completions_has_event<CxsDecayed, remote_cx_event>::value &&
+       !detail::completions_has_event<CxsDecayed, operation_cx_event>::value),
       "rpc_ff does not support remote or operation completion."
     );
 
     auto state = detail::completions_state<
         /*EventPredicate=*/detail::event_is_here,
         /*EventValues=*/detail::rpc_ff_event_values,
-        Cxs
-      >{std::move(cxs)};
+        CxsDecayed
+      >{std::forward<Cxs>(cxs)};
     
     auto returner = detail::completions_returner<
         /*EventPredicate=*/detail::event_is_here,
         /*EventValues=*/detail::rpc_ff_event_values,
-        Cxs
+        CxsDecayed
       >{state};
     
     backend::template send_am_master<progress_level::user>(
@@ -234,18 +235,18 @@ namespace upcxx {
   
   template<typename Cxs, typename Fn, typename ...Arg>
   UPCXX_NODISCARD
-  auto rpc_ff(intrank_t recipient, Cxs cxs, Fn &&fn, Arg &&...args)
+  auto rpc_ff(intrank_t recipient, Cxs &&cxs, Fn &&fn, Arg &&...args)
     // computes our return type, but SFINAE's out if cxs is not a completions type
     -> typename std::enable_if<
-         detail::is_completions<Cxs>::value,
-         typename detail::rpc_ff_return_no_sfinae<Fn(Arg...), Cxs>::type
+         detail::is_completions<typename std::decay<Cxs>::type>::value,
+         typename detail::rpc_ff_return_no_sfinae<Fn(Arg...), typename std::decay<Cxs>::type>::type
        >::type {
   
     UPCXX_ASSERT_INIT();
     UPCXX_ASSERT(recipient >= 0 && recipient < world().rank_n(),
       "rpc_ff(recipient, ...) requires recipient in [0, rank_n()-1] == [0, " << world().rank_n()-1 << "], but given: " << recipient);
 
-    return rpc_ff(world(), recipient, std::move(cxs), std::forward<Fn>(fn), std::forward<Arg>(args)...);
+    return rpc_ff(world(), recipient, std::forward<Cxs>(cxs), std::forward<Fn>(fn), std::forward<Arg>(args)...);
   }
   
   //////////////////////////////////////////////////////////////////////
@@ -331,9 +332,10 @@ namespace upcxx {
   
   namespace detail {
     template<typename Cxs, typename Fn, typename ...Arg>
-    auto rpc(const team &tm, intrank_t recipient, Fn &&fn, Arg &&...args, Cxs cxs, int /*dummy*/)
+    auto rpc(const team &tm, intrank_t recipient, Fn &&fn, Arg &&...args, Cxs &&cxs, int /*dummy*/)
       // computes our return type, but SFINAE's out if fn(args...) is ill-formed
-      -> typename detail::rpc_return<Fn(Arg...), Cxs>::type {
+      -> typename detail::rpc_return<Fn(Arg...), typename std::decay<Cxs>::type>::type {
+      using CxsDecayed = typename std::decay<Cxs>::type;
       
       static_assert(
         detail::trait_forall<
@@ -361,22 +363,22 @@ namespace upcxx {
       );
 
       UPCXX_ASSERT_ALWAYS(
-        (!detail::completions_has_event<Cxs, remote_cx_event>::value),
+        (!detail::completions_has_event<CxsDecayed, remote_cx_event>::value),
         "rpc does not support remote completion."
       );
 
       using cxs_state_t = detail::completions_state<
           /*EventPredicate=*/detail::event_is_here,
           /*EventValues=*/detail::rpc_event_values<Fn&&(Arg&&...)>,
-          Cxs
+          CxsDecayed
         >;
       
-      cxs_state_t state(std::move(cxs));
+      cxs_state_t state(std::forward<Cxs>(cxs));
       
       auto returner = detail::completions_returner<
           /*EventPredicate=*/detail::event_is_here,
           /*EventValues=*/detail::rpc_event_values<Fn&&(Arg&&...)>,
-          Cxs
+          CxsDecayed
         >(state);
       
       intrank_t initiator = backend::rank_me;
@@ -416,15 +418,16 @@ namespace upcxx {
     // folded into the parameter pack for ...Arg, forcing it into the
     // variadic arguments here.
     template<typename Cxs, typename Fn, typename ...Arg>
-    future<> rpc(const team &, intrank_t, Fn &&, Arg &&..., Cxs, ...) {
+    future<> rpc(const team &, intrank_t, Fn &&, Arg &&..., Cxs&&, ...) {
+      using CxsDecayed = typename std::decay<Cxs>::type;
       // check that this overload is not unintentionally invoked
       static_assert(
-        !detail::rpc_return_no_sfinae<Fn(Arg...), Cxs>::value,
+        !detail::rpc_return_no_sfinae<Fn(Arg...), CxsDecayed>::value,
         "internal error"
       );
       // friendlier error message for when Fn(Arg...) is invalid
       static_assert(
-        detail::rpc_return_no_sfinae<Fn(Arg...), Cxs>::value,
+        detail::rpc_return_no_sfinae<Fn(Arg...), CxsDecayed>::value,
         "function object provided to rpc cannot be invoked on the given arguments as rvalue references "
         "(after deserialization of the function object and arguments). "
         "Note: make sure that the function object does not have any non-const lvalue-reference parameters."
@@ -435,11 +438,11 @@ namespace upcxx {
 
   template<typename Cxs, typename Fn, typename ...Arg>
   UPCXX_NODISCARD
-  auto rpc(const team &tm, intrank_t recipient, Cxs cxs, Fn &&fn, Arg &&...args)
+  auto rpc(const team &tm, intrank_t recipient, Cxs &&cxs, Fn &&fn, Arg &&...args)
     // computes our return type, but SFINAE's out if cxs is not a completions type
     -> typename std::enable_if<
-         detail::is_completions<Cxs>::value,
-         typename detail::rpc_return_no_sfinae<Fn(Arg...), Cxs>::type
+         detail::is_completions<typename std::decay<Cxs>::type>::value,
+         typename detail::rpc_return_no_sfinae<Fn(Arg...), typename std::decay<Cxs>::type>::type
        >::type {
 
     UPCXX_ASSERT_INIT();
@@ -448,17 +451,17 @@ namespace upcxx {
 
     return detail::template rpc<Cxs, Fn&&, Arg&&...>(
         tm, recipient, std::forward<Fn>(fn), std::forward<Arg>(args)...,
-        std::move(cxs), 0
+        std::forward<Cxs>(cxs), 0
       );
   }
   
   template<typename Cxs, typename Fn, typename ...Arg>
   UPCXX_NODISCARD
-  auto rpc(intrank_t recipient, Cxs cxs, Fn &&fn, Arg &&...args)
+  auto rpc(intrank_t recipient, Cxs &&cxs, Fn &&fn, Arg &&...args)
     // computes our return type, but SFINAE's out if cxs is not a completions type
     -> typename std::enable_if<
-         detail::is_completions<Cxs>::value,
-         typename detail::rpc_return_no_sfinae<Fn(Arg...), Cxs>::type
+         detail::is_completions<typename std::decay<Cxs>::type>::value,
+         typename detail::rpc_return_no_sfinae<Fn(Arg...), typename std::decay<Cxs>::type>::type
        >::type {
 
     UPCXX_ASSERT_INIT();
@@ -467,7 +470,7 @@ namespace upcxx {
 
     return detail::template rpc<Cxs, Fn&&, Arg&&...>(
         world(), recipient, std::forward<Fn>(fn), std::forward<Arg>(args)...,
-        std::move(cxs), 0
+        std::forward<Cxs>(cxs), 0
       );
   }
   

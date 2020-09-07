@@ -26,21 +26,22 @@ namespace upcxx {
   typename detail::completions_returner<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::barrier_event_values,
-      Cxs
+      typename std::decay<Cxs>::type
     >::return_t
   barrier_async(
       const team &tm = upcxx::world(),
-      Cxs cxs = completions<future_cx<operation_cx_event>>({})
+      Cxs &&cxs = completions<future_cx<operation_cx_event>>({})
     ) {
+    using CxsDecayed = typename std::decay<Cxs>::type;
     UPCXX_ASSERT_INIT();
     UPCXX_ASSERT_MASTER();
     UPCXX_ASSERT_ALWAYS(
-      (detail::completions_has_event<Cxs, operation_cx_event>::value),
+      (detail::completions_has_event<CxsDecayed, operation_cx_event>::value),
       "Not requesting operation completion is surely an error."
     );
     UPCXX_ASSERT_ALWAYS(
-      (!detail::completions_has_event<Cxs, source_cx_event>::value &&
-       !detail::completions_has_event<Cxs, remote_cx_event>::value),
+      (!detail::completions_has_event<CxsDecayed, source_cx_event>::value &&
+       !detail::completions_has_event<CxsDecayed, remote_cx_event>::value),
       "barrier_async does not support source or remote completion."
     );
 
@@ -48,9 +49,9 @@ namespace upcxx {
       detail::completions_state<
         /*EventPredicate=*/detail::event_is_here,
         /*EventValues=*/detail::barrier_event_values,
-        Cxs> state;
+        CxsDecayed> state;
 
-      barrier_cb(Cxs &&cxs): state(std::move(cxs)) {}
+      barrier_cb(Cxs &&cxs): state(std::forward<Cxs>(cxs)) {}
       
       void execute_and_delete(backend::gasnet::handle_cb_successor) {
         state.template operator()<operation_cx_event>();
@@ -58,12 +59,12 @@ namespace upcxx {
       }
     };
 
-    barrier_cb *cb = new barrier_cb(std::move(cxs));
+    barrier_cb *cb = new barrier_cb(std::forward<Cxs>(cxs));
     
     auto returner = detail::completions_returner<
         /*EventPredicate=*/detail::event_is_here,
         /*EventValues=*/detail::barrier_event_values,
-        Cxs
+        CxsDecayed
       >(cb->state);
     
     detail::barrier_async_inject(tm, cb);
