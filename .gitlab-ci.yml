@@ -185,6 +185,7 @@ variables:
       echo "===="
       export CONFIGURE_ARGS+=" --with-default-network=${CI_NETWORKS%% *}"
       export RANKS="$CI_RANKS"
+      export TEST_CERR_LIMIT=${TEST_CERR_LIMIT:-50}
       if [[ $GASNET_SPAWNFN == 'L' ]]; then
         # TEMPORARY workaround for bug 4079
         export TIMEOUT=${TIMEOUT:-$(type -p timeout)}
