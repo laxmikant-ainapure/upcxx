@@ -431,6 +431,65 @@ namespace upcxx {
       return detail::when_all_fast(std::forward<future1<Kind1, T1...>>(v1),
                                    std::forward<future1<Kind2, T2...>>(v2));
     }
+
+    template<typename Fn>
+    cx_non_future_return
+    call_convert_non_future(Fn &&fn, std::false_type/* returns_future*/) {
+      static_cast<Fn&&>(fn)();
+      return {};
+    }
+    template<typename Fn>
+    auto call_convert_non_future(Fn &&fn, std::true_type/* returns_future*/)
+      UPCXX_RETURN_DECLTYPE(static_cast<Fn&&>(fn)()) {
+      return static_cast<Fn&&>(fn)();
+    }
+
+    template<typename Fn>
+    using cx_decayed_result =
+      typename std::decay<typename std::result_of<Fn()>::type>::type;
+
+    template<typename ...Fn>
+    struct cx_combine_results_t;
+
+    template<>
+    struct cx_combine_results_t<> {
+      using type = cx_non_future_return;
+    };
+
+    template<typename Fn1, typename ...Fns>
+    struct cx_combine_results_t<Fn1, Fns...> {
+      using converted_rettype = typename std::conditional<
+        detail::is_future1<cx_decayed_result<Fn1>>::value,
+        typename std::result_of<Fn1()>::type,
+        cx_non_future_return
+      >::type;
+      using type = decltype(
+        cx_result_combine(
+          std::declval<converted_rettype>(),
+          std::declval<typename cx_combine_results_t<Fns...>::type>()
+        )
+      );
+    };
+
+    struct cx_combine_results {
+      cx_non_future_return operator()() {
+        return {};
+      }
+      template<typename Fn1, typename ...Fns>
+      typename cx_combine_results_t<Fn1&&, Fns&&...>::type
+      operator()(Fn1 &&fn1, Fns &&...fns) {
+        return cx_result_combine(
+            call_convert_non_future(
+              static_cast<Fn1&&>(fn1),
+              std::integral_constant<
+                bool,
+                detail::is_future1<cx_decayed_result<Fn1&&>>::value
+              >{}
+            ),
+            operator()(static_cast<Fns&&>(fns)...)
+          );
+      }
+    };
   }
 
 
@@ -470,12 +529,14 @@ namespace upcxx {
     struct cx_state<buffered_cx<Event>, std::tuple<>> {
       cx_state(buffered_cx<Event>) {}
       void operator()() {}
+      std::tuple<> get_remote_fn() { return {}; }
     };
     
     template<typename Event>
     struct cx_state<blocking_cx<Event>, std::tuple<>> {
       cx_state(blocking_cx<Event>) {}
       void operator()() {}
+      std::tuple<> get_remote_fn() { return {}; }
     };
     
     template<typename Event, progress_level level, typename ...T>
@@ -503,6 +564,8 @@ namespace upcxx {
           /*move ref*/pro_, std::tuple<T...>(static_cast<T&&>(vals)...)
         );
       }
+
+      std::tuple<> get_remote_fn() { return {}; }
     };
 
     /* There are multiple specializations for promise_cx since both the promise
@@ -539,6 +602,8 @@ namespace upcxx {
           /*move ref*/pro_, std::tuple<T...>(static_cast<T&&>(vals)...)
         );
       }
+
+      std::tuple<> get_remote_fn() { return {}; }
     };
     // Case when event type list is empty
     template<typename Event, typename ...T>
@@ -566,6 +631,8 @@ namespace upcxx {
       void operator()() {
         backend::fulfill_during<progress_level::user>(/*move ref*/pro_, 1);
       }
+
+      std::tuple<> get_remote_fn() { return {}; }
     };
     // Case when promise and event type list are both empty
     template<typename Event>
@@ -593,6 +660,8 @@ namespace upcxx {
       void operator()() {
         backend::fulfill_during<progress_level::user>(/*move ref*/pro_, 1);
       }
+
+      std::tuple<> get_remote_fn() { return {}; }
     };
     
     template<typename Event, typename Fn, typename ...T>
@@ -622,6 +691,8 @@ namespace upcxx {
         );
         upcxx::current_persona().undischarged_n_ -= 1;
       }
+
+      std::tuple<> get_remote_fn() { return {}; }
     };
 
     // cx_state<rpc_cx<...>> does not fit the usual mold since the event isn't
@@ -641,6 +712,8 @@ namespace upcxx {
       operator()(T ...vals) {
         return static_cast<Fn&&>(fn_)(static_cast<T&&>(vals)...);
       }
+
+      std::tuple<Fn&> get_remote_fn() { return std::tuple<Fn&>{fn_}; }
     };
   }
 
@@ -730,6 +803,8 @@ namespace upcxx {
         return event_bound{};
       }
 
+      std::tuple<> get_remote_fns() { return {}; }
+
       template<typename Event>
       typename detail::tuple_types_into<
           typename EventValues::template tuple_t<Event>,
@@ -770,6 +845,8 @@ namespace upcxx {
       
       template<typename Event, typename ...V>
       void operator()(V&&...) {/*nop*/}
+
+      std::tuple<> get_remote_fn() { return {}; }
     };
 
     template<typename Cx>
@@ -823,6 +900,10 @@ namespace upcxx {
           >{},
           std::forward<V>(vals)...
         );
+      }
+
+      auto get_remote_fn() UPCXX_RETURN_DECLTYPE(state_.get_remote_fn()) {
+        return state_.get_remote_fn();
       }
       
       template<typename Event, typename Lpc>
@@ -999,10 +1080,45 @@ namespace upcxx {
           );
         }
       };
-      
+
+      auto get_remote_fns()
+        UPCXX_RETURN_DECLTYPE(std::tuple_cat(head().get_remote_fn(),
+                                             tail().get_remote_fns())) {
+        return std::tuple_cat(head().get_remote_fn(),
+                              tail().get_remote_fns());
+      }
+
+      template<typename FnRefTuple, int ...i>
+      auto bind_remote_fns(FnRefTuple &&fns, detail::index_sequence<i...>)
+        UPCXX_RETURN_DECLTYPE (
+          upcxx::bind(
+            cx_combine_results{},
+            std::get<i>(std::forward<FnRefTuple>(fns))...
+          )
+        ) {
+        return upcxx::bind(
+            cx_combine_results{},
+            std::get<i>(std::forward<FnRefTuple>(fns))...
+          );
+      }
+
+      template<typename FnRefTuple>
+      auto bind_remote_fns(FnRefTuple &&fns)
+        UPCXX_RETURN_DECLTYPE(
+          bind_remote_fns(
+            std::forward<FnRefTuple>(fns),
+            detail::make_index_sequence<std::tuple_size<FnRefTuple>::value>{}
+          )
+        ) {
+        return bind_remote_fns(
+            std::forward<FnRefTuple>(fns),
+            detail::make_index_sequence<std::tuple_size<FnRefTuple>::value>{}
+          );
+      }
+
       template<typename Event>
       auto bind_event() &&
-        -> decltype(upcxx::bind_rvalue_as_lvalue(event_bound<Event>(), std::move(*this))) {
+        -> decltype(bind_remote_fns(get_remote_fns())) { // FIXME COMMENT
         /* This is gross. We are moving our entire instance into this bound
         callable instead of just the items related to Event. This limits the
         applicability of bind_event to completion_state's with only a single
@@ -1012,7 +1128,7 @@ namespace upcxx {
         TODO: we should at least assert no events besides Event are enabled by
         our predicate.
         */
-        return upcxx::bind_rvalue_as_lvalue(event_bound<Event>(), std::move(*this));
+        return bind_remote_fns(get_remote_fns());
       }
 
       template<typename Event>
@@ -1027,138 +1143,6 @@ namespace upcxx {
       }
     };
   }
-
-  //////////////////////////////////////////////////////////////////////
-  // Serialization of a completions_state of rpc_cx's
-
-  /* TODO: I believe enabling serialization for completions_state is totally
-  unnecessary. Now that we have completions_state::bind_event, anyone wanting
-  to send this over the wire should just send my_cx_state.bind_event<rpc_cx_event>()
-  instead.
-  */
-  
-  template<typename EventValues, typename Event, typename Fn, int ordinal>
-  struct serialization<
-      detail::completions_state_head<
-        /*event_enabled=*/true, EventValues, rpc_cx<Event,Fn>, ordinal
-      >
-    > {
-    using type = detail::completions_state_head<true, EventValues, rpc_cx<Event,Fn>, ordinal>;
-
-    static constexpr bool is_serializable = serialization_traits<Fn>::is_serializable;
-    
-    template<typename Ub>
-    static auto ubound(Ub ub, type const &s)
-      UPCXX_RETURN_DECLTYPE(
-        ub.template cat_ubound_of<Fn>(s.state_.fn_)
-      ) {
-      return ub.template cat_ubound_of<Fn>(s.state_.fn_);
-    }
-
-    template<typename Writer>
-    static void serialize(Writer &w, type const &s) {
-      w.template write<Fn>(s.state_.fn_);
-    }
-
-    using deserialized_rpc_cx_t =
-      rpc_cx<Event, typename serialization_traits<Fn>::deserialized_type>;
-    using deserialized_type = detail::completions_state_head<
-        true, EventValues,
-        deserialized_rpc_cx_t,
-        ordinal
-      >;
-    
-    static constexpr bool skip_is_fast = serialization_traits<Fn>::skip_is_fast;
-    static constexpr bool references_buffer = serialization_traits<Fn>::references_buffer;
-    
-    template<typename Reader>
-    static void skip(Reader &r) {
-      r.template skip<Fn>();
-    }
-
-    template<typename Reader>
-    static deserialized_type* deserialize(Reader &r, void *spot) {
-      return new(spot) deserialized_type(deserialized_rpc_cx_t{r.template read<Fn>()});
-    }
-  };
-
-  template<typename EventValues, typename Cx, int ordinal>
-  struct serialization<
-      detail::completions_state_head</*event_enabled=*/false, EventValues, Cx, ordinal>
-    >:
-    detail::serialization_trivial<
-      detail::completions_state_head</*event_enabled=*/false, EventValues, Cx, ordinal>,
-      /*empty=*/true
-    > {
-    static constexpr bool is_serializable = true;
-  };
-  
-  template<template<typename> class EventPredicate,
-           typename EventValues, int ordinal>
-  struct serialization<
-      detail::completions_state<EventPredicate, EventValues, completions<>, ordinal>
-    >:
-    detail::serialization_trivial<
-      detail::completions_state<EventPredicate, EventValues, completions<>, ordinal>,
-      /*empty=*/true
-    > {
-    static constexpr bool is_serializable = true;
-  };
-
-  template<template<typename> class EventPredicate,
-           typename EventValues, typename CxH, typename ...CxT, int ordinal>
-  struct serialization<
-      detail::completions_state<EventPredicate, EventValues, completions<CxH,CxT...>, ordinal>
-    > {
-    using type = detail::completions_state<EventPredicate, EventValues, completions<CxH,CxT...>, ordinal>;
-
-    static constexpr bool is_serializable =
-      serialization_traits<typename type::head_t>::is_serializable &&
-      serialization_traits<typename type::tail_t>::is_serializable;
-    
-    template<typename Ub>
-    static auto ubound(Ub ub, type const &cxs)
-      UPCXX_RETURN_DECLTYPE(
-        ub.template cat_ubound_of<typename type::head_t>(cxs.head())
-          .template cat_ubound_of<typename type::tail_t>(cxs.tail())
-      ) {
-      return ub.template cat_ubound_of<typename type::head_t>(cxs.head())
-               .template cat_ubound_of<typename type::tail_t>(cxs.tail());
-    }
-
-    template<typename Writer>
-    static void serialize(Writer &w, type const &cxs) {
-      w.template write<typename type::head_t>(cxs.head());
-      w.template write<typename type::tail_t>(cxs.tail());
-    }
-
-    using deserialized_type = detail::completions_state<
-        EventPredicate, EventValues,
-        completions<typename CxH::deserialized_cx,
-                    typename CxT::deserialized_cx...>,
-        ordinal
-      >;
-
-    static constexpr bool skip_is_fast =
-      serialization_traits<typename type::head_t>::skip_is_fast &&
-      serialization_traits<typename type::tail_t>::skip_is_fast;
-    static constexpr bool references_buffer =
-      serialization_traits<typename type::head_t>::references_buffer ||
-      serialization_traits<typename type::tail_t>::references_buffer;
-
-    template<typename Reader>
-    static void skip(Reader &r) {
-      r.template skip<typename type::head_t>();
-      r.template skip<typename type::tail_t>();
-    }
-
-    template<typename Reader>
-    static deserialized_type* deserialize(Reader &r, void *spot) {
-      auto h = r.template read<typename type::head_t>();
-      auto t = r.template read<typename type::tail_t>();
-      return new(spot) deserialized_type(std::move(h), std::move(t));
-    }
-  };
 
   //////////////////////////////////////////////////////////////////////////////
   /* detail::completions_returner: Manage return type for completions<...>
