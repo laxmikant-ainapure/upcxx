@@ -28,6 +28,40 @@
 #include <cstdint>
 #include <string>
 
+////////////////////////////////////////////////////////////////////////////////
+// Argument-checking assertions
+
+// These define the maximum-size (in bytes) of an object that by-value API's will accept without an #error
+#ifndef UPCXX_MAX_VALUE_SIZE
+#define UPCXX_MAX_VALUE_SIZE 512 // user-tunable default
+#endif
+#ifndef UPCXX_MAX_RPC_ARG_SIZE
+#define UPCXX_MAX_RPC_ARG_SIZE 512 // user-tunable default
+#endif
+
+#define UPCXX_STATIC_ASSERT_VALUE_SIZE(T, fnname) \
+  static_assert(sizeof(T) <= UPCXX_MAX_VALUE_SIZE, \
+    "This program is attempting to pass an object with a large static type (over " UPCXX_STRINGIFY(UPCXX_MAX_VALUE_SIZE) " bytes) " \
+    "to the by-value overload of upcxx::" #fnname ". This is ill-advised because the by-value overload is " \
+    "designed and tuned for small scalar values, and will impose significant data copy overheads " \
+    "(and possibly program stack overflow) when used with larger types. Please use the bulk upcxx::" \
+    #fnname " overload instead, which manipulates the data by pointer, avoiding costly by-value copies. " \
+    "The threshold for this error can be adjusted (at your own peril!) via -DUPCXX_MAX_VALUE_SIZE=n" \
+  )
+namespace upcxx { namespace detail {
+  template <typename T>
+  struct type_respects_static_size_limit {
+    static constexpr bool value = sizeof(T) <= UPCXX_MAX_RPC_ARG_SIZE;
+  };
+}}
+#define UPCXX_STATIC_ASSERT_RPC_MSG(fnname) \
+    "This program is attempting to pass an object with a large static type (over " UPCXX_STRINGIFY(UPCXX_MAX_RPC_ARG_SIZE) " bytes) " \
+    "to upcxx::" #fnname ". This is ill-advised because RPC is tuned for top-level argument objects that provide " \
+    "fast move operations, and will impose significant data copy overheads (and possibly program stack overflow) " \
+    "when used with larger types. Please consider instead passing a Serializable container for your large object, " \
+    "such as a upcxx::view (e.g. `upcxx::make_view(&my_large_object, &my_large_object+1)`), to avoid costly data copies. " \
+    "The threshold for this error can be adjusted (at your own peril!) via -DUPCXX_MAX_RPC_ARG_SIZE=n" 
+
 //////////////////////////////////////////////////////////////////////
 // Public API:
 
