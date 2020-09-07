@@ -314,20 +314,21 @@ variables:
       eval $DO_BUILD all
       eval $DO_INSTALL install
       eval $DO_TEST_INSTALL test_install || touch .pipe-failed
-      # split to reduce peak storage requirement:
+      # Test compile and run steps are sub-divided to reduce peak storage requirement:
+      if (( $CI_DEV_CHECK )); then
+        maybe_dev='dev-'
+        modes="-opt -debug"
+      else
+        maybe_dev=''
+        modes="''" # non-empty when seen by `for` but empty when subject to `eval`
+      fi
       for net in $CI_NETWORKS; do
         export NETWORKS=$net
-        if (( $CI_DEV_CHECK )); then
-          for codemode in opt debug; do
-            eval $DO_COMPILE dev-tests-$codemode || touch .pipe-failed
-            eval $DO_RUN dev-run-tests || touch .pipe-failed
-            (set +x; rm -rf test-*-*)
-          done
-        else
-          eval $DO_COMPILE tests || touch .pipe-failed
-          eval $DO_RUN run-tests || touch .pipe-failed
+        for mode in $modes; do
+          eval $DO_COMPILE ${maybe_dev}tests${mode} || touch .pipe-failed
+          eval $DO_RUN     ${maybe_dev}run-tests    || touch .pipe-failed
           (set +x; rm -rf test-*-*)
-        fi
+        done
       done
       test ! -f .pipe-failed
       touch .pipe-passed
