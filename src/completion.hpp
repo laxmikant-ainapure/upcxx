@@ -451,10 +451,6 @@ namespace upcxx {
       return static_cast<Fn&&>(fn)();
     }
 
-    template<typename Fn>
-    using cx_decayed_result =
-      typename std::decay<typename std::result_of<Fn()>::type>::type;
-
     // We need to compute the type of combining results manually, since
     // we are C++11. If we were C++14, we could just use auto for the
     // return type of cx_remote_dispatch::operator(). We can't use
@@ -465,22 +461,28 @@ namespace upcxx {
     template<typename ...Fn>
     struct cx_remote_dispatch_t;
 
-    template<>
-    struct cx_remote_dispatch_t<> {
-      using type = cx_non_future_return;
+    template<typename Fn>
+    using cx_decayed_result =
+      typename std::decay<typename std::result_of<Fn()>::type>::type;
+
+    template<typename Fn>
+    using cx_converted_rettype = typename std::conditional<
+      detail::is_future1<cx_decayed_result<Fn>>::value,
+      typename std::result_of<Fn()>::type,
+      cx_non_future_return
+    >::type;
+
+    template<typename Fn>
+    struct cx_remote_dispatch_t<Fn> {
+      using type = cx_converted_rettype<Fn>;
     };
 
-    template<typename Fn1, typename ...Fns>
-    struct cx_remote_dispatch_t<Fn1, Fns...> {
-      using converted_rettype = typename std::conditional<
-        detail::is_future1<cx_decayed_result<Fn1>>::value,
-        typename std::result_of<Fn1()>::type,
-        cx_non_future_return
-      >::type;
+    template<typename Fn1, typename Fn2, typename ...Fns>
+    struct cx_remote_dispatch_t<Fn1, Fn2, Fns...> {
       using type = decltype(
         cx_result_combine(
-          std::declval<converted_rettype>(),
-          std::declval<typename cx_remote_dispatch_t<Fns...>::type>()
+          std::declval<cx_converted_rettype<Fn1>>(),
+          std::declval<typename cx_remote_dispatch_t<Fn2, Fns...>::type>()
         )
       );
     };
@@ -492,23 +494,32 @@ namespace upcxx {
     // execute until the future is ready
     struct cx_remote_dispatch {
       cx_non_future_return operator()() {
+        UPCXX_ASSERT_ALWAYS(false,
+                            "internal error: empty cx_remote_dispatch "
+                            "means that an unnecessary remote completion "
+                            "was sent over the wire!");
         return {};
       }
-      template<typename Fn1, typename ...Fns>
-      typename cx_remote_dispatch_t<Fn1&&, Fns&&...>::type
-      operator()(Fn1 &&fn1, Fns &&...fns) {
+      template<typename Fn>
+      typename cx_remote_dispatch_t<Fn&&>::type operator()(Fn &&fn) {
+        return call_convert_non_future(
+            static_cast<Fn&&>(fn),
+            std::integral_constant<
+              bool,
+              detail::is_future1<cx_decayed_result<Fn&&>>::value
+            >{}
+          );
+      }
+      template<typename Fn1, typename Fn2, typename ...Fns>
+      typename cx_remote_dispatch_t<Fn1&&, Fn2&&, Fns&&...>::type
+      operator()(Fn1 &&fn1, Fn2 &&fn2, Fns &&...fns) {
         // Note: we can't use one big when_all(), as it will result in
         // futures inside of futures. Instead, we combine the results
         // sequentially.
         return cx_result_combine(
-            call_convert_non_future(
-              static_cast<Fn1&&>(fn1),
-              std::integral_constant<
-                bool,
-                detail::is_future1<cx_decayed_result<Fn1&&>>::value
-              >{}
-            ),
-            operator()(static_cast<Fns&&>(fns)...)
+            operator()(static_cast<Fn1&&>(fn1)),
+            operator()(static_cast<Fn2&&>(fn2),
+                       static_cast<Fns&&>(fns)...)
           );
       }
     };
