@@ -397,7 +397,7 @@ namespace upcxx {
     detail::support_as_rpc<remote_cx_event> {};
 
   //////////////////////////////////////////////////////////////////////
-  // cx_non_future_return, cx_result_combine, and cx_combine_results:
+  // cx_non_future_return, cx_result_combine, and cx_remote_dispatch:
   // Collect results of as_rpc invocations. The purpose is to ensure
   // that returned futures are propagated all the way out to the
   // top-level binding, so that view-buffer and input-argument
@@ -457,21 +457,21 @@ namespace upcxx {
 
     // We need to compute the type of combining results manually, since
     // we are C++11. If we were C++14, we could just use auto for the
-    // return type of cx_combine_results::operator(). We can't use
+    // return type of cx_remote_dispatch::operator(). We can't use
     // decltype since operator() calls itself recursively -- the
     // definition is incomplete when decltype would be used in the
     // signature, so the recursive call is not resolved and the whole
     // thing fails to substitute.
     template<typename ...Fn>
-    struct cx_combine_results_t;
+    struct cx_remote_dispatch_t;
 
     template<>
-    struct cx_combine_results_t<> {
+    struct cx_remote_dispatch_t<> {
       using type = cx_non_future_return;
     };
 
     template<typename Fn1, typename ...Fns>
-    struct cx_combine_results_t<Fn1, Fns...> {
+    struct cx_remote_dispatch_t<Fn1, Fns...> {
       using converted_rettype = typename std::conditional<
         detail::is_future1<cx_decayed_result<Fn1>>::value,
         typename std::result_of<Fn1()>::type,
@@ -480,22 +480,22 @@ namespace upcxx {
       using type = decltype(
         cx_result_combine(
           std::declval<converted_rettype>(),
-          std::declval<typename cx_combine_results_t<Fns...>::type>()
+          std::declval<typename cx_remote_dispatch_t<Fns...>::type>()
         )
       );
     };
 
-    // cx_combine_results calls the given functions, combining all
+    // cx_remote_dispatch calls the given functions, combining all
     // future results into one big, conjoined future. This enables
     // lifetime extension for the arguments to as_rpc callbacks; the
     // cleanup gets chained on the resulting future, and it will not
     // execute until the future is ready
-    struct cx_combine_results {
+    struct cx_remote_dispatch {
       cx_non_future_return operator()() {
         return {};
       }
       template<typename Fn1, typename ...Fns>
-      typename cx_combine_results_t<Fn1&&, Fns&&...>::type
+      typename cx_remote_dispatch_t<Fn1&&, Fns&&...>::type
       operator()(Fn1 &&fn1, Fns &&...fns) {
         // Note: we can't use one big when_all(), as it will result in
         // futures inside of futures. Instead, we combine the results
@@ -1011,12 +1011,12 @@ namespace upcxx {
       auto bind_remote_fns(FnRefTuple &&fns, detail::index_sequence<i...>)
         UPCXX_RETURN_DECLTYPE (
           upcxx::bind(
-            cx_combine_results{},
+            cx_remote_dispatch{},
             std::get<i>(std::forward<FnRefTuple>(fns))...
           )
         ) {
         return upcxx::bind(
-            cx_combine_results{},
+            cx_remote_dispatch{},
             std::get<i>(std::forward<FnRefTuple>(fns))...
           );
       }
