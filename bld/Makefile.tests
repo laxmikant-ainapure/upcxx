@@ -371,8 +371,10 @@ ALL_TESTS = $(foreach test, $(notdir $(testprograms_seq) $(testprograms_par)), \
 do-tests-clean: force
 	@echo 'Removing tests for $(CONDUIT).'
 	@rm -f $(call ALL_TESTS,$(CONDUIT))
+# Note $(CONDUITS) may be empty for `(dev-)tests-clean` after `clean`
 tests-clean: force
-	@for conduit in $(CONDUITS); do \
+	@list='$(CONDUITS)'; \
+	for conduit in $${list:-$(ALL_CONDUITS)}; do \
 	   $$MAKE $(MAKE_HERE) do-tests-clean CONDUIT=$$conduit || exit $$?; \
 	done
 
