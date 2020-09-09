@@ -48,8 +48,8 @@ The current release is known to work on the following configurations:
 
 * Cray XC/x86\_64 with one of the following PrgEnv environment modules and
   its dependencies (smp and aries conduits):
-    - PrgEnv-gnu with gcc/6.4.0 (or later) loaded.
-    - PrgEnv-intel with gcc/6.4.0 (or later) loaded.
+    - PrgEnv-gnu with gcc/7.1.0 (or later) loaded.
+    - PrgEnv-intel with gcc/7.1.0 (or later) loaded.
     - PrgEnv-cray with cce/9.0.0 (or later) loaded.
       Note that does not include support for "cce/9.x.y-classic".
 
@@ -300,7 +300,7 @@ pass the appropriate value for your system:
 * `--with-cross=cray-aries-alps`: Cray XC systems using the Cray ALPS job scheduler (aprun)
 
 When Intel compilers are being used (usually the default for these systems),
-`g++` in `$PATH` must be version 6.4.0 or newer.  If the default is too old,
+`g++` in `$PATH` must be version 7.1.0 or newer.  If the default is too old,
 then you may need to explicitly load a `gcc` environment module, e.g.:
 
 ```bash
