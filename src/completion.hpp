@@ -562,14 +562,12 @@ namespace upcxx {
     struct cx_state<buffered_cx<Event>, std::tuple<>> {
       cx_state(buffered_cx<Event>) {}
       void operator()() {}
-      std::tuple<> get_remote_fn() { return {}; }
     };
     
     template<typename Event>
     struct cx_state<blocking_cx<Event>, std::tuple<>> {
       cx_state(blocking_cx<Event>) {}
       void operator()() {}
-      std::tuple<> get_remote_fn() { return {}; }
     };
     
     template<typename Event, progress_level level, typename ...T>
@@ -597,8 +595,6 @@ namespace upcxx {
           /*move ref*/pro_, std::tuple<T...>(static_cast<T&&>(vals)...)
         );
       }
-
-      std::tuple<> get_remote_fn() { return {}; }
     };
 
     /* There are multiple specializations for promise_cx since both the promise
@@ -635,8 +631,6 @@ namespace upcxx {
           /*move ref*/pro_, std::tuple<T...>(static_cast<T&&>(vals)...)
         );
       }
-
-      std::tuple<> get_remote_fn() { return {}; }
     };
     // Case when event type list is empty
     template<typename Event, typename ...T>
@@ -664,8 +658,6 @@ namespace upcxx {
       void operator()() {
         backend::fulfill_during<progress_level::user>(/*move ref*/pro_, 1);
       }
-
-      std::tuple<> get_remote_fn() { return {}; }
     };
     // Case when promise and event type list are both empty
     template<typename Event>
@@ -693,8 +685,6 @@ namespace upcxx {
       void operator()() {
         backend::fulfill_during<progress_level::user>(/*move ref*/pro_, 1);
       }
-
-      std::tuple<> get_remote_fn() { return {}; }
     };
     
     template<typename Event, typename Fn, typename ...T>
@@ -724,8 +714,6 @@ namespace upcxx {
         );
         upcxx::current_persona().undischarged_n_ -= 1;
       }
-
-      std::tuple<> get_remote_fn() { return {}; }
     };
 
     // cx_state<rpc_cx<...>> does not fit the usual mold since the event isn't
@@ -745,9 +733,27 @@ namespace upcxx {
       operator()(T ...vals) {
         return static_cast<Fn&&>(fn_)(static_cast<T&&>(vals)...);
       }
-
-      std::tuple<Fn&> get_remote_fn() { return std::tuple<Fn&>{fn_}; }
     };
+  }
+
+  //////////////////////////////////////////////////////////////////////////////
+  namespace detail {
+    template<typename CxOrCxState>
+    std::tuple<> cx_get_remote_fn(const CxOrCxState &) {
+      return {};
+    }
+
+    template<typename Fn>
+    std::tuple<const Fn&> cx_get_remote_fn(const rpc_cx<remote_cx_event,Fn> &cx) {
+      return std::tuple<const Fn&>{cx.fn_};
+    }
+
+    template<typename Fn, typename ...T>
+    std::tuple<const Fn&> cx_get_remote_fn(
+        const cx_state<rpc_cx<remote_cx_event,Fn>, std::tuple<T...>> &state
+      ) {
+      return std::tuple<const Fn&>{state.fn_};
+    }
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -841,6 +847,7 @@ namespace upcxx {
         return event_bound{};
       }
 
+      static std::tuple<> get_remote_fns(completions<>) { return {}; }
       std::tuple<> get_remote_fns() { return {}; }
 
       template<typename Event>
@@ -928,8 +935,8 @@ namespace upcxx {
         );
       }
 
-      auto get_remote_fn() UPCXX_RETURN_DECLTYPE(state_.get_remote_fn()) {
-        return state_.get_remote_fn();
+      auto get_remote_fn() UPCXX_RETURN_DECLTYPE(cx_get_remote_fn(state_)) {
+        return cx_get_remote_fn(state_);
       }
       
       template<typename Event, typename Lpc>
@@ -1013,6 +1020,13 @@ namespace upcxx {
         tail_t::template operator()<Event>(static_cast<V&&>(vals)...);
       }
 
+      static auto get_remote_fns(const completions<CxH,CxT...> &cxs)
+        UPCXX_RETURN_DECLTYPE(std::tuple_cat(cx_get_remote_fn(cxs.head()),
+                                             tail_t::get_remote_fns(cxs.tail()))) {
+        return std::tuple_cat(cx_get_remote_fn(cxs.head()),
+                              tail_t::get_remote_fns(cxs.tail()));
+      }
+
       auto get_remote_fns()
         UPCXX_RETURN_DECLTYPE(std::tuple_cat(head().get_remote_fn(),
                                              tail().get_remote_fns())) {
@@ -1021,7 +1035,7 @@ namespace upcxx {
       }
 
       template<typename FnRefTuple, int ...i>
-      auto bind_remote_fns(FnRefTuple &&fns, detail::index_sequence<i...>)
+      static auto bind_remote_fns(FnRefTuple &&fns, detail::index_sequence<i...>)
         UPCXX_RETURN_DECLTYPE (
           upcxx::bind(
             cx_remote_dispatch{},
@@ -1034,13 +1048,13 @@ namespace upcxx {
           );
       }
 
-      template<typename Event>
-      auto bind_event()
+      template<typename Event, typename FnRefTuple>
+      static auto bind_event_fns(FnRefTuple &&fns)
         UPCXX_RETURN_DECLTYPE(
           bind_remote_fns(
-            get_remote_fns(),
+            fns,
             detail::make_index_sequence<
-              std::tuple_size<decltype(get_remote_fns())>::value
+              std::tuple_size<typename std::decay<FnRefTuple>::type>::value
             >{}
           )
         ) {
@@ -1052,11 +1066,23 @@ namespace upcxx {
                       "internal error: bind_event() currently only "
                       "supported for remote_cx_event");
         return bind_remote_fns(
-            get_remote_fns(),
+            fns,
             detail::make_index_sequence<
-              std::tuple_size<decltype(get_remote_fns())>::value
+              std::tuple_size<typename std::decay<FnRefTuple>::type>::value
             >{}
           );
+      }
+
+      template<typename Event>
+      static auto bind_event(const completions<CxH,CxT...> &cxs)
+        UPCXX_RETURN_DECLTYPE(bind_event_fns<Event>(get_remote_fns(cxs))) {
+        return bind_event_fns<Event>(get_remote_fns(cxs));
+      }
+
+      template<typename Event>
+      auto bind_event()
+        UPCXX_RETURN_DECLTYPE(bind_event_fns<Event>(get_remote_fns())) {
+        return bind_event_fns<Event>(get_remote_fns());
       }
 
       template<typename Event>
