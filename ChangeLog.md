@@ -47,6 +47,13 @@ Build system changes:
 * `configure --enable-X` is now equivalent to `--with-X`, similarly for `--disable`/`--without`
 * Tests run by `make check` and friends now enforce a 5m time limit by default
 
+Requirements changes:
+
+* The minimum required `gcc` environment module version for PrgEnv-gnu and
+  PrgEnv-intel on a Cray XC has risen from 6.4.0 to 7.1.0.
+* The minimum required Intel compiler version for PrgEnv-intel on a Cray XC
+  has risen from 17.0.2 to 18.0.0.
+
 Notable bug fixes:
 
 * issue #151: Validate requested completions against the events supported by an

@@ -26,7 +26,8 @@ sys_info() {
     ) fi
 }
 
-# For probing for lowest acceptable (for its libstdc++) g++ version:
+# For probing for lowest acceptable (for its libstdc++) g++ version.
+# These are defaults, which may be overridden per-platform (such as Cray XC).
 MIN_GNU_MAJOR=6
 MIN_GNU_MINOR=4
 MIN_GNU_PATCH=0
@@ -229,6 +230,17 @@ platform_sanity_checks() {
             fi
             CC=${CC:-cc}
             CXX=${CXX:-CC}
+            MIN_GNU_MAJOR=7
+            if test -z "$CRAY_PRGENVINTEL"; then
+              MIN_GNU_MINOR=1
+            else
+              # Old icpc with new g++ reports 0 for __GNUC_MINOR__.
+              # Since GCC releases START at MINOR=1 (never 0) we can safely
+              # allow a MINOR==0 knowing the real value is at least 1.
+              MIN_GNU_MINOR=0
+            fi
+            MIN_GNU_PATCH=0
+            MIN_GNU_STRING='7.1'
         elif test "$KERNEL" = "Darwin" ; then # default to XCode clang
             CC=${CC:-/usr/bin/clang}
             CXX=${CXX:-/usr/bin/clang++}
@@ -304,8 +316,13 @@ platform_sanity_checks() {
         elif echo "$CXXVERS" | egrep 'Free Software Foundation' 2>&1 > /dev/null &&
              ! check_gnu_version CXX &> /dev/null; then
             COMPILER_BAD=1
-        elif echo "$CXXVERS" | egrep ' +\(ICC\) +(17\.0\.[2-9]|1[89]\.|2[0-9]\.)' 2>&1 > /dev/null ; then
+        elif test -z "$CRAY_PRGENVINTEL" && \
+             echo "$CXXVERS" | egrep ' +\(ICC\) +(17\.0\.[2-9]|1[89]\.|2[0-9]\.)' 2>&1 > /dev/null ; then
 	    # Ex: icpc (ICC) 18.0.1 20171018
+            check_intel_compiler || exit 1
+            COMPILER_GOOD=1
+        elif test -n "$CRAY_PRGENVINTEL" && \
+             echo "$CXXVERS" | egrep ' +\(ICC\) +(1[89]\.|2[0-9]\.)' 2>&1 > /dev/null ; then
             check_intel_compiler || exit 1
             COMPILER_GOOD=1
         elif echo "$CXXVERS" | egrep ' +\(ICC\) ' 2>&1 > /dev/null ; then
@@ -350,8 +367,8 @@ We recommend one of the following C++ compilers (or any later versions):
            Linux on ppc64le:  g++ 6.4.0, LLVM/clang 5.0.0, PGI 18.10
            Linux on aarch64:  g++ 6.4.0, LLVM/clang 4.0.0
            macOS on x86_64:   g++ 6.4.0, Xcode/clang 8.0.0
-           Cray XC systems:   PrgEnv-gnu with gcc/6.4.0 environment module loaded
-                              PrgEnv-intel with Intel C 17.0.2 and gcc/6.4.0 environment module loaded
+           Cray XC systems:   PrgEnv-gnu with gcc/7.1.0 environment module loaded
+                              PrgEnv-intel with Intel C 18.0.0 and gcc/7.1.0 environment modules loaded
                               PrgEnv-cray with cce/9.0.0 environment module loaded
                               ALCF's PrgEnv-llvm/4.0
 EOF
