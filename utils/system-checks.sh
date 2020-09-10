@@ -322,7 +322,7 @@ platform_sanity_checks() {
             check_intel_compiler || exit 1
             COMPILER_GOOD=1
         elif test -n "$CRAY_PRGENVINTEL" && \
-             echo "$CXXVERS" | egrep ' +\(ICC\) +(1[89]\.|2[0-9]\.)' 2>&1 > /dev/null ; then
+             echo "$CXXVERS" | egrep ' +\(ICC\) +(18\.0\.[1-9]|19\.|2[0-9]\.)' 2>&1 > /dev/null ; then
             check_intel_compiler || exit 1
             COMPILER_GOOD=1
         elif echo "$CXXVERS" | egrep ' +\(ICC\) ' 2>&1 > /dev/null ; then
@@ -368,7 +368,7 @@ We recommend one of the following C++ compilers (or any later versions):
            Linux on aarch64:  g++ 6.4.0, LLVM/clang 4.0.0
            macOS on x86_64:   g++ 6.4.0, Xcode/clang 8.0.0
            Cray XC systems:   PrgEnv-gnu with gcc/7.1.0 environment module loaded
-                              PrgEnv-intel with Intel C 18.0.0 and gcc/7.1.0 environment modules loaded
+                              PrgEnv-intel with Intel C 18.0.1 and gcc/7.1.0 environment modules loaded
                               PrgEnv-cray with cce/9.0.0 environment module loaded
                               ALCF's PrgEnv-llvm/4.0
 EOF
