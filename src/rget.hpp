@@ -84,7 +84,7 @@ namespace upcxx {
 
       void send_remote() {
         backend::send_am_master<progress_level::user>( rank_s,
-          std::move(state_remote).template bind_event<remote_cx_event>()
+          state_remote.template bind_event<remote_cx_event>()
         );
         
         upcxx::current_persona().undischarged_n_ -= 1;

@@ -801,10 +801,12 @@ namespace upcxx {
       void operator()(V&&...); // should be &&, but not for legacy
 
       // Create a callable to fire all actions associated with given event. Note
-      // this method consumes the instance (&&) so Event should be the only event
-      // enabled by our predicate if any.
+      // this is only supported for Event==remote_cx_event, and it assumes that
+      // the event does not produce any values. The returned bound function
+      // contains references to functions inside this completion, so it must be
+      // consumed before the completion dies.
       template<typename Event>
-      SomeCallable bind_event() &&;
+      SomeCallable bind_event();
 
       // Convert states of actions associated with given Event to dormant lpc list
       template<typename Event>
@@ -832,7 +834,7 @@ namespace upcxx {
       };
       
       template<typename Event>
-      event_bound bind_event() && {
+      event_bound bind_event() {
         static_assert(std::is_same<Event, remote_cx_event>::value,
                       "internal error: bind_event() currently only "
                       "supported for remote_cx_event");
@@ -1033,7 +1035,7 @@ namespace upcxx {
       }
 
       template<typename Event>
-      auto bind_event() &&
+      auto bind_event()
         UPCXX_RETURN_DECLTYPE(
           bind_remote_fns(
             get_remote_fns(),

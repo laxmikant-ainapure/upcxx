@@ -120,7 +120,7 @@ namespace upcxx
         auto *cbs = static_cast<FinalType*>(this);
         
         backend::send_am_master<progress_level::user>( cbs->rank_d,
-          std::move(cbs->state_remote).template bind_event<remote_cx_event>()
+          cbs->state_remote.template bind_event<remote_cx_event>()
         );
 
         upcxx::current_persona().undischarged_n_ -= 1;
