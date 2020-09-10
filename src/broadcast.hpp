@@ -38,31 +38,32 @@ namespace upcxx {
   typename detail::completions_returner<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::broadcast_scalar_event_values<T>,
-      Cxs
+      typename std::decay<Cxs>::type
     >::return_t
   broadcast_nontrivial(
       T1 &&value, intrank_t root,
       const team &tm = upcxx::world(),
-      Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
+      Cxs &&cxs = completions<future_cx<operation_cx_event>>{{}}
     ) {
 
+    using CxsDecayed = typename std::decay<Cxs>::type;
     UPCXX_ASSERT_INIT();
     UPCXX_ASSERT(root >= 0 && root < tm.rank_n(),
       "broadcast_nontrivial(..., root, team) requires root in [0, team.rank_n()-1] == [0, " << tm.rank_n()-1 << "], but given: " << root);
     UPCXX_ASSERT_ALWAYS(
-      (detail::completions_has_event<Cxs, operation_cx_event>::value),
+      (detail::completions_has_event<CxsDecayed, operation_cx_event>::value),
       "Not requesting operation completion is surely an error."
     );
     UPCXX_ASSERT_ALWAYS(
-      (!detail::completions_has_event<Cxs, source_cx_event>::value &&
-       !detail::completions_has_event<Cxs, remote_cx_event>::value),
+      (!detail::completions_has_event<CxsDecayed, source_cx_event>::value &&
+       !detail::completions_has_event<CxsDecayed, remote_cx_event>::value),
       "Broadcasts do not support source or remote completion."
     );
 
     using cxs_state_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::broadcast_scalar_event_values<T>,
-      Cxs>;
+      CxsDecayed>;
     
     struct broadcast_state {
       int awaiting;
@@ -104,12 +105,12 @@ namespace upcxx {
       s->contribute(id);
     }
 
-    ::new(&s->cxs_state) cxs_state_t(std::move(cxs));
+    ::new(&s->cxs_state) cxs_state_t(std::forward<Cxs>(cxs));
     
     detail::completions_returner<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::broadcast_scalar_event_values<T>,
-      Cxs>
+      CxsDecayed>
     returner(s->cxs_state);
     
     s->contribute(id);
@@ -134,13 +135,14 @@ namespace upcxx {
   typename detail::completions_returner<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::broadcast_vector_event_values,
-      Cxs
+      typename std::decay<Cxs>::type
     >::return_t
   broadcast(
       T *buf, std::size_t n, intrank_t root,
       const team &tm = upcxx::world(),
-      Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
+      Cxs &&cxs = completions<future_cx<operation_cx_event>>{{}}
     ) {
+    using CxsDecayed = typename std::decay<Cxs>::type;
     static_assert(
       upcxx::is_trivially_serializable<T>::value,
       "Only TriviallySerializable types permitted for `upcxx::broadcast`. "
@@ -152,12 +154,12 @@ namespace upcxx {
     UPCXX_ASSERT(root >= 0 && root < tm.rank_n(),
       "broadcast(..., root, team) requires root in [0, team.rank_n()-1] == [0, " << tm.rank_n()-1 << "], but given: " << root);
     UPCXX_ASSERT_ALWAYS(
-      (detail::completions_has_event<Cxs, operation_cx_event>::value),
+      (detail::completions_has_event<CxsDecayed, operation_cx_event>::value),
       "Not requesting operation completion is surely an error."
     );
     UPCXX_ASSERT_ALWAYS(
-      (!detail::completions_has_event<Cxs, source_cx_event>::value &&
-       !detail::completions_has_event<Cxs, remote_cx_event>::value),
+      (!detail::completions_has_event<CxsDecayed, source_cx_event>::value &&
+       !detail::completions_has_event<CxsDecayed, remote_cx_event>::value),
       "Broadcasts do not support source or remote completion."
     );
 
@@ -165,9 +167,9 @@ namespace upcxx {
       detail::completions_state<
         /*EventPredicate=*/detail::event_is_here,
         /*EventValues=*/detail::broadcast_vector_event_values,
-        Cxs> cxs_state;
+        CxsDecayed> cxs_state;
 
-      broadcast_cb(Cxs &&cxs): cxs_state(std::move(cxs)) {}
+      broadcast_cb(Cxs &&cxs): cxs_state(std::forward<Cxs>(cxs)) {}
       
       void execute_and_delete(backend::gasnet::handle_cb_successor) override {
         cxs_state.template operator()<operation_cx_event>();
@@ -175,12 +177,12 @@ namespace upcxx {
       }
     };
     
-    broadcast_cb *cb = new broadcast_cb(std::move(cxs));
+    broadcast_cb *cb = new broadcast_cb(std::forward<Cxs>(cxs));
     
     detail::completions_returner<
         /*EventPredicate=*/detail::event_is_here,
         /*EventValues=*/detail::broadcast_vector_event_values,
-        Cxs>
+        CxsDecayed>
       returner(cb->cxs_state);
 
     detail::broadcast_trivial(tm, root, (void*)buf, n*sizeof(T), cb);
@@ -195,7 +197,7 @@ namespace upcxx {
   typename detail::completions_returner<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::broadcast_scalar_event_values<T>,
-      Cxs
+      typename std::decay<Cxs>::type
     >::return_t
   broadcast(
       T1 value, intrank_t root,
@@ -203,6 +205,7 @@ namespace upcxx {
       Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
     ) {
     
+    using CxsDecayed = typename std::decay<Cxs>::type;
     static_assert(
       upcxx::is_trivially_serializable<T>::value,
       "Only TriviallySerializable types permitted for `upcxx::broadcast`. "
@@ -216,12 +219,12 @@ namespace upcxx {
     UPCXX_ASSERT(root >= 0 && root < tm.rank_n(),
       "broadcast(..., root, team) requires root in [0, team.rank_n()-1] == [0, " << tm.rank_n()-1 << "], but given: " << root);
     UPCXX_ASSERT_ALWAYS(
-      (detail::completions_has_event<Cxs, operation_cx_event>::value),
+      (detail::completions_has_event<CxsDecayed, operation_cx_event>::value),
       "Not requesting operation completion is surely an error."
     );
     UPCXX_ASSERT_ALWAYS(
-      (!detail::completions_has_event<Cxs, source_cx_event>::value &&
-       !detail::completions_has_event<Cxs, remote_cx_event>::value),
+      (!detail::completions_has_event<CxsDecayed, source_cx_event>::value &&
+       !detail::completions_has_event<CxsDecayed, remote_cx_event>::value),
       "Broadcasts do not support source or remote completion."
     );
 
@@ -230,11 +233,11 @@ namespace upcxx {
       detail::completions_state<
         /*EventPredicate=*/detail::event_is_here,
         /*EventValues=*/detail::broadcast_scalar_event_values<T>,
-        Cxs> cxs_state;
+        CxsDecayed> cxs_state;
       
       broadcast_cb(T &&value, Cxs &&cxs):
         value(std::move(value)),
-        cxs_state(std::move(cxs)) {
+        cxs_state(std::forward<Cxs>(cxs)) {
       }
       
       void execute_and_delete(backend::gasnet::handle_cb_successor) override {
@@ -243,12 +246,12 @@ namespace upcxx {
       }
     };
     
-    broadcast_cb *cb = new broadcast_cb(std::move(value), std::move(cxs));
+    broadcast_cb *cb = new broadcast_cb(std::move(value), std::forward<Cxs>(cxs));
 
     detail::completions_returner<
         /*EventPredicate=*/detail::event_is_here,
         /*EventValues=*/detail::broadcast_scalar_event_values<T>,
-        Cxs>
+        CxsDecayed>
       returner(cb->cxs_state);
     
     detail::broadcast_trivial(tm, root, (void*)&cb->value, sizeof(T), cb);

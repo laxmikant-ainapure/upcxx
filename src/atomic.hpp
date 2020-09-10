@@ -186,20 +186,21 @@ namespace upcxx {
       // convenience declarations
       template<typename Cxs>
       using FETCH_RTYPE = typename detail::completions_returner<detail::event_is_here,
-          fetch_aop_event_values, Cxs>::return_t;
+          fetch_aop_event_values, typename std::decay<Cxs>::type>::return_t;
       template<typename Cxs>
       using NOFETCH_RTYPE = typename detail::completions_returner<detail::event_is_here,
-          nofetch_aop_event_values, Cxs>::return_t;
+          nofetch_aop_event_values, typename std::decay<Cxs>::type>::return_t;
       using FUTURE_CX = completions<future_cx<operation_cx_event> >;
 
       // generic fetching atomic operation
       template<typename Cxs = FUTURE_CX>
       UPCXX_NODISCARD
       FETCH_RTYPE<Cxs> fop(atomic_op aop, global_ptr<T> gptr, std::memory_order order,
-                           T val1 = 0, T val2 = 0, Cxs cxs = Cxs{{}}) const {
+                           T val1 = 0, T val2 = 0, Cxs &&cxs = Cxs{{}}) const {
+        using CxsDecayed = typename std::decay<Cxs>::type;
         UPCXX_ASSERT_INIT();
         UPCXX_ASSERT(this->atomic_gex_ops || this->ad_gex_handle, "Atomic domain is not constructed");
-        UPCXX_ASSERT((detail::completions_has_event<Cxs, operation_cx_event>::value));
+        UPCXX_ASSERT((detail::completions_has_event<CxsDecayed, operation_cx_event>::value));
         UPCXX_GPTR_CHK(gptr);
         UPCXX_ASSERT(gptr != nullptr, "Global pointer for atomic operation is null");
         UPCXX_ASSERT(this->parent_tm_->from_world(gptr.rank_,-1) >= 0, 
@@ -209,13 +210,13 @@ namespace upcxx {
               " not in domain's operation set '" << 
               detail::opset_to_string(this->atomic_gex_ops) << "'\n");
         UPCXX_ASSERT_ALWAYS(
-          (detail::completions_has_event<Cxs, operation_cx_event>::value),
+          (detail::completions_has_event<CxsDecayed, operation_cx_event>::value),
           "Not requesting operation completion for '" <<
           detail::atomic_op_str(aop) << "' is surely an error."
         );
         UPCXX_ASSERT_ALWAYS(
-          (!detail::completions_has_event<Cxs, source_cx_event>::value &&
-           !detail::completions_has_event<Cxs, remote_cx_event>::value),
+          (!detail::completions_has_event<CxsDecayed, source_cx_event>::value &&
+           !detail::completions_has_event<CxsDecayed, remote_cx_event>::value),
           "Atomic operation '" << detail::atomic_op_str(aop) << "'"
           " does not support source or remote completion."
         );
@@ -223,13 +224,13 @@ namespace upcxx {
         
         // we only have local completion, not remote
         using cxs_here_t = detail::completions_state<detail::event_is_here,
-            fetch_aop_event_values, Cxs>;
+            fetch_aop_event_values, CxsDecayed>;
         
         // Create the callback object
-        auto *cb = new fetch_op_cb<cxs_here_t>{cxs_here_t{std::move(cxs)}};
+        auto *cb = new fetch_op_cb<cxs_here_t>{cxs_here_t{std::forward<Cxs>(cxs)}};
         
         auto returner = detail::completions_returner<detail::event_is_here,
-            fetch_aop_event_values, Cxs>{cb->state_here};
+            fetch_aop_event_values, CxsDecayed>{cb->state_here};
         
         // execute the backend gasnet function
         gex_Event_t h = this->inject( this->ad_gex_handle,
@@ -254,10 +255,11 @@ namespace upcxx {
       template<typename Cxs = FUTURE_CX>
       UPCXX_NODISCARD
       NOFETCH_RTYPE<Cxs> op(atomic_op aop, global_ptr<T> gptr, std::memory_order order,
-                            T val1 = 0, T val2 = 0, Cxs cxs = Cxs{{}}) const {
+                            T val1 = 0, T val2 = 0, Cxs &&cxs = Cxs{{}}) const {
+        using CxsDecayed = typename std::decay<Cxs>::type;
         UPCXX_ASSERT_INIT();
         UPCXX_ASSERT(this->atomic_gex_ops || this->ad_gex_handle, "Atomic domain is not constructed");
-        UPCXX_ASSERT((detail::completions_has_event<Cxs, operation_cx_event>::value));
+        UPCXX_ASSERT((detail::completions_has_event<CxsDecayed, operation_cx_event>::value));
         UPCXX_GPTR_CHK(gptr);
         UPCXX_ASSERT(gptr != nullptr, "Global pointer for atomic operation is null");
         UPCXX_ASSERT(this->parent_tm_->from_world(gptr.rank_,-1) >= 0, 
@@ -267,26 +269,26 @@ namespace upcxx {
               " not in domain's operation set '" << 
               detail::opset_to_string(this->atomic_gex_ops) << "'\n");
         UPCXX_ASSERT_ALWAYS(
-          (detail::completions_has_event<Cxs, operation_cx_event>::value),
+          (detail::completions_has_event<CxsDecayed, operation_cx_event>::value),
           "Not requesting operation completion for '" <<
           detail::atomic_op_str(aop) << "' is surely an error."
         );
         UPCXX_ASSERT_ALWAYS(
-          (!detail::completions_has_event<Cxs, source_cx_event>::value &&
-           !detail::completions_has_event<Cxs, remote_cx_event>::value),
+          (!detail::completions_has_event<CxsDecayed, source_cx_event>::value &&
+           !detail::completions_has_event<CxsDecayed, remote_cx_event>::value),
           "Atomic operation '" << detail::atomic_op_str(aop) << "'"
           " does not support source or remote completion."
         );
         
         // we only have local completion, not remote
         using cxs_here_t = detail::completions_state<detail::event_is_here,
-            nofetch_aop_event_values, Cxs>;
+            nofetch_aop_event_values, CxsDecayed>;
         
         // Create the callback object on stack..
-        nofetch_op_cb<cxs_here_t> cb(cxs_here_t(std::move(cxs)));
+        nofetch_op_cb<cxs_here_t> cb(cxs_here_t(std::forward<Cxs>(cxs)));
         
         auto returner = detail::completions_returner<detail::event_is_here,
-            nofetch_aop_event_values, Cxs>{cb.state_here};
+            nofetch_aop_event_values, CxsDecayed>{cb.state_here};
         
         // execute the backend gasnet function
         gex_Event_t h = this->inject( this->ad_gex_handle,
@@ -358,46 +360,46 @@ namespace upcxx {
       template<typename Cxs = FUTURE_CX>
       UPCXX_NODISCARD
       NOFETCH_RTYPE<Cxs> store(global_ptr<T> gptr, T val, std::memory_order order,
-                               Cxs cxs = Cxs{{}}) const {
+                               Cxs &&cxs = Cxs{{}}) const {
         UPCXX_ASSERT_INIT();
-        return op(atomic_op::store, gptr, order, val, (T)0, cxs);
+        return op(atomic_op::store, gptr, order, val, (T)0, std::forward<Cxs>(cxs));
       }
       template<typename Cxs = FUTURE_CX>
       UPCXX_NODISCARD
-      FETCH_RTYPE<Cxs> load(global_ptr<const T> gptr, std::memory_order order, Cxs cxs = Cxs{{}}) const {
+      FETCH_RTYPE<Cxs> load(global_ptr<const T> gptr, std::memory_order order, Cxs &&cxs = Cxs{{}}) const {
         UPCXX_ASSERT_INIT();
-        return fop(atomic_op::load, const_pointer_cast<T>(gptr), order, (T)0, (T)0, cxs);
+        return fop(atomic_op::load, const_pointer_cast<T>(gptr), order, (T)0, (T)0, std::forward<Cxs>(cxs));
       }
       template<typename Cxs = FUTURE_CX>
       UPCXX_NODISCARD
-      NOFETCH_RTYPE<Cxs> inc(global_ptr<T> gptr, std::memory_order order, Cxs cxs = Cxs{{}}) const {
+      NOFETCH_RTYPE<Cxs> inc(global_ptr<T> gptr, std::memory_order order, Cxs &&cxs = Cxs{{}}) const {
         UPCXX_ASSERT_INIT();
-        return op(atomic_op::inc, gptr, order, (T)0, (T)0, cxs);
+        return op(atomic_op::inc, gptr, order, (T)0, (T)0, std::forward<Cxs>(cxs));
       }
       template<typename Cxs = FUTURE_CX>
       UPCXX_NODISCARD
-      NOFETCH_RTYPE<Cxs> dec(global_ptr<T> gptr, std::memory_order order, Cxs cxs = Cxs{{}}) const {
+      NOFETCH_RTYPE<Cxs> dec(global_ptr<T> gptr, std::memory_order order, Cxs &&cxs = Cxs{{}}) const {
         UPCXX_ASSERT_INIT();
-        return op(atomic_op::dec,gptr, order, (T)0, (T)0, cxs);
+        return op(atomic_op::dec,gptr, order, (T)0, (T)0, std::forward<Cxs>(cxs));
       }
       template<typename Cxs = FUTURE_CX>
       UPCXX_NODISCARD
-      FETCH_RTYPE<Cxs> fetch_inc(global_ptr<T> gptr, std::memory_order order, Cxs cxs = Cxs{{}}) const {
+      FETCH_RTYPE<Cxs> fetch_inc(global_ptr<T> gptr, std::memory_order order, Cxs &&cxs = Cxs{{}}) const {
         UPCXX_ASSERT_INIT();
-        return fop(atomic_op::fetch_inc, gptr, order, (T)0, (T)0, cxs);
+        return fop(atomic_op::fetch_inc, gptr, order, (T)0, (T)0, std::forward<Cxs>(cxs));
       }
       template<typename Cxs = FUTURE_CX>
       UPCXX_NODISCARD
-      FETCH_RTYPE<Cxs> fetch_dec(global_ptr<T> gptr, std::memory_order order, Cxs cxs = Cxs{{}}) const {
+      FETCH_RTYPE<Cxs> fetch_dec(global_ptr<T> gptr, std::memory_order order, Cxs &&cxs = Cxs{{}}) const {
         UPCXX_ASSERT_INIT();
-        return fop(atomic_op::fetch_dec, gptr, order, (T)0, (T)0, cxs);
+        return fop(atomic_op::fetch_dec, gptr, order, (T)0, (T)0, std::forward<Cxs>(cxs));
       }
       template<typename Cxs = FUTURE_CX>
       UPCXX_NODISCARD
       FETCH_RTYPE<Cxs> compare_exchange(global_ptr<T> gptr, T val1, T val2, std::memory_order order,
-                                        Cxs cxs = Cxs{{}}) const {
+                                        Cxs &&cxs = Cxs{{}}) const {
         UPCXX_ASSERT_INIT();
-        return fop(atomic_op::compare_exchange, gptr, order, val1, val2, cxs);
+        return fop(atomic_op::compare_exchange, gptr, order, val1, val2, std::forward<Cxs>(cxs));
       }
       
       #define UPCXX_AD_METHODS(name, constraint)\
@@ -405,17 +407,17 @@ namespace upcxx {
         UPCXX_NODISCARD \
         constraint(FETCH_RTYPE<Cxs>) \
 	fetch_##name(global_ptr<T> gptr, T val, std::memory_order order,\
-                                      Cxs cxs = Cxs{{}}) const {\
+                                      Cxs &&cxs = Cxs{{}}) const {\
           UPCXX_ASSERT_INIT(); \
-          return fop(atomic_op::fetch_##name, gptr, order, val, (T)0, cxs);\
+          return fop(atomic_op::fetch_##name, gptr, order, val, (T)0, std::forward<Cxs>(cxs));\
         }\
         template<typename Cxs = FUTURE_CX>\
         UPCXX_NODISCARD \
         constraint(NOFETCH_RTYPE<Cxs>) \
 	name(global_ptr<T> gptr, T val, std::memory_order order,\
-                                Cxs cxs = Cxs{{}}) const {\
+                                Cxs &&cxs = Cxs{{}}) const {\
           UPCXX_ASSERT_INIT(); \
-          return op(atomic_op::name, gptr, order, val, (T)0, cxs);\
+          return op(atomic_op::name, gptr, order, val, (T)0, std::forward<Cxs>(cxs));\
         }
       // sfinae helpers to disable unsupported type/op combos
       #define UPCXX_AD_INTONLY(R) typename std::enable_if<std::is_integral<T>::value,R>::type
