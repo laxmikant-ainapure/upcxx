@@ -49,7 +49,7 @@ The current release is known to work on the following configurations:
 * Cray XC/x86\_64 with one of the following PrgEnv environment modules and
   its dependencies (smp and aries conduits):
     - PrgEnv-gnu with gcc/7.1.0 (or later) loaded.
-    - PrgEnv-intel with gcc/7.1.0 (or later) loaded.
+    - PrgEnv-intel with intel/18.0.0 and gcc/7.1.0 (or later) loaded.
     - PrgEnv-cray with cce/9.0.0 (or later) loaded.
       Note that does not include support for "cce/9.x.y-classic".
 

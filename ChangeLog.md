@@ -51,6 +51,8 @@ Requirements changes:
 
 * The minimum required `gcc` environment module version for PrgEnv-gnu and
   PrgEnv-intel on a Cray XC has risen from 6.4.0 to 7.1.0.
+* The minimum required Intel compiler version for PrgEnv-intel on a Cray XC
+  has risen from 17.0.2 to 18.0.0.
 
 Notable bug fixes:
 
