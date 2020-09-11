@@ -462,7 +462,8 @@ namespace upcxx {
     
     detail::rma_put_sync sync_done = o->inject(
       gp_d.rank_, gp_d.raw_ptr_, &value_s, sizeof(T),
-      detail::cx_bind_event<remote_cx_event>(std::forward<Cxs>(cxs))
+      traits_t::cx_state_remote_t
+        ::template bind_event<remote_cx_event>(std::forward<Cxs>(cxs))
     );
     detail::template rput_post_inject<object_t, traits_t>(o, sync_done);
     return returner();
@@ -497,7 +498,8 @@ namespace upcxx {
     
     detail::rma_put_sync sync_done = o->inject(
       gp_d.rank_, gp_d.raw_ptr_, buf_s, n*sizeof(T),
-      detail::cx_bind_event<remote_cx_event>(std::forward<Cxs>(cxs))
+      traits_t::cx_state_remote_t
+        ::template bind_event<remote_cx_event>(std::forward<Cxs>(cxs))
     );
     detail::template rput_post_inject<object_t, traits_t>(o, sync_done);
     return returner();
