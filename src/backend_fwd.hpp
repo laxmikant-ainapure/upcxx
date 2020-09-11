@@ -191,6 +191,8 @@ namespace backend {
   };
   
   void quiesce(const team &tm, entry_barrier eb);
+
+  void warn_collective_in_progress(const char *fnname, entry_barrier eb=entry_barrier::none);
   
   template<progress_level level, typename Fn>
   void during_level(Fn &&fn, persona &active_per = current_persona());

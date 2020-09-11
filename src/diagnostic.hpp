@@ -92,6 +92,26 @@ namespace upcxx {
   #define UPCXX_ASSERT_MASTER_IFSEQ() ((void)0)
 #endif
 
+// asserting collective-safe context
+#ifndef UPCXX_COLLECTIVES_IN_PROGRESS
+#define UPCXX_COLLECTIVES_IN_PROGRESS 1 // whether or not to allow collective invocations in progress
+#endif
+#if !UPCXX_COLLECTIVES_IN_PROGRESS // hard prohibition against collectives in progress
+#define UPCXX_ASSERT_COLLECTIVE_SAFE_NAMED(fnname, eb) \
+  UPCXX_ASSERT_ALWAYS(!(::upcxx::initialized() && ::upcxx::in_progress()), \
+       "Collective operation " << fnname << " invoked within the restricted context. \n" \
+       "Initiation of collective operations from within callbacks running inside user-level progress is prohibited.")
+#define UPCXX_ASSERT_COLLECTIVE_SAFE(eb) UPCXX_ASSERT_COLLECTIVE_SAFE_NAMED("shown above", eb)
+#else // Allow collectives in progress with a deprecation warning
+// eb is an entry_barrier constant actually representing the progress level
+// cannot use progress_level enum because it lacks a "none" constant
+#define UPCXX_ASSERT_COLLECTIVE_SAFE_NAMED(fnname, eb) ( \
+    (::upcxx::initialized() && ::upcxx::in_progress()) ? \
+    ::upcxx::backend::warn_collective_in_progress(fnname, eb) \
+    : (void)0 )
+#define UPCXX_ASSERT_COLLECTIVE_SAFE(eb) UPCXX_ASSERT_COLLECTIVE_SAFE_NAMED(UPCXX_FUNC, eb)
+#endif
+
 // UPCXX_NODISCARD: The C++17 [[nodiscard]] attribute, when supported/enabled
 // Auto-detection can be overridden by -DUPCXX_USE_NODISCARD=1/0
 #ifndef UPCXX_USE_NODISCARD

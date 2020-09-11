@@ -1130,6 +1130,36 @@ void backend::quiesce(const team &tm, upcxx::entry_barrier eb) {
   }
 }
 
+void backend::warn_collective_in_progress(const char *fnname, entry_barrier eb) {
+  UPCXX_ASSERT_MASTER();
+  UPCXX_ASSERT(upcxx::in_progress());
+
+  static bool warn = os_env<bool>("UPCXX_WARN_COLLECTIVE_IN_PROGRESS", true);
+  if (warn) {
+    if (!upcxx::rank_me()) { // only output from proc0 to avoid spamminess 
+                             // (at a small risk of missing subteam calls that exclude proc0)
+      upcxx::say("") << std::string(70, '/') << "\n"
+        "WARNING: The following collective UPC++ operation was initiated inside the "
+        "UPC++ restricted context (from a callback running inside user-level progress):\n\n"
+        "   " << fnname << "\n\n"
+        "Initiating a collective from inside progress is a deprecated behavior and may be prohibited in a forthcoming release.\n"
+        "Please contact the UPC++ maintainers at <upcxx@googlegroups.com> if this capability is important to your application!\n"
+        "This warning may be silenced by setting envvar: UPCXX_WARN_COLLECTIVE_IN_PROGRESS=0\n"
+        << std::string(70, '/') << "\n";
+    }
+    warn = false;
+  }
+
+  if (eb == entry_barrier::user) { // issue 412
+    upcxx::fatal_error(
+     "Collective operations with user-level progress semantics are prohibited "
+     "from being initiated inside the restricted context (from a callback already running inside user-level progress).\n"
+     "Please refactor your code and/or request entry_barrier::internal or entry_barrier::none "
+     "(where available).", 
+     "User-progress collective initiated inside progress", fnname);
+  }
+}
+
 tuple<intrank_t/*rank*/, uintptr_t/*raw*/> backend::globalize_memory(void const *addr) {
   intrank_t peer_n = pshm_peer_ub - pshm_peer_lb;
   uintptr_t uaddr = reinterpret_cast<uintptr_t>(addr);
