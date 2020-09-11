@@ -372,6 +372,7 @@ variables:
 .theta.compute:
   tags: [ shell, anl, ecp-theta ]
   variables:
+    ci_script: theta-llvm
     CI_MAKE_PARALLEL: "-j8"
     CI_NETWORKS: "aries"
     MY_OS:   'cnl'
@@ -379,7 +380,7 @@ variables:
     MY_HOST: 'theta'
   before_script:
     - *do_ci_dev_check
-    - &theta-dev-ci |-
+    - |-
       if ! (( $CI_THETA_RUN_ALL_PRGENV )); then
         DEV_CI_STAGES="${DEV_CI_STAGES:-configure,build,tests}"
       fi
@@ -388,7 +389,6 @@ variables:
 theta.PrgEnv-llvm:
   extends: [ .dev_ci, .new_llvm, .theta.compute ]
   variables:
-    ci_script: theta-llvm
     CI_THETA_RUN_ALL_PRGENV: 1
     UPCXX_HAVE_OPENMP: ''
 
@@ -396,7 +396,7 @@ theta.PrgEnv-llvm:
 theta.PrgEnv-llvm_floor:
   extends: [ .dev_ci, .old_llvm, .theta.compute ]
   variables:
-    ci_script: theta-llvm_old
+    DEV_CI_PRGENV: llvm/4.0
     CI_THETA_RUN_ALL_PRGENV: 1
     UPCXX_HAVE_OPENMP: ''
 
@@ -404,35 +404,19 @@ theta.PrgEnv-llvm_floor:
 theta.PrgEnv-gnu:
   extends: [ .dev_ci, .new_gnu, .theta.compute ]
   variables:
-    ci_script: theta-llvm
-  before_script:
-    - *do_ci_dev_check
-    - *theta-dev-ci
-    - perl -pi -e 's/-llvm/-gnu/;'
-        -- utils/dev-ci/$ci_script
+    DEV_CI_PRGENV: gnu
 
 # Theta PrgEnv-intel
 theta.PrgEnv-intel:
   extends: [ .dev_ci, .new_intel, .theta.compute ]
   variables:
-    ci_script: theta-llvm
-  before_script:
-    - *do_ci_dev_check
-    - *theta-dev-ci
-    - perl -pi -e 's/-llvm/-intel/;'
-               -e 's/ load xalt/ load xalt/;'
-        -- utils/dev-ci/$ci_script
+    DEV_CI_PRGENV: intel
 
 # Theta PrgEnv-cray
 theta.PrgEnv-cray:
   extends: [ .dev_ci, .new_cray, .theta.compute, .rules_manual ]
   variables:
-    ci_script: theta-llvm
-  before_script:
-    - *do_ci_dev_check
-    - *theta-dev-ci
-    - perl -pi -e 's/-llvm/-cray/;'
-        -- utils/dev-ci/$ci_script
+    DEV_CI_PRGENV: cray
 
 ################################################################################
 ##
