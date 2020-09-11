@@ -1,40 +1,8 @@
 #!/bin/bash
 
-## BOILERPLATE
-source $(dirname $0)/_ci-common
+export DEV_CI_COMPILER=cce/9.0.0
 
-## ENVIRONMENT
-for x in intel gnu cray; do module swap PrgEnv-$x PrgEnv-cray ; done 2>/dev/null
-for x in haswell mic-knl; do module swap craype-$x craype-haswell ; done 2>/dev/null
-module swap cce cce/9.0.0
+# COMPILER_PATH is a hack to replace broken linker in out-of-date cce/9.0.0
 export COMPILER_PATH=/opt/cray/pe/cce/default/binutils/x86_64/bin
-export TMPDIR=/run/user/$(id -u)
-export UPCXX_HAVE_OPENMP=1
 
-export NETWORKS="${CI_NETWORKS:-aries}"
-export GMAKE="${CI_MAKE:-${GMAKE:-make}}"
-MAKE_CMD="$GMAKE ${CI_MAKE_PARALLEL:--j8}"
-
-## CONFIGURE
-if [[ $STAGES =~ ,configure, ]]; then
-  $UPCXX/configure ${GASNET:+ --with-gasnet=$GASNET}
-fi
-
-## BUILD
-if [[ $STAGES =~ ,build, ]]; then
-  eval $DO_BUILD
-fi
-
-## TESTS
-if [[ $STAGES =~ ,tests, ]]; then
-  eval $DO_COMPILE || touch .pipe-fail
-fi
-
-## RUN
-if [[ $STAGES =~ ,run, ]]; then
-  unset TMPDIR
-  time salloc -C haswell -t 120 -q interactive -N 2 -- time $GMAKE ${MAYBE_DEV}run-tests || touch .pipe-fail
-fi
-
-## DONE
-finished
+source $(dirname $0)/cori-cray
