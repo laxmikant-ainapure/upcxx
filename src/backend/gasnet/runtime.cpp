@@ -1094,6 +1094,7 @@ void gasnet::deallocate(void *p, sheap_footprint_t *foot) {
 // from: upcxx/backend.hpp
 
 void backend::quiesce(const team &tm, upcxx::entry_barrier eb) {
+  UPCXX_ASSERT_MASTER_IFSEQ();
   switch(eb) {
   case entry_barrier::none:
     break;
@@ -1103,17 +1104,29 @@ void backend::quiesce(const team &tm, upcxx::entry_barrier eb) {
       //std::atomic_thread_fence(std::memory_order_release);
       
       gex_Event_t e = gex_Coll_BarrierNB( gasnet::handle_of(tm), 0);
-      
-      while(0 != gex_Event_Test(e)) {
-        upcxx::progress(
-          eb == entry_barrier::internal
-            ? progress_level::internal
-            : progress_level::user
-        );
+
+      bool const in_progress = upcxx::in_progress();
+      UPCXX_ASSERT(!(eb == entry_barrier::user && in_progress)); // issue #412
+     
+      if (in_progress) {
+        // issue 412: we are already inside (user) progress in the restricted context,
+        // thus user-level progress is a no-op. Ensure GASNet makes internal progress
+        // to complete this quiescence barrier.
+        gex_Event_Wait(e);
+      } else {
+        while(0 != gex_Event_Test(e)) {
+          upcxx::progress(
+            eb == entry_barrier::internal
+              ? progress_level::internal
+              : progress_level::user
+          );
+        }
       }
       
       //std::atomic_thread_fence(std::memory_order_acquire);
     } break;
+  default:
+    UPCXX_FATAL_ERROR("Invalid entry_barrier value = " << (int)eb);
   }
 }
 
