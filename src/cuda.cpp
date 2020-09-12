@@ -89,6 +89,7 @@ upcxx::cuda_device::cuda_device(int device):
 
   UPCXX_ASSERT_INIT();
   UPCXX_ASSERT_ALWAYS_MASTER();
+  UPCXX_ASSERT_COLLECTIVE_SAFE(entry_barrier::user);
 
   #if UPCXX_CUDA_ENABLED
     if(device != invalid_device_id) {
@@ -124,6 +125,7 @@ upcxx::cuda_device::~cuda_device() {
 void upcxx::cuda_device::destroy(upcxx::entry_barrier eb) {
   UPCXX_ASSERT_INIT();
   UPCXX_ASSERT_ALWAYS_MASTER();
+  UPCXX_ASSERT_COLLECTIVE_SAFE(eb);
 
   backend::quiesce(upcxx::world(), eb);
 

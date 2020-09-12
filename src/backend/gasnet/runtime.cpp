@@ -438,6 +438,7 @@ void upcxx::restore_heap(void) {
 // from: upcxx/backend.hpp
 
 void upcxx::init() {
+  UPCXX_ASSERT_COLLECTIVE_SAFE(entry_barrier::none);
   if(0 != backend::init_count++)
     return;
 
@@ -884,6 +885,7 @@ namespace {
 void upcxx::finalize() {
   UPCXX_ASSERT_INIT();
   UPCXX_ASSERT_ALWAYS_MASTER();
+  UPCXX_ASSERT_COLLECTIVE_SAFE(entry_barrier::user);
   UPCXX_ASSERT_ALWAYS(backend::init_count > 0);
   
   if (backend::init_count > 1) {

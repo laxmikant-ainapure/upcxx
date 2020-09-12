@@ -348,10 +348,12 @@ namespace upcxx {
       
       // The constructor takes a vector of operations. Currently, flags is currently unsupported.
       atomic_domain(std::vector<atomic_op> const &ops, const team &tm = upcxx::world()) :
-        detail::atomic_domain_untyped<sizeof(T), detail::bit_flavor<T>()>((UPCXX_ASSERT_INIT(),ops), tm) {}
+        detail::atomic_domain_untyped<sizeof(T), 
+           detail::bit_flavor<T>()>((UPCXX_ASSERT_INIT(),UPCXX_ASSERT_COLLECTIVE_SAFE(entry_barrier::user),ops), tm) {}
       
       void destroy(entry_barrier eb = entry_barrier::user) {
         UPCXX_ASSERT_INIT();
+        UPCXX_ASSERT_COLLECTIVE_SAFE(eb);
         detail::atomic_domain_untyped<sizeof(T), detail::bit_flavor<T>()>::destroy(eb);
       }
 

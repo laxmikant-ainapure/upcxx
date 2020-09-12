@@ -56,6 +56,7 @@ team::~team() {
 team team::split(intrank_t color, intrank_t key) const {
   UPCXX_ASSERT_INIT();
   UPCXX_ASSERT_MASTER();
+  UPCXX_ASSERT_COLLECTIVE_SAFE(entry_barrier::user);
   UPCXX_ASSERT(color >= 0 || color == color_none);
   
   gex_TM_t sub_tm = GEX_TM_INVALID;
@@ -102,6 +103,7 @@ team team::split(intrank_t color, intrank_t key) const {
 void team::destroy(entry_barrier eb) {
   UPCXX_ASSERT_INIT();
   UPCXX_ASSERT_MASTER();
+  UPCXX_ASSERT_COLLECTIVE_SAFE(eb);
   UPCXX_ASSERT(this != &world(),      "team::destroy() is prohibited on team world()");
   UPCXX_ASSERT(this != &local_team(), "team::destroy() is prohibited on the local_team()");
 
