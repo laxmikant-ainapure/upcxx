@@ -22,6 +22,11 @@ namespace upcxx {
     UPCXX_ASSERT_INIT();
     return backend::master;
   }
+
+  inline bool in_progress() {
+    UPCXX_ASSERT_INIT();
+    return detail::the_persona_tls.get_progressing() >= 0;
+  }
   
   inline bool progress_required() {
     UPCXX_ASSERT_INIT();
