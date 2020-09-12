@@ -716,7 +716,8 @@ namespace upcxx {
     };
 
     // cx_state<rpc_cx<...>> does not fit the usual mold since the event isn't
-    // triggered locally.
+    // triggered locally. Instead, fn_ is extracted and sent over the wire by
+    // completions_state<...>::bind_event().
     template<typename Event, typename Fn, typename ...T>
     struct cx_state<rpc_cx<Event,Fn>, std::tuple<T...>> {
       Fn fn_;
@@ -726,11 +727,6 @@ namespace upcxx {
       }
       cx_state(const rpc_cx<Event,Fn> &cx):
         fn_(cx.fn_) {
-      }
-      
-      typename std::result_of<Fn&&(T&&...)>::type
-      operator()(T ...vals) {
-        return static_cast<Fn&&>(fn_)(static_cast<T&&>(vals)...);
       }
     };
   }
