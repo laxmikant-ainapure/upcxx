@@ -48,6 +48,7 @@ namespace upcxx {
 
     using CxsDecayed = typename std::decay<Cxs>::type;
     UPCXX_ASSERT_INIT();
+    UPCXX_ASSERT_MASTER();
     UPCXX_ASSERT(root >= 0 && root < tm.rank_n(),
       "broadcast_nontrivial(..., root, team) requires root in [0, team.rank_n()-1] == [0, " << tm.rank_n()-1 << "], but given: " << root);
     UPCXX_ASSERT_ALWAYS(
@@ -151,6 +152,7 @@ namespace upcxx {
     );
     
     UPCXX_ASSERT_INIT();
+    UPCXX_ASSERT_MASTER();
     UPCXX_ASSERT(root >= 0 && root < tm.rank_n(),
       "broadcast(..., root, team) requires root in [0, team.rank_n()-1] == [0, " << tm.rank_n()-1 << "], but given: " << root);
     UPCXX_ASSERT_ALWAYS(
@@ -216,6 +218,7 @@ namespace upcxx {
     UPCXX_STATIC_ASSERT_VALUE_SIZE(T, broadcast); // issue 392: prevent large types by-value
 
     UPCXX_ASSERT_INIT();
+    UPCXX_ASSERT_MASTER();
     UPCXX_ASSERT(root >= 0 && root < tm.rank_n(),
       "broadcast(..., root, team) requires root in [0, team.rank_n()-1] == [0, " << tm.rank_n()-1 << "], but given: " << root);
     UPCXX_ASSERT_ALWAYS(
