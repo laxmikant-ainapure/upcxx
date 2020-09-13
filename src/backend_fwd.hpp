@@ -50,6 +50,27 @@
   )
 namespace upcxx { namespace detail {
   template <typename T>
+  struct type_respects_value_size_limit {
+    static constexpr bool value = sizeof(T) <= UPCXX_MAX_VALUE_SIZE;
+  };
+  template <>
+  struct type_respects_value_size_limit<void> {
+    static constexpr bool value = true;
+  };
+}}
+#define UPCXX_STATIC_ASSERT_VALUE_RETURN_SIZE(fnname, alternate, ...) \
+  static_assert(::upcxx::detail::type_respects_value_size_limit<__VA_ARGS__>::value, \
+    "This program is calling upcxx::" fnname " to request the UPC++ library return an object by-value that has "\
+    "a large static type (over " UPCXX_STRINGIFY(UPCXX_MAX_VALUE_SIZE) " bytes). " \
+    "This is ill-advised because the by-value return of this function is " \
+    "designed and tuned for small scalar values, and will impose significant data copy overheads " \
+    "(and possibly program stack overflow) when used with larger types. " \
+    "Please call the function upcxx::" alternate " instead, which passes data by reference, " \
+    "avoiding costly by-value copies of large data through stack temporaries. " \
+    "The threshold for this error can be adjusted (at your own peril!) via -DUPCXX_MAX_VALUE_SIZE=n" \
+  )
+namespace upcxx { namespace detail {
+  template <typename T>
   struct type_respects_static_size_limit {
     static constexpr bool value = sizeof(T) <= UPCXX_MAX_RPC_ARG_SIZE;
   };
