@@ -72,7 +72,15 @@ namespace upcxx {
     
     using clref_results_refs_or_vals_type = decltype(std::declval<impl_type const&>().result_refs_or_vals());
     using rref_results_refs_or_vals_type = decltype(std::declval<impl_type&&>().result_refs_or_vals());
-    
+
+    // factored return type computation for future::result*()
+    template<int i, typename tuple_type>
+    using result_return_select_type = typename std::conditional<
+                    (i<0 && sizeof...(T) > 1), // auto mode && multiple elements
+                    tuple_type,  // entire tuple (possibly ref-ified)
+                    typename detail::tuple_element_or_void<(i<0 ? 0 : i), tuple_type>::type // element or void
+                  >::type;
+
     impl_type impl_;
     
   public:
@@ -138,11 +146,7 @@ namespace upcxx {
   
   public:
     template<int i=-1>
-    typename std::conditional<
-        (i<0 && sizeof...(T) > 1),
-          results_type,
-          typename detail::tuple_element_or_void<(i<0 ? 0 : i), results_type>::type
-      >::type
+    result_return_select_type<i, results_type>
     result() const& {
       UPCXX_ASSERT( ready(), nonready_msg("result","wait","result") );
       return get_at_(
@@ -157,11 +161,7 @@ namespace upcxx {
     }
 
     template<int i=-1>
-    typename std::conditional<
-        (i<0 && sizeof...(T) > 1),
-          results_type,
-          typename detail::tuple_element_or_void<(i<0 ? 0 : i), results_type>::type
-      >::type
+    result_return_select_type<i, results_type>
     result() && {
       UPCXX_ASSERT( ready(), nonready_msg("result","wait","result") );
       return get_at_(
@@ -176,11 +176,7 @@ namespace upcxx {
     }
     
     template<int i=-1>
-    typename std::conditional<
-        (i<0 && sizeof...(T) > 1),
-          clref_results_refs_or_vals_type,
-          typename detail::tuple_element_or_void<(i<0 ? 0 : i), clref_results_refs_or_vals_type>::type
-      >::type
+    result_return_select_type<i, clref_results_refs_or_vals_type>
     result_reference() const& {
       UPCXX_ASSERT( ready(), nonready_msg("result_reference","wait_reference","result reference") );
       return get_at_(
@@ -195,11 +191,7 @@ namespace upcxx {
     }
 
     template<int i=-1>
-    typename std::conditional<
-        (i<0 && sizeof...(T) > 1),
-          rref_results_refs_or_vals_type,
-          typename detail::tuple_element_or_void<(i<0 ? 0 : i), rref_results_refs_or_vals_type>::type
-      >::type
+    result_return_select_type<i, rref_results_refs_or_vals_type>
     result_reference() && {
       UPCXX_ASSERT( ready(), nonready_msg("result_reference","wait_reference","result reference") );
       return get_at_(
@@ -298,11 +290,7 @@ namespace upcxx {
     template<int i=-1, typename Fn>
     auto wait(Fn &&progress) const&
     #endif
-      -> typename std::conditional<
-        (i<0 && sizeof...(T) > 1),
-          results_type,
-          typename detail::tuple_element_or_void<(i<0 ? 0 : i), results_type>::type
-      >::type {
+      -> result_return_select_type<i, results_type> {
       UPCXX_ASSERT_INIT_NAMED("future<...>::wait()");
       
       while(!impl_.ready())
@@ -318,11 +306,7 @@ namespace upcxx {
     template<int i=-1, typename Fn>
     auto wait(Fn &&progress) &&
     #endif
-      -> typename std::conditional<
-        (i<0 && sizeof...(T) > 1),
-          results_type,
-          typename detail::tuple_element_or_void<(i<0 ? 0 : i), results_type>::type
-      >::type {
+      -> result_return_select_type<i, results_type> {
       UPCXX_ASSERT_INIT_NAMED("future<...>::wait()");
       
       while(!impl_.ready())
@@ -370,11 +354,7 @@ namespace upcxx {
     template<int i=-1, typename Fn>
     auto wait_reference(Fn &&progress) const&
     #endif
-      -> typename std::conditional<
-        (i<0 && sizeof...(T) > 1),
-          clref_results_refs_or_vals_type,
-          typename detail::tuple_element_or_void<(i<0 ? 0 : i), clref_results_refs_or_vals_type>::type
-      >::type {
+      -> result_return_select_type<i, clref_results_refs_or_vals_type> {
       UPCXX_ASSERT_INIT_NAMED("future<...>::wait_reference()");
       
       while(!impl_.ready())
@@ -390,11 +370,7 @@ namespace upcxx {
     template<int i=-1, typename Fn>
     auto wait_reference(Fn &&progress) &&
     #endif
-      -> typename std::conditional<
-        (i<0 && sizeof...(T) > 1),
-          rref_results_refs_or_vals_type,
-          typename detail::tuple_element_or_void<(i<0 ? 0 : i), rref_results_refs_or_vals_type>::type
-      >::type {
+      -> result_return_select_type<i, rref_results_refs_or_vals_type> {
       UPCXX_ASSERT_INIT_NAMED("future<...>::wait_reference()");
       
       while(!impl_.ready())
