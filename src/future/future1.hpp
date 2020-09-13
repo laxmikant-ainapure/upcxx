@@ -148,6 +148,8 @@ namespace upcxx {
     template<int i=-1>
     result_return_select_type<i, results_type>
     result() const& {
+      UPCXX_STATIC_ASSERT_VALUE_RETURN_SIZE("future::result()", "future::result_reference()",
+                                            result_return_select_type<i, results_type>);
       UPCXX_ASSERT( ready(), nonready_msg("result","wait","result") );
       return get_at_(
           impl_.result_refs_or_vals(),
@@ -163,6 +165,8 @@ namespace upcxx {
     template<int i=-1>
     result_return_select_type<i, results_type>
     result() && {
+      UPCXX_STATIC_ASSERT_VALUE_RETURN_SIZE("future::result()", "future::result_reference()",
+                                            result_return_select_type<i, results_type>);
       UPCXX_ASSERT( ready(), nonready_msg("result","wait","result") );
       return get_at_(
           static_cast<impl_type&&>(impl_).result_refs_or_vals(),
@@ -206,10 +210,16 @@ namespace upcxx {
     }
     
     results_type result_tuple() const& {
+      UPCXX_STATIC_ASSERT_VALUE_RETURN_SIZE("future::result_tuple()", 
+                                            "future::result_reference()", // result_reference_tuple is unspecified
+                                            results_type);
       UPCXX_ASSERT( ready(), nonready_msg("result_tuple","wait_tuple","result tuple") );
       return impl_.result_refs_or_vals();
     }
     results_type result_tuple() && {
+      UPCXX_STATIC_ASSERT_VALUE_RETURN_SIZE("future::result_tuple()", 
+                                            "future::result_reference()", // result_reference_tuple is unspecified
+                                            results_type);
       UPCXX_ASSERT( ready(), nonready_msg("result_tuple","wait_tuple","result tuple") );
       return static_cast<impl_type&&>(impl_).result_refs_or_vals();
     }
@@ -291,6 +301,8 @@ namespace upcxx {
     auto wait(Fn &&progress) const&
     #endif
       -> result_return_select_type<i, results_type> {
+      UPCXX_STATIC_ASSERT_VALUE_RETURN_SIZE("future::wait()", "future::wait_reference()",
+                                            result_return_select_type<i, results_type>);
       UPCXX_ASSERT_INIT_NAMED("future<...>::wait()");
       
       while(!impl_.ready())
@@ -307,6 +319,8 @@ namespace upcxx {
     auto wait(Fn &&progress) &&
     #endif
       -> result_return_select_type<i, results_type> {
+      UPCXX_STATIC_ASSERT_VALUE_RETURN_SIZE("future::wait()", "future::wait_reference()",
+                                            result_return_select_type<i, results_type>);
       UPCXX_ASSERT_INIT_NAMED("future<...>::wait()");
       
       while(!impl_.ready())
@@ -323,6 +337,7 @@ namespace upcxx {
     results_type wait_tuple(Fn &&progress) const&
     #endif
     {
+      UPCXX_STATIC_ASSERT_VALUE_RETURN_SIZE("future::wait_tuple()", "future::wait_reference()", results_type);
       UPCXX_ASSERT_INIT_NAMED("future<...>::wait_tuple()");
 
       while(!impl_.ready())
@@ -339,6 +354,7 @@ namespace upcxx {
     results_type wait_tuple(Fn &&progress) &&
     #endif
     {
+      UPCXX_STATIC_ASSERT_VALUE_RETURN_SIZE("future::wait_tuple()", "future::wait_reference()", results_type);
       UPCXX_ASSERT_INIT_NAMED("future<...>::wait_tuple()");
 
       while(!impl_.ready())
