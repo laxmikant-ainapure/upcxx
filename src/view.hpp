@@ -41,6 +41,9 @@ namespace upcxx {
     deserializing_iterator(char const *p = nullptr) noexcept: r_(p) {}
     
     value_type operator*() const noexcept {
+      UPCXX_STATIC_ASSERT_VALUE_RETURN_SIZE("deserializing_iterator::operator*()",
+                                            "deserializing_iterator::deserialize_into()",
+                                            value_type);
       detail::serialization_reader r1(r_);
       detail::raw_storage<value_type> raw;
       detail::serialization_view_element<T>::deserialize(r1, &raw);

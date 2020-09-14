@@ -631,6 +631,7 @@ namespace upcxx {
                      "Template argument of read must be Serializable.");
         static_assert(!::std::is_array<T1>::value,
                      "Cannot return array type from read -- use read_into or read_sequence_into instead.");
+        UPCXX_STATIC_ASSERT_VALUE_RETURN_SIZE("[Reader]::read()", "[Reader]::read_into()", T1);
 
         detail::raw_storage<T1> raw;
         upcxx::template serialization_traits<T>::deserialize(*this, &raw);
