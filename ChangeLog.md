@@ -96,6 +96,7 @@ Notable bug fixes:
 * spec issue 158: prohibit reference types in `global_ptr` and `upcxx_memberof_general`
 * spec issue 160: Deadlocks arising from synchronous collective calls with internal progress
 * spec issue 167: `dist_object<T>::fetch` does not correctly handle `T` with asymmetric serialization
+* spec issue 170: Implement `upcxx::in_progress()` query
 
 This library release conforms to the
 [UPC++ v1.0 Specification, Revision 2020.8.1-draft](docs/spec.pdf).
