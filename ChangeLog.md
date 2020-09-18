@@ -90,12 +90,14 @@ Notable bug fixes:
 * issue #405: regression: `upcxx::copy(T*,global_ptr<T>,size_t)` fails to compile
 * issue #407: RPC breaks if an argument asymmetrically deserializes to a type that
   itself has asymmetric deserialization
+* issue #412: entry barriers deadlock when invoked inside user-level progress callbacks
 * issue #413: LPC callback that returns a reference produces a future containing
   a dangling reference
 * spec issue 104: Provide a universal variadic factory for future
 * spec issue 158: prohibit reference types in `global_ptr` and `upcxx_memberof_general`
 * spec issue 160: Deadlocks arising from synchronous collective calls with internal progress
 * spec issue 167: `dist_object<T>::fetch` does not correctly handle `T` with asymmetric serialization
+* spec issue 169: Deprecate collective calls inside progress callbacks
 * spec issue 170: Implement `upcxx::in_progress()` query
 
 This library release conforms to the
@@ -114,6 +116,12 @@ Breaking changes:
 * `upcxx_memberof(_general)(gp, mem)` now produce a `global_ptr<T>` when `mem` 
   names an array whose element type is `T`.
 * `atomic_domain` construction now has user-level progress
+* Initiating collective operations with progress level `user` from inside the restricted 
+  context (within a callback running inside progress) is now prohibited, and diagnosed
+  with a runtime error.  Most such calls previously led to silent deadlock.
+* Initiating collective operations with a progress level of `internal` or `none` from within
+  the restricted context (within a callback running inside progress) is now a deprecated
+  behavior, and diagnosted with a runtime warning. For details, see spec issue 169.
 
 ### 2020.03.12: Release 2020.3.0
 
