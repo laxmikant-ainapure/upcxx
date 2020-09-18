@@ -49,7 +49,7 @@ if [[ $STAGES =~ ,run, ]]; then
     for (( i = 15; i; --i )); do  # Retry every 2 minutes for up to 30 minutes total
       (( i % 2 )) && QUEUE=debug-cache-quad || QUEUE=debug-flat-quad
       time env -u TMPDIR qsub -q $QUEUE -t 60 -n 2 -A CSC250STPM17 -I \
-        <<<"cd $PWD && time $GMAKE ${MAYBE_DEV}run-tests NETWORKS='$NETWORKS' || touch .pipe-fail" |& tee batch.log
+        <<<"set -x ; cd $PWD && time $GMAKE ${MAYBE_DEV}run-tests NETWORKS='$NETWORKS' || touch .pipe-fail" |& tee batch.log
       if [[ ${PIPESTATUS[0]} -eq 0 ]]; then break; fi
       if ! grep -q "jobs per user.*has been reached" batch.log; then failure; fi
       sleep 120
