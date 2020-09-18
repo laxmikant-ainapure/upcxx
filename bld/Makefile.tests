@@ -122,22 +122,28 @@ do-build-%: force
 	 exe="$(TEST_EXE_PATTERN)";                      \
 	 if ! [[ "$$exe" =~ $(call TEST_PATTERN,$(TESTS)) ]] || \
 	      [[ "$$exe" =~ $(call TEST_PATTERN,$(NO_TESTS)) ]] ; then \
-	     [[ '$(UPCXX_VERBOSE)' == 1 ]] && echo Skipping filtered $$exe ; \
+	     (( $(UPCXX_VERBOSE) )) && echo Skipping filtered $$exe ; \
 	     exit 0 ; \
          fi ; \
 	 flags=TEST_FLAGS_$$(basename $$src .cpp | tr '[a-z]-' '[A-Z]_'); \
 	 output=$(TEST_OUTPUT)/$${exe}-compile.out ;     \
-	 ( if [[ '$(UPCXX_VERBOSE)' == 1 ]]; then set -x; fi;  \
+	 upcxx_cmd="$(UPCXX_BINDIR)/upcxx" ;             \
+	 ( if (( $(UPCXX_DRY_RUN) )); then upcxx_cmd="echo $$upcxx_cmd"; fi; \
+	   if (( $(UPCXX_VERBOSE) )); then set -x; fi;  \
 	   UPCXX_CODEMODE=$(UPCXX_CODEMODE)              \
 	   UPCXX_THREADMODE=$$threadmode                 \
 	   UPCXX_NETWORK=$$network                       \
-	   $(UPCXX_BINDIR)/upcxx $(upcxx_src)/$$src      \
+	   $$upcxx_cmd $(upcxx_src)/$$src                \
 	                         $${!flags}              \
 	                         $(UPCXX_COLOR_CXXFLAGS) \
 				 $(EXTRAFLAGS)           \
 	                         -o $$exe$(EXESUFFIX)    \
 				 2> $$output );          \
 	 result=$$?;                                     \
+	 if (( $(UPCXX_DRY_RUN) )); then                 \
+	     printf 'Compiling %-60s SKIPPED\n' "$$exe"; \
+	     exit 0;                                     \
+	 fi;                                             \
 	 if [[ -f $$errc ]]; then : expect compile error ; \
 	   if [[ $$result == 0 ]]; then                  \
 	     $$MAKE $(MAKE_HERE) do-test-xml RESULT=compile-fail OUTPUT=$$output ; \
@@ -416,7 +422,7 @@ do-run-tests: force
 	   [[ -x $$test ]] || continue;                                 \
 	   if ! [[ "$$test" =~ $(call TEST_PATTERN,$(TESTS)) ]] || \
 	        [[ "$$test" =~ $(call TEST_PATTERN,$(NO_TESTS) $(test_exclude_compile_only)) ]] ; then \
-	      [[ '$(UPCXX_VERBOSE)' == 1 ]] && echo Skipping filtered $$test ; \
+	      (( $(UPCXX_VERBOSE) )) && echo Skipping filtered $$test ; \
 	      : $$((++skipped)); continue;                              \
            fi ; \
 	   echo "Running $$test"; : $$((++total));                      \
@@ -435,8 +441,9 @@ do-run-tests: force
 	     fi;                                                        \
 	     runcmd=$${!runvar};                                        \
 	   fi;                                                          \
+	   if (( $(UPCXX_DRY_RUN) )); then runcmd="echo $$runcmd"; fi;  \
 	   output=$(TEST_OUTPUT)/$$test-run.out ;                       \
-	   ( if [[ '$(UPCXX_VERBOSE)' == 1 ]]; then set -x; fi;         \
+	   ( if (( $(UPCXX_VERBOSE) )); then set -x; fi;         \
 	     $$runcmd -np $$ranks -- $$run_wrapper ./$$test &> $$output; \
 	   );                                                           \
 	   exitcode=$$?;                                                \
