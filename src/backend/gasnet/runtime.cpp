@@ -438,6 +438,7 @@ void upcxx::restore_heap(void) {
 // from: upcxx/backend.hpp
 
 void upcxx::init() {
+  UPCXX_ASSERT_COLLECTIVE_SAFE(entry_barrier::none);
   if(0 != backend::init_count++)
     return;
 
@@ -884,6 +885,7 @@ namespace {
 void upcxx::finalize() {
   UPCXX_ASSERT_INIT();
   UPCXX_ASSERT_ALWAYS_MASTER();
+  UPCXX_ASSERT_COLLECTIVE_SAFE(entry_barrier::user);
   UPCXX_ASSERT_ALWAYS(backend::init_count > 0);
   
   if (backend::init_count > 1) {
@@ -1094,6 +1096,7 @@ void gasnet::deallocate(void *p, sheap_footprint_t *foot) {
 // from: upcxx/backend.hpp
 
 void backend::quiesce(const team &tm, upcxx::entry_barrier eb) {
+  UPCXX_ASSERT_MASTER_IFSEQ();
   switch(eb) {
   case entry_barrier::none:
     break;
@@ -1103,17 +1106,59 @@ void backend::quiesce(const team &tm, upcxx::entry_barrier eb) {
       //std::atomic_thread_fence(std::memory_order_release);
       
       gex_Event_t e = gex_Coll_BarrierNB( gasnet::handle_of(tm), 0);
-      
-      while(0 != gex_Event_Test(e)) {
-        upcxx::progress(
-          eb == entry_barrier::internal
-            ? progress_level::internal
-            : progress_level::user
-        );
+
+      bool const in_progress = upcxx::in_progress();
+      UPCXX_ASSERT(!(eb == entry_barrier::user && in_progress)); // issue #412
+     
+      if (in_progress) {
+        // issue 412: we are already inside (user) progress in the restricted context,
+        // thus user-level progress is a no-op. Ensure GASNet makes internal progress
+        // to complete this quiescence barrier.
+        gex_Event_Wait(e);
+      } else {
+        while(0 != gex_Event_Test(e)) {
+          upcxx::progress(
+            eb == entry_barrier::internal
+              ? progress_level::internal
+              : progress_level::user
+          );
+        }
       }
       
       //std::atomic_thread_fence(std::memory_order_acquire);
     } break;
+  default:
+    UPCXX_FATAL_ERROR("Invalid entry_barrier value = " << (int)eb);
+  }
+}
+
+void backend::warn_collective_in_progress(const char *fnname, entry_barrier eb) {
+  UPCXX_ASSERT_MASTER();
+  UPCXX_ASSERT(upcxx::in_progress());
+
+  static bool warn = os_env<bool>("UPCXX_WARN_COLLECTIVE_IN_PROGRESS", true);
+  if (warn) {
+    if (!upcxx::rank_me()) { // only output from proc0 to avoid spamminess 
+                             // (at a small risk of missing subteam calls that exclude proc0)
+      upcxx::say("") << std::string(70, '/') << "\n"
+        "WARNING: The following collective UPC++ operation was initiated inside the "
+        "UPC++ restricted context (from a callback running inside user-level progress):\n\n"
+        "   " << fnname << "\n\n"
+        "Initiating a collective from inside progress is a deprecated behavior and may be prohibited in a forthcoming release.\n"
+        "Please contact the UPC++ maintainers at <upcxx@googlegroups.com> if this capability is important to your application!\n"
+        "This warning may be silenced by setting envvar: UPCXX_WARN_COLLECTIVE_IN_PROGRESS=0\n"
+        << std::string(70, '/') << "\n";
+    }
+    warn = false;
+  }
+
+  if (eb == entry_barrier::user) { // issue 412
+    upcxx::fatal_error(
+     "Collective operations with user-level progress semantics are prohibited "
+     "from being initiated inside the restricted context (from a callback already running inside user-level progress).\n"
+     "Please refactor your code and/or request entry_barrier::internal or entry_barrier::none "
+     "(where available).", 
+     "User-progress collective initiated inside progress", fnname);
   }
 }
 

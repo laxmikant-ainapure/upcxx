@@ -126,6 +126,7 @@ namespace {
 void upcxx::barrier(const team &tm) {
   UPCXX_ASSERT_INIT();
   UPCXX_ASSERT_MASTER();
+  UPCXX_ASSERT_COLLECTIVE_SAFE(entry_barrier::user);
  
   // memory fencing is handled inside gex_Coll_BarrierNB + gex_Event_Test
   //std::atomic_thread_fence(std::memory_order_release);

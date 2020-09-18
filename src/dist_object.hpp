@@ -92,6 +92,7 @@ namespace upcxx {
       value_(std::forward<U>(arg)...) {
       UPCXX_ASSERT_INIT();
       UPCXX_ASSERT_MASTER();
+      UPCXX_ASSERT_COLLECTIVE_SAFE(entry_barrier::none);
       
       id_ = const_cast<upcxx::team*>(&tm)->next_collective_id(detail::internal_only());
       
@@ -107,6 +108,7 @@ namespace upcxx {
       value_(std::move(value)) {
       UPCXX_ASSERT_INIT();
       UPCXX_ASSERT_MASTER();
+      UPCXX_ASSERT_COLLECTIVE_SAFE(entry_barrier::none);
 
       id_ = const_cast<upcxx::team*>(&tm)->next_collective_id(detail::internal_only());
       
