@@ -14,12 +14,12 @@ namespace upcxx {
     void rma_copy_get(void *buf_d, intrank_t rank_s, void const *buf_s, std::size_t size, backend::gasnet::handle_cb *cb);
     void rma_copy_put(intrank_t rank_d, void *buf_d, void const *buf_s, std::size_t size, backend::gasnet::handle_cb *cb);
     void rma_copy_local(
-        int dev_d, void *buf_d,
-        int dev_s, void const *buf_s, std::size_t size,
+        int heap_d, void *buf_d,
+        int heap_s, void const *buf_s, std::size_t size,
         cuda::event_cb *cb
       );
 
-    constexpr int host_device = -1;
+    constexpr int host_heap = -1;
 
     template<typename Cxs>
     typename detail::completions_returner<
@@ -27,8 +27,8 @@ namespace upcxx {
       /*EventValues=*/detail::rput_event_values,
       typename std::decay<Cxs>::type
     >::return_t
-    copy(const int dev_s, const intrank_t rank_s, void *const buf_s,
-         const int dev_d, const intrank_t rank_d, void *const buf_d,
+    copy(const int heap_s, const intrank_t rank_s, void *const buf_s,
+         const int heap_d, const intrank_t rank_d, void *const buf_d,
          const std::size_t size, Cxs &&cxs);
   }
   
@@ -46,8 +46,8 @@ namespace upcxx {
     UPCXX_ASSERT_INIT();
     UPCXX_GPTR_CHK(src);
     UPCXX_ASSERT(src && dest, "pointer arguments to copy may not be null");
-    return detail::copy( src.device_, src.rank_, src.raw_ptr_,
-                         detail::host_device, upcxx::rank_me(), dest,
+    return detail::copy( src.heap_idx_, src.rank_, src.raw_ptr_,
+                         detail::host_heap, upcxx::rank_me(), dest,
                          n * sizeof(T), std::forward<Cxs>(cxs) );
   }
 
@@ -65,8 +65,8 @@ namespace upcxx {
     UPCXX_ASSERT_INIT();
     UPCXX_GPTR_CHK(dest);
     UPCXX_ASSERT(src && dest, "pointer arguments to copy may not be null");
-    return detail::copy( detail::host_device, upcxx::rank_me(), const_cast<T*>(src),
-                         dest.device_, dest.rank_, dest.raw_ptr_,
+    return detail::copy( detail::host_heap, upcxx::rank_me(), const_cast<T*>(src),
+                         dest.heap_idx_, dest.rank_, dest.raw_ptr_,
                          n * sizeof(T), std::forward<Cxs>(cxs) );
   }
   
@@ -85,8 +85,8 @@ namespace upcxx {
     UPCXX_GPTR_CHK(src); UPCXX_GPTR_CHK(dest);
     UPCXX_ASSERT(src && dest, "pointer arguments to copy may not be null");
     return detail::copy(
-      src.device_, src.rank_, src.raw_ptr_,
-      dest.device_, dest.rank_, dest.raw_ptr_,
+      src.heap_idx_, src.rank_, src.raw_ptr_,
+      dest.heap_idx_, dest.rank_, dest.raw_ptr_,
       n*sizeof(T), std::forward<Cxs>(cxs)
     );
   }
@@ -98,8 +98,8 @@ namespace upcxx {
       /*EventValues=*/detail::rput_event_values,
       typename std::decay<Cxs>::type
   >::return_t
-  copy(const int dev_s, const intrank_t rank_s, void *const buf_s,
-       const int dev_d, const intrank_t rank_d, void *const buf_d,
+  copy(const int heap_s, const intrank_t rank_s, void *const buf_s,
+       const int heap_d, const intrank_t rank_d, void *const buf_d,
        const std::size_t size, Cxs &&cxs) {
     
     using CxsDecayed = typename std::decay<Cxs>::type;
@@ -131,8 +131,8 @@ namespace upcxx {
         [=]() {
           auto operation_cx_as_internal_future = upcxx::completions<upcxx::future_cx<upcxx::operation_cx_event, progress_level::internal>>{{}};
           
-          detail::copy( dev_s, rank_s, buf_s,
-                        dev_d, rank_d, buf_d,
+          detail::copy( heap_s, rank_s, buf_s,
+                        heap_d, rank_d, buf_d,
                         size, operation_cx_as_internal_future )
           .then([=]() {
             const_cast<cxs_remote_t&>(cxs_remote).template operator()<remote_cx_event>();
@@ -150,7 +150,7 @@ namespace upcxx {
       );
     }
     else if(rank_d == rank_s) {
-      detail::rma_copy_local(dev_d, buf_d, dev_s, buf_s, size,
+      detail::rma_copy_local(heap_d, buf_d, heap_s, buf_s, size,
         cuda::make_event_cb([=]() {
           cxs_here->template operator()<source_cx_event>();
           cxs_here->template operator()<operation_cx_event>();
@@ -166,7 +166,7 @@ namespace upcxx {
        * is used to transfer on the network
        */
       void *bounce_d;
-      if(dev_d == host_device)
+      if(heap_d == host_heap)
         bounce_d = buf_d;
       else {
         bounce_d = backend::gasnet::allocate(size, 64, &backend::gasnet::sheap_footprint_rdzv);
@@ -179,7 +179,7 @@ namespace upcxx {
             return [=]() {
               detail::rma_copy_put(rank_d, bounce_d, bounce_s, size,
               backend::gasnet::make_handle_cb([=]() {
-                  if(dev_s != host_device)
+                  if(heap_s != host_heap)
                     backend::gasnet::deallocate(bounce_s, &backend::gasnet::sheap_footprint_rdzv);
                   
                   backend::send_am_persona<progress_level::internal>(
@@ -188,7 +188,7 @@ namespace upcxx {
                       cxs_here->template operator()<source_cx_event>();
                       
                       auto bounce_d_cont = [=]() {
-                        if(dev_d != host_device)
+                        if(heap_d != host_heap)
                           backend::gasnet::deallocate(bounce_d, &backend::gasnet::sheap_footprint_rdzv);
 
                         cxs_remote_heaped->template operator()<remote_cx_event>();
@@ -197,10 +197,10 @@ namespace upcxx {
                         delete cxs_here;
                       };
                       
-                      if(dev_d == host_device)
+                      if(heap_d == host_heap)
                         bounce_d_cont();
                       else
-                        detail::rma_copy_local(dev_d, buf_d, host_device, bounce_d, size, cuda::make_event_cb(bounce_d_cont));
+                        detail::rma_copy_local(heap_d, buf_d, host_heap, bounce_d, size, cuda::make_event_cb(bounce_d_cont));
                     }
                   );
                 })
@@ -208,13 +208,13 @@ namespace upcxx {
             };
           };
           
-          if(dev_s == host_device)
+          if(heap_s == host_heap)
             make_bounce_s_cont(buf_s)();
           else {
             void *bounce_s = backend::gasnet::allocate(size, 64, &backend::gasnet::sheap_footprint_rdzv);
             
             detail::rma_copy_local(
-              host_device, bounce_s, dev_s, buf_s, size,
+              host_heap, bounce_s, heap_s, buf_s, size,
               cuda::make_event_cb(make_bounce_s_cont(bounce_s))
             );
           }
@@ -227,7 +227,7 @@ namespace upcxx {
        */
       auto make_bounce_s_cont = [&](void *bounce_s) {
         return [=]() {
-          if(dev_s != host_device) {
+          if(heap_s != host_heap) {
             // since source side has a bounce buffer, we can signal source_cx as soon
             // as its populated
             cxs_here->template operator()<source_cx_event>();
@@ -237,12 +237,12 @@ namespace upcxx {
             upcxx::world(), rank_d,
             upcxx::bind(
               [=](cxs_remote_t &&cxs_remote) {
-                void *bounce_d = dev_d == host_device ? buf_d : backend::gasnet::allocate(size, 64, &backend::gasnet::sheap_footprint_rdzv);
+                void *bounce_d = heap_d == host_heap ? buf_d : backend::gasnet::allocate(size, 64, &backend::gasnet::sheap_footprint_rdzv);
                 
                 detail::rma_copy_get(bounce_d, rank_s, bounce_s, size,
                   backend::gasnet::make_handle_cb([=]() {
                     auto bounce_d_cont = [=]() {
-                      if(dev_d != host_device)
+                      if(heap_d != host_heap)
                         backend::gasnet::deallocate(bounce_d, &backend::gasnet::sheap_footprint_rdzv);
                       
                       const_cast<cxs_remote_t&>(cxs_remote).template operator()<remote_cx_event>();
@@ -250,7 +250,7 @@ namespace upcxx {
                       backend::send_am_persona<progress_level::internal>(
                         upcxx::world(), rank_s, initiator_per,
                         [=]() {
-                          if(dev_s != host_device)
+                          if(heap_s != host_heap)
                             backend::gasnet::deallocate(bounce_s, &backend::gasnet::sheap_footprint_rdzv);
                           else {
                             // source didnt use bounce buffer, need to source_cx now
@@ -263,10 +263,10 @@ namespace upcxx {
                       );
                     };
                     
-                    if(dev_d == host_device)
+                    if(heap_d == host_heap)
                       bounce_d_cont();
                     else
-                      detail::rma_copy_local(dev_d, buf_d, host_device, bounce_d, size, cuda::make_event_cb(bounce_d_cont));
+                      detail::rma_copy_local(heap_d, buf_d, host_heap, bounce_d, size, cuda::make_event_cb(bounce_d_cont));
                   })
                 );
               }, std::move(cxs_remote)
@@ -275,12 +275,12 @@ namespace upcxx {
         };
       };
 
-      if(dev_s == host_device)
+      if(heap_s == host_heap)
         make_bounce_s_cont(buf_s)();
       else {
         void *bounce_s = backend::gasnet::allocate(size, 64, &backend::gasnet::sheap_footprint_rdzv);
         
-        detail::rma_copy_local(host_device, bounce_s, dev_s, buf_s, size, cuda::make_event_cb(make_bounce_s_cont(bounce_s)));
+        detail::rma_copy_local(host_heap, bounce_s, heap_s, buf_s, size, cuda::make_event_cb(make_bounce_s_cont(bounce_s)));
       }
     }
 

@@ -1216,7 +1216,7 @@ intrank_t backend::team_rank_to_world(const team &tm, intrank_t peer) {
   return gex_TM_TranslateRankToJobrank(gasnet::handle_of(tm), peer);
 }
 
-void backend::validate_global_ptr(bool allow_null, intrank_t rank, void *raw_ptr, std::int32_t device,
+void backend::validate_global_ptr(bool allow_null, intrank_t rank, void *raw_ptr, std::int32_t heap_idx,
                                   memory_kind KindSet, size_t T_align, const char *T_name, 
                                   const char *short_context, const char *context) {
   if_pf (!upcxx::initialized()) return; // don't perform checking before init
@@ -1245,7 +1245,7 @@ void backend::validate_global_ptr(bool allow_null, intrank_t rank, void *raw_ptr
     bool is_null = !raw_ptr;
 
     if (is_null) {
-      if_pf(device != -1 || rank != 0) {
+      if_pf(heap_idx != -1 || rank != 0) {
         ss << pretty_type() << " representation corrupted, bad null\n";
         error = true; break;
       }
@@ -1269,19 +1269,19 @@ void backend::validate_global_ptr(bool allow_null, intrank_t rank, void *raw_ptr
     #endif
 
     if_pf (
-        (KindSet == memory_kind::host && device != -1) // host should always be device -1
-     || ((int(KindSet) & int(memory_kind::host)) == 0 && device == -1) // non-host gptr cannot ref host device
-     || (device < -1) // currently never use other negative devices
-     || (KindSet == memory_kind::cuda_device && device > max_cuda_device) // invalid cuda device
+        (KindSet == memory_kind::host && heap_idx != -1) // host should always be heap_idx -1
+     || ((int(KindSet) & int(memory_kind::host)) == 0 && heap_idx == -1) // non-host gptr cannot ref host device
+     || (heap_idx < -1) // currently never use other negative heap_idx
+     || (KindSet == memory_kind::cuda_device && heap_idx > max_cuda_device) // invalid device heap_idx
       ) {
-      ss << pretty_type() << " representation corrupted, bad device\n";
+      ss << pretty_type() << " representation corrupted, bad heap_idx\n";
       error = true; break;
     }
 
     #ifndef UPCXX_GPTR_CHECK_SCALE
     #define UPCXX_GPTR_CHECK_SCALE 1024 // job size limit where we stop bounds-checking remote segs
     #endif
-    if (device == -1 && // host memory segment bounds-check
+    if (heap_idx == -1 && // host memory segment bounds-check
         (rank_is_local(rank) || backend::rank_n <= UPCXX_GPTR_CHECK_SCALE)) {
       void *owner_vbase;
       uintptr_t size;
@@ -1309,7 +1309,7 @@ void backend::validate_global_ptr(bool allow_null, intrank_t rank, void *raw_ptr
 
   if_pf (error) {
     if (short_context && *short_context) ss << " in " << short_context;
-    ss << "\n  rank = " << rank << ", raw_ptr = " << raw_ptr << ", device = " << device;
+    ss << "\n  rank = " << rank << ", raw_ptr = " << raw_ptr << ", heap_idx = " << heap_idx;
     fatal_error(ss.str(), "fatal global_ptr error", context);
   }
 }

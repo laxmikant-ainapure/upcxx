@@ -92,7 +92,7 @@ namespace upcxx {
       UPCXX_ASSERT_INIT();
       UPCXX_GPTR_CHK(p);
       if(p) {
-        UPCXX_ASSERT(p.device_ == this->device_ && p.rank_ == upcxx::rank_me());
+        UPCXX_ASSERT(p.heap_idx_ == this->device_ && p.rank_ == upcxx::rank_me());
         lock_.lock();
         this->seg_.deallocate(p.raw_ptr_);
         lock_.unlock();
@@ -130,8 +130,8 @@ namespace upcxx {
       UPCXX_ASSERT_INIT();
       UPCXX_GPTR_CHK(gp);
       return Device::invalid_device_id == -1 // this is true statically so faster case will always be taken
-        ? gp.device_
-        : gp ? gp.device_ : Device::invalid_device_id;
+        ? gp.heap_idx_
+        : gp ? gp.heap_idx_ : Device::invalid_device_id;
     }
     
     template<typename T>
