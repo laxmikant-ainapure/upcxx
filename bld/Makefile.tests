@@ -27,7 +27,8 @@ GASNET_BLDDIR = $(BLDDIR)/gasnet.$(firstword $(UPCXX_CODEMODE) $(UPCXX_DBGOPT))
 
 # public-facing targets don't use GASNet "conduit" terminology
 # using "target-specific variable values" for the defaults
-check dev-check dev-check-debug dev-check-opt: NETWORKS ?= $(UPCXX_DEFAULT_NETWORK)
+# Do NOT change the following line to ?= as that breaks make 3.81
+check dev-check dev-check-debug dev-check-opt: NETWORKS = $(UPCXX_DEFAULT_NETWORK)
 NETWORKS ?= $(filter-out $(UNOFFICIAL_CONDUITS),$(CONDUITS))
 ifneq ($(strip $(NETWORKS)),)
 export NETWORKS
