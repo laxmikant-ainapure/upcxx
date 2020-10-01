@@ -48,7 +48,7 @@ namespace upcxx {
 
     // allow construction from a pointer-to-non-const
     explicit global_ptr(detail::internal_only, intrank_t rank, T *raw,
-                        int heap_idx = -1):
+                        int heap_idx = 0):
       base_type(detail::internal_only(), rank, raw, heap_idx) {
     }
 
@@ -99,7 +99,7 @@ namespace upcxx {
     }
     
     explicit global_ptr(detail::internal_only, intrank_t rank, const T *raw,
-                        int heap_idx = -1):
+                        int heap_idx = 0):
       #if UPCXX_MANY_KINDS
         heap_idx_(heap_idx),
       #endif
@@ -140,12 +140,12 @@ namespace upcxx {
     bool is_local() const {
       UPCXX_ASSERT_INIT();
       UPCXX_GPTR_CHK(*this);
-      return heap_idx_ == -1 && (raw_ptr_ == nullptr || backend::rank_is_local(rank_));
+      return heap_idx_ == 0 && (raw_ptr_ == nullptr || backend::rank_is_local(rank_));
     }
 
     bool is_null() const {
       UPCXX_GPTR_CHK(*this);
-      return heap_idx_ == -1 && raw_ptr_ == nullptr;
+      return heap_idx_ == 0 && raw_ptr_ == nullptr;
     }
     
     // This creates ambiguity with gp/int arithmetic like `my_gp + 1` since 
@@ -160,7 +160,7 @@ namespace upcxx {
     const T* local() const {
       UPCXX_ASSERT_INIT();
       UPCXX_GPTR_CHK(*this);
-      return KindSet != memory_kind::host && heap_idx_ != -1
+      return KindSet != memory_kind::host && heap_idx_ != 0
         ? nullptr
         : static_cast<T*>(
           backend::localize_memory(
@@ -180,7 +180,7 @@ namespace upcxx {
       if(0 == (int(KindSet) & (int(KindSet)-1))) // determines if KindSet is a singleton set
         return KindSet;
       else
-        return heap_idx_ == -1 ? memory_kind::host : memory_kind::cuda_device;
+        return heap_idx_ == 0 ? memory_kind::host : memory_kind::cuda_device;
     }
     
     std::ptrdiff_t operator-(global_ptr rhs) const {
@@ -237,7 +237,7 @@ namespace upcxx {
     #if UPCXX_MANY_KINDS
       std::int32_t heap_idx_;
     #else
-      static constexpr std::int32_t heap_idx_ = -1;
+      static constexpr std::int32_t heap_idx_ = 0;
     #endif
     intrank_t rank_;
     T* raw_ptr_;

@@ -23,6 +23,7 @@
 
 #include <upcxx/future/fwd.hpp>
 #include <upcxx/diagnostic.hpp>
+#include <gasnet_fwd.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -167,6 +168,7 @@ namespace upcxx {
 #endif
 
 namespace upcxx {
+namespace detail { struct device_allocator_base; }
 namespace backend {
   extern int init_count;
   extern intrank_t rank_n;
@@ -189,6 +191,22 @@ namespace backend {
       // personas carry no extra state
     #endif
   };
+
+  struct heap_state {
+    gex_EP_Index_t ep_index;
+    detail::device_allocator_base *alloc_base;
+  };
+  #if UPCXX_CUDA_ENABLED
+    #ifndef UPCXX_GASNET_MAXEPS
+    #define UPCXX_GASNET_MAXEPS  8 // TODO: belongs in upcxx_config.h
+    #endif
+    constexpr int max_heaps = UPCXX_GASNET_MAXEPS;
+    static_assert(UPCXX_GASNET_MAXEPS >= 1, "bad value of UPCXX_GASNET_MAXEPS");
+  #else
+    constexpr int max_heaps = 1;
+  #endif
+  extern heap_state *heaps[max_heaps];
+  extern int heap_count;
   
   void quiesce(const team &tm, entry_barrier eb);
 

@@ -10,19 +10,12 @@
 #include <cstdint>
 
 namespace upcxx {
-  namespace cuda {
-  #if UPCXX_CUDA_ENABLED
-    constexpr int max_devices = 32;
-    
-    struct device_state; // implemented in cuda_internal.hpp
-    
-    extern device_state *devices[max_devices];
-  #endif
-  }
 
   class cuda_device {
     friend struct detail::device_allocator_core<cuda_device>;
+    friend struct device_allocator<cuda_device>;
     int device_;
+    int heap_idx_;
     
   public:
     template<typename T>
@@ -50,6 +43,9 @@ namespace upcxx {
     }
 
     void destroy(upcxx::entry_barrier eb = entry_barrier::user);
+
+  private:
+    static id_type device_id(detail::internal_only, backend::heap_state *hs);
   };
 
   namespace detail {
@@ -65,6 +61,7 @@ namespace upcxx {
 
       device_allocator_core(cuda_device *dev, void *base, std::size_t size);
       device_allocator_core(device_allocator_core&&) = default;
+      void destroy();
       ~device_allocator_core();
     };
 

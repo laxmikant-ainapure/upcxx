@@ -19,7 +19,7 @@ namespace upcxx {
         cuda::event_cb *cb
       );
 
-    constexpr int host_heap = -1;
+    constexpr int host_heap = 0;
 
     template<typename Cxs>
     typename detail::completions_returner<

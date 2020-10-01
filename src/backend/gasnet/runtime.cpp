@@ -79,6 +79,9 @@ intrank_t backend::rank_me; // leave undefined so valgrind can catch it.
 
 bool backend::verbose_noise = false;
 
+backend::heap_state *backend::heaps[backend::max_heaps] = {/*nullptr...*/};
+int backend::heap_count = 1;
+
 persona backend::master;
 persona_scope *backend::initial_master_scope = nullptr;
 
@@ -1245,7 +1248,7 @@ void backend::validate_global_ptr(bool allow_null, intrank_t rank, void *raw_ptr
     bool is_null = !raw_ptr;
 
     if (is_null) {
-      if_pf(heap_idx != -1 || rank != 0) {
+      if_pf(heap_idx != 0 || rank != 0) {
         ss << pretty_type() << " representation corrupted, bad null\n";
         error = true; break;
       }
@@ -1262,17 +1265,11 @@ void backend::validate_global_ptr(bool allow_null, intrank_t rank, void *raw_ptr
       error = true; break;
     }
 
-    #if UPCXX_CUDA_ENABLED
-      const int max_cuda_device = upcxx::cuda::max_devices - 1;
-    #else
-      const int max_cuda_device = -1;
-    #endif
-
     if_pf (
-        (KindSet == memory_kind::host && heap_idx != -1) // host should always be heap_idx -1
-     || ((int(KindSet) & int(memory_kind::host)) == 0 && heap_idx == -1) // non-host gptr cannot ref host device
-     || (heap_idx < -1) // currently never use other negative heap_idx
-     || (KindSet == memory_kind::cuda_device && heap_idx > max_cuda_device) // invalid device heap_idx
+        (KindSet == memory_kind::host && heap_idx != 0) // host should always be heap_idx 0
+     || ((int(KindSet) & int(memory_kind::host)) == 0 && heap_idx == 0) // non-host gptr cannot ref host device
+     || (heap_idx < 0) // currently never use negative heap_idx
+     || (heap_idx > backend::max_heaps) // invalid heap_idx
       ) {
       ss << pretty_type() << " representation corrupted, bad heap_idx\n";
       error = true; break;
@@ -1281,7 +1278,7 @@ void backend::validate_global_ptr(bool allow_null, intrank_t rank, void *raw_ptr
     #ifndef UPCXX_GPTR_CHECK_SCALE
     #define UPCXX_GPTR_CHECK_SCALE 1024 // job size limit where we stop bounds-checking remote segs
     #endif
-    if (heap_idx == -1 && // host memory segment bounds-check
+    if (heap_idx == 0 && // host memory segment bounds-check
         (rank_is_local(rank) || backend::rank_n <= UPCXX_GPTR_CHECK_SCALE)) {
       void *owner_vbase;
       uintptr_t size;

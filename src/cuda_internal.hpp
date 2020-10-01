@@ -41,11 +41,11 @@
 
   namespace upcxx {
     namespace cuda {
-      struct device_state {
+      struct device_state : public backend::heap_state {
+        int device_id;
         CUcontext context;
         CUstream stream;
         CUdeviceptr segment_to_free;
-        detail::device_allocator_core<upcxx::cuda_device> *allocator_core;
       };
     }
   }
