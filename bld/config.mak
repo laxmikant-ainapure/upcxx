@@ -10,6 +10,7 @@ UPCXX_CONFIG_SCRIPTS = \
 	upcxx_network.sh \
 	builtin_assume_aligned.sh \
 	hidden_am_concurrency_level.sh \
+	maxeps.sh \
 	issue400_workaround.sh
 # Scripts (in $(upcxx_src)/utils/config/gasnet) to be run IN ORDER
 GASNET_CONFIG_SCRIPTS = \
