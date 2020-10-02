@@ -101,11 +101,11 @@ Usage:
   --with-cuda-cppflags=...
         Sets the pre-processor flags needed to find CUDA runtime headers.
         Overrides the value of $UPCXX_CUDA_CPPFLAGS, if any.
-        The default is to search probe 'nvcc'.
+        The default is to probe 'nvcc'.
   --with-cuda-libflags=...
         Sets the linker flags needed to link CUDA runtime libraries.
         Overrides the value of $UPCXX_CUDA_LIBFLAGS, if any.
-        The default is to search probe 'nvcc'.
+        The default is to probe 'nvcc'.
 
   --with-default-network=...
         Specifies the default network.
