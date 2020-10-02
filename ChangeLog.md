@@ -93,6 +93,7 @@ Notable bug fixes:
 * issue #412: entry barriers deadlock when invoked inside user-level progress callbacks
 * issue #413: LPC callback that returns a reference produces a future containing
   a dangling reference
+* issue #419: Ensure correct/portable behavior of `upcxx::initialized()` in static destructors
 * spec issue 104: Provide a universal variadic factory for future
 * spec issue 158: prohibit reference types in `global_ptr` and `upcxx_memberof_general`
 * spec issue 160: Deadlocks arising from synchronous collective calls with internal progress

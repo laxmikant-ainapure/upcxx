@@ -466,8 +466,13 @@ void upcxx::init() {
   if (upcxx_upc_is_linked()) {
     upcxx_upc_init(&client, &endpoint, &world_tm);
   } else { 
+    // issue 419: we clear init across gex_Client_Init so that any processes forked 
+    // inside this call don't appear to have an initialized UPC++ library, unless they 
+    // return from this call and finish upcxx::init()
+    backend::init_count = 0; 
     ok = gex_Client_Init(&client, &endpoint, &world_tm, "upcxx", nullptr, nullptr, 0);
     UPCXX_ASSERT_ALWAYS(ok == GASNET_OK);
+    backend::init_count = 1;
   }
 
   backend::rank_n = gex_TM_QuerySize(world_tm);
