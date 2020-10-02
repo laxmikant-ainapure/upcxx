@@ -50,9 +50,9 @@ int main() {
     }
   }
   if (nerrs)
-    cout << "Failure: " << nerrs << " errors detected\n";
+    cout << "Failure/ERROR: " << nerrs << " errors detected\n";
   else
-    cout << "Success" << endl;
+    cout << "Success/SUCCESS" << endl;
 
   gpu_alloc.deallocate(gpu_array);
   upcxx::delete_array(host_array1);

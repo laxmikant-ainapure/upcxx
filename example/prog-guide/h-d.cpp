@@ -41,9 +41,9 @@ int main() {
     }
   }
   if (nerrs)
-    cout << "Failure: " << nerrs << " errors detected\n";
+    cout << "Failure/ERROR: " << nerrs << " errors detected\n";
   else
-    cout << "Success" << endl;
+    cout << "Success/SUCCESS" << endl;
 
   delete_array(host_array2);
   delete_array(host_array1);
