@@ -11,7 +11,7 @@
     #include <gasnet.h>
     #include <gasnet_coll.h>
     #define UPCXX_REQUIRES_GEX_SPEC_VERSION_MAJOR  0
-    #define UPCXX_REQUIRES_GEX_SPEC_VERSION_MINOR  7
+    #define UPCXX_REQUIRES_GEX_SPEC_VERSION_MINOR  10
     #if GASNET_RELEASE_VERSION_MAJOR < 2000
       // User is trying to compile against GASNet-1, or some other gasnet.h header that is not GASNet-EX
       #error UPC++ requires a current version of GASNet-EX (not to be confused with GASNet-1). Please rerun configure without '--with-gasnet=...' to use the default GASNet-EX layer.

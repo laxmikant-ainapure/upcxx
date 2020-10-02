@@ -59,14 +59,6 @@ using namespace std;
     #error "Segment-everything not supported."
 #endif
 
-#ifndef UPCXX_LOCAL_TM_CREATE // gex_TM_Create was added in spec v0.9
-  #if GEX_SPEC_VERSION_MINOR >= 9 || GEX_SPEC_VERSION_MAJOR  
-     #define UPCXX_LOCAL_TM_CREATE 1
-  #else
-     #define UPCXX_LOCAL_TM_CREATE 0
-  #endif
-#endif
-
 static_assert(
   sizeof(gex_Event_t) == sizeof(uintptr_t),
   "Failed: sizeof(gex_Event_t) == sizeof(uintptr_t)"
@@ -643,7 +635,6 @@ void upcxx::init() {
 
   // determine (upper bound on) scratch requirements for local_team
   if (!local_is_world) { // only if we are creating a GEX-level team
-  #if UPCXX_LOCAL_TM_CREATE
     // build local_team membership table, avoiding split comms
     gex_EP_Location_t *peer_ids = new gex_EP_Location_t[peer_n];
     peer_EP_loc = (void *)peer_ids;
@@ -660,14 +651,7 @@ void upcxx::init() {
       GEX_FLAG_TM_SCRATCH_SIZE_RECOMMENDED |
       GEX_FLAG_TM_LOCAL_SCRATCH | GEX_FLAG_RANK_IS_JOBRANK
     );
-  #else
-    local_scratch_sz = gex_TM_Split(
-      &local_tm, world_tm,
-      /*color*/nbhd[0].gex_jobrank, /*key*/peer_me,
-      nullptr, 0,
-      GEX_FLAG_TM_SCRATCH_SIZE_RECOMMENDED
-    );
-  #endif
+
     UPCXX_ASSERT_ALWAYS(local_scratch_sz);
   }
 
@@ -714,7 +698,6 @@ void upcxx::init() {
     
     UPCXX_ASSERT_ALWAYS( local_scratch_sz && local_scratch_ptr );
 
-  #if UPCXX_LOCAL_TM_CREATE
     gex_EP_Location_t *peer_ids = (gex_EP_Location_t *)peer_EP_loc;
     peer_EP_loc = nullptr;
     gex_TM_Create(
@@ -725,14 +708,6 @@ void upcxx::init() {
       GEX_FLAG_TM_LOCAL_SCRATCH | GEX_FLAG_RANK_IS_JOBRANK
     );
     delete [] peer_ids;
-  #else
-    gex_TM_Split(
-      &local_tm, world_tm,
-      /*color*/backend::pshm_peer_lb, /*key*/peer_me,
-      local_scratch_ptr, local_scratch_sz,
-      /*flags*/0
-    );
-  #endif
 
     if (!upcxx_upc_is_linked()) // UPC mode has custom local_tm scratch cleanup
       gex_TM_SetCData(local_tm, local_scratch_ptr );

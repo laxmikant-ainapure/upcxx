@@ -92,14 +92,6 @@ team team::split(intrank_t color, intrank_t key) const {
     );
 }
 
-#ifndef UPCXX_TM_DESTROY // gex_TM_Destroy was added in spec v0.10
-  #if GEX_SPEC_VERSION_MINOR >= 10 || GEX_SPEC_VERSION_MAJOR  
-     #define UPCXX_TM_DESTROY 1
-  #else
-     #define UPCXX_TM_DESTROY 0
-  #endif
-#endif
-
 void team::destroy(entry_barrier eb) {
   UPCXX_ASSERT_INIT();
   UPCXX_ASSERT_MASTER();
@@ -120,14 +112,12 @@ void team::destroy(detail::internal_only, entry_barrier eb) {
 
     void *scratch = gex_TM_QueryCData(tm);
 
-    #if UPCXX_TM_DESTROY
-      if (tm != gasnet::handle_of(detail::the_world_team.value())) {
+    if (tm != gasnet::handle_of(detail::the_world_team.value())) {
         gex_Memvec_t scratch_area;
         gex_TM_Destroy(tm, &scratch_area, GEX_FLAG_GLOBALLY_QUIESCED);
 
         if (scratch) UPCXX_ASSERT(scratch == scratch_area.gex_addr);
-      }
-    #endif
+    }
     
     upcxx::deallocate(scratch);
   }
