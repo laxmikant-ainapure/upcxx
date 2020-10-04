@@ -93,8 +93,7 @@ upcxx::cuda_device::cuda_device(int device):
 
   #if UPCXX_CUDA_ENABLED
     if (device != invalid_device_id) {
-      UPCXX_ASSERT_ALWAYS(backend::heap_count < backend::max_heaps, "exceeded max device opens: " << backend::max_heaps - 1);
-      heap_idx_ = backend::heap_count++;
+      heap_idx_ = backend::heap_state::alloc_index();
       CUcontext ctx;
       CUresult res = cuDevicePrimaryCtxRetain(&ctx, device);
       if(res == CUDA_ERROR_NOT_INITIALIZED) {
@@ -114,7 +113,7 @@ upcxx::cuda_device::cuda_device(int device):
       st->ep_index = heap_idx_;
       
       CU_CHECK_ALWAYS(cuStreamCreate(&st->stream, CU_STREAM_NON_BLOCKING));
-      backend::heaps[heap_idx_] = st;
+      backend::heap_state::get(heap_idx_,true) = st;
       
       CU_CHECK_ALWAYS(cuCtxPopCurrent(&ctx));
     }
@@ -139,7 +138,7 @@ void upcxx::cuda_device::destroy(upcxx::entry_barrier eb) {
   if (!is_active()) return;
 
   #if UPCXX_CUDA_ENABLED
-    cuda::device_state *st = static_cast<cuda::device_state*>(backend::heaps[heap_idx_]);
+    cuda::device_state *st = cuda::device_state::get(heap_idx_);
     UPCXX_ASSERT(st != nullptr);
     UPCXX_ASSERT(st->device_id == device_);
     UPCXX_ASSERT(st->ep_index == (gex_EP_Index_t)heap_idx_);
@@ -153,13 +152,13 @@ void upcxx::cuda_device::destroy(upcxx::entry_barrier eb) {
     }
 
     // TODO: gex_EP_Destroy() and gex_Segment_Destroy(), 
-    // and modify backend::heap_count to allow recycling of heap_idx
+    // and modify heap_state to allow recycling of heap_idx
     
     CU_CHECK_ALWAYS(cuStreamDestroy(st->stream));
     CU_CHECK_ALWAYS(cuCtxSetCurrent(nullptr));
     CU_CHECK_ALWAYS(cuDevicePrimaryCtxRelease(st->device_id));
     
-    backend::heaps[heap_idx_] = nullptr;
+    backend::heap_state::get(heap_idx_) = nullptr;
     delete st;
   #endif
   
@@ -168,11 +167,9 @@ void upcxx::cuda_device::destroy(upcxx::entry_barrier eb) {
 }
 
 upcxx::cuda_device::id_type 
-upcxx::cuda_device::device_id(detail::internal_only, backend::heap_state *hs) {
-  UPCXX_ASSERT(hs);
+upcxx::cuda_device::device_id(detail::internal_only, int heap_idx) {
   #if UPCXX_CUDA_ENABLED
-    cuda::device_state *st = static_cast<cuda::device_state*>(hs);
-    UPCXX_ASSERT(st);
+    cuda::device_state *st = cuda::device_state::get(heap_idx);
     int id = st->device_id;
     UPCXX_ASSERT(id != invalid_device_id);
     return id;
@@ -189,7 +186,7 @@ detail::device_allocator_core<upcxx::cuda_device>::device_allocator_core(
     (dev ? dev->heap_idx_ : -1/*inactive*/),
     #if UPCXX_CUDA_ENABLED
       dev ? 
-       make_segment(static_cast<cuda::device_state*>(backend::heaps[dev->heap_idx_]), base, size)
+       make_segment(cuda::device_state::get(dev->heap_idx_), base, size)
        : segment_allocator(nullptr, 0)
     #else
       segment_allocator(nullptr, 0)
@@ -203,8 +200,7 @@ detail::device_allocator_core<upcxx::cuda_device>::device_allocator_core(
   // TODO: gex_EP_PublishBoundSegment
   #if UPCXX_CUDA_ENABLED
     if (dev) {
-      backend::heap_state *hs = backend::heaps[heap_idx_];
-      UPCXX_ASSERT(hs);
+      backend::heap_state *hs = backend::heap_state::get(heap_idx_);
       UPCXX_ASSERT(hs->alloc_base == this); // registration handled by device_allocator_base
     }
   #endif
@@ -213,11 +209,8 @@ detail::device_allocator_core<upcxx::cuda_device>::device_allocator_core(
 void detail::device_allocator_core<upcxx::cuda_device>::destroy() {
   if (!is_active()) return;
 
-  backend::heap_state *hs = backend::heaps[heap_idx_];
-    
   #if UPCXX_CUDA_ENABLED  
-      UPCXX_ASSERT(heap_idx_ > 0 && heap_idx_ < backend::max_heaps);
-      cuda::device_state *st = static_cast<cuda::device_state*>(hs);
+      cuda::device_state *st = cuda::device_state::get(heap_idx_);
       UPCXX_ASSERT(st);
      
       if(st->segment_to_free) {
@@ -228,7 +221,7 @@ void detail::device_allocator_core<upcxx::cuda_device>::destroy() {
         CU_CHECK_ALWAYS(cuCtxPopCurrent(&dump));
       }
       
-      hs->alloc_base = &tombstone; // deregister
+      st->alloc_base = &tombstone; // deregister
   #endif
 
   heap_idx_ = -1; // deactivate

@@ -46,6 +46,14 @@
         CUcontext context;
         CUstream stream;
         CUdeviceptr segment_to_free;
+
+	device_state() : backend::heap_state(backend::heap_state::memory_kind::cuda) {}
+
+        static device_state *get(std::int32_t heap_idx, bool allow_null = false) {
+          backend::heap_state *hs = backend::heap_state::get(heap_idx, allow_null);
+	  if (hs) UPCXX_ASSERT(hs->kind() == backend::heap_state::memory_kind::cuda);
+          return static_cast<device_state*>(hs);
+        }
       };
     }
   }

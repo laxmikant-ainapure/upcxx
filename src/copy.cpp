@@ -26,13 +26,13 @@ void upcxx::detail::rma_copy_local(
   else {
   #if UPCXX_CUDA_ENABLED
     int heap_main = heap_d != host_heap ? heap_d : heap_s;
-    cuda::device_state *st = static_cast<cuda::device_state*>(backend::heaps[heap_main]);
+    cuda::device_state *st = cuda::device_state::get(heap_main);
     
     CU_CHECK(cuCtxPushCurrent(st->context));
 
     if(heap_d != host_heap && heap_s != host_heap) {
-      cuda::device_state *st_d = static_cast<cuda::device_state*>(backend::heaps[heap_d]);
-      cuda::device_state *st_s = static_cast<cuda::device_state*>(backend::heaps[heap_s]);
+      cuda::device_state *st_d = cuda::device_state::get(heap_d);
+      cuda::device_state *st_s = cuda::device_state::get(heap_s);
       
       // device to device
       CU_CHECK(cuMemcpyPeerAsync(

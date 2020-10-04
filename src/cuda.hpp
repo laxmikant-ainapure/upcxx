@@ -45,7 +45,7 @@ namespace upcxx {
     void destroy(upcxx::entry_barrier eb = entry_barrier::user);
 
   private:
-    static id_type device_id(detail::internal_only, backend::heap_state *hs);
+    static id_type device_id(detail::internal_only, int heap_idx);
   };
 
   namespace detail {

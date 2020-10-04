@@ -79,8 +79,8 @@ intrank_t backend::rank_me; // leave undefined so valgrind can catch it.
 
 bool backend::verbose_noise = false;
 
-backend::heap_state *backend::heaps[backend::max_heaps] = {/*nullptr...*/};
-int backend::heap_count = 1;
+backend::heap_state *backend::heap_state::heaps[backend::heap_state::max_heaps] = {/*nullptr...*/};
+int backend::heap_state::heap_count = 1; // host segment is implicitly idx 0
 
 persona backend::master;
 persona_scope *backend::initial_master_scope = nullptr;
@@ -1269,7 +1269,7 @@ void backend::validate_global_ptr(bool allow_null, intrank_t rank, void *raw_ptr
         (KindSet == memory_kind::host && heap_idx != 0) // host should always be heap_idx 0
      || ((int(KindSet) & int(memory_kind::host)) == 0 && heap_idx == 0) // non-host gptr cannot ref host device
      || (heap_idx < 0) // currently never use negative heap_idx
-     || (heap_idx > backend::max_heaps) // invalid heap_idx
+     || (heap_idx >= backend::heap_state::max_heaps) // invalid heap_idx
       ) {
       ss << pretty_type() << " representation corrupted, bad heap_idx\n";
       error = true; break;

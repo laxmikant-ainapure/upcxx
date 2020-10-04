@@ -18,9 +18,7 @@ namespace upcxx {
         heap_idx_(heap_idx),
         seg_(std::move(seg)) {
         if (heap_idx_ >= 0) {
-          UPCXX_ASSERT(heap_idx_ > 0 && heap_idx_ < backend::max_heaps);
-          backend::heap_state *hs = backend::heaps[heap_idx_];
-          UPCXX_ASSERT(hs);
+          backend::heap_state *hs = backend::heap_state::get(heap_idx_);
           UPCXX_ASSERT(!hs->alloc_base, 
                        "A given device object may only be used to create one device_allocator");
           hs->alloc_base = this; // register
@@ -30,8 +28,7 @@ namespace upcxx {
       device_allocator_base(device_allocator_base&& other) : 
         heap_idx_(other.heap_idx_), seg_(std::move(other.seg_)) {
         if (heap_idx_ >= 0) {
-          backend::heap_state *hs = backend::heaps[heap_idx_];
-          UPCXX_ASSERT(hs);
+          backend::heap_state *hs = backend::heap_state::get(heap_idx_);
           UPCXX_ASSERT(hs->alloc_base == &other);
           hs->alloc_base = this; // update registration
           other.heap_idx_ = -1; // deactivate
@@ -47,6 +44,7 @@ namespace upcxx {
       static constexpr std::size_t min_alignment;
       template<typename T>
       static constexpr std::size_t default_alignment();
+      static id_type device_id(detail::internal_only, int heap_idx);
 
       device_allocator_core(Device &dev, typename Device::pointer<void> base, std::size_t size);
       device_allocator_core(device_allocator_core&&) = default;
@@ -161,14 +159,10 @@ namespace upcxx {
       UPCXX_ASSERT(gp.is_null() || gp.where() == upcxx::rank_me());
       if (!gp) return Device::invalid_device_id;
       else {
-        int heap_idx = gp.heap_idx_;
-        UPCXX_ASSERT(heap_idx > 0); // currently prohibited for host memory
-        UPCXX_ASSERT(heap_idx < backend::max_heaps);
-        backend::heap_state *hs = backend::heaps[heap_idx];
-        UPCXX_ASSERT(hs && hs->alloc_base && hs->alloc_base->is_active(), 
+        backend::heap_state *hs = backend::heap_state::get(gp.heap_idx_);
+        UPCXX_ASSERT(hs->alloc_base && hs->alloc_base->is_active(), 
           "device_allocator::device_id() invoked with a pointer from an inactive device.");
-        UPCXX_ASSERT(hs);
-        return Device::device_id(detail::internal_only(), hs);
+        return Device::device_id(detail::internal_only(), gp.heap_idx_);
       }
     }
     
@@ -178,11 +172,8 @@ namespace upcxx {
       UPCXX_GPTR_CHK(gp);
       if (!gp) return Device::template null_pointer<T>();
       UPCXX_ASSERT(gp.where() == upcxx::rank_me());
-      int heap_idx = gp.heap_idx_;
-      UPCXX_ASSERT(heap_idx > 0); // currently prohibited for host memory
-      UPCXX_ASSERT(heap_idx < backend::max_heaps);
-      backend::heap_state *hs = backend::heaps[heap_idx];
-      UPCXX_ASSERT(hs && hs->alloc_base && hs->alloc_base->is_active(), 
+      backend::heap_state *hs = backend::heap_state::get(gp.heap_idx_);
+      UPCXX_ASSERT(hs->alloc_base && hs->alloc_base->is_active(), 
         "device_allocator::device_id() invoked with a pointer from an inactive device.");
       return gp.raw_ptr_;
     }

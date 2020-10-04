@@ -23,6 +23,7 @@
 
 #include <upcxx/future/fwd.hpp>
 #include <upcxx/diagnostic.hpp>
+#include <upcxx/upcxx_config.hpp>
 #include <gasnet_fwd.h>
 
 #include <cstddef>
@@ -195,19 +196,42 @@ namespace backend {
   struct heap_state {
     gex_EP_Index_t ep_index;
     detail::device_allocator_base *alloc_base;
-  };
+
   #if UPCXX_CUDA_ENABLED
-    #ifndef UPCXX_GASNET_MAXEPS
-    #define UPCXX_GASNET_MAXEPS  8 // TODO: belongs in upcxx_config.h
-    #endif
-    constexpr int max_heaps = UPCXX_GASNET_MAXEPS;
-    static_assert(UPCXX_GASNET_MAXEPS >= 1, "bad value of UPCXX_GASNET_MAXEPS");
+    static constexpr int max_heaps = UPCXX_MAXEPS;
   #else
-    constexpr int max_heaps = 1;
+    static constexpr int max_heaps = 1;
   #endif
-  extern heap_state *heaps[max_heaps];
-  extern int heap_count;
-  
+    static_assert(max_heaps >= 1, "bad value of UPCXX_MAXEPS");
+
+    enum class memory_kind : std::uint32_t { 
+      host = 0x40514051, 
+      cuda = 0xC0DAC0DA,
+    };
+    heap_state(memory_kind k) : my_kind(k) {}
+    memory_kind kind() { return my_kind; }
+
+  protected:
+    memory_kind my_kind; // serves as both tag and magic
+    static heap_state *heaps[max_heaps];
+    static int heap_count;
+
+  public:
+    static int alloc_index() {
+      UPCXX_ASSERT_ALWAYS(heap_count < max_heaps, "exceeded max device opens: " << max_heaps - 1);
+      return heap_count++;
+    }
+
+    // retrieve reference to heap_state pointer at heap_idx, with bounds-checking
+    static inline heap_state *&get(std::int32_t heap_idx, bool allow_null = false) {
+      UPCXX_ASSERT(heap_count <= max_heaps, "internal error in backend::heap_state::get");
+      UPCXX_ASSERT(heap_idx > 0 && heap_idx < heap_count, "invalid heap_idx (corrupted global_ptr?)");
+      heap_state *&hs = heaps[heap_idx];
+      UPCXX_ASSERT(hs || allow_null, "heap_idx referenced a null heap");
+      return hs;
+    }
+  };
+
   void quiesce(const team &tm, entry_barrier eb);
 
   void warn_collective_in_progress(const char *fnname, entry_barrier eb=entry_barrier::none);
