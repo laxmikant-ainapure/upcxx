@@ -31,7 +31,11 @@ namespace upcxx {
 
     cuda_device(int device = invalid_device_id);
     cuda_device(cuda_device const&) = delete;
-    cuda_device(cuda_device&&) = default;
+    cuda_device(cuda_device&& other) : 
+      device_(other.device_), heap_idx_(other.heap_idx_) {
+      other.device_ = invalid_device_id; 
+      other.heap_idx_ = -1;
+    }
     ~cuda_device();
 
     int device_id() const { return device_; }
