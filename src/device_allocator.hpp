@@ -54,7 +54,7 @@ namespace upcxx {
   }
   
   template<typename Device>
-  class device_allocator: detail::device_allocator_core<Device> {
+  class device_allocator: public detail::device_allocator_core<Device> {
     detail::par_mutex lock_;
     
   public:
