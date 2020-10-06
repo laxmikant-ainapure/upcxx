@@ -1,23 +1,29 @@
 #include <upcxx/cuda.hpp>
 #include <upcxx/cuda_internal.hpp>
+#include <upcxx/reduce.hpp>
 
 namespace detail = upcxx::detail;
 
 using std::size_t;
 
 #if UPCXX_CUDA_ENABLED
-  namespace {
-    detail::segment_allocator make_segment(upcxx::cuda::device_state *st, void *base, size_t size) {
-      bool throw_bad_alloc = false;
+namespace {
+  detail::segment_allocator make_segment(int heap_idx, void *base, size_t size) {
+    upcxx::cuda::device_state *st = heap_idx <= 0 ? nullptr :
+                                    upcxx::cuda::device_state::get(heap_idx);
+    bool throw_bad_alloc = false;
+
+    if (st) { // creating a real device heap, possibly allocating memory
+
       CU_CHECK(cuCtxPushCurrent(st->context));
       
       CUdeviceptr p = 0x0;
 
-      if(-size == 1) {
+      if(-size == 1) { // undocumented "largest available"
         size_t lo=1<<20, hi=size_t(16)<<30;
         
         while(hi-lo > 64<<10) {
-          if(p) cuMemFree(p);
+          if(p) CU_CHECK_ALWAYS(cuMemFree(p));
           size = (lo + hi)/2;
           CUresult r = cuMemAlloc(&p, size);
 
@@ -26,38 +32,57 @@ using std::size_t;
           else if(r == CUDA_SUCCESS)
             lo = size;
           else
-            CU_CHECK(r);
+            CU_CHECK_ALWAYS(r);
         }
 
         st->segment_to_free = p;
         base = reinterpret_cast<void*>(p);
-      }
-      else if(base == nullptr) {
+
+      } else if(base == nullptr) { // allocate a particular size
         CUresult r = cuMemAlloc(&p, size);
         if(r == CUDA_ERROR_OUT_OF_MEMORY) {
           throw_bad_alloc = true;
           p = reinterpret_cast<CUdeviceptr>(nullptr);
-        }
-        else
+        } else
           UPCXX_ASSERT_ALWAYS(r == CUDA_SUCCESS, "Requested cuda allocation failed: size="<<size<<", return="<<int(r));
         
         st->segment_to_free = p;
         base = reinterpret_cast<void*>(p);
-      }
-      else
+
+      } else { // client-provided segment
         st->segment_to_free = reinterpret_cast<CUdeviceptr>(nullptr);
+      }
       
       CUcontext dump;
       CU_CHECK(cuCtxPopCurrent(&dump));
-
-      if(throw_bad_alloc)
-        throw std::bad_alloc();
-      else
-        return detail::segment_allocator(base, size);
     }
 
-    detail::device_allocator_core<upcxx::cuda_device> tombstone(nullptr, reinterpret_cast<CUdeviceptr>(nullptr), 0);
-  }
+    // once segment is collectively created, decide whether we are keeping it.
+    // this is a effectively a user-level barrier, but not a documented guarantee
+    throw_bad_alloc = upcxx::reduce_all<bool>(throw_bad_alloc, upcxx::op_fast_bit_or).wait();
+
+    if (throw_bad_alloc) { // single-valued
+      // at least one process failed to allocate, so collectively unwind and throw
+      if (st && st->segment_to_free) {
+        CU_CHECK(cuCtxPushCurrent(st->context));
+        CU_CHECK_ALWAYS(cuMemFree(st->segment_to_free));
+        CUcontext dump;
+        CU_CHECK(cuCtxPopCurrent(&dump));
+        st->segment_to_free = reinterpret_cast<CUdeviceptr>(nullptr);
+      }
+      // TODO: collect and report information about the failing request in exn.what()
+      throw std::bad_alloc();
+    } else {
+      // TODO: wire-up the GASNet segment
+      //   gex_Segment_Create()
+      //   gex_EP_BindSegment()
+      //   gex_EP_PublishBoundSegment()
+      return detail::segment_allocator(base, size);
+    }
+  } // make_segment
+
+  detail::device_allocator_core<upcxx::cuda_device> tombstone;
+} // anon namespace
 #endif
 
 #if UPCXX_CUDA_ENABLED
@@ -151,7 +176,10 @@ void upcxx::cuda_device::destroy(upcxx::entry_barrier eb) {
       UPCXX_ASSERT(st->alloc_base == &tombstone);
     }
 
-    // TODO: gex_EP_Destroy() and gex_Segment_Destroy(), 
+    // TODO: once they are provided, eventually will do:
+    //   gex_Segment_Destroy()
+    //   gex_MK_Destroy()
+    //   gex_EP_Destroy()  
     // and modify heap_state to allow recycling of heap_idx
     
     CU_CHECK_ALWAYS(cuStreamDestroy(st->stream));
@@ -179,28 +207,26 @@ upcxx::cuda_device::device_id(detail::internal_only, int heap_idx) {
   #endif
 }
 
+// non-collective default constructor
+detail::device_allocator_core<upcxx::cuda_device>::device_allocator_core():
+  detail::device_allocator_base(-1/*inactive*/, segment_allocator(nullptr, 0)) { }
+
+// collective constructor with a (possibly inactive) device
 detail::device_allocator_core<upcxx::cuda_device>::device_allocator_core(
-    upcxx::cuda_device *dev, void *base, size_t size
+    upcxx::cuda_device &dev, void *base, size_t size
   ):
   detail::device_allocator_base(
-    (dev ? dev->heap_idx_ : -1/*inactive*/),
+    dev.heap_idx_,
     #if UPCXX_CUDA_ENABLED
-      dev ? 
-       make_segment(cuda::device_state::get(dev->heap_idx_), base, size)
-       : segment_allocator(nullptr, 0)
+      make_segment(dev.heap_idx_, base, size)
     #else
       segment_allocator(nullptr, 0)
     #endif
   ) {
-  if (!dev) return; // default constructor
 
-  UPCXX_ASSERT_ALWAYS_MASTER();
-
-  // TODO: user entry barrier
-  // TODO: gex_EP_PublishBoundSegment
   #if UPCXX_CUDA_ENABLED
-    if (dev) {
-      backend::heap_state *hs = backend::heap_state::get(heap_idx_);
+    if (dev.is_active()) {
+      backend::heap_state *hs = backend::heap_state::get(dev.heap_idx_);
       UPCXX_ASSERT(hs->alloc_base == this); // registration handled by device_allocator_base
     }
   #endif

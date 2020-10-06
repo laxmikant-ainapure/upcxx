@@ -46,7 +46,14 @@ namespace upcxx {
       static constexpr std::size_t default_alignment();
       static id_type device_id(detail::internal_only, int heap_idx);
 
+      device_allocator_core(); // non-collective default constructor
+
+      // collective constructor
+      // dev must be provided but might be inactive
+      // base==null means not provided
       device_allocator_core(Device &dev, typename Device::pointer<void> base, std::size_t size);
+
+      // move constructor must be provided (need not be default)
       device_allocator_core(device_allocator_core&&) = default;
 
       void destroy();
@@ -61,16 +68,16 @@ namespace upcxx {
     using device_type = Device;
 
     device_allocator():
-      detail::device_allocator_core<Device>(nullptr, Device::template null_pointer<void>(), 0) {
-    }
+      detail::device_allocator_core<Device>() { }
+
     device_allocator(Device &dev, typename Device::template pointer<void> base, std::size_t size):
-      detail::device_allocator_core<Device>((UPCXX_ASSERT_INIT(),(dev.is_active()?&dev:nullptr)), 
-                                            base, size) {
-    }
+      detail::device_allocator_core<Device>(
+        (UPCXX_ASSERT_INIT(),UPCXX_ASSERT_ALWAYS_MASTER(),dev), base, size) { }
+
     device_allocator(Device &dev, std::size_t size):
-      detail::device_allocator_core<Device>((UPCXX_ASSERT_INIT(),(dev.is_active()?&dev:nullptr)), 
-                                            Device::template null_pointer<void>(), size) {
-    }
+      detail::device_allocator_core<Device>(
+        (UPCXX_ASSERT_INIT(),UPCXX_ASSERT_ALWAYS_MASTER(),dev),
+        Device::template null_pointer<void>(), size) { }
     
     device_allocator(device_allocator &&that):
       // base class move ctor

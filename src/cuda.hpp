@@ -63,7 +63,8 @@ namespace upcxx {
     template<>
     struct device_allocator_core<cuda_device>: device_allocator_base, device_allocator_core_min_align<16> {
 
-      device_allocator_core(cuda_device *dev, void *base, std::size_t size);
+      device_allocator_core();
+      device_allocator_core(cuda_device &dev, void *base, std::size_t size);
       device_allocator_core(device_allocator_core&&) = default;
       void destroy();
       ~device_allocator_core();
