@@ -5,7 +5,7 @@ This is the ChangeLog for public releases of [UPC++](https://upcxx.lbl.gov).
 For information on using UPC++, see: [README.md](README.md)    
 For information on installing UPC++, see: [INSTALL.md](INSTALL.md)
 
-### 20XX.YY.ZZ: PENDING
+### 2020.10.30: Release 2020.10.0
 
 General features/enhancements: (see specification and programmer's guide for full details)
 
@@ -102,7 +102,7 @@ Notable bug fixes:
 * spec issue 170: Implement `upcxx::in_progress()` query
 
 This library release conforms to the
-[UPC++ v1.0 Specification, Revision 2020.8.1-draft](docs/spec.pdf).
+[UPC++ v1.0 Specification, Revision 2020.10.0](docs/spec.pdf).
 All currently specified features are fully implemented.
 See the [UPC++ issue tracker](https://upcxx-bugs.lbl.gov) for status of known bugs.
 
