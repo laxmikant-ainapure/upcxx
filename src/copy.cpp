@@ -14,27 +14,25 @@ using upcxx::memory_kind;
 using upcxx::detail::lpc_base;
 
 void upcxx::detail::rma_copy_local(
-    int dev_d, void *buf_d,
-    int dev_s, void const *buf_s, std::size_t size,
+    int heap_d, void *buf_d,
+    int heap_s, void const *buf_s, std::size_t size,
     cuda::event_cb *cb
   ) {
 
-  constexpr int host_device = -1;
-
-  if(dev_d == host_device && dev_s == host_device) {
+  if(heap_d == host_heap && heap_s == host_heap) {
     std::memmove(buf_d, buf_s, size);
     cb->execute_and_delete();
   }
   else {
   #if UPCXX_CUDA_ENABLED
-    int dev_main = dev_d != host_device ? dev_d : dev_s;
-    cuda::device_state *st = static_cast<cuda::device_state*>(cuda::devices[dev_main]);
+    int heap_main = heap_d != host_heap ? heap_d : heap_s;
+    cuda::device_state *st = cuda::device_state::get(heap_main);
     
     CU_CHECK(cuCtxPushCurrent(st->context));
 
-    if(dev_d != host_device && dev_s != host_device) {
-      cuda::device_state *st_d = static_cast<cuda::device_state*>(cuda::devices[dev_d]);
-      cuda::device_state *st_s = static_cast<cuda::device_state*>(cuda::devices[dev_s]);
+    if(heap_d != host_heap && heap_s != host_heap) {
+      cuda::device_state *st_d = cuda::device_state::get(heap_d);
+      cuda::device_state *st_s = cuda::device_state::get(heap_s);
       
       // device to device
       CU_CHECK(cuMemcpyPeerAsync(
@@ -43,7 +41,7 @@ void upcxx::detail::rma_copy_local(
         size, st->stream
       ));
     }
-    else if(dev_d != host_device) {
+    else if(heap_d != host_heap) {
       // host to device
       CU_CHECK(cuMemcpyHtoDAsync(reinterpret_cast<CUdeviceptr>(buf_d), buf_s, size, st->stream));
     }
@@ -61,6 +59,8 @@ void upcxx::detail::rma_copy_local(
     per->cuda_state_.event_cbs.enqueue(cb);
     
     {CUcontext dump; CU_CHECK(cuCtxPopCurrent(&dump));}
+  #else
+    UPCXX_FATAL_ERROR("Unrecognized heaps in upcxx::copy() -- gptr corruption?");
   #endif
   }
 }

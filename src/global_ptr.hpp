@@ -48,8 +48,8 @@ namespace upcxx {
 
     // allow construction from a pointer-to-non-const
     explicit global_ptr(detail::internal_only, intrank_t rank, T *raw,
-                        int device = -1):
-      base_type(detail::internal_only(), rank, raw, device) {
+                        int heap_idx = 0):
+      base_type(detail::internal_only(), rank, raw, heap_idx) {
     }
 
     template <typename U>
@@ -93,15 +93,15 @@ namespace upcxx {
         #endif
           backend::validate_global_ptr(allow_null, rank_,
                                        reinterpret_cast<void*>(raw_ptr_),
-                                       device_, KindSet, align,
+                                       heap_idx_, KindSet, align,
                                        detail::typename_of<T>(), 
                                        short_context, context);
     }
     
     explicit global_ptr(detail::internal_only, intrank_t rank, const T *raw,
-                        int device = -1):
+                        int heap_idx = 0):
       #if UPCXX_MANY_KINDS
-        device_(device),
+        heap_idx_(heap_idx),
       #endif
       rank_(rank),
       raw_ptr_(const_cast<T*>(raw)) {
@@ -114,7 +114,7 @@ namespace upcxx {
     explicit global_ptr(detail::internal_only, 
                         const global_ptr<U, KindSet> &other, std::ptrdiff_t offset):
       #if UPCXX_MANY_KINDS
-        device_(other.device_),
+        heap_idx_(other.heap_idx_),
       #endif
       rank_(other.rank_),
       raw_ptr_(reinterpret_cast<T*>(
@@ -127,7 +127,7 @@ namespace upcxx {
     template<memory_kind KindSet1,
              typename = typename std::enable_if<((int)KindSet & (int)KindSet1) == (int)KindSet1>::type>
     global_ptr(global_ptr<const T,KindSet1> const &that):
-      global_ptr(detail::internal_only(), that.rank_, that.raw_ptr_, that.device_) {
+      global_ptr(detail::internal_only(), that.rank_, that.raw_ptr_, that.heap_idx_) {
       UPCXX_GPTR_CHK(*this);
     }
     
@@ -140,12 +140,12 @@ namespace upcxx {
     bool is_local() const {
       UPCXX_ASSERT_INIT();
       UPCXX_GPTR_CHK(*this);
-      return device_ == -1 && (raw_ptr_ == nullptr || backend::rank_is_local(rank_));
+      return heap_idx_ == 0 && (raw_ptr_ == nullptr || backend::rank_is_local(rank_));
     }
 
     bool is_null() const {
       UPCXX_GPTR_CHK(*this);
-      return device_ == -1 && raw_ptr_ == nullptr;
+      return heap_idx_ == 0 && raw_ptr_ == nullptr;
     }
     
     // This creates ambiguity with gp/int arithmetic like `my_gp + 1` since 
@@ -160,7 +160,7 @@ namespace upcxx {
     const T* local() const {
       UPCXX_ASSERT_INIT();
       UPCXX_GPTR_CHK(*this);
-      return KindSet != memory_kind::host && device_ != -1
+      return KindSet != memory_kind::host && heap_idx_ != 0
         ? nullptr
         : static_cast<T*>(
           backend::localize_memory(
@@ -180,20 +180,20 @@ namespace upcxx {
       if(0 == (int(KindSet) & (int(KindSet)-1))) // determines if KindSet is a singleton set
         return KindSet;
       else
-        return device_ == -1 ? memory_kind::host : memory_kind::cuda_device;
+        return heap_idx_ == 0 ? memory_kind::host : memory_kind::cuda_device;
     }
     
     std::ptrdiff_t operator-(global_ptr rhs) const {
       if (raw_ptr_ == rhs.raw_ptr_) { UPCXX_GPTR_CHK(*this); UPCXX_GPTR_CHK(rhs); }
       else  { UPCXX_GPTR_CHK_NONNULL(*this); UPCXX_GPTR_CHK_NONNULL(rhs); }
-      UPCXX_ASSERT(device_ == rhs.device_, "operator-(global_ptr,global_ptr): requires pointers of the same kind & device.");
+      UPCXX_ASSERT(heap_idx_ == rhs.heap_idx_, "operator-(global_ptr,global_ptr): requires pointers of the same kind & device.");
       UPCXX_ASSERT(rank_ == rhs.rank_, "operator-(global_ptr,global_ptr): requires pointers to the same rank.");
       return raw_ptr_ - rhs.raw_ptr_;
     }
 
     friend bool operator==(global_ptr a, global_ptr b) {
       UPCXX_GPTR_CHK(a); UPCXX_GPTR_CHK(b); 
-      return a.device_ == b.device_ && a.rank_ == b.rank_ && a.raw_ptr_ == b.raw_ptr_;
+      return a.heap_idx_ == b.heap_idx_ && a.rank_ == b.rank_ && a.raw_ptr_ == b.raw_ptr_;
     }
     friend bool operator==(global_ptr a, std::nullptr_t) {
       return a == global_ptr(nullptr);
@@ -204,7 +204,7 @@ namespace upcxx {
     
     friend bool operator!=(global_ptr a, global_ptr b) {
       UPCXX_GPTR_CHK(a); UPCXX_GPTR_CHK(b); 
-      return a.device_ != b.device_ || a.rank_ != b.rank_ || a.raw_ptr_ != b.raw_ptr_;
+      return a.heap_idx_ != b.heap_idx_ || a.rank_ != b.rank_ || a.raw_ptr_ != b.raw_ptr_;
     }
     friend bool operator!=(global_ptr a, std::nullptr_t) {
       return a != global_ptr(nullptr);
@@ -235,9 +235,9 @@ namespace upcxx {
   
   public: //private!
     #if UPCXX_MANY_KINDS
-      std::int32_t device_;
+      std::int32_t heap_idx_;
     #else
-      static constexpr std::int32_t device_ = -1;
+      static constexpr std::int32_t heap_idx_ = 0;
     #endif
     intrank_t rank_;
     T* raw_ptr_;
@@ -249,7 +249,7 @@ namespace upcxx {
     return global_ptr<T,K>(detail::internal_only(),
                            ptr.rank_,
                            static_cast<T*>(ptr.raw_ptr_),
-                           ptr.device_);
+                           ptr.heap_idx_);
   }
 
   template<typename T, typename U, memory_kind K>
@@ -258,7 +258,7 @@ namespace upcxx {
     return global_ptr<T,K>(detail::internal_only(),
                            ptr.rank_,
                            reinterpret_cast<T*>(ptr.raw_ptr_),
-                           ptr.device_);
+                           ptr.heap_idx_);
   }
 
   template<typename T, typename U, memory_kind K>
@@ -267,7 +267,7 @@ namespace upcxx {
     return global_ptr<T,K>(detail::internal_only(),
                            ptr.rank_,
                            const_cast<T*>(ptr.raw_ptr_),
-                           ptr.device_);
+                           ptr.heap_idx_);
   }
 
   template<memory_kind K, typename T, memory_kind K1>
@@ -275,7 +275,7 @@ namespace upcxx {
   typename std::enable_if<(int(K) & int(K1)) != 0 , global_ptr<T,K>>::type
   static_kind_cast(global_ptr<T,K1> p) {
     UPCXX_GPTR_CHK(p);
-    return global_ptr<T,K>(detail::internal_only(), p.rank_, p.raw_ptr_, p.device_);
+    return global_ptr<T,K>(detail::internal_only(), p.rank_, p.raw_ptr_, p.heap_idx_);
   }
   
   template<memory_kind K, typename T, memory_kind K1>
@@ -285,7 +285,7 @@ namespace upcxx {
     UPCXX_GPTR_CHK(p);
     return ((int)p.dynamic_kind() & (int)K) != 0
         ? global_ptr<T,K>(
-          detail::internal_only(), p.rank_, p.raw_ptr_, p.device_
+          detail::internal_only(), p.rank_, p.raw_ptr_, p.heap_idx_
         )
         : global_ptr<T,K>(nullptr);
   }
@@ -295,7 +295,7 @@ namespace upcxx {
     // UPCXX_GPTR_CHK(ptr) // allow output of bad pointers for diagnostic purposes
     return os << "(gp: " << ptr.rank_ << ", " 
               << reinterpret_cast<void*>(ptr.raw_ptr_) // issue #223
-	      << ", dev=" << ptr.device_ << ")";
+	      << ", heap=" << ptr.heap_idx_ << ")";
   }
 
   template<typename T>
@@ -341,8 +341,8 @@ namespace std {
       bool ans = lhs.raw_ptr_ < rhs.raw_ptr_;
       ans &= lhs.rank_ == rhs.rank_;
       ans |= lhs.rank_ < rhs.rank_;
-      ans &= lhs.device_ == rhs.device_;
-      ans |= lhs.device_ < rhs.device_;
+      ans &= lhs.heap_idx_ == rhs.heap_idx_;
+      ans |= lhs.heap_idx_ < rhs.heap_idx_;
       return ans;
     }
   };
@@ -355,8 +355,8 @@ namespace std {
       bool ans = lhs.raw_ptr_ <= rhs.raw_ptr_;
       ans &= lhs.rank_ == rhs.rank_;
       ans |= lhs.rank_ < rhs.rank_;
-      ans &= lhs.device_ == rhs.device_;
-      ans |= lhs.device_ < rhs.device_;
+      ans &= lhs.heap_idx_ == rhs.heap_idx_;
+      ans |= lhs.heap_idx_ < rhs.heap_idx_;
       return ans;
     }
   };
@@ -369,8 +369,8 @@ namespace std {
       bool ans = lhs.raw_ptr_ > rhs.raw_ptr_;
       ans &= lhs.rank_ == rhs.rank_;
       ans |= lhs.rank_ > rhs.rank_;
-      ans &= lhs.device_ == rhs.device_;
-      ans |= lhs.device_ > rhs.device_;
+      ans &= lhs.heap_idx_ == rhs.heap_idx_;
+      ans |= lhs.heap_idx_ > rhs.heap_idx_;
       return ans;
     }
   };
@@ -383,8 +383,8 @@ namespace std {
       bool ans = lhs.raw_ptr_ >= rhs.raw_ptr_;
       ans &= lhs.rank_ == rhs.rank_;
       ans |= lhs.rank_ > rhs.rank_;
-      ans &= lhs.device_ == rhs.device_;
-      ans |= lhs.device_ > rhs.device_;
+      ans &= lhs.heap_idx_ == rhs.heap_idx_;
+      ans |= lhs.heap_idx_ > rhs.heap_idx_;
       return ans;
     }
   };
@@ -420,7 +420,7 @@ namespace std {
       DEALINGS IN THE SOFTWARE.
       */
 
-      std::uint64_t b = std::uint64_t(gptr.device_)<<32 | std::uint32_t(gptr.rank_);
+      std::uint64_t b = std::uint64_t(gptr.heap_idx_)<<32 | std::uint32_t(gptr.rank_);
       std::uint64_t a = reinterpret_cast<std::uint64_t>(gptr.raw_ptr_);
       a ^= b + 0x9e3779b9 + (a<<6) + (a>>2);
       return std::size_t(a);
