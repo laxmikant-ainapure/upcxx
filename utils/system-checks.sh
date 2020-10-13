@@ -290,6 +290,7 @@ platform_sanity_checks() {
         local CCVERS=`$CC --version 2>&1`
         local COMPILER_BAD=
         local COMPILER_GOOD=
+        local EXTRA_RECOMMEND=
         if echo "$CXXVERS" | egrep 'Apple LLVM version [1-7]\.' 2>&1 > /dev/null ; then
             COMPILER_BAD=1
         elif echo "$CXXVERS" | egrep 'Apple LLVM version ([8-9]\.|[1-9][0-9])' 2>&1 > /dev/null ; then
@@ -297,6 +298,13 @@ platform_sanity_checks() {
         elif echo "$CXXVERS" | egrep 'PGI Compilers and Tools'  > /dev/null ; then
             if [[ $UPCXX_CROSS =~ ^cray-aries- ]]; then
                : # PrgEnv-pgi: currently neither GOOD nor BAD
+            elif egrep ' +(20\.[789]|20\.1[0-2]|2[1-9]\.[0-9]+)-' <<<"$CXXVERS" 2>&1 >/dev/null ; then
+               # Ex: "pgc++ (aka nvc++) 20.7-0 LLVM 64-bit target on x86-64 Linux -tp nehalem"
+               # 20.7 and up are known BAD
+               # TODO: update with end range before 2030
+               COMPILER_BAD=1
+               EXTRA_RECOMMEND='
+       As an exception to the above, PGI (aka NVIDIA HPC SDK) 20.7 and newer are NOT currently supported.'
             elif [[ "$ARCH,$KERNEL" = 'x86_64,Linux' ]] &&
                  egrep ' +(19|[2-9][0-9])\.[0-9]+-' <<<"$CXXVERS" 2>&1 >/dev/null ; then
                # Ex: "pgc++ 19.7-0 LLVM 64-bit target on x86-64 Linux -tp nehalem"
@@ -374,16 +382,16 @@ We recommend one of the following C++ compilers (or any later versions):
 EOF
         if test -n "$ARCH_BAD" ; then
             echo "ERROR: This version of UPC++ does not support the '$ARCH' architecture."
-            echo "ERROR: $RECOMMEND"
+            echo "ERROR: $RECOMMEND$EXTRA_RECOMMEND"
             exit 1
         elif test -n "$COMPILER_BAD" ; then
             echo 'ERROR: Your C++ compiler is known to lack the support needed to build UPC++. '\
                  'Please set $CC and $CXX to point to a newer C/C++ compiler suite.'
-            echo "ERROR: $RECOMMEND"
+            echo "ERROR: $RECOMMEND$EXTRA_RECOMMEND"
             exit 1
         elif test -z "$COMPILER_GOOD" || test -z "$KERNEL_GOOD" || test -z "$ARCH_GOOD" ; then
             echo 'WARNING: Your C++ compiler or platform has not been validated to run UPC++'
-            echo "WARNING: $RECOMMEND"
+            echo "WARNING: $RECOMMEND$EXTRA_RECOMMEND"
         fi
     fi
     return 0
