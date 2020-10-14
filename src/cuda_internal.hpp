@@ -8,6 +8,14 @@
   #include <cuda.h>
   #include <cuda_runtime_api.h>
 
+  // Decide whether GASNet has native memory kinds support
+  #if GEX_SPEC_VERSION_MINOR >= 12 || GEX_SPEC_VERSION_MAJOR 
+    #include <gasnet_mk.h>
+    #if UPCXX_CUDA_ENABLED && UPCXX_MAXEPS > 1 && GASNET_HAVE_MK_CLASS_CUDA_UVA
+      #define UPCXX_CUDA_USE_MK 1
+    #endif
+  #endif
+
   namespace upcxx {
     namespace cuda {
       void cu_failed(CUresult res, const char *file, int line, const char *expr);
@@ -41,11 +49,16 @@
 
   namespace upcxx {
     namespace cuda {
+      bool use_mk(); // true iff using GASNet memory kinds
       struct device_state : public backend::heap_state {
         int device_id;
         CUcontext context;
         CUstream stream;
         CUdeviceptr segment_to_free;
+
+        #if UPCXX_CUDA_USE_MK
+          // gex objects...
+        #endif
 
 	device_state() : backend::heap_state(backend::heap_state::memory_kind::cuda) {}
 

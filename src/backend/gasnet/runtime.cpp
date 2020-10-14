@@ -81,6 +81,8 @@ bool backend::verbose_noise = false;
 
 backend::heap_state *backend::heap_state::heaps[backend::heap_state::max_heaps] = {/*nullptr...*/};
 int backend::heap_state::heap_count = 1; // host segment is implicitly idx 0
+bool backend::heap_state::use_mk_ = false;  // set by heap_state::init()
+bool backend::heap_state::recycle = false; // set by heap_state::init()
 
 persona backend::master;
 persona_scope *backend::initial_master_scope = nullptr;
@@ -252,6 +254,19 @@ namespace {
 
 #include <upcxx/dl_malloc.h>
 
+void upcxx::backend::heap_state::init() {
+  heap_state::use_mk_ = false 
+  #if UPCXX_CUDA_ENABLED
+     || upcxx::cuda::use_mk()
+  #endif
+  /* || otherkind::use_mk() ... */;
+
+  // currently we do not recycle heap_idx when using GASNet memory kinds,
+  // until GASNet grows the ability to recycle endpoints
+  heap_state::recycle = !heap_state::use_mk_;
+}
+
+
 namespace {
   gex_TM_t world_tm;
   gex_TM_t local_tm;
@@ -347,6 +362,8 @@ namespace {
         UPCXX_ASSERT_ALWAYS(local_scratch_ptr);
       }
     }
+
+    backend::heap_state::init();
   }
   void init_localheap_tables(void);
 }

@@ -7,6 +7,12 @@ namespace detail = upcxx::detail;
 using std::size_t;
 
 #if UPCXX_CUDA_ENABLED
+#if UPCXX_CUDA_USE_MK
+  bool upcxx::cuda::use_mk() { return true; }
+#else
+  bool upcxx::cuda::use_mk() { return false; }
+#endif
+
 namespace {
   detail::segment_allocator make_segment(int heap_idx, void *base, size_t size) {
     upcxx::cuda::device_state *st = heap_idx <= 0 ? nullptr :
@@ -135,7 +141,6 @@ upcxx::cuda_device::cuda_device(int device):
       st->segment_to_free = reinterpret_cast<CUdeviceptr>(nullptr);
 
       // TODO: gex_EP_Create
-      st->ep_index = heap_idx_;
       
       CU_CHECK_ALWAYS(cuStreamCreate(&st->stream, CU_STREAM_NON_BLOCKING));
       backend::heap_state::get(heap_idx_,true) = st;
@@ -166,7 +171,6 @@ void upcxx::cuda_device::destroy(upcxx::entry_barrier eb) {
     cuda::device_state *st = cuda::device_state::get(heap_idx_);
     UPCXX_ASSERT(st != nullptr);
     UPCXX_ASSERT(st->device_id == device_);
-    UPCXX_ASSERT(st->ep_index == (gex_EP_Index_t)heap_idx_);
 
     if (st->alloc_base) {
       detail::device_allocator_core<upcxx::cuda_device>* alloc = 
@@ -187,6 +191,7 @@ void upcxx::cuda_device::destroy(upcxx::entry_barrier eb) {
     CU_CHECK_ALWAYS(cuDevicePrimaryCtxRelease(st->device_id));
     
     backend::heap_state::get(heap_idx_) = nullptr;
+    backend::heap_state::free_index(heap_idx_);
     delete st;
   #endif
   
