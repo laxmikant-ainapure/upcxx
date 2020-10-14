@@ -23,7 +23,9 @@ void upcxx::detail::rma_copy_local(
   const bool host_s = (heap_s == host_heap || heap_s == private_heap);
 
   if( host_d && host_s) { // both sides in local host memory
-    std::memmove(buf_d, buf_s, size);
+    UPCXX_ASSERT((char*)buf_d + size <= buf_s || (char*)buf_s + size <= buf_d,
+                 "Source and destination regions in upcxx::copy must not overlap");
+    std::memcpy(buf_d, buf_s, size);
     cb->execute_and_delete();
   }
   else { // one or both sides on device
