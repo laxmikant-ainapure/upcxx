@@ -20,6 +20,7 @@ namespace upcxx {
       );
 
     constexpr int host_heap = 0;
+    constexpr int private_heap = -1;
 
     template<typename Cxs>
     typename detail::completions_returner<
@@ -47,7 +48,7 @@ namespace upcxx {
     UPCXX_GPTR_CHK(src);
     UPCXX_ASSERT(src && dest, "pointer arguments to copy may not be null");
     return detail::copy( src.heap_idx_, src.rank_, src.raw_ptr_,
-                         detail::host_heap, upcxx::rank_me(), dest,
+                         detail::private_heap, upcxx::rank_me(), dest,
                          n * sizeof(T), std::forward<Cxs>(cxs) );
   }
 
@@ -65,7 +66,7 @@ namespace upcxx {
     UPCXX_ASSERT_INIT();
     UPCXX_GPTR_CHK(dest);
     UPCXX_ASSERT(src && dest, "pointer arguments to copy may not be null");
-    return detail::copy( detail::host_heap, upcxx::rank_me(), const_cast<T*>(src),
+    return detail::copy( detail::private_heap, upcxx::rank_me(), const_cast<T*>(src),
                          dest.heap_idx_, dest.rank_, dest.raw_ptr_,
                          n * sizeof(T), std::forward<Cxs>(cxs) );
   }
@@ -123,7 +124,8 @@ namespace upcxx {
         CxsDecayed
       >(*cxs_here);
 
-    if(upcxx::rank_me() != rank_d && upcxx::rank_me() != rank_s) {
+    if(upcxx::rank_me() != rank_d && upcxx::rank_me() != rank_s) { // 3rd party copy
+      UPCXX_ASSERT(heap_s != detail::private_heap && heap_d != detail::private_heap);
       int initiator = upcxx::rank_me();
       
       backend::send_am_master<progress_level::internal>(
@@ -152,7 +154,8 @@ namespace upcxx {
         }, std::move(cxs_remote))
       );
     }
-    else if(rank_d == rank_s) {
+    else if(rank_d == rank_s) { // fully loopback on the calling process
+      UPCXX_ASSERT(rank_d == upcxx::rank_me()); 
       detail::rma_copy_local(heap_d, buf_d, heap_s, buf_s, size,
         cuda::make_event_cb([=]() {
           cxs_here->template operator()<source_cx_event>();
@@ -174,7 +177,8 @@ namespace upcxx {
       else {
         bounce_d = backend::gasnet::allocate(size, 64, &backend::gasnet::sheap_footprint_rdzv);
       }
-      
+
+      const bool host_s = (heap_s == host_heap || heap_s == private_heap);
       backend::send_am_master<progress_level::internal>(
         upcxx::world(), rank_s,
         [=]() {
@@ -182,7 +186,7 @@ namespace upcxx {
             return [=]() {
               detail::rma_copy_put(rank_d, bounce_d, bounce_s, size,
               backend::gasnet::make_handle_cb([=]() {
-                  if(heap_s != host_heap)
+                  if (!host_s)
                     backend::gasnet::deallocate(bounce_s, &backend::gasnet::sheap_footprint_rdzv);
                   
                   backend::send_am_persona<progress_level::internal>(
@@ -191,7 +195,7 @@ namespace upcxx {
                       cxs_here->template operator()<source_cx_event>();
                       
                       auto bounce_d_cont = [=]() {
-                        if(heap_d != host_heap)
+                        if (heap_d != host_heap)
                           backend::gasnet::deallocate(bounce_d, &backend::gasnet::sheap_footprint_rdzv);
 
                         serialization_traits<cxs_remote_t>::deserialized_value(*cxs_remote_heaped).template operator()<remote_cx_event>();
@@ -211,7 +215,7 @@ namespace upcxx {
             };
           };
           
-          if(heap_s == host_heap)
+          if (host_s)
             make_bounce_s_cont(buf_s)();
           else {
             void *bounce_s = backend::gasnet::allocate(size, 64, &backend::gasnet::sheap_footprint_rdzv);
@@ -240,6 +244,7 @@ namespace upcxx {
             upcxx::world(), rank_d,
             upcxx::bind(
               [=](deserialized_type_t<cxs_remote_t> &&cxs_remote) {
+                const bool host_d = (heap_d == host_heap || heap_d == private_heap);
                 void *bounce_d = heap_d == host_heap ? buf_d : backend::gasnet::allocate(size, 64, &backend::gasnet::sheap_footprint_rdzv);
                 deserialized_type_t<cxs_remote_t> *cxs_remote_heaped =
                   new deserialized_type_t<cxs_remote_t>(std::move(cxs_remote));
@@ -247,7 +252,7 @@ namespace upcxx {
                 detail::rma_copy_get(bounce_d, rank_s, bounce_s, size,
                   backend::gasnet::make_handle_cb([=]() {
                     auto bounce_d_cont = [=]() {
-                      if(heap_d != host_heap)
+                      if (!host_d)
                         backend::gasnet::deallocate(bounce_d, &backend::gasnet::sheap_footprint_rdzv);
                       
                       cxs_remote_heaped->template operator()<remote_cx_event>();
@@ -256,7 +261,7 @@ namespace upcxx {
                       backend::send_am_persona<progress_level::internal>(
                         upcxx::world(), rank_s, initiator_per,
                         [=]() {
-                          if(heap_s != host_heap)
+                          if (heap_s != host_heap)
                             backend::gasnet::deallocate(bounce_s, &backend::gasnet::sheap_footprint_rdzv);
                           else {
                             // source didnt use bounce buffer, need to source_cx now

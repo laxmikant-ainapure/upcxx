@@ -19,18 +19,22 @@ void upcxx::detail::rma_copy_local(
     cuda::event_cb *cb
   ) {
 
-  if(heap_d == host_heap && heap_s == host_heap) {
+  const bool host_d = (heap_d == host_heap || heap_d == private_heap);
+  const bool host_s = (heap_s == host_heap || heap_s == private_heap);
+
+  if( host_d && host_s) { // both sides in local host memory
     std::memmove(buf_d, buf_s, size);
     cb->execute_and_delete();
   }
-  else {
+  else { // one or both sides on device
   #if UPCXX_CUDA_ENABLED
-    int heap_main = heap_d != host_heap ? heap_d : heap_s;
+    int heap_main = !host_d ? heap_d : heap_s;
+    UPCXX_ASSERT(heap_main > 0);
     cuda::device_state *st = cuda::device_state::get(heap_main);
     
     CU_CHECK(cuCtxPushCurrent(st->context));
 
-    if(heap_d != host_heap && heap_s != host_heap) {
+    if(!host_d && !host_s) {
       cuda::device_state *st_d = cuda::device_state::get(heap_d);
       cuda::device_state *st_s = cuda::device_state::get(heap_s);
       
@@ -41,11 +45,12 @@ void upcxx::detail::rma_copy_local(
         size, st->stream
       ));
     }
-    else if(heap_d != host_heap) {
+    else if(!host_d) {
       // host to device
       CU_CHECK(cuMemcpyHtoDAsync(reinterpret_cast<CUdeviceptr>(buf_d), buf_s, size, st->stream));
     }
     else {
+      UPCXX_ASSERT(!host_s);
       // device to host
       CU_CHECK(cuMemcpyDtoHAsync(buf_d, reinterpret_cast<CUdeviceptr>(buf_s), size, st->stream));
     }
