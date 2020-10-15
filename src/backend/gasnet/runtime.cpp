@@ -484,6 +484,7 @@ void upcxx::init() {
     backend::init_count = 0; 
     ok = gex_Client_Init(&client, &endpoint, &world_tm, "upcxx", nullptr, nullptr, 0);
     UPCXX_ASSERT_ALWAYS(ok == GASNET_OK);
+    UPCXX_ASSERT_ALWAYS(gex_EP_QueryIndex(endpoint) == 0);
     backend::init_count = 1;
   }
 
@@ -2451,4 +2452,11 @@ namespace upcxx {
 // Other library ident strings live in watermark.cpp
 
 GASNETT_IDENT(UPCXX_IdentString_Network, "$UPCXXNetwork: " _STRINGIFY(GASNET_CONDUIT_NAME) " $");
+
+// requires cuda_internal.hpp
+#if UPCXX_CUDA_USE_MK
+  GASNETT_IDENT(UPCXX_IdentString_CUDAGASNet, "$UPCXXCUDAGASNet: 1 $");
+#else
+  GASNETT_IDENT(UPCXX_IdentString_CUDAGASNet, "$UPCXXCUDAGASNet: 0 $");
+#endif
 
