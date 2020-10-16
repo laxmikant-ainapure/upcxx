@@ -538,7 +538,7 @@ dirac.clang_floor:
 ##
 
 .catalina:
-  tags: [ shell, lbnl, class, xcode-11 ]
+  tags: [ shell, lbnl, class, xcode-latest ]
   variables:
     CI_MAKE_PARALLEL: "-j4"
     MY_OS:   'macos'
@@ -565,7 +565,7 @@ catalina.gcc:
 ##
 
 .el-capitan:
-  tags: [ shell, lbnl, class, xcode-8 ]
+  tags: [ shell, lbnl, class, xcode-floor ]
   variables:
     CI_MAKE_PARALLEL: "-j4"
     MY_OS:   'macos'
