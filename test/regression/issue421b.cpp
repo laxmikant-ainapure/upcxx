@@ -4,6 +4,29 @@
 
 using namespace upcxx;
 
+static bool done = false;
+
+struct B {
+  void operator()() {
+    done = true;
+  }
+};
+
+// test copy+as_rpc() with non-trivial, asymmetric serialization
+struct A {
+  B fn{};
+  struct upcxx_serialization {
+    template<typename Writer>
+    static void serialize(Writer &w, const A &a) {
+      w.write(a.fn);
+    }
+    template<typename Reader>
+    static B* deserialize(Reader &r, void *spot) {
+      return new(spot) B{r.template read<B>()};
+    }
+  };
+};
+
 int main() {
   upcxx::init();
   print_test_header();
@@ -15,7 +38,6 @@ int main() {
   *gp3.local() = 420 + rank_me();
   dist_object<std::pair<global_ptr<int>,
                         global_ptr<int>>> dptr(std::make_pair(gp2, gp3));
-  static bool done = false;
   int left = (rank_me() + rank_n() - 1) % rank_n();
   int right = (rank_me() + 1) % rank_n();
   global_ptr<int> gp_left2, gp_left3;
@@ -25,14 +47,14 @@ int main() {
   barrier();
 
   // local to local
-  copy(gp1, gp2, 1, remote_cx::as_rpc([]() { done = true; }));
+  copy(gp1, gp2, 1, remote_cx::as_rpc(A{}));
   while (!done) upcxx::progress();
   assert(*gp2.local() == 42);
   done = false;
   barrier();
 
   // local to remote
-  copy(gp3, gp_left2, 1, remote_cx::as_rpc([]() { done = true; }));
+  copy(gp3, gp_left2, 1, remote_cx::as_rpc(A{}));
   while (!done) upcxx::progress();
   done = false;
   barrier();
@@ -40,7 +62,7 @@ int main() {
   barrier();
 
   // remote to local
-  copy(gp_left2, gp3, 1, remote_cx::as_rpc([]() { done = true; }));
+  copy(gp_left2, gp3, 1, remote_cx::as_rpc(A{}));
   while (!done) upcxx::progress();
   done = false;
   barrier();
@@ -48,7 +70,7 @@ int main() {
   barrier();
 
   // remote to remote
-  copy(gp_left3, gp_right2, 1, remote_cx::as_rpc([]() { done = true; }));
+  copy(gp_left3, gp_right2, 1, remote_cx::as_rpc(A{}));
   while (!done) upcxx::progress();
   done = false;
   barrier();
