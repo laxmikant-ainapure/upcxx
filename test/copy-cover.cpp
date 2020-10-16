@@ -148,24 +148,23 @@ int main(int argc, char *argv[]) {
             UPCXX_ASSERT_ALWAYS(rank == upcxx::rank_me());
             rc_count++;
           };
-          // RC disabled due to issue #421
           future<> of, sf;
 
           // private -> heapA
-          std::tie(of, sf) = upcxx::copy<val_t>(priv_src, bufA, bufelems, cxs);
-    //                                            cxs | remote_cx::as_rpc(rc,bufA.where()));
+          std::tie(of, sf) = upcxx::copy<val_t>(priv_src, bufA, bufelems, 
+                                                cxs | remote_cx::as_rpc(rc,bufA.where()));
           sf.wait(); 
           of.wait();
 
           // heapA -> heapB
-          std::tie(of, sf) = upcxx::copy<val_t>(bufA, bufB, bufelems, cxs);
-      //                                          cxs | remote_cx::as_rpc(rc,bufB.where()));
+          std::tie(of, sf) = upcxx::copy<val_t>(bufA, bufB, bufelems,
+                                                cxs | remote_cx::as_rpc(rc,bufB.where()));
           sf.wait(); 
           of.wait();
 
           // heapB -> private
-          std::tie(of, sf) = upcxx::copy<val_t>(bufB, priv_dst, bufelems, cxs);
-      //                                          cxs | remote_cx::as_rpc(rc,me));
+          std::tie(of, sf) = upcxx::copy<val_t>(bufB, priv_dst, bufelems,
+                                                cxs | remote_cx::as_rpc(rc,me));
           sf.wait(); 
           of.wait();
 
@@ -188,7 +187,7 @@ int main(int argc, char *argv[]) {
         step++;
       }} // A/B bufs
 
-      //do { upcxx::progress(); } while (rc_count < 3 * bufcnt*bufcnt);
+      do { upcxx::progress(); } while (rc_count < 3 * bufcnt*bufcnt);
       rc_count = 0;
       upcxx::barrier();
     } // round
