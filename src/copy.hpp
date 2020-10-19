@@ -128,14 +128,17 @@ namespace upcxx {
       
       backend::send_am_master<progress_level::internal>(
         upcxx::world(), rank_d,
-        [=]() {
+        upcxx::bind([=](deserialized_type_t<cxs_remote_t> &&cxs_remote) {
           auto operation_cx_as_internal_future = upcxx::completions<upcxx::future_cx<upcxx::operation_cx_event, progress_level::internal>>{{}};
+          deserialized_type_t<cxs_remote_t> *cxs_remote_heaped =
+            new deserialized_type_t<cxs_remote_t>(std::move(cxs_remote));
           
           detail::copy( heap_s, rank_s, buf_s,
                         heap_d, rank_d, buf_d,
                         size, operation_cx_as_internal_future )
           .then([=]() {
-            const_cast<cxs_remote_t&>(cxs_remote).template operator()<remote_cx_event>();
+            cxs_remote_heaped->template operator()<remote_cx_event>();
+            delete cxs_remote_heaped;
             
             backend::send_am_persona<progress_level::internal>(
               upcxx::world(), initiator, initiator_per,
@@ -146,7 +149,7 @@ namespace upcxx {
               }
             );
           });
-        }
+        }, std::move(cxs_remote))
       );
     }
     else if(rank_d == rank_s) {
@@ -154,7 +157,7 @@ namespace upcxx {
         cuda::make_event_cb([=]() {
           cxs_here->template operator()<source_cx_event>();
           cxs_here->template operator()<operation_cx_event>();
-          const_cast<cxs_remote_t&>(cxs_remote).template operator()<remote_cx_event>();
+          serialization_traits<cxs_remote_t>::deserialized_value(cxs_remote).template operator()<remote_cx_event>();
           delete cxs_here;
         })
       );
@@ -191,7 +194,7 @@ namespace upcxx {
                         if(heap_d != host_heap)
                           backend::gasnet::deallocate(bounce_d, &backend::gasnet::sheap_footprint_rdzv);
 
-                        cxs_remote_heaped->template operator()<remote_cx_event>();
+                        serialization_traits<cxs_remote_t>::deserialized_value(*cxs_remote_heaped).template operator()<remote_cx_event>();
                         cxs_here->template operator()<operation_cx_event>();
                         delete cxs_remote_heaped;
                         delete cxs_here;
@@ -236,8 +239,10 @@ namespace upcxx {
           backend::send_am_master<progress_level::internal>(
             upcxx::world(), rank_d,
             upcxx::bind(
-              [=](cxs_remote_t &&cxs_remote) {
+              [=](deserialized_type_t<cxs_remote_t> &&cxs_remote) {
                 void *bounce_d = heap_d == host_heap ? buf_d : backend::gasnet::allocate(size, 64, &backend::gasnet::sheap_footprint_rdzv);
+                deserialized_type_t<cxs_remote_t> *cxs_remote_heaped =
+                  new deserialized_type_t<cxs_remote_t>(std::move(cxs_remote));
                 
                 detail::rma_copy_get(bounce_d, rank_s, bounce_s, size,
                   backend::gasnet::make_handle_cb([=]() {
@@ -245,7 +250,8 @@ namespace upcxx {
                       if(heap_d != host_heap)
                         backend::gasnet::deallocate(bounce_d, &backend::gasnet::sheap_footprint_rdzv);
                       
-                      const_cast<cxs_remote_t&>(cxs_remote).template operator()<remote_cx_event>();
+                      cxs_remote_heaped->template operator()<remote_cx_event>();
+                      delete cxs_remote_heaped;
 
                       backend::send_am_persona<progress_level::internal>(
                         upcxx::world(), rank_s, initiator_per,
