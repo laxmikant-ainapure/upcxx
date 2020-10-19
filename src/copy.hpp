@@ -23,30 +23,52 @@ namespace upcxx {
     constexpr int private_heap = -1;
 
     template<typename Cxs>
-    typename detail::completions_returner<
-      /*EventPredicate=*/detail::event_is_here,
-      /*EventValues=*/detail::rput_event_values,
-      typename std::decay<Cxs>::type
-    >::return_t
+    struct copy_traits {
+
+      using return_t = typename detail::completions_returner<
+            /*EventPredicate=*/detail::event_is_here,
+            /*EventValues=*/detail::rput_event_values,
+            typename std::decay<Cxs>::type
+          >::return_t;
+    
+      static constexpr bool want_op = completions_has_event<typename std::decay<Cxs>::type, operation_cx_event>::value;
+      static constexpr bool want_remote = completions_has_event<typename std::decay<Cxs>::type, remote_cx_event>::value;
+
+      template<typename T>
+      static void assert_sane() {
+        static_assert(
+          is_trivially_serializable<T>::value,
+          "RMA operations only work on TriviallySerializable types."
+        );
+
+        UPCXX_ASSERT_ALWAYS((want_op || want_remote),
+          "Not requesting either operation or remote completion is surely an "
+          "error. You'll have know way of ever knowing when the target memory is "
+          "safe to read or write again."
+        );
+      }
+    };
+
+    template<typename Cxs>
+    typename detail::copy_traits<Cxs>::return_t
     copy(const int heap_s, const intrank_t rank_s, void *const buf_s,
          const int heap_d, const intrank_t rank_d, void *const buf_d,
          const std::size_t size, Cxs &&cxs);
-  }
+
+  } // detail
+
   
   template<typename T, memory_kind Ks,
            typename Cxs = completions<future_cx<operation_cx_event>>>
   UPCXX_NODISCARD
   inline
-  typename detail::completions_returner<
-      /*EventPredicate=*/detail::event_is_here,
-      /*EventValues=*/detail::rput_event_values,
-    typename std::decay<Cxs>::type
-    >::return_t
+  typename detail::copy_traits<Cxs>::return_t
   copy(global_ptr<const T,Ks> src, T *dest, std::size_t n,
        Cxs &&cxs=completions<future_cx<operation_cx_event>>{{}}) {
     UPCXX_ASSERT_INIT();
     UPCXX_GPTR_CHK(src);
     UPCXX_ASSERT(src && dest, "pointer arguments to copy may not be null");
+    detail::copy_traits<Cxs>::template assert_sane<T>();
     return detail::copy( src.heap_idx_, src.rank_, src.raw_ptr_,
                          detail::private_heap, upcxx::rank_me(), dest,
                          n * sizeof(T), std::forward<Cxs>(cxs) );
@@ -56,16 +78,13 @@ namespace upcxx {
            typename Cxs = completions<future_cx<operation_cx_event>>>
   UPCXX_NODISCARD
   inline
-  typename detail::completions_returner<
-      /*EventPredicate=*/detail::event_is_here,
-      /*EventValues=*/detail::rput_event_values,
-      typename std::decay<Cxs>::type
-    >::return_t
+  typename detail::copy_traits<Cxs>::return_t
   copy(T const *src, global_ptr<T,Kd> dest, std::size_t n,
        Cxs &&cxs=completions<future_cx<operation_cx_event>>{{}}) {
     UPCXX_ASSERT_INIT();
     UPCXX_GPTR_CHK(dest);
     UPCXX_ASSERT(src && dest, "pointer arguments to copy may not be null");
+    detail::copy_traits<Cxs>::template assert_sane<T>();
     return detail::copy( detail::private_heap, upcxx::rank_me(), const_cast<T*>(src),
                          dest.heap_idx_, dest.rank_, dest.raw_ptr_,
                          n * sizeof(T), std::forward<Cxs>(cxs) );
@@ -75,16 +94,13 @@ namespace upcxx {
            typename Cxs = completions<future_cx<operation_cx_event>>>
   UPCXX_NODISCARD
   inline
-  typename detail::completions_returner<
-      /*EventPredicate=*/detail::event_is_here,
-      /*EventValues=*/detail::rput_event_values,
-      typename std::decay<Cxs>::type
-    >::return_t
+  typename detail::copy_traits<Cxs>::return_t
   copy(global_ptr<const T,Ks> src, global_ptr<T,Kd> dest, std::size_t n,
        Cxs &&cxs=completions<future_cx<operation_cx_event>>{{}}) {
     UPCXX_ASSERT_INIT();
     UPCXX_GPTR_CHK(src); UPCXX_GPTR_CHK(dest);
     UPCXX_ASSERT(src && dest, "pointer arguments to copy may not be null");
+    detail::copy_traits<Cxs>::template assert_sane<T>();
     return detail::copy(
       src.heap_idx_, src.rank_, src.raw_ptr_,
       dest.heap_idx_, dest.rank_, dest.raw_ptr_,
@@ -94,11 +110,7 @@ namespace upcxx {
 
  namespace detail {
   template<typename Cxs>
-  typename detail::completions_returner<
-      /*EventPredicate=*/detail::event_is_here,
-      /*EventValues=*/detail::rput_event_values,
-      typename std::decay<Cxs>::type
-  >::return_t
+  typename detail::copy_traits<Cxs>::return_t
   copy(const int heap_s, const intrank_t rank_s, void *const buf_s,
        const int heap_d, const intrank_t rank_d, void *const buf_d,
        const std::size_t size, Cxs &&cxs) {
