@@ -18,6 +18,12 @@ namespace upcxx {
         int heap_s, void const *buf_s, std::size_t size,
         cuda::event_cb *cb
       );
+    void rma_copy_remote(
+        int heap_s, intrank_t rank_s, void const * buf_s,
+        int heap_d, intrank_t rank_d, void * buf_d,
+        std::size_t size,      
+        backend::gasnet::handle_cb *cb
+    );
 
     constexpr int host_heap = 0;
     constexpr int private_heap = -1;
@@ -174,6 +180,28 @@ namespace upcxx {
           cxs_here->template operator()<operation_cx_event>();
           serialization_traits<cxs_remote_t>::deserialized_value(cxs_remote).template operator()<remote_cx_event>();
           delete cxs_here;
+        })
+      );
+    }
+    else if (backend::heap_state::use_mk()) { // MK-enabled GASNet backend
+      // GASNet will do a direct source-to-dest memory transfer.
+      // No bounce buffering, we just need to orchestrate the completions
+      detail::rma_copy_remote(heap_s, rank_s, buf_s, heap_d, rank_d, buf_d, size,
+        backend::gasnet::make_handle_cb([=]() {
+          cxs_here->template operator()<source_cx_event>();
+          cxs_here->template operator()<operation_cx_event>();
+          delete cxs_here;
+
+          if (rank_d == upcxx::rank_me()) { // in-place RC
+            serialization_traits<cxs_remote_t>::deserialized_value(cxs_remote).template operator()<remote_cx_event>();
+          } else { // initiator-chained RC
+            backend::send_am_master<progress_level::internal>(
+              upcxx::world(), rank_d,
+              upcxx::bind([=](deserialized_type_t<cxs_remote_t> &&cxs_remote) {
+                cxs_remote.template operator()<remote_cx_event>();
+              }, std::move(cxs_remote))
+            );
+          }
         })
       );
     }
