@@ -30,20 +30,26 @@ namespace {
         size_t lo=1<<20, hi=size_t(16)<<30;
         
         while(hi-lo > 64<<10) {
-          if(p) CU_CHECK_ALWAYS(cuMemFree(p));
+          if(p) {
+            CU_CHECK_ALWAYS(cuMemFree(p));
+            p = 0;
+          }
           size = (lo + hi)/2;
           CUresult r = cuMemAlloc(&p, size);
 
-          if(r == CUDA_ERROR_OUT_OF_MEMORY)
+          if(r == CUDA_ERROR_OUT_OF_MEMORY) {
             hi = size;
-          else if(r == CUDA_SUCCESS)
+            p = 0;
+          } else if(r == CUDA_SUCCESS) {
             lo = size;
-          else
+          } else {
             CU_CHECK_ALWAYS(r);
+          }
         }
 
         st->segment_to_free = p;
         base = reinterpret_cast<void*>(p);
+        if (!p) throw_bad_alloc = true;
 
       } else if(base == nullptr) { // allocate a particular size
         CUresult r = cuMemAlloc(&p, size);
