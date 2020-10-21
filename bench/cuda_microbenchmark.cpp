@@ -46,9 +46,8 @@ static double helper(int warmup, int window_size, int trials, int len,
                     fut.wait();
                 }
             }
+            all.wait();
         }
-
-        all.wait();
 
         std::chrono::steady_clock::time_point end =
             std::chrono::steady_clock::now();
