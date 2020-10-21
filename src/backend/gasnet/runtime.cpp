@@ -81,6 +81,8 @@ bool backend::verbose_noise = false;
 
 backend::heap_state *backend::heap_state::heaps[backend::heap_state::max_heaps] = {/*nullptr...*/};
 int backend::heap_state::heap_count = 1; // host segment is implicitly idx 0
+bool backend::heap_state::use_mk_ = false;  // set by heap_state::init()
+bool backend::heap_state::recycle = false; // set by heap_state::init()
 
 persona backend::master;
 persona_scope *backend::initial_master_scope = nullptr;
@@ -252,6 +254,19 @@ namespace {
 
 #include <upcxx/dl_malloc.h>
 
+void upcxx::backend::heap_state::init() {
+  heap_state::use_mk_ = false 
+  #if UPCXX_CUDA_ENABLED
+     || upcxx::cuda::use_mk()
+  #endif
+  /* || otherkind::use_mk() ... */;
+
+  // currently we do not recycle heap_idx when using GASNet memory kinds,
+  // until GASNet grows the ability to recycle endpoints
+  heap_state::recycle = !heap_state::use_mk_;
+}
+
+
 namespace {
   gex_TM_t world_tm;
   gex_TM_t local_tm;
@@ -347,6 +362,8 @@ namespace {
         UPCXX_ASSERT_ALWAYS(local_scratch_ptr);
       }
     }
+
+    backend::heap_state::init();
   }
   void init_localheap_tables(void);
 }
@@ -467,6 +484,7 @@ void upcxx::init() {
     backend::init_count = 0; 
     ok = gex_Client_Init(&client, &endpoint, &world_tm, "upcxx", nullptr, nullptr, 0);
     UPCXX_ASSERT_ALWAYS(ok == GASNET_OK);
+    UPCXX_ASSERT_ALWAYS(gex_EP_QueryIndex(endpoint) == 0);
     backend::init_count = 1;
   }
 
@@ -2434,4 +2452,11 @@ namespace upcxx {
 // Other library ident strings live in watermark.cpp
 
 GASNETT_IDENT(UPCXX_IdentString_Network, "$UPCXXNetwork: " _STRINGIFY(GASNET_CONDUIT_NAME) " $");
+
+// requires cuda_internal.hpp
+#if UPCXX_CUDA_USE_MK
+  GASNETT_IDENT(UPCXX_IdentString_CUDAGASNet, "$UPCXXCUDAGASNet: 1 $");
+#else
+  GASNETT_IDENT(UPCXX_IdentString_CUDAGASNet, "$UPCXXCUDAGASNet: 0 $");
+#endif
 

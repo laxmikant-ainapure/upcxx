@@ -1,12 +1,19 @@
 #include <upcxx/cuda.hpp>
 #include <upcxx/cuda_internal.hpp>
 #include <upcxx/reduce.hpp>
+#include <upcxx/backend/gasnet/runtime_internal.hpp>
 
 namespace detail = upcxx::detail;
 
 using std::size_t;
 
 #if UPCXX_CUDA_ENABLED
+#if UPCXX_CUDA_USE_MK
+  bool upcxx::cuda::use_mk() { return true; }
+#else
+  bool upcxx::cuda::use_mk() { return false; }
+#endif
+
 namespace {
   detail::segment_allocator make_segment(int heap_idx, void *base, size_t size) {
     upcxx::cuda::device_state *st = heap_idx <= 0 ? nullptr :
@@ -73,10 +80,31 @@ namespace {
       // TODO: collect and report information about the failing request in exn.what()
       throw std::bad_alloc();
     } else {
-      // TODO: wire-up the GASNet segment
-      //   gex_Segment_Create()
-      //   gex_EP_BindSegment()
-      //   gex_EP_PublishBoundSegment()
+      #if UPCXX_CUDA_USE_MK
+      gex_TM_t TM0 = upcxx::backend::gasnet::handle_of(upcxx::world()); UPCXX_ASSERT(TM0 != GEX_TM_INVALID);
+      if (st) {
+        int ok;
+        gex_Client_t client = gex_TM_QueryClient(TM0);
+
+        UPCXX_ASSERT(st->segment == GEX_SEGMENT_INVALID);
+        ok = gex_Segment_Create(&st->segment, client, base, size, st->kind, 0);
+        UPCXX_ASSERT_ALWAYS(ok == GASNET_OK && st->segment != GEX_SEGMENT_INVALID, 
+          "gex_Segment_Create("<<size<<") failed for CUDA device " << st->device_id);
+        
+        gex_EP_BindSegment(st->ep, st->segment, 0);
+        UPCXX_ASSERT(gex_EP_QuerySegment(st->ep) == st->segment, 
+          "gex_EP_BindSegment() failed for CUDA device " << st->device_id);
+
+        ok = gex_EP_PublishBoundSegment(TM0, &st->ep, 1, 0);
+        UPCXX_ASSERT_ALWAYS(ok == GASNET_OK,
+          "gex_EP_PublishBoundSegment() failed for CUDA device " << st->device_id);
+      } else { // matching collective call for inactive ranks
+        int ok = gex_EP_PublishBoundSegment(TM0, nullptr, 0, 0);
+        UPCXX_ASSERT_ALWAYS(ok == GASNET_OK,
+          "gex_EP_PublishBoundSegment() failed for inactive CUDA device ");
+      }
+      #endif
+
       return detail::segment_allocator(base, size);
     }
   } // make_segment
@@ -134,8 +162,28 @@ upcxx::cuda_device::cuda_device(int device):
       st->alloc_base = nullptr;
       st->segment_to_free = reinterpret_cast<CUdeviceptr>(nullptr);
 
-      // TODO: gex_EP_Create
-      st->ep_index = heap_idx_;
+      #if UPCXX_CUDA_USE_MK
+      {
+        int ok;
+        gex_TM_t TM0 = backend::gasnet::handle_of(upcxx::world()); UPCXX_ASSERT(TM0 != GEX_TM_INVALID);
+        gex_Client_t client = gex_TM_QueryClient(TM0);
+        gex_MK_Create_args_t args;
+
+        args.gex_flags = 0;
+        args.gex_class = GEX_MK_CLASS_CUDA_UVA;
+        args.gex_args.gex_class_cuda_uva.gex_CUdevice = device;
+        ok = gex_MK_Create(&st->kind, client, &args, 0);
+        UPCXX_ASSERT_ALWAYS(ok == GASNET_OK, "gex_MK_Create failed for CUDA device " << device);
+
+        ok = gex_EP_Create(&st->ep, client, GEX_EP_CAPABILITY_RMA, 0);
+        UPCXX_ASSERT_ALWAYS(ok == GASNET_OK, "gex_EP_Create failed for heap_idx " << heap_idx_);
+
+        gex_EP_Index_t epidx  = gex_EP_QueryIndex(st->ep);
+        UPCXX_ASSERT_ALWAYS(epidx == heap_idx_, 
+                           "gex_EP_Create generated unexpected EP_Index "<<epidx<<"for heap_idx "<<heap_idx_);
+        st->segment = GEX_SEGMENT_INVALID;
+      }
+      #endif
       
       CU_CHECK_ALWAYS(cuStreamCreate(&st->stream, CU_STREAM_NON_BLOCKING));
       backend::heap_state::get(heap_idx_,true) = st;
@@ -166,7 +214,6 @@ void upcxx::cuda_device::destroy(upcxx::entry_barrier eb) {
     cuda::device_state *st = cuda::device_state::get(heap_idx_);
     UPCXX_ASSERT(st != nullptr);
     UPCXX_ASSERT(st->device_id == device_);
-    UPCXX_ASSERT(st->ep_index == (gex_EP_Index_t)heap_idx_);
 
     if (st->alloc_base) {
       detail::device_allocator_core<upcxx::cuda_device>* alloc = 
@@ -176,17 +223,23 @@ void upcxx::cuda_device::destroy(upcxx::entry_barrier eb) {
       UPCXX_ASSERT(st->alloc_base == &tombstone);
     }
 
+    #if UPCXX_CUDA_USE_MK
     // TODO: once they are provided, eventually will do:
     //   gex_Segment_Destroy()
     //   gex_MK_Destroy()
     //   gex_EP_Destroy()  
     // and modify heap_state to allow recycling of heap_idx
+      st->segment = GEX_SEGMENT_INVALID;
+      st->ep =      GEX_EP_INVALID;
+      st->kind =    GEX_MK_INVALID;
+    #endif
     
     CU_CHECK_ALWAYS(cuStreamDestroy(st->stream));
     CU_CHECK_ALWAYS(cuCtxSetCurrent(nullptr));
     CU_CHECK_ALWAYS(cuDevicePrimaryCtxRelease(st->device_id));
     
     backend::heap_state::get(heap_idx_) = nullptr;
+    backend::heap_state::free_index(heap_idx_);
     delete st;
   #endif
   
