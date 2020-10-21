@@ -199,7 +199,7 @@ namespace backend {
   #if UPCXX_CUDA_ENABLED && UPCXX_MAXEPS > 1
     static constexpr int max_heaps = UPCXX_MAXEPS;
   #else
-    static constexpr int max_heaps = 32;
+    static constexpr int max_heaps = 33;
   #endif
     static_assert(max_heaps > 1, "bad value of UPCXX_MAXEPS");
 
