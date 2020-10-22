@@ -22,6 +22,9 @@ namespace {
 
     if (st) { // creating a real device heap, possibly allocating memory
 
+      UPCXX_ASSERT_ALWAYS(size != 0, 
+        "device_allocator<cuda_device> constructor requested invalid segment size="<<size);
+
       CU_CHECK(cuCtxPushCurrent(st->context));
       
       CUdeviceptr p = 0x0;
@@ -56,8 +59,11 @@ namespace {
         if(r == CUDA_ERROR_OUT_OF_MEMORY) {
           throw_bad_alloc = true;
           p = reinterpret_cast<CUdeviceptr>(nullptr);
-        } else
-          UPCXX_ASSERT_ALWAYS(r == CUDA_SUCCESS, "Requested cuda allocation failed: size="<<size<<", return="<<int(r));
+        } else if (r != CUDA_SUCCESS) {
+          std::string s("Requested cuda allocation failed: size=");
+          s += std::to_string(size);
+          upcxx::cuda::cu_failed(r, __FILE__, __LINE__, s.c_str()); 
+        }
         
         st->segment_to_free = p;
         base = reinterpret_cast<void*>(p);
