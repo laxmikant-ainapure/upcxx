@@ -52,7 +52,7 @@ int main() {
   if(upcxx::rank_me() == 0)
     std::cout << "SUCCESS" << std::endl;
 
-  delete incr;
+  delete[] incr;
   upcxx::delete_array(recv_buff);
   
   upcxx::finalize();
