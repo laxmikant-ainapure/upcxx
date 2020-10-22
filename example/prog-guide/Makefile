@@ -41,6 +41,7 @@ EXAMPLES = \
   view-histogram1 \
   view-histogram2 \
   view-matrix-tasks \
+  view-accumulate \
   non-contig-example \
   team_simple \
   team_advanced \

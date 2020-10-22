@@ -22,7 +22,7 @@ upcxx::future<> update_remote_matrix(
     element const *elts, int elt_n
   ) {
   return upcxx::rpc(rank,
-    [](upcxx::view<element> elts_in_rpc) {
+    [](upcxx::view<element> const &elts_in_rpc) {
       upcxx::future<> all_done = upcxx::make_future();
       
       for(int w=0; w < worker_n; w++) {
@@ -31,7 +31,7 @@ upcxx::future<> update_remote_matrix(
           [w, elts_in_rpc]() {
             // Sum subset of elements into `my_matrix` according to a
             // round-robin mapping of matrix rows to workers.
-            for(element elt: elts_in_rpc) {
+            for(element const &elt: elts_in_rpc) {
               if(w == elt.row % worker_n)
                 my_matrix[elt.row][elt.col] += elt.value;
             }
