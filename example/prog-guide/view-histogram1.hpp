@@ -63,7 +63,7 @@ upcxx::future<> send_histo1_byview(histogram1 const &histo) {
     upcxx::rpc(cluster.first,
       upcxx::operation_cx::as_promise(all_done),
       
-      [](upcxx::view<std::pair<const std::string, double>> histo_view) {
+      [](upcxx::view<std::pair<const std::string, double>> const &histo_view) {
         // Pain point from `send_histo1_byval`: Eliminated.
         
         // Traverse key-values directly in network buffer.
