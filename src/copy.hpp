@@ -39,6 +39,7 @@ namespace upcxx {
     
       static constexpr bool want_op = completions_has_event<typename std::decay<Cxs>::type, operation_cx_event>::value;
       static constexpr bool want_remote = completions_has_event<typename std::decay<Cxs>::type, remote_cx_event>::value;
+      static constexpr bool want_source = completions_has_event<typename std::decay<Cxs>::type, source_cx_event>::value;
 
       template<typename T>
       static void assert_sane() {
@@ -183,6 +184,62 @@ namespace upcxx {
           delete cxs_here;
         })
       );
+    }
+    else if (backend::heap_state::use_mk() && 
+             rank_s == initiator && // MK put to different-rank
+             ( ( copy_traits::want_remote && !copy_traits::want_op ) // RC but not OC
+               || // using GDR and UPCXX_BUG4148_WORKAROUND
+               ((heap_d > 0 || heap_s > 0) && backend::heap_state::bug4148_workaround())
+             ) 
+      ) { // convert MK put into MK get, either as an optimization or to avoid correctness bug 4148
+      UPCXX_ASSERT(rank_d != initiator);
+      UPCXX_ASSERT(heap_d != private_heap);
+      void *eff_buf_s = buf_s;
+      int eff_heap_s = heap_s;
+      void *bounce_s = nullptr;
+      bool must_ack = copy_traits::want_op;
+      if (heap_s == private_heap) {
+        // must use a bounce buffer to make the source remotely accessible
+        bounce_s = backend::gasnet::allocate(size, 64, &backend::gasnet::sheap_footprint_rdzv);
+        std::memcpy(bounce_s, buf_s, size);
+        eff_buf_s = bounce_s;
+        eff_heap_s = host_heap;
+        // we can signal source_cx as soon as it's populated
+        cxs_here->template operator()<source_cx_event>();
+        must_ack = true;
+      } else must_ack |= copy_traits::want_source;
+
+      backend::send_am_master<progress_level::internal>(
+        upcxx::world(), rank_d,
+        upcxx::bind([=](deserialized_type_t<cxs_remote_t> &&cxs_remote) {
+          // at target
+          deserialized_type_t<cxs_remote_t> *cxs_remote_heaped =
+               new deserialized_type_t<cxs_remote_t>(std::move(cxs_remote));
+
+          detail::rma_copy_remote(eff_heap_s, rank_s, eff_buf_s, heap_d, rank_d, buf_d, size,
+            backend::gasnet::make_handle_cb([=]() {
+              // RMA complete at target
+              cxs_remote_heaped->template operator()<remote_cx_event>();
+              delete cxs_remote_heaped;
+
+              if (must_ack) {
+                 backend::send_am_persona<progress_level::internal>(
+                   upcxx::world(), rank_s, initiator_per,
+                   [=]() {
+                     // back at initiator
+                     if (bounce_s) backend::gasnet::deallocate(bounce_s, &backend::gasnet::sheap_footprint_rdzv);
+                     else cxs_here->template operator()<source_cx_event>();
+                     cxs_here->template operator()<operation_cx_event>();
+                     delete cxs_here;
+                   }); // AM to initiator
+              } // must_ack
+            }) // gasnet::make_handle_cb
+          ); // rma_copy_remote
+        }, std::move(cxs_remote)) // bind
+      ); // AM to target
+
+      // initiator
+      if (!must_ack) delete cxs_here;
     }
     else if (backend::heap_state::use_mk()) { // MK-enabled GASNet backend
       // GASNet will do a direct source-to-dest memory transfer.
