@@ -136,16 +136,16 @@ namespace upcxx {
     cxs_remote_t cxs_remote(std::forward<Cxs>(cxs));
 
     persona *initiator_per = &upcxx::current_persona();
-    
+    const intrank_t initiator = upcxx::rank_me();
+
     auto returner = detail::completions_returner<
         /*EventPredicate=*/detail::event_is_here,
         /*EventValues=*/detail::rput_event_values,
         CxsDecayed
       >(*cxs_here);
 
-    if(upcxx::rank_me() != rank_d && upcxx::rank_me() != rank_s) { // 3rd party copy
+    if (initiator != rank_d && initiator != rank_s) { // 3rd party copy
       UPCXX_ASSERT(heap_s != detail::private_heap && heap_d != detail::private_heap);
-      int initiator = upcxx::rank_me();
       
       backend::send_am_master<progress_level::internal>(
         upcxx::world(), rank_d,
@@ -174,7 +174,7 @@ namespace upcxx {
       );
     }
     else if(rank_d == rank_s) { // fully loopback on the calling process
-      UPCXX_ASSERT(rank_d == upcxx::rank_me()); 
+      UPCXX_ASSERT(rank_d == initiator); 
       detail::rma_copy_local(heap_d, buf_d, heap_s, buf_s, size,
         cuda::make_event_cb([=]() {
           cxs_here->template operator()<source_cx_event>();
@@ -198,7 +198,7 @@ namespace upcxx {
             }, /*known_active=*/std::false_type());
           
           if (copy_traits::want_remote) {
-            if (rank_d == upcxx::rank_me()) { // in-place RC
+            if (rank_d == initiator) { // in-place RC
               serialization_traits<cxs_remote_t>::deserialized_value(cxs_remote).template operator()<remote_cx_event>();
             } else { // initiator-chained RC
               backend::send_am_master<progress_level::internal>(
@@ -212,8 +212,8 @@ namespace upcxx {
         })
       );
     }
-    else if(rank_d == upcxx::rank_me()) {
-      UPCXX_ASSERT(rank_s != upcxx::rank_me());
+    else if(rank_d == initiator) {
+      UPCXX_ASSERT(rank_s != initiator);
       UPCXX_ASSERT(heap_s != private_heap);
       cxs_remote_t *cxs_remote_heaped = new cxs_remote_t(std::move(cxs_remote));
       
@@ -277,7 +277,7 @@ namespace upcxx {
       );
     }
     else {
-      UPCXX_ASSERT(rank_s == upcxx::rank_me() && rank_d != upcxx::rank_me());
+      UPCXX_ASSERT(rank_s == initiator && rank_d != initiator);
       UPCXX_ASSERT(heap_d != private_heap);
       /* We are the source, so semantically this is a PUT even though we use a
        * GET to transfer over network.
