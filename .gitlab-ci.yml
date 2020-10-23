@@ -479,8 +479,9 @@ theta.llvm:
     GASNET_SPAWNFN: L
     GASNET_SUPERNODE_MAXSIZE: 2
 
+# TODO: remove '.rules_manual' from extends once issue 421 is resolved
 dirac.pgi:
-  extends: [ .generic, .new_pgi, .dirac ]
+  extends: [ .generic, .new_pgi, .dirac, .rules_manual ]
   resource_group: pgi_license
   before_script:
     - module load PrgEnv/pgi
@@ -505,8 +506,9 @@ dirac.clang:
     - module load PrgEnv/llvm
     - export CC=clang CXX=clang++
 
+# TODO: remove '.rules_manual' from extends once issue 421 is resolved
 dirac.pgi_floor:
-  extends: [ .generic, .old_pgi, .dirac ]
+  extends: [ .generic, .old_pgi, .dirac, .rules_manual ]
   resource_group: pgi_license
   before_script:
     - module load PrgEnv/pgi/19.1
@@ -603,8 +605,9 @@ el-capitan.gcc_floor:
     GASNET_SUPERNODE_MAXSIZE: 2
     GASNET_CONFIGURE_ARGS: '--enable-force-posix-realtime'
 
+# TODO: remove '.rules_manual' from extends once issue 421 is resolved
 power9.pgi:
-  extends: [ .generic, .new_pgi, .power9 ]
+  extends: [ .generic, .new_pgi, .power9, .rules_manual ]
   before_script:
     - module load pgi
     - export CC=pgcc CXX=pgc++
