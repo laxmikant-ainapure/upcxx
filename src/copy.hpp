@@ -130,6 +130,7 @@ namespace upcxx {
       /*EventPredicate=*/detail::event_is_remote,
       /*EventValues=*/detail::rput_event_values,
       CxsDecayed>;
+    using copy_traits = detail::copy_traits<Cxs>;
 
     cxs_here_t *cxs_here = new cxs_here_t(std::forward<Cxs>(cxs));
     cxs_remote_t cxs_remote(std::forward<Cxs>(cxs));
@@ -195,17 +196,19 @@ namespace upcxx {
               cxs_here->template operator()<operation_cx_event>();
               delete cxs_here;
             }, /*known_active=*/std::false_type());
-
-          if (rank_d == upcxx::rank_me()) { // in-place RC
-            serialization_traits<cxs_remote_t>::deserialized_value(cxs_remote).template operator()<remote_cx_event>();
-          } else { // initiator-chained RC
-            backend::send_am_master<progress_level::internal>(
-              upcxx::world(), rank_d,
-              upcxx::bind([=](deserialized_type_t<cxs_remote_t> &&cxs_remote) {
-                cxs_remote.template operator()<remote_cx_event>();
-              }, std::move(cxs_remote))
-            );
-          }
+          
+          if (copy_traits::want_remote) {
+            if (rank_d == upcxx::rank_me()) { // in-place RC
+              serialization_traits<cxs_remote_t>::deserialized_value(cxs_remote).template operator()<remote_cx_event>();
+            } else { // initiator-chained RC
+              backend::send_am_master<progress_level::internal>(
+                upcxx::world(), rank_d,
+                upcxx::bind([=](deserialized_type_t<cxs_remote_t> &&cxs_remote) {
+                  cxs_remote.template operator()<remote_cx_event>();
+                }, std::move(cxs_remote))
+              );
+            }
+          } // want_remote
         })
       );
     }
