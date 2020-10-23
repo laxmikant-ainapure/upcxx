@@ -1,11 +1,13 @@
 #include <upcxx/cuda.hpp>
 #include <upcxx/cuda_internal.hpp>
 #include <upcxx/reduce.hpp>
+#include <upcxx/allocate.hpp>
 #include <upcxx/backend/gasnet/runtime_internal.hpp>
 
 namespace detail = upcxx::detail;
 
 using std::size_t;
+using std::uint64_t;
 
 #if UPCXX_CUDA_ENABLED
 #if UPCXX_CUDA_USE_MK
@@ -18,9 +20,12 @@ namespace {
   detail::segment_allocator make_segment(int heap_idx, void *base, size_t size) {
     upcxx::cuda::device_state *st = heap_idx <= 0 ? nullptr :
                                     upcxx::cuda::device_state::get(heap_idx);
-    bool throw_bad_alloc = false;
+    uint64_t failed_alloc = 0;
 
     if (st) { // creating a real device heap, possibly allocating memory
+
+      UPCXX_ASSERT_ALWAYS(size != 0, 
+        "device_allocator<cuda_device> constructor requested invalid segment size="<<size);
 
       CU_CHECK(cuCtxPushCurrent(st->context));
       
@@ -30,28 +35,37 @@ namespace {
         size_t lo=1<<20, hi=size_t(16)<<30;
         
         while(hi-lo > 64<<10) {
-          if(p) CU_CHECK_ALWAYS(cuMemFree(p));
+          if(p) {
+            CU_CHECK_ALWAYS(cuMemFree(p));
+            p = 0;
+          }
           size = (lo + hi)/2;
           CUresult r = cuMemAlloc(&p, size);
 
-          if(r == CUDA_ERROR_OUT_OF_MEMORY)
+          if(r == CUDA_ERROR_OUT_OF_MEMORY) {
             hi = size;
-          else if(r == CUDA_SUCCESS)
+            p = 0;
+          } else if(r == CUDA_SUCCESS) {
             lo = size;
-          else
+          } else {
             CU_CHECK_ALWAYS(r);
+          }
         }
 
         st->segment_to_free = p;
         base = reinterpret_cast<void*>(p);
+        if (!p) failed_alloc = size;
 
       } else if(base == nullptr) { // allocate a particular size
         CUresult r = cuMemAlloc(&p, size);
         if(r == CUDA_ERROR_OUT_OF_MEMORY) {
-          throw_bad_alloc = true;
+          failed_alloc = size;
           p = reinterpret_cast<CUdeviceptr>(nullptr);
-        } else
-          UPCXX_ASSERT_ALWAYS(r == CUDA_SUCCESS, "Requested cuda allocation failed: size="<<size<<", return="<<int(r));
+        } else if (r != CUDA_SUCCESS) {
+          std::string s("Requested cuda allocation failed: size=");
+          s += std::to_string(size);
+          upcxx::cuda::cu_failed(r, __FILE__, __LINE__, s.c_str()); 
+        }
         
         st->segment_to_free = p;
         base = reinterpret_cast<void*>(p);
@@ -65,10 +79,21 @@ namespace {
     }
 
     // once segment is collectively created, decide whether we are keeping it.
-    // this is a effectively a user-level barrier, but not a documented guarantee
-    throw_bad_alloc = upcxx::reduce_all<bool>(throw_bad_alloc, upcxx::op_fast_bit_or).wait();
+    // this is a effectively a user-level barrier, but not a documented guarantee.
+    // This could be a simple boolean bit_or reduction to test if any process failed.
+    // However in order to improve error reporting upon allocation failure, 
+    // we instead reduce a max over a value constructed as: 
+    //   high 44 bits: size_that_failed | low 20 bits: rank_that_failed
+    uint64_t alloc_report_max = uint64_t(1LLU<<44) - 1;
+    uint64_t reduceval = std::min(failed_alloc, alloc_report_max);
+    uint64_t rank_report_max = (1LLU<<20) - 1;
+    uint64_t rank_tmp = std::min(std::uint64_t(upcxx::rank_me()), rank_report_max);
+    reduceval = (reduceval << 20) | rank_tmp;
+    reduceval = upcxx::reduce_all<uint64_t>(reduceval, upcxx::op_fast_max).wait();
+    uint64_t largest_failure = reduceval >> 20;
 
-    if (throw_bad_alloc) { // single-valued
+
+    if (largest_failure > 0) { // single-valued
       // at least one process failed to allocate, so collectively unwind and throw
       if (st && st->segment_to_free) {
         CU_CHECK(cuCtxPushCurrent(st->context));
@@ -77,8 +102,23 @@ namespace {
         CU_CHECK(cuCtxPopCurrent(&dump));
         st->segment_to_free = reinterpret_cast<CUdeviceptr>(nullptr);
       }
-      // TODO: collect and report information about the failing request in exn.what()
-      throw std::bad_alloc();
+
+      // collect info to report about the failing request in exn.what()
+      uint64_t report_size;
+      upcxx::intrank_t report_rank;
+      if (failed_alloc) { // ranks that failed report themselves directly
+        report_size = failed_alloc;
+        report_rank = upcxx::rank_me();
+      } else { // others report the largest failing allocation request from the reduction
+        UPCXX_ASSERT(largest_failure <= alloc_report_max);
+        if (largest_failure == alloc_report_max) report_size = 0; // size overflow
+        else report_size = largest_failure;
+        reduceval &= rank_report_max;
+        if (reduceval == rank_report_max) report_rank = -1; // rank overflow, don't know who
+        else report_rank = reduceval;
+      }
+
+      throw upcxx::bad_segment_alloc("cuda_device", report_size, report_rank);
     } else {
       #if UPCXX_CUDA_USE_MK
       gex_TM_t TM0 = upcxx::backend::gasnet::handle_of(upcxx::world()); UPCXX_ASSERT(TM0 != GEX_TM_INVALID);

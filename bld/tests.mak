@@ -119,6 +119,7 @@ test_exclude_all += \
 # Conditionally exclude tests that require CUDA support:
 ifeq ($(strip $(UPCXX_CUDA)),)
 test_exclude_all += \
+	test/bad-segment-alloc.cpp \
 	example/prog-guide/h-d.cpp \
 	example/prog-guide/h-d-remote.cpp
 endif

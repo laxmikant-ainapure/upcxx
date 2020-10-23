@@ -42,6 +42,29 @@ namespace upcxx {
      static constexpr const char *_base = "upcxx::bad_shared_alloc: ";
   };
   //////////////////////////////////////////////////////////////////////
+  struct bad_segment_alloc : public std::bad_alloc {
+    bad_segment_alloc(const char *device_typename=nullptr, size_t nbytes=0, intrank_t who=-1) {
+      std::stringstream ss;
+      if (!device_typename) device_typename = "Device";
+      ss << _base << "UPC++ failed to allocate " << device_typename << " segment memory";
+      if (who == -1) ss << " on one or more processes";
+      else           ss << " on process " << who << " (and possibly others)";
+      ss << "\n inside upcxx::device_allocator<" << device_typename <<"> segment-allocating constructor";
+      if (nbytes) ss << "\n while trying to allocate a " << nbytes <<  " byte segment";
+      ss << "\n You may need to request a smaller device segment to accomodate the memory capacity of your device.";
+      _what = ss.str();
+    }
+    bad_segment_alloc(const std::string & reason) : _what(_base) {
+      _what += reason;
+    }
+    virtual const char* what() const noexcept {
+      return _what.c_str();
+    }
+    private:
+     std::string _what;
+     static constexpr const char *_base = "upcxx::bad_segment_alloc: ";
+  };
+  //////////////////////////////////////////////////////////////////////
   /* Declared in: upcxx/backend_fwd.hpp
   
   void* allocate(std::size_t size,

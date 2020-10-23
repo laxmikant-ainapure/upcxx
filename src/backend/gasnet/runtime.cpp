@@ -270,6 +270,7 @@ void upcxx::backend::heap_state::init() {
 namespace {
   gex_TM_t world_tm;
   gex_TM_t local_tm;
+  gex_EP_t endpoint0;
 
   detail::par_mutex segment_lock_;
   mspace segment_mspace_;
@@ -472,19 +473,18 @@ void upcxx::init() {
   tls.is_primordial_thread = true;
 
   gex_Client_t client;
-  gex_EP_t endpoint;
   gex_Segment_t segment;
 
   if (upcxx_upc_is_linked()) {
-    upcxx_upc_init(&client, &endpoint, &world_tm);
+    upcxx_upc_init(&client, &endpoint0, &world_tm);
   } else { 
     // issue 419: we clear init across gex_Client_Init so that any processes forked 
     // inside this call don't appear to have an initialized UPC++ library, unless they 
     // return from this call and finish upcxx::init()
     backend::init_count = 0; 
-    ok = gex_Client_Init(&client, &endpoint, &world_tm, "upcxx", nullptr, nullptr, 0);
+    ok = gex_Client_Init(&client, &endpoint0, &world_tm, "upcxx", nullptr, nullptr, 0);
     UPCXX_ASSERT_ALWAYS(ok == GASNET_OK);
-    UPCXX_ASSERT_ALWAYS(gex_EP_QueryIndex(endpoint) == 0);
+    UPCXX_ASSERT_ALWAYS(gex_EP_QueryIndex(endpoint0) == 0);
     backend::init_count = 1;
   }
 
@@ -573,7 +573,7 @@ void upcxx::init() {
   }
 
   // AM handler registration
-  ok = gex_EP_RegisterHandlers(endpoint, am_table, sizeof(am_table)/sizeof(am_table[0]));
+  ok = gex_EP_RegisterHandlers(endpoint0, am_table, sizeof(am_table)/sizeof(am_table[0]));
   UPCXX_ASSERT_ALWAYS(ok == GASNET_OK);
 
   size_t am_medium_size = gex_AM_MaxRequestMedium(
@@ -1264,6 +1264,7 @@ void backend::validate_global_ptr(bool allow_null, intrank_t rank, void *raw_ptr
 
   do { // run diagnostics
     bool is_null = !raw_ptr;
+      // TODO: this will need adjustment when introducing offset-addressable kinds
 
     if (is_null) {
       if_pf(heap_idx != 0 || rank != 0) {
@@ -1296,19 +1297,52 @@ void backend::validate_global_ptr(bool allow_null, intrank_t rank, void *raw_ptr
     #ifndef UPCXX_GPTR_CHECK_SCALE
     #define UPCXX_GPTR_CHECK_SCALE 1024 // job size limit where we stop bounds-checking remote segs
     #endif
-    if (heap_idx == 0 && // host memory segment bounds-check
-        (rank_is_local(rank) || backend::rank_n <= UPCXX_GPTR_CHECK_SCALE)) {
-      void *owner_vbase;
-      uintptr_t size;
+    if (rank_is_local(rank) || backend::rank_n <= UPCXX_GPTR_CHECK_SCALE) {
+      // compute segment bounds
+      void *owner_vbase = nullptr;
+      size_t size = 0;
 
-      gex_Segment_QueryBound(world_tm, rank,
-                             &owner_vbase, nullptr, &size);
-      UPCXX_ASSERT_ALWAYS(owner_vbase && size);
-      void *owner_vlim = (void *)(((char*)owner_vbase) + size - 1);
-      if_pf (raw_ptr < owner_vbase || raw_ptr > owner_vlim) {
-        ss << pretty_type() << " out-of-bounds of host segment [" 
-           << owner_vbase << ", " << owner_vlim << "]\n";
-        error = true; break;
+      gex_TM_t tm = GEX_TM_INVALID;
+      if (heap_idx == 0) tm = world_tm; // host memory segment, ask GASNet
+      else { // device segment
+        if (rank == backend::rank_me) { // local device, we have bounds
+          backend::heap_state *hs = backend::heap_state::get(heap_idx, true);
+          if_pf (!hs || !hs->alloc_base) {
+            ss << pretty_type() << " representation corrupted or stale pointer, "
+               << "heap_idx does not correspond to an active device segment\n";
+            error = true; break;
+          }
+          std::tie(owner_vbase, size) = hs->alloc_base->seg_.segment_range();
+          UPCXX_ASSERT(owner_vbase && size);
+        }
+        #if GEX_SPEC_VERSION_MINOR >= 12 || GEX_SPEC_VERSION_MAJOR 
+        else if (backend::heap_state::use_mk()) { // query GEX for remote device EP
+          UPCXX_ASSERT(endpoint0 != GEX_EP_INVALID);
+          tm = gex_TM_Pair(endpoint0, heap_idx);
+        }
+        #endif
+      }
+
+      if (tm != GEX_TM_INVALID) {
+        int result = gex_Segment_QueryBound(tm, rank, &owner_vbase, nullptr, &size);
+        if_pf (result != GASNET_OK) { // can only be remote device heap that does not exist
+          UPCXX_ASSERT(heap_idx > 0);
+          UPCXX_ASSERT(rank != backend::rank_me);
+          ss << pretty_type() << " representation corrupted or stale pointer, "
+             << "heap_idx does not correspond to an active device segment\n";
+          error = true; break;
+        }
+        UPCXX_ASSERT(owner_vbase && size);
+      }
+      if (owner_vbase) {
+        UPCXX_ASSERT(size);
+        void *owner_vlim = (void *)(((char*)owner_vbase) + size - 1);
+        if_pf (raw_ptr < owner_vbase || raw_ptr > owner_vlim) {
+          const char *seg = (heap_idx ? "device" : "host");
+          ss << pretty_type() << " out-of-bounds of " << seg << " segment [" 
+             << owner_vbase << ", " << owner_vlim << "]\n";
+          error = true; break;
+        }
       }
     }
 
