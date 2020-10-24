@@ -152,15 +152,18 @@ namespace upcxx {
         upcxx::world(), rank_d,
         upcxx::bind([=](deserialized_type_t<cxs_remote_t> &&cxs_remote) {
           auto operation_cx_as_internal_future = upcxx::completions<upcxx::future_cx<upcxx::operation_cx_event, progress_level::internal>>{{}};
-          deserialized_type_t<cxs_remote_t> *cxs_remote_heaped =
-            new deserialized_type_t<cxs_remote_t>(std::move(cxs_remote));
+          deserialized_type_t<cxs_remote_t> *cxs_remote_heaped = (
+            copy_traits::want_remote ?
+              new deserialized_type_t<cxs_remote_t>(std::move(cxs_remote)) : nullptr);
           
           detail::copy( heap_s, rank_s, buf_s,
                         heap_d, rank_d, buf_d,
                         size, operation_cx_as_internal_future )
           .then([=]() {
-            cxs_remote_heaped->template operator()<remote_cx_event>();
-            delete cxs_remote_heaped;
+            if (copy_traits::want_remote) {
+              cxs_remote_heaped->template operator()<remote_cx_event>();
+              delete cxs_remote_heaped;
+            }
             
             backend::send_am_persona<progress_level::internal>(
               upcxx::world(), initiator, initiator_per,
@@ -213,14 +216,17 @@ namespace upcxx {
         upcxx::world(), rank_d,
         upcxx::bind([=](deserialized_type_t<cxs_remote_t> &&cxs_remote) {
           // at target
-          deserialized_type_t<cxs_remote_t> *cxs_remote_heaped =
-               new deserialized_type_t<cxs_remote_t>(std::move(cxs_remote));
+          deserialized_type_t<cxs_remote_t> *cxs_remote_heaped = (
+            copy_traits::want_remote ?
+               new deserialized_type_t<cxs_remote_t>(std::move(cxs_remote)) : nullptr);
 
           detail::rma_copy_remote(eff_heap_s, rank_s, eff_buf_s, heap_d, rank_d, buf_d, size,
             backend::gasnet::make_handle_cb([=]() {
               // RMA complete at target
-              cxs_remote_heaped->template operator()<remote_cx_event>();
-              delete cxs_remote_heaped;
+              if (copy_traits::want_remote) {
+                cxs_remote_heaped->template operator()<remote_cx_event>();
+                delete cxs_remote_heaped;
+              }
 
               if (must_ack) {
                  backend::send_am_persona<progress_level::internal>(
@@ -272,7 +278,9 @@ namespace upcxx {
     else if(rank_d == initiator) {
       UPCXX_ASSERT(rank_s != initiator);
       UPCXX_ASSERT(heap_s != private_heap);
-      cxs_remote_t *cxs_remote_heaped = new cxs_remote_t(std::move(cxs_remote));
+      cxs_remote_t *cxs_remote_heaped = (
+        copy_traits::want_remote ?
+          new cxs_remote_t(std::move(cxs_remote)) : nullptr);
       
       /* We are the destination, so semantically like a GET, even though a PUT
        * is used to transfer on the network
@@ -303,9 +311,11 @@ namespace upcxx {
                         if (heap_d != host_heap)
                           backend::gasnet::deallocate(bounce_d, &backend::gasnet::sheap_footprint_rdzv);
 
-                        serialization_traits<cxs_remote_t>::deserialized_value(*cxs_remote_heaped).template operator()<remote_cx_event>();
+                        if (copy_traits::want_remote) {
+                          serialization_traits<cxs_remote_t>::deserialized_value(*cxs_remote_heaped).template operator()<remote_cx_event>();
+                          delete cxs_remote_heaped;
+                        }
                         cxs_here->template operator()<operation_cx_event>();
-                        delete cxs_remote_heaped;
                         delete cxs_here;
                       };
                       
@@ -352,8 +362,9 @@ namespace upcxx {
             upcxx::bind(
               [=](deserialized_type_t<cxs_remote_t> &&cxs_remote) {
                 void *bounce_d = heap_d == host_heap ? buf_d : backend::gasnet::allocate(size, 64, &backend::gasnet::sheap_footprint_rdzv);
-                deserialized_type_t<cxs_remote_t> *cxs_remote_heaped =
-                  new deserialized_type_t<cxs_remote_t>(std::move(cxs_remote));
+                deserialized_type_t<cxs_remote_t> *cxs_remote_heaped = (
+                  copy_traits::want_remote ?
+                    new deserialized_type_t<cxs_remote_t>(std::move(cxs_remote)) : nullptr);
                 
                 detail::rma_copy_get(bounce_d, rank_s, bounce_s, size,
                   backend::gasnet::make_handle_cb([=]() {
@@ -361,8 +372,10 @@ namespace upcxx {
                       if (heap_d != host_heap)
                         backend::gasnet::deallocate(bounce_d, &backend::gasnet::sheap_footprint_rdzv);
                       
-                      cxs_remote_heaped->template operator()<remote_cx_event>();
-                      delete cxs_remote_heaped;
+                      if (copy_traits::want_remote) {
+                        cxs_remote_heaped->template operator()<remote_cx_event>();
+                        delete cxs_remote_heaped;
+                      }
 
                       backend::send_am_persona<progress_level::internal>(
                         upcxx::world(), rank_s, initiator_per,
