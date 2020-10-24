@@ -39,6 +39,7 @@ namespace upcxx {
     
       static constexpr bool want_op = completions_has_event<typename std::decay<Cxs>::type, operation_cx_event>::value;
       static constexpr bool want_remote = completions_has_event<typename std::decay<Cxs>::type, remote_cx_event>::value;
+      static constexpr bool want_source = completions_has_event<typename std::decay<Cxs>::type, source_cx_event>::value;
 
       template<typename T>
       static void assert_sane() {
@@ -130,21 +131,22 @@ namespace upcxx {
       /*EventPredicate=*/detail::event_is_remote,
       /*EventValues=*/detail::rput_event_values,
       CxsDecayed>;
+    using copy_traits = detail::copy_traits<Cxs>;
 
     cxs_here_t *cxs_here = new cxs_here_t(std::forward<Cxs>(cxs));
     cxs_remote_t cxs_remote(std::forward<Cxs>(cxs));
 
     persona *initiator_per = &upcxx::current_persona();
-    
+    const intrank_t initiator = upcxx::rank_me();
+
     auto returner = detail::completions_returner<
         /*EventPredicate=*/detail::event_is_here,
         /*EventValues=*/detail::rput_event_values,
         CxsDecayed
       >(*cxs_here);
 
-    if(upcxx::rank_me() != rank_d && upcxx::rank_me() != rank_s) { // 3rd party copy
+    if (initiator != rank_d && initiator != rank_s) { // 3rd party copy
       UPCXX_ASSERT(heap_s != detail::private_heap && heap_d != detail::private_heap);
-      int initiator = upcxx::rank_me();
       
       backend::send_am_master<progress_level::internal>(
         upcxx::world(), rank_d,
@@ -173,7 +175,7 @@ namespace upcxx {
       );
     }
     else if(rank_d == rank_s) { // fully loopback on the calling process
-      UPCXX_ASSERT(rank_d == upcxx::rank_me()); 
+      UPCXX_ASSERT(rank_d == initiator); 
       detail::rma_copy_local(heap_d, buf_d, heap_s, buf_s, size,
         cuda::make_event_cb([=]() {
           cxs_here->template operator()<source_cx_event>();
@@ -182,6 +184,62 @@ namespace upcxx {
           delete cxs_here;
         })
       );
+    }
+    else if (backend::heap_state::use_mk() && 
+             rank_s == initiator && // MK put to different-rank
+             ( ( copy_traits::want_remote && !copy_traits::want_op ) // RC but not OC
+               || // using GDR and UPCXX_BUG4148_WORKAROUND
+               ((heap_d > 0 || heap_s > 0) && backend::heap_state::bug4148_workaround())
+             ) 
+      ) { // convert MK put into MK get, either as an optimization or to avoid correctness bug 4148
+      UPCXX_ASSERT(rank_d != initiator);
+      UPCXX_ASSERT(heap_d != private_heap);
+      void *eff_buf_s = buf_s;
+      int eff_heap_s = heap_s;
+      void *bounce_s = nullptr;
+      bool must_ack = copy_traits::want_op;
+      if (heap_s == private_heap) {
+        // must use a bounce buffer to make the source remotely accessible
+        bounce_s = backend::gasnet::allocate(size, 64, &backend::gasnet::sheap_footprint_rdzv);
+        std::memcpy(bounce_s, buf_s, size);
+        eff_buf_s = bounce_s;
+        eff_heap_s = host_heap;
+        // we can signal source_cx as soon as it's populated
+        cxs_here->template operator()<source_cx_event>();
+        must_ack = true;
+      } else must_ack |= copy_traits::want_source;
+
+      backend::send_am_master<progress_level::internal>(
+        upcxx::world(), rank_d,
+        upcxx::bind([=](deserialized_type_t<cxs_remote_t> &&cxs_remote) {
+          // at target
+          deserialized_type_t<cxs_remote_t> *cxs_remote_heaped =
+               new deserialized_type_t<cxs_remote_t>(std::move(cxs_remote));
+
+          detail::rma_copy_remote(eff_heap_s, rank_s, eff_buf_s, heap_d, rank_d, buf_d, size,
+            backend::gasnet::make_handle_cb([=]() {
+              // RMA complete at target
+              cxs_remote_heaped->template operator()<remote_cx_event>();
+              delete cxs_remote_heaped;
+
+              if (must_ack) {
+                 backend::send_am_persona<progress_level::internal>(
+                   upcxx::world(), rank_s, initiator_per,
+                   [=]() {
+                     // back at initiator
+                     if (bounce_s) backend::gasnet::deallocate(bounce_s, &backend::gasnet::sheap_footprint_rdzv);
+                     else cxs_here->template operator()<source_cx_event>();
+                     cxs_here->template operator()<operation_cx_event>();
+                     delete cxs_here;
+                   }); // AM to initiator
+              } // must_ack
+            }) // gasnet::make_handle_cb
+          ); // rma_copy_remote
+        }, std::move(cxs_remote)) // bind
+      ); // AM to target
+
+      // initiator
+      if (!must_ack) delete cxs_here;
     }
     else if (backend::heap_state::use_mk()) { // MK-enabled GASNet backend
       // GASNet will do a direct source-to-dest memory transfer.
@@ -195,22 +253,24 @@ namespace upcxx {
               cxs_here->template operator()<operation_cx_event>();
               delete cxs_here;
             }, /*known_active=*/std::false_type());
-
-          if (rank_d == upcxx::rank_me()) { // in-place RC
-            serialization_traits<cxs_remote_t>::deserialized_value(cxs_remote).template operator()<remote_cx_event>();
-          } else { // initiator-chained RC
-            backend::send_am_master<progress_level::internal>(
-              upcxx::world(), rank_d,
-              upcxx::bind([=](deserialized_type_t<cxs_remote_t> &&cxs_remote) {
-                cxs_remote.template operator()<remote_cx_event>();
-              }, std::move(cxs_remote))
-            );
-          }
+          
+          if (copy_traits::want_remote) {
+            if (rank_d == initiator) { // in-place RC
+              serialization_traits<cxs_remote_t>::deserialized_value(cxs_remote).template operator()<remote_cx_event>();
+            } else { // initiator-chained RC
+              backend::send_am_master<progress_level::internal>(
+                upcxx::world(), rank_d,
+                upcxx::bind([=](deserialized_type_t<cxs_remote_t> &&cxs_remote) {
+                  cxs_remote.template operator()<remote_cx_event>();
+                }, std::move(cxs_remote))
+              );
+            }
+          } // want_remote
         })
       );
     }
-    else if(rank_d == upcxx::rank_me()) {
-      UPCXX_ASSERT(rank_s != upcxx::rank_me());
+    else if(rank_d == initiator) {
+      UPCXX_ASSERT(rank_s != initiator);
       UPCXX_ASSERT(heap_s != private_heap);
       cxs_remote_t *cxs_remote_heaped = new cxs_remote_t(std::move(cxs_remote));
       
@@ -274,7 +334,7 @@ namespace upcxx {
       );
     }
     else {
-      UPCXX_ASSERT(rank_s == upcxx::rank_me() && rank_d != upcxx::rank_me());
+      UPCXX_ASSERT(rank_s == initiator && rank_d != initiator);
       UPCXX_ASSERT(heap_d != private_heap);
       /* We are the source, so semantically this is a PUT even though we use a
        * GET to transfer over network.

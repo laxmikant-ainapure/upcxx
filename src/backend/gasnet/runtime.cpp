@@ -83,6 +83,7 @@ backend::heap_state *backend::heap_state::heaps[backend::heap_state::max_heaps] 
 int backend::heap_state::heap_count = 1; // host segment is implicitly idx 0
 bool backend::heap_state::use_mk_ = false;  // set by heap_state::init()
 bool backend::heap_state::recycle = false; // set by heap_state::init()
+bool backend::heap_state::bug4148_workaround_ = false; // set by heap_state::init()
 
 persona backend::master;
 persona_scope *backend::initial_master_scope = nullptr;
@@ -264,6 +265,21 @@ void upcxx::backend::heap_state::init() {
   // currently we do not recycle heap_idx when using GASNet memory kinds,
   // until GASNet grows the ability to recycle endpoints
   heap_state::recycle = !heap_state::use_mk_;
+
+  #if UPCXX_CUDA_USE_MK
+    #if UPCXX_NETWORK_IBV
+      gex_Rank_t num_nbrhd;
+      gex_System_QueryMyPosition(&num_nbrhd, 0, 0, 0);
+      UPCXX_ASSERT(intrank_t(num_nbrhd) <= backend::rank_n);
+      bool bug4148 = // GASNet bug 4148 arises in two scenarios:
+         (intrank_t(num_nbrhd) < backend::rank_n) // some node is using PSHM bypass
+         || upcxx::os_env<bool>("GASNET_USE_FENCED_PUTS", false); // or ibv multi-rail
+    #else
+      bool bug4148 = false;
+    #endif
+    heap_state::bug4148_workaround_ =
+      upcxx::os_env<bool>("UPCXX_BUG4148_WORKAROUND", bug4148);
+  #endif
 }
 
 
