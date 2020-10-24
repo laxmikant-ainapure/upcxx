@@ -50,8 +50,9 @@ int main(int argc, char *argv[]) {
   { size_t bufsz = 0;
     if (argc > 2) bufsz = std::atol(argv[2]);
     if (bufsz <= 0) bufsz = 1024*1024;
-    if (!me) say("") << "Running with iters=" << iters << " bufsz=" << bufsz << " bytes"; 
+    if (bufsz < sizeof(val_t)) bufsz = sizeof(val_t);
     bufelems = bufsz / sizeof(val_t);
+    if (!me) say("") << "Running with iters=" << iters << " bufsz=" << bufelems*sizeof(val_t) << " bytes"; 
   }
 
   {
@@ -102,10 +103,14 @@ int main(int argc, char *argv[]) {
       global_ptr<val_t, memory_kind::cuda_device> cuda_ptrs[max_dev_n][allocs_per_heap];
 
       for (int dev = 0; dev < max_dev_n; dev++) {
+        size_t align = cuda_device::default_alignment<val_t>();
+        size_t allocsz = bufelems*2*sizeof(val_t);
+        allocsz = align*((allocsz+align-1)/align);
         gpu[dev] = new cuda_device(dev%dev_n);
-        seg[dev] = new device_allocator<cuda_device>(*gpu[dev], bufelems*sizeof(val_t)*allocs_per_heap*2);
+        seg[dev] = new device_allocator<cuda_device>(*gpu[dev], allocsz*allocs_per_heap);
         for (int i=0; i < allocs_per_heap; i++) {
           cuda_ptrs[dev][i] = seg[dev]->allocate<val_t>(bufelems*2);
+          assert(cuda_ptrs[dev][i]);
           int rank = (me+i)%ranks;
           dist_object<any_ptr> dobj(cuda_ptrs[dev][i]);
           any_ptr gp = dobj.fetch(rank).wait();
