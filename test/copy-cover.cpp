@@ -150,6 +150,11 @@ int main(int argc, char *argv[]) {
           int killfreq = 7;
         #endif
         const val_t dead = (val_t)step;
+        #if SKIP_RC_ONLY
+          const bool rconly = false;
+        #else
+          const bool rconly = (step%5 == 1);
+        #endif
 
         for(int i=0; i < bufelems; i++) {
           priv_src[i] = VAL(me, step, i);
@@ -170,6 +175,37 @@ int main(int argc, char *argv[]) {
           const bool kill1 = killfreq && !((step*3+1)%killfreq);
           const bool kill2 = killfreq && !((step*3+2)%killfreq);
           const bool kill3 = killfreq && !((step*3+3)%killfreq);
+
+        if (rconly) { // use only remote completion events
+
+          promise<> p1,p2,p3;
+          // private -> heapA
+          upcxx::copy<val_t>(priv_src, bufA, bufelems, 
+            remote_cx::as_rpc([=,&p1]() {
+              rc(bufA.where()); // at heapA
+              // notify initiator
+              rpc_ff(me, [&]() { p1.fulfill_anonymous(1); });
+            }));
+          p1.get_future().wait();
+
+          // heapA -> heapB
+          upcxx::copy<val_t>(bufA, bufB, bufelems,
+            remote_cx::as_rpc([=,&p2]() {
+              rc(bufB.where()); // at heapB
+              // notify initiator
+              rpc_ff(me, [&]() { p2.fulfill_anonymous(1); });
+            }));
+          p2.get_future().wait();
+
+          // heapB -> private
+          upcxx::copy<val_t>(bufB, priv_dst, bufelems,
+            remote_cx::as_rpc([=,&p3]() {
+              rc(me); // at me
+              p3.fulfill_anonymous(1); 
+            }));
+          p3.get_future().wait();
+
+        } else { // exercise all three completion events
 
           // private -> heapA
           std::tie(of, sf) = upcxx::copy<val_t>(priv_src, bufA, bufelems, 
@@ -197,6 +233,7 @@ int main(int argc, char *argv[]) {
 
           when_all(kf1, kf2, kf3).wait();
 
+        }
         #endif
 
         std::string mismatch;
