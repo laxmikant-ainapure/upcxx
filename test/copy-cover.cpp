@@ -98,14 +98,19 @@ int main(int argc, char *argv[]) {
     }
 
     #if USE_CUDA
-      cuda_device* gpu[max_dev_n];
-      device_allocator<cuda_device>* seg[max_dev_n];
-      global_ptr<val_t, memory_kind::cuda_device> cuda_ptrs[max_dev_n][allocs_per_heap];
+      cuda_device* gpu[max_dev_n] = {};
+      device_allocator<cuda_device>* seg[max_dev_n] = {};
+      global_ptr<val_t, memory_kind::cuda_device> cuda_ptrs[max_dev_n][allocs_per_heap] = {};
 
+    if (dev_n) {
       for (int dev = 0; dev < max_dev_n; dev++) {
         size_t align = cuda_device::default_alignment<val_t>();
         size_t allocsz = bufelems*2*sizeof(val_t);
         allocsz = align*((allocsz+align-1)/align);
+        align = 4096;
+        if (allocsz > align) { // more than one page gets a full page
+          allocsz = align*((allocsz+align-1)/align);
+        }
         gpu[dev] = new cuda_device(dev%dev_n);
         seg[dev] = new device_allocator<cuda_device>(*gpu[dev], allocsz*allocs_per_heap);
         for (int i=0; i < allocs_per_heap; i++) {
@@ -118,6 +123,7 @@ int main(int argc, char *argv[]) {
           barrier();
         }
       }
+    }
     #endif
 
     val_t *priv_src = new val_t[bufelems];
@@ -209,6 +215,7 @@ int main(int argc, char *argv[]) {
     }
     
     #if USE_CUDA
+    if (dev_n) {
       for (int dev = 0; dev < max_dev_n; dev++) {
         for (int i=0; i < allocs_per_heap; i++) {
           seg[dev]->deallocate(cuda_ptrs[dev][i]);
@@ -217,6 +224,7 @@ int main(int argc, char *argv[]) {
         gpu[dev]->destroy();
         delete gpu[dev];
       }
+    }
     #endif
   }
     
