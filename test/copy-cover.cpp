@@ -144,6 +144,12 @@ int main(int argc, char *argv[]) {
       for (int B=0; B < bufcnt; B++) {
         any_ptr bufA = ptrs[A];
         any_ptr bufB = ptrs[B] + maxelems;
+        #if SKIP_KILL
+          int killfreq = 0;
+        #else
+          int killfreq = 7;
+        #endif
+        const val_t dead = (val_t)step;
 
         for(int i=0; i < bufelems; i++) {
           priv_src[i] = VAL(me, step, i);
@@ -160,24 +166,36 @@ int main(int argc, char *argv[]) {
             rc_count++;
           };
           future<> of, sf;
+          future<> kf1 = make_future(), kf2 = make_future(), kf3 = make_future();
+          const bool kill1 = killfreq && !((step*3+1)%killfreq);
+          const bool kill2 = killfreq && !((step*3+2)%killfreq);
+          const bool kill3 = killfreq && !((step*3+3)%killfreq);
 
           // private -> heapA
           std::tie(of, sf) = upcxx::copy<val_t>(priv_src, bufA, bufelems, 
                                                 cxs | remote_cx::as_rpc(rc,bufA.where()));
-          sf.wait(); 
+          if (kill1) {
+            kf1 = sf.then([=]() { priv_src[0] = dead; });
+          } else sf.wait(); 
           of.wait();
 
           // heapA -> heapB
           std::tie(of, sf) = upcxx::copy<val_t>(bufA, bufB, bufelems,
                                                 cxs | remote_cx::as_rpc(rc,bufB.where()));
-          sf.wait(); 
+          if (kill2) {
+            kf2 = sf.then([&]() { return upcxx::copy<val_t>(&dead, bufA, 1); });
+          } else sf.wait(); 
           of.wait();
 
           // heapB -> private
           std::tie(of, sf) = upcxx::copy<val_t>(bufB, priv_dst, bufelems,
                                                 cxs | remote_cx::as_rpc(rc,me));
-          sf.wait(); 
+          if (kill3) {
+            kf3 = sf.then([&]() { return upcxx::copy<val_t>(&dead, bufB, 1); });
+          } else sf.wait(); 
           of.wait();
+
+          when_all(kf1, kf2, kf3).wait();
 
         #endif
 
@@ -206,7 +224,8 @@ int main(int argc, char *argv[]) {
                 <<" step="<<step
                 <<" A="<<A<<"("<<Awhere<<Aheap<<")"
                 <<" B="<<B<<"("<<Bwhere<<Bheap<<")"
-                <<mismatch;
+                <<mismatch
+                <<(kill1?", kill1":"")<<(kill2?", kill2":"")<<(kill3?", kill3":"");
         }
 
         step++;
