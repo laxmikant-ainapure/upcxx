@@ -41,18 +41,16 @@ int main(int argc, char *argv[]) {
 
   int me = upcxx::rank_me();
   int ranks = upcxx::rank_n();
-  int peer1 = (upcxx::rank_me()+1)%ranks;
-  int peer2 = (upcxx::rank_me()+1)%ranks;
   long iters = 0;
   if (argc > 1) iters = std::atol(argv[1]);
   if (iters <= 0) iters = 10;
-  size_t bufelems;
+  size_t maxelems;
   { size_t bufsz = 0;
     if (argc > 2) bufsz = std::atol(argv[2]);
     if (bufsz <= 0) bufsz = 1024*1024;
     if (bufsz < sizeof(val_t)) bufsz = sizeof(val_t);
-    bufelems = bufsz / sizeof(val_t);
-    if (!me) say("") << "Running with iters=" << iters << " bufsz=" << bufelems*sizeof(val_t) << " bytes"; 
+    maxelems = bufsz / sizeof(val_t);
+    if (!me) say("") << "Running with iters=" << iters << " bufsz=" << maxelems*sizeof(val_t) << " bytes"; 
   }
 
   {
@@ -86,7 +84,7 @@ int main(int argc, char *argv[]) {
     global_ptr<val_t> host_ptrs[allocs_per_heap];
     for (int i=0; i < allocs_per_heap; i++) {
     #if USE_HOST
-      host_ptrs[i] = upcxx::new_array<val_t>(bufelems*2);
+      host_ptrs[i] = upcxx::new_array<val_t>(maxelems*2);
       int rank = (me+i)%ranks;
       dist_object<any_ptr> dobj(host_ptrs[i]);
       any_ptr gp = dobj.fetch(rank).wait();
@@ -105,7 +103,7 @@ int main(int argc, char *argv[]) {
     if (dev_n) {
       for (int dev = 0; dev < max_dev_n; dev++) {
         size_t align = cuda_device::default_alignment<val_t>();
-        size_t allocsz = bufelems*2*sizeof(val_t);
+        size_t allocsz = maxelems*2*sizeof(val_t);
         allocsz = align*((allocsz+align-1)/align);
         align = 4096;
         if (allocsz > align) { // more than one page gets a full page
@@ -114,7 +112,7 @@ int main(int argc, char *argv[]) {
         gpu[dev] = new cuda_device(dev%dev_n);
         seg[dev] = new device_allocator<cuda_device>(*gpu[dev], allocsz*allocs_per_heap);
         for (int i=0; i < allocs_per_heap; i++) {
-          cuda_ptrs[dev][i] = seg[dev]->allocate<val_t>(bufelems*2);
+          cuda_ptrs[dev][i] = seg[dev]->allocate<val_t>(maxelems*2);
           assert(cuda_ptrs[dev][i]);
           int rank = (me+i)%ranks;
           dist_object<any_ptr> dobj(cuda_ptrs[dev][i]);
@@ -126,24 +124,26 @@ int main(int argc, char *argv[]) {
     }
     #endif
 
-    val_t *priv_src = new val_t[bufelems];
-    val_t *priv_dst = new val_t[bufelems];
+    val_t *priv_src = new val_t[maxelems];
+    val_t *priv_dst = new val_t[maxelems];
     const int bufcnt = ptrs.size();
 
 
     uint64_t step = 0;
     static uint64_t rc_count = 0;
     for (int round = 0; round < iters; round++) {
-      bool talk = !me && (iters <= 10 || round % ((iters+9)/10) == 0);
-      if (talk) {
+     bool talk = !me && (iters <= 10 || round % ((iters+9)/10) == 0);
+     if (talk) {
         say("") << "Round "<< round << " (" << round*100/iters << " %)";
-      }
-      upcxx::barrier();
+     }
+     upcxx::barrier();
+     for (size_t bufelems = 1; bufelems < 2*maxelems; bufelems *= 2) {
+      if (bufelems > maxelems) bufelems = maxelems;
       
       for (int A=0; A < bufcnt; A++) {
       for (int B=0; B < bufcnt; B++) {
         any_ptr bufA = ptrs[A];
-        any_ptr bufB = ptrs[B] + bufelems;
+        any_ptr bufB = ptrs[B] + maxelems;
 
         for(int i=0; i < bufelems; i++) {
           priv_src[i] = VAL(me, step, i);
@@ -191,8 +191,22 @@ int main(int argc, char *argv[]) {
             mismatch = oss.str();
           }
         }
-        if (mismatch.size()) {
-          say() << "ERROR: Mismatch at round="<<round<<" step="<<step<<" A="<<A<<" B="<<B<<mismatch;
+        if (mismatch.size()) { // diagnose failure
+          auto who = [=](int rank) { 
+            if (rank == me) return "my "; 
+            if (rank == (me+1)%ranks) return "his ";
+            if (rank == (me+2)%ranks) return "her ";
+            return "other ";
+          };
+          const char * Awhere = who(bufA.where());
+          const char * Aheap  = (bufA.dynamic_kind() == memory_kind::host ? "host" : "device");
+          const char * Bwhere = who(bufB.where());
+          const char * Bheap  = (bufB.dynamic_kind() == memory_kind::host ? "host" : "device");
+          say() << "ERROR: Mismatch at round="<<round<<" bufsz="<<(bufelems*sizeof(val_t))
+                <<" step="<<step
+                <<" A="<<A<<"("<<Awhere<<Aheap<<")"
+                <<" B="<<B<<"("<<Bwhere<<Bheap<<")"
+                <<mismatch;
         }
 
         step++;
@@ -201,6 +215,7 @@ int main(int argc, char *argv[]) {
       do { upcxx::progress(); } while (rc_count < 3 * bufcnt*bufcnt);
       rc_count = 0;
       upcxx::barrier();
+     } // bufelems
     } // round
     
     upcxx::barrier();
