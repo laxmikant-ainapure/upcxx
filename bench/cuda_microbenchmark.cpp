@@ -283,8 +283,8 @@ int main(int argc, char **argv) {
                print_bandwidth_results(local_gpu_to_remote_gpu,
                        remote_gpu_to_local_gpu, local_host_to_remote_gpu,
                        remote_gpu_to_local_host, local_gpu_to_remote_host,
-                       remote_host_to_local_gpu, trials, window_size,
-                       local_host_to_remote_host, remote_host_to_local_host,
+                       remote_host_to_local_gpu, local_host_to_remote_host,
+                       remote_host_to_local_host, trials, window_size,
                        msg_len, 0, 0);
                std::cout << std::endl;
            }
@@ -304,8 +304,8 @@ int main(int argc, char **argv) {
                print_bandwidth_results(local_gpu_to_remote_gpu,
                        remote_gpu_to_local_gpu, local_host_to_remote_gpu,
                        remote_gpu_to_local_host, local_gpu_to_remote_host,
-                       remote_host_to_local_gpu, trials, window_size,
-                       local_host_to_remote_host, remote_host_to_local_host,
+                       remote_host_to_local_gpu, local_host_to_remote_host,
+                       remote_host_to_local_host, trials, window_size,
                        msg_len, 0, 1);
                std::cout << std::endl;
            }
@@ -326,8 +326,8 @@ int main(int argc, char **argv) {
                print_bandwidth_results(local_gpu_to_remote_gpu,
                        remote_gpu_to_local_gpu, local_host_to_remote_gpu,
                        remote_gpu_to_local_host, local_gpu_to_remote_host,
-                       remote_host_to_local_gpu, trials, window_size,
-                       local_host_to_remote_host, remote_host_to_local_host,
+                       remote_host_to_local_gpu, local_host_to_remote_host,
+                       remote_host_to_local_host, trials, window_size,
                        msg_len, 1, 0);
                std::cout << std::endl;
            }
@@ -347,8 +347,8 @@ int main(int argc, char **argv) {
                print_bandwidth_results(local_gpu_to_remote_gpu,
                        remote_gpu_to_local_gpu, local_host_to_remote_gpu,
                        remote_gpu_to_local_host, local_gpu_to_remote_host,
-                       remote_host_to_local_gpu, trials, window_size,
-                       local_host_to_remote_host, remote_host_to_local_host,
+                       remote_host_to_local_gpu, local_host_to_remote_host,
+                       remote_host_to_local_host, trials, window_size,
                        msg_len, 1, 1);
                std::cout << std::endl;
            }
