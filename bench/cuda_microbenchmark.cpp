@@ -69,7 +69,8 @@ static void run_all_copies(int warmup, int window_size, int trials, int msg_len,
         int is_active_rank,
         double &local_gpu_to_remote_gpu, double &remote_gpu_to_local_gpu,
         double &local_host_to_remote_gpu, double &remote_gpu_to_local_host,
-        double &local_gpu_to_remote_host, double &remote_host_to_local_gpu) {
+        double &local_gpu_to_remote_host, double &remote_host_to_local_gpu,
+        double &local_host_to_remote_host, double &remote_host_to_local_host) {
     local_gpu_to_remote_gpu =
         helper<memory_kind::cuda_device, memory_kind::cuda_device, flood>(
                 warmup, window_size, trials, msg_len,
@@ -78,6 +79,7 @@ static void run_all_copies(int warmup, int window_size, int trials, int msg_len,
         helper<memory_kind::cuda_device, memory_kind::cuda_device, flood>(
                 warmup, window_size, trials, msg_len,
                 remote_gpu_array, local_gpu_array, is_active_rank);
+
     local_host_to_remote_gpu =
         helper<memory_kind::host, memory_kind::cuda_device, flood>(
                 warmup, window_size, trials, msg_len,
@@ -86,6 +88,7 @@ static void run_all_copies(int warmup, int window_size, int trials, int msg_len,
         helper<memory_kind::cuda_device, memory_kind::host, flood>(
                 warmup, window_size, trials, msg_len,
                 remote_gpu_array, local_host_array, is_active_rank);
+
     local_gpu_to_remote_host =
         helper<memory_kind::cuda_device, memory_kind::host, flood>(
                 warmup, window_size, trials, msg_len, local_gpu_array,
@@ -94,12 +97,22 @@ static void run_all_copies(int warmup, int window_size, int trials, int msg_len,
         helper<memory_kind::host, memory_kind::cuda_device, flood>(
                 warmup, window_size, trials, msg_len, remote_host_array,
                 local_gpu_array, is_active_rank);
+
+    local_host_to_remote_host =
+        helper<memory_kind::host, memory_kind::host, flood>(
+                warmup, window_size, trials, msg_len, local_host_array,
+                remote_host_array, is_active_rank);
+    remote_host_to_local_host =
+        helper<memory_kind::host, memory_kind::host, flood>(
+                warmup, window_size, trials, msg_len, remote_host_array,
+                local_host_array, is_active_rank);
 }
 
 static void print_latency_results(double local_gpu_to_remote_gpu,
         double remote_gpu_to_local_gpu, double local_host_to_remote_gpu,
         double remote_gpu_to_local_host, double local_gpu_to_remote_host,
-        double remote_host_to_local_gpu, int trials, int window_size) {
+        double remote_host_to_local_gpu, double local_host_to_remote_host,
+        double remote_host_to_local_host, int trials, int window_size) {
     long nmsgs = trials * window_size;
 
     std::cout << "Latency results for 8-byte transfers" << std::endl;
@@ -122,12 +135,19 @@ static void print_latency_results(double local_gpu_to_remote_gpu,
     std::cout << "  Remote Host -> Local GPU: " <<
         (remote_host_to_local_gpu / double(nmsgs)) <<
         " s of latency" << std::endl;
+    std::cout << "  Local Host -> Remote Host: " <<
+        (local_host_to_remote_host / double(nmsgs)) <<
+        " s of latency" << std::endl;
+    std::cout << "  Remote Host -> Local Host: " <<
+        (remote_host_to_local_host / double(nmsgs)) <<
+        " s of latency" << std::endl;
 }
 
 static void print_bandwidth_results(double local_gpu_to_remote_gpu,
         double remote_gpu_to_local_gpu, double local_host_to_remote_gpu,
         double remote_gpu_to_local_host, double local_gpu_to_remote_host,
-        double remote_host_to_local_gpu, int trials, int window_size,
+        double remote_host_to_local_gpu, double local_host_to_remote_host,
+        double remote_host_to_local_host, int trials, int window_size,
         int msg_len, int bidirectional, int flood) {
     std::string sync_type, dir_type;
     long nmsgs = trials * window_size;
@@ -177,6 +197,14 @@ static void print_bandwidth_results(double local_gpu_to_remote_gpu,
         (double(nmsgs) / remote_host_to_local_gpu) << " msgs/s, " <<
         (double(gbytes) / remote_host_to_local_gpu) << " GB/s" <<
         std::endl;
+    std::cout << "  Local Host -> Remote Host: " <<
+        (double(nmsgs) / local_host_to_remote_host) << " msgs/s, " <<
+        (double(gbytes) / local_host_to_remote_host) << " GB/s" <<
+        std::endl;
+    std::cout << "  Remote Host -> Local Host: " <<
+        (double(nmsgs) / remote_host_to_local_host) << " msgs/s, " <<
+        (double(gbytes) / remote_host_to_local_host) << " GB/s" <<
+        std::endl;
 }
 
 int main(int argc, char **argv) {
@@ -218,19 +246,22 @@ int main(int argc, char **argv) {
 
        double local_gpu_to_remote_gpu, remote_gpu_to_local_gpu,
               local_host_to_remote_gpu, remote_gpu_to_local_host,
-              local_gpu_to_remote_host, remote_host_to_local_gpu;
+              local_gpu_to_remote_host, remote_host_to_local_gpu,
+              local_host_to_remote_host, remote_host_to_local_host;
 
        run_all_copies<0>(warmup, window_size, trials, 8, local_gpu_array,
                remote_gpu_array, host_array, remote_host_array, (rank_me() == 0),
                local_gpu_to_remote_gpu, remote_gpu_to_local_gpu,
                local_host_to_remote_gpu, remote_gpu_to_local_host,
-               local_gpu_to_remote_host, remote_host_to_local_gpu);
+               local_gpu_to_remote_host, remote_host_to_local_gpu,
+               local_host_to_remote_host, remote_host_to_local_host);
 
        if (rank_me() == 0) {
            print_latency_results(local_gpu_to_remote_gpu,
                    remote_gpu_to_local_gpu, local_host_to_remote_gpu,
                    remote_gpu_to_local_host, local_gpu_to_remote_host,
-                   remote_host_to_local_gpu, trials, window_size);
+                   remote_host_to_local_gpu, local_host_to_remote_host,
+                   remote_host_to_local_host, trials, window_size);
            std::cout << std::endl;
        }
 
@@ -245,13 +276,15 @@ int main(int argc, char **argv) {
                    remote_host_array, is_active_rank,
                    local_gpu_to_remote_gpu, remote_gpu_to_local_gpu,
                    local_host_to_remote_gpu, remote_gpu_to_local_host,
-                   local_gpu_to_remote_host, remote_host_to_local_gpu);
+                   local_gpu_to_remote_host, remote_host_to_local_gpu,
+                   local_host_to_remote_host, remote_host_to_local_host);
 
            if (rank_me() == 0) {
                print_bandwidth_results(local_gpu_to_remote_gpu,
                        remote_gpu_to_local_gpu, local_host_to_remote_gpu,
                        remote_gpu_to_local_host, local_gpu_to_remote_host,
                        remote_host_to_local_gpu, trials, window_size,
+                       local_host_to_remote_host, remote_host_to_local_host,
                        msg_len, 0, 0);
                std::cout << std::endl;
            }
@@ -264,13 +297,15 @@ int main(int argc, char **argv) {
                    remote_host_array, is_active_rank,
                    local_gpu_to_remote_gpu, remote_gpu_to_local_gpu,
                    local_host_to_remote_gpu, remote_gpu_to_local_host,
-                   local_gpu_to_remote_host, remote_host_to_local_gpu);
+                   local_gpu_to_remote_host, remote_host_to_local_gpu,
+                   local_host_to_remote_host, remote_host_to_local_host);
 
            if (rank_me() == 0) {
                print_bandwidth_results(local_gpu_to_remote_gpu,
                        remote_gpu_to_local_gpu, local_host_to_remote_gpu,
                        remote_gpu_to_local_host, local_gpu_to_remote_host,
                        remote_host_to_local_gpu, trials, window_size,
+                       local_host_to_remote_host, remote_host_to_local_host,
                        msg_len, 0, 1);
                std::cout << std::endl;
            }
@@ -284,13 +319,15 @@ int main(int argc, char **argv) {
                    remote_host_array, is_active_rank,
                    local_gpu_to_remote_gpu, remote_gpu_to_local_gpu,
                    local_host_to_remote_gpu, remote_gpu_to_local_host,
-                   local_gpu_to_remote_host, remote_host_to_local_gpu);
+                   local_gpu_to_remote_host, remote_host_to_local_gpu,
+                   local_host_to_remote_host, remote_host_to_local_host);
 
            if (rank_me() == 0) {
                print_bandwidth_results(local_gpu_to_remote_gpu,
                        remote_gpu_to_local_gpu, local_host_to_remote_gpu,
                        remote_gpu_to_local_host, local_gpu_to_remote_host,
                        remote_host_to_local_gpu, trials, window_size,
+                       local_host_to_remote_host, remote_host_to_local_host,
                        msg_len, 1, 0);
                std::cout << std::endl;
            }
@@ -303,13 +340,15 @@ int main(int argc, char **argv) {
                    remote_host_array, is_active_rank,
                    local_gpu_to_remote_gpu, remote_gpu_to_local_gpu,
                    local_host_to_remote_gpu, remote_gpu_to_local_host,
-                   local_gpu_to_remote_host, remote_host_to_local_gpu);
+                   local_gpu_to_remote_host, remote_host_to_local_gpu,
+                   local_host_to_remote_host, remote_host_to_local_host);
 
            if (rank_me() == 0) {
                print_bandwidth_results(local_gpu_to_remote_gpu,
                        remote_gpu_to_local_gpu, local_host_to_remote_gpu,
                        remote_gpu_to_local_host, local_gpu_to_remote_host,
                        remote_host_to_local_gpu, trials, window_size,
+                       local_host_to_remote_host, remote_host_to_local_host,
                        msg_len, 1, 1);
                std::cout << std::endl;
            }
