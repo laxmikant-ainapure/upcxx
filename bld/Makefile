@@ -299,7 +299,7 @@ endif
 # In developer builds, embed git-describe output in runtime.o
 ifneq ($(wildcard $(top_srcdir)/.git),)
 # NOTE: --git-dir breaks --dirty
-UPCXX_GIT_VERSION := $(shell cd "$(top_srcdir)" && git describe --dirty --always 2>/dev/null | grep '^upcxx-20[0-9][0-9]\.[0-9]')
+UPCXX_GIT_VERSION := $(shell cd "$(top_srcdir)" && git describe --dirty --long --always 2>/dev/null | head -n 1)
 ifneq ($(strip $(UPCXX_GIT_VERSION)),)
 upcxx_git_version_file = backend/gasnet/watermark.cpp # consumes UPCXX_GIT_VERSION
 upcxx_git_version_obj = $(notdir $(basename $(upcxx_git_version_file))).o
