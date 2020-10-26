@@ -12,41 +12,42 @@ static double helper(int warmup, int window_size, int trials, int len,
         global_ptr<uint8_t, dst_memory_kind> &dst_ptr,
         int is_active_rank) {
     double elapsed = 0.0;
-    upcxx::future<> all = upcxx::make_future();
 
     if (is_active_rank) {
         for (int i = 0; i < warmup; i++) {
+            upcxx::promise<> prom;
             for (int j = 0; j < window_size; j++) {
-                upcxx::future<> fut = upcxx::copy(src_ptr, dst_ptr, len);
-                if (flood) {
-                    all = upcxx::when_all(all, fut);
-                } else {
+                upcxx::copy(src_ptr, dst_ptr, len,
+                        upcxx::operation_cx::as_promise(prom));
+                if (!flood) {
+                    upcxx::future<> fut = prom.finalize();
                     fut.wait();
                 }
             }
 
-            all.wait(); // no-op if !COPY_ASYNC
+            upcxx::future<> fut = prom.finalize();
+            fut.wait();
         }
     }
 
     upcxx::barrier();
 
     if (is_active_rank) {
-        upcxx::future<> all = upcxx::make_future();
-
         std::chrono::steady_clock::time_point start =
             std::chrono::steady_clock::now();
 
         for (int i = 0; i < trials; i++) {
+            upcxx::promise<> prom;
             for (int j = 0; j < window_size; j++) {
-                upcxx::future<> fut = upcxx::copy(src_ptr, dst_ptr, len);
-                if (flood) {
-                    all = upcxx::when_all(all, fut);
-                } else {
+                upcxx::copy(src_ptr, dst_ptr, len,
+                        upcxx::operation_cx::as_promise(prom));
+                if (!flood) {
+                    upcxx::future<> fut = prom.finalize();
                     fut.wait();
                 }
             }
-            all.wait();
+            upcxx::future<> fut = prom.finalize();
+            fut.wait();
         }
 
         std::chrono::steady_clock::time_point end =
