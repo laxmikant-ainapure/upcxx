@@ -5,7 +5,57 @@ This is the ChangeLog for public releases of [UPC++](https://upcxx.lbl.gov).
 For information on using UPC++, see: [README.md](README.md)    
 For information on installing UPC++, see: [INSTALL.md](INSTALL.md)
 
-### 20XX.YY.ZZ: PENDING
+### 2020.10.30: Memory Kinds Prototype 2020.11.0
+
+This is a **prototype** release of UPC++ demonstrating the new GPUDirect RDMA (GDR)
+native implementation of memory kinds for NVIDIA-branded CUDA devices with
+Mellanox-branded InfiniBand network adapters.
+
+As a prototype, it has not been validated as widely as normal stable releases,
+and may include features and behaviors that are subject to change without notice.
+This prototype is recommended for any users who want to exercise the memory kinds
+feature with CUDA-enabled GPUs. All other UPC++ users are recommended to use the
+latest stable release.
+
+See [INSTALL.md](INSTALL.md) for instructions to enable UPC++ CUDA support
+and for a list of caveats and known issues with the current GDR-accelerated
+implementation.
+
+Recent changes to the memory kinds feature:
+
+* Relax the restriction that a given CUDA device ID may only be opened once per process
+  using `cuda_device`.
+* Add a `device_allocator::is_active()` query, and fix several subtle defects with
+  inactive devices/allocators.
+* Resource exhaustion failures that occur while allocating a device segment now throw
+  `upcxx::bad_segment_alloc`, a new subclass of `std::bad_alloc`.
+* Debug-mode `global_ptr` checking for device pointers has been strengthened when
+  using GDR-accelerated memory kinds.
+
+Requirements changes:
+
+* The PGI/NVIDIA C++ compiler is not supported in this prototype release, due to a
+  known problem with the optimizer. Users are advised to use a supported version
+  of the Intel, GNU or LLVM/Clang C++ compiler instead. See [INSTALL.md](INSTALL.md)
+  for details on supported compilers.
+
+Notable bug fixes:
+
+* issue #221: `upcxx::copy()` mishandling of private memory arguments
+* issue #421: Regression with `upcxx::copy(remote_cx::as_rpc)`
+
+This prototype library release conforms to the
+[UPC++ v1.0 Specification, Revision 2020.11.0-draft](docs/spec.pdf).
+All currently specified features are fully implemented.
+See the [UPC++ issue tracker](https://upcxx-bugs.lbl.gov) for status of known bugs.
+
+Breaking changes:
+
+* `device_allocator` construction is now a collective operation with user-level progress.
+* `device_allocator::device_id()` is now restricted to `global_ptr` arguments
+  with affinity to the calling process.
+
+### 2020.10.30: Release 2020.10.0
 
 General features/enhancements: (see specification and programmer's guide for full details)
 
@@ -102,7 +152,7 @@ Notable bug fixes:
 * spec issue 170: Implement `upcxx::in_progress()` query
 
 This library release conforms to the
-[UPC++ v1.0 Specification, Revision 2020.8.1-draft](docs/spec.pdf).
+[UPC++ v1.0 Specification, Revision 2020.10.0](https://bitbucket.org/berkeleylab/upcxx/downloads/upcxx-spec-2020.10.0.pdf).
 All currently specified features are fully implemented.
 See the [UPC++ issue tracker](https://upcxx-bugs.lbl.gov) for status of known bugs.
 
