@@ -5,6 +5,18 @@ This is the ChangeLog for public releases of [UPC++](https://upcxx.lbl.gov).
 For information on using UPC++, see: [README.md](README.md)    
 For information on installing UPC++, see: [INSTALL.md](INSTALL.md)
 
+### PROTOTYPE BRANCH NOTICE
+
+This is the "memory\_kinds" feature branch of UPC++, intended only for use by
+developers with an interest in the memory kinds feature for CUDA GPU hardware.
+Other developers should consider use of the latest stable release.
+
+While it is intended that changes and capabilities introduced in this
+branch will make their way into a stable release of UPC++, this is
+only a prototype. All aspects of the APIs and capabilities first
+introduced on this branch are subject to non-trivial changes before
+the prototype stage ends.
+
 ### 2020.10.30: Memory Kinds Prototype 2020.11.0
 
 This is a **prototype** release of UPC++ demonstrating the new GPUDirect RDMA (GDR)

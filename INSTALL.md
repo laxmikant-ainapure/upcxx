@@ -4,6 +4,18 @@ This file documents software installation of [UPC++](https://upcxx.lbl.gov).
 
 For information on using UPC++, see: [README.md](README.md)    
 
+## PROTOTYPE BRANCH NOTICE
+
+This is the "memory\_kinds" feature branch of UPC++, intended only for use by
+developers with an interest in the memory kinds feature for CUDA GPU hardware.
+Other developers should consider use of the latest stable release.
+
+While it is intended that changes and capabilities introduced in this
+branch will make their way into a stable release of UPC++, this is
+only a prototype. All aspects of the APIs and capabilities first
+introduced on this branch are subject to non-trivial changes before
+the prototype stage ends.
+
 ## System Requirements
 
 ### Supported Platforms
