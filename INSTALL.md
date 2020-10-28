@@ -35,8 +35,7 @@ The current release is known to work on the following configurations:
     - g++ 6.4.0 or newer    
     - clang++ 4.0.0 or newer (with libstdc++ from g++ 6.4.0 or newer)    
     - Intel C++ 17.0.2 or newer (with libstdc++ from g++ 6.4.0 or newer)    
-    - PGI C++ 19.1 or newer (with libstdc++ from g++ 6.4.0 or newer), except that
-      PGI (aka NVIDIA HPC SDK) 20.7 and newer are NOT currently supported  
+    - The PGI/NVIDIA C++ compiler is NOT currently supported in this prototype.
 
     If `/usr/bin/g++` is older than 6.4.0 (even if using another compiler),
     see [Linux Compiler Notes](#markdown-header-linux-compiler-notes), below.
@@ -44,8 +43,7 @@ The current release is known to work on the following configurations:
 * Linux/ppc64le (aka IBM POWER little-endian) with one of the following compilers:
     - g++ 6.4.0 or newer
     - clang++ 5.0.0 or newer (with libstdc++ from g++ 6.4.0 or newer)    
-    - PGI C++ 18.10 or newer (with libstdc++ from g++ 6.4.0 or newer), except that
-      PGI (aka NVIDIA HPC SDK) 20.7 and newer are NOT currently supported  
+    - The PGI/NVIDIA C++ compiler is NOT currently supported in this prototype.
 
     If `/usr/bin/g++` is older than 6.4.0 (even if using another compiler),
     see [Linux Compiler Notes](#markdown-header-linux-compiler-notes), below.
