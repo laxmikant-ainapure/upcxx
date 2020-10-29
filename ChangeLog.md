@@ -125,21 +125,14 @@ Notable bug fixes:
   return the exact type `future<T>`. Sole remaining exception is `when_all`.
 * issue #313: implement `future::{result,wait}_reference`
 * issue #336: Add `static_assert` to prohibit massive types as top-level arguments to RPC
-* issue #343: Guarantee equality for default-constructed invalid `upcxx::team_id`
 * issue #344: poor handling for `make install prefix=relative-path`
 * issue #345: configure with single-dash arguments
 * issue #346: `configure --cross=cray*` ignores `--with-cc/--with-cxx`
-* issue #353: configure: automatically cross-compile on Cray XC
 * issue #355: `upcxx::view<T>` broken with asymmetric deserialization of `T`
-* issue #356: `SERIALIZED_{FIELDS|VALUES}` incorrectly require public constructors
 * issue #361: upcxx::rpc broken when mixing arguments of `T&&` and `dist_object&`
 * issue #364: Stray "-e" output on macOS and possibly elsewhere
-* issue #369: `completion_cx::as_future()` typically leaks
-* issue #371: `team_id`s are not "universal" as documented
-* issue #373: No `python` in `$PATH` in recent Linux distros
 * issue #375: Improve error message for C array types by-value arguments to RPC
 * issue #376: warnings from GCC 10.1 in reduce.hpp for boolean reductions
-* issue #380: Compile regression on bulk `upcxx::rput` with source+operation completions
 * issue #384: finalize can complete without invoking progress, leading to obscure leaks
 * issue #386: `upcxx_memberof_general` prohibits member designators that end with an array access
 * issue #388: `deserialized_value()` overflows buffer for massive static types
@@ -170,12 +163,8 @@ See the [UPC++ issue tracker](https://upcxx-bugs.lbl.gov) for status of known bu
 
 Breaking changes:
 
-* Configure-time envvar `CROSS` has been renamed to `UPCXX_CROSS`.
-  For backwards compat, the former is still accepted when the latter is unset.
 * Build-time `UPCXX_CODEMODE`/`-codemode` value "O3" has been renamed to "opt".
   For backwards compat, the former is still accepted.
-* Implementation of `upcxx::team_id` is no longer Trivial (was never guaranteed to be).
-  It remains DefaultConstructible, TriviallyCopyable, StandardLayoutType, EqualityComparable
 * `upcxx_memberof(_general)(gp, mem)` now produce a `global_ptr<T>` when `mem` 
   names an array whose element type is `T`.
 * `atomic_domain` construction now has user-level progress
@@ -185,6 +174,30 @@ Breaking changes:
 * Initiating collective operations with a progress level of `internal` or `none` from within
   the restricted context (within a callback running inside progress) is now a deprecated
   behavior, and diagnosted with a runtime warning. For details, see spec issue 169.
+
+### 2020.07.17: Bug-fix release 2020.3.2
+
+New features/enhancements:
+
+* Shared heap exhaustion in `upcxx::new_(array)` now throws `upcxx::bad_shared_alloc` (a type
+  derived from `std::bad_alloc`) which provides additional diagnostics about the failure.
+
+Notable bug fixes:
+
+* issue #343: Guarantee equality for default-constructed invalid `upcxx::team_id`
+* issue #353: configure: automatically cross-compile on Cray XC
+* issue #356: `SERIALIZED_{FIELDS|VALUES}` incorrectly require public constructors
+* issue #369: `completion_cx::as_future()` typically leaks
+* issue #371: `team_id`s are not "universal" as documented
+* issue #373: No `python` in `$PATH` in recent Linux distros
+* issue #380: Compile regression on bulk `upcxx::rput` with source+operation completions
+
+Breaking changes:
+
+* Configure-time envvar `CROSS` has been renamed to `UPCXX_CROSS`.
+  For backwards compat, the former is still accepted when the latter is unset.
+* Implementation of `upcxx::team_id` is no longer Trivial (was never guaranteed to be).
+  It remains DefaultConstructible, TriviallyCopyable, StandardLayoutType, EqualityComparable
 
 ### 2020.03.12: Release 2020.3.0
 
