@@ -28,10 +28,9 @@ int main(int argc, char *argv[])
     if (i % 10 == 0) upcxx::progress();
   }
 
-  // Loop while not all insert rpc_ff have completed.
   bool done;
-  do {
-    // On each rank, capture the number of inserts injected and the number of inserts completed
+  do { // Loop while not all insert rpc_ff have completed.
+    // On each rank, capture the counts of inserts injected and completed
     long local[2] = {n_inserts_injected, dmap.local_size()};
     // Globally count the number of inserts injected and completed by completing
     // an element-wise sum reduction of each of the two counters in the local
@@ -49,7 +48,7 @@ int main(int argc, char *argv[])
     // attach callback, which itself returns a future 
     upcxx::future<> fut = dmap.find(key).then(
       // lambda to check the return value
-      [key](string val) {
+      [key](const string &val) {
         assert(val == key);
       });
     // conjoin the futures

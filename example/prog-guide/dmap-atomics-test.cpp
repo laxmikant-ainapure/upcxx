@@ -49,7 +49,7 @@ int main(int argc, char *argv[])
     // attach callback, which itself returns a future 
     upcxx::future<> fut = dmap.find(key).then(
       // lambda to check the return value
-      [key](string val) {
+      [key](const string &val) {
         assert(val == key);
       });
     // conjoin the futures
