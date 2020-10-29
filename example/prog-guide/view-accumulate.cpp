@@ -2,7 +2,8 @@
 #include <cassert>
 
 //SNIPPET
-upcxx::future<> add_accumulate(upcxx::global_ptr<double> remote_dst, double *buf, std::size_t buf_len) {
+upcxx::future<> add_accumulate(upcxx::global_ptr<double> remote_dst, 
+                               double *buf, std::size_t buf_len) {
   return upcxx::rpc(remote_dst.where(),
     [](const upcxx::global_ptr<double>& dst, const upcxx::view<double>& buf_in_rpc) {
       // Traverse `buf_in_rpc` like a container, adding each element to the
