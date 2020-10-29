@@ -5,6 +5,9 @@
 
 using namespace std;
 
+// simulate an unpredictable predicate
+// test validation relies on this being a pure function
+bool should_perform_insert(long i) { return (i%10 != 0); }
 
 int main(int argc, char *argv[])
 {
@@ -19,11 +22,13 @@ int main(int argc, char *argv[])
   for (long i = 0; i < N; i++) {
     string key = to_string(upcxx::rank_me()) + ":" + to_string(i);
     string val = key;
-    // insert mapping from key to value in our distributed map.
-    // insert has no return because it uses rpc_ff.
-    dmap.insert(key, val);
-    // increment the local count
-    n_inserts_injected++;
+    if (should_perform_insert(i)) { // unpredictable condition
+      // insert mapping from key to value in our distributed map.
+      // insert has no return because it uses rpc_ff.
+      dmap.insert(key, val);
+      // increment the local count
+      n_inserts_injected++;
+    }
     // periodically call progress to allow incoming RPCs to be processed
     if (i % 10 == 0) upcxx::progress();
   }
@@ -45,14 +50,16 @@ int main(int argc, char *argv[])
   upcxx::future<> fut_all = upcxx::make_future();
   for (long i = 0; i < N; i++) {
     string key = to_string((upcxx::rank_me() + 1) % upcxx::rank_n()) + ":" + to_string(i);
-    // attach callback, which itself returns a future 
-    upcxx::future<> fut = dmap.find(key).then(
-      // lambda to check the return value
-      [key](const string &val) {
-        assert(val == key);
-      });
-    // conjoin the futures
-    fut_all = upcxx::when_all(fut_all, fut);
+    if (should_perform_insert(i)) { 
+      // attach callback, which itself returns a future 
+      upcxx::future<> fut = dmap.find(key).then(
+        // lambda to check the return value
+        [key](const string &val) {
+          assert(val == key);
+        });
+      // conjoin the futures
+      fut_all = upcxx::when_all(fut_all, fut);
+    }
     // periodically call progress to allow incoming RPCs to be processed
     if (i % 10 == 0) upcxx::progress();
   }
