@@ -63,7 +63,7 @@ int main(int argc, char **argv) {
     if (val > 0) heapsz = val * (1<<20);
   }
 
-  int log_maxreq = 20;
+  int log_maxreq = 10;
   argv++; argc--;
   if (argc > 0) {
     int reqarg = atoi(argv[0]);

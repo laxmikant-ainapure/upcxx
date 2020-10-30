@@ -25,63 +25,69 @@ namespace upcxx {
     typename detail::completions_returner<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::rput_event_values,
-      Cxs
+      typename std::decay<Cxs>::type
     >::return_t
     copy(const int dev_s, const intrank_t rank_s, void *const buf_s,
          const int dev_d, const intrank_t rank_d, void *const buf_d,
-         const std::size_t size, Cxs cxs);
+         const std::size_t size, Cxs &&cxs);
   }
   
   template<typename T, memory_kind Ks,
            typename Cxs = completions<future_cx<operation_cx_event>>>
+  UPCXX_NODISCARD
   inline
   typename detail::completions_returner<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::rput_event_values,
-      Cxs
+    typename std::decay<Cxs>::type
     >::return_t
-  copy(global_ptr<T,Ks> src, T *dest, std::size_t n,
-       Cxs cxs=completions<future_cx<operation_cx_event>>{{}}) {
+  copy(global_ptr<const T,Ks> src, T *dest, std::size_t n,
+       Cxs &&cxs=completions<future_cx<operation_cx_event>>{{}}) {
+    UPCXX_ASSERT_INIT();
     UPCXX_GPTR_CHK(src);
     UPCXX_ASSERT(src && dest, "pointer arguments to copy may not be null");
     return detail::copy( src.device_, src.rank_, src.raw_ptr_,
                          detail::host_device, upcxx::rank_me(), dest,
-                         n * sizeof(T), std::move(cxs) );
+                         n * sizeof(T), std::forward<Cxs>(cxs) );
   }
 
   template<typename T, memory_kind Kd,
            typename Cxs = completions<future_cx<operation_cx_event>>>
+  UPCXX_NODISCARD
   inline
   typename detail::completions_returner<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::rput_event_values,
-      Cxs
+      typename std::decay<Cxs>::type
     >::return_t
   copy(T const *src, global_ptr<T,Kd> dest, std::size_t n,
-       Cxs cxs=completions<future_cx<operation_cx_event>>{{}}) {
+       Cxs &&cxs=completions<future_cx<operation_cx_event>>{{}}) {
+    UPCXX_ASSERT_INIT();
     UPCXX_GPTR_CHK(dest);
     UPCXX_ASSERT(src && dest, "pointer arguments to copy may not be null");
-    return detail::copy( detail::host_device, upcxx::rank_me(), const_cast<void*>(src),
+    return detail::copy( detail::host_device, upcxx::rank_me(), const_cast<T*>(src),
                          dest.device_, dest.rank_, dest.raw_ptr_,
-                         n * sizeof(T), std::move(cxs) );
+                         n * sizeof(T), std::forward<Cxs>(cxs) );
   }
   
   template<typename T, memory_kind Ks, memory_kind Kd,
            typename Cxs = completions<future_cx<operation_cx_event>>>
+  UPCXX_NODISCARD
   inline
   typename detail::completions_returner<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::rput_event_values,
-      Cxs
+      typename std::decay<Cxs>::type
     >::return_t
-  copy(global_ptr<T,Ks> src, global_ptr<T,Kd> dest, std::size_t n,
-       Cxs cxs=completions<future_cx<operation_cx_event>>{{}}) {
+  copy(global_ptr<const T,Ks> src, global_ptr<T,Kd> dest, std::size_t n,
+       Cxs &&cxs=completions<future_cx<operation_cx_event>>{{}}) {
+    UPCXX_ASSERT_INIT();
     UPCXX_GPTR_CHK(src); UPCXX_GPTR_CHK(dest);
     UPCXX_ASSERT(src && dest, "pointer arguments to copy may not be null");
     return detail::copy(
       src.device_, src.rank_, src.raw_ptr_,
       dest.device_, dest.rank_, dest.raw_ptr_,
-      n*sizeof(T), std::move(cxs)
+      n*sizeof(T), std::forward<Cxs>(cxs)
     );
   }
 
@@ -90,30 +96,31 @@ namespace upcxx {
   typename detail::completions_returner<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::rput_event_values,
-      Cxs
+      typename std::decay<Cxs>::type
   >::return_t
   copy(const int dev_s, const intrank_t rank_s, void *const buf_s,
        const int dev_d, const intrank_t rank_d, void *const buf_d,
-       const std::size_t size, Cxs cxs) {
+       const std::size_t size, Cxs &&cxs) {
     
+    using CxsDecayed = typename std::decay<Cxs>::type;
     using cxs_here_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::rput_event_values,
-      Cxs>;
+      CxsDecayed>;
     using cxs_remote_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_remote,
       /*EventValues=*/detail::rput_event_values,
-      Cxs>;
+      CxsDecayed>;
 
-    cxs_here_t *cxs_here = new cxs_here_t(std::move(cxs));
-    cxs_remote_t cxs_remote(std::move(cxs));
+    cxs_here_t *cxs_here = new cxs_here_t(std::forward<Cxs>(cxs));
+    cxs_remote_t cxs_remote(std::forward<Cxs>(cxs));
 
     persona *initiator_per = &upcxx::current_persona();
     
     auto returner = detail::completions_returner<
         /*EventPredicate=*/detail::event_is_here,
         /*EventValues=*/detail::rput_event_values,
-        Cxs
+        CxsDecayed
       >(*cxs_here);
 
     if(upcxx::rank_me() != rank_d && upcxx::rank_me() != rank_s) {

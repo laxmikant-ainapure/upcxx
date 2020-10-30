@@ -78,6 +78,7 @@ template<>
 gex_Event_t atomic_domain_untyped<4,0>::inject( 
         std::uintptr_t ad, void *result_ptr, intrank_t jobrank, void *raw_ptr,
         atomic_op opcode, proxy_type val1, proxy_type val2, gex_Flags_t flags) {
+  UPCXX_ASSERT_MASTER_IFSEQ();
   return gex_AD_OpNB_U32(reinterpret_cast<gex_AD_t>(ad), reinterpret_cast<proxy_type*>(result_ptr), 
                          jobrank, raw_ptr, (gex_OP_t)opcode, val1, val2, flags);
 }
@@ -85,6 +86,7 @@ template<>
 gex_Event_t atomic_domain_untyped<4,1>::inject( 
         std::uintptr_t ad, void *result_ptr, intrank_t jobrank, void *raw_ptr,
         atomic_op opcode, proxy_type val1, proxy_type val2, gex_Flags_t flags) {
+  UPCXX_ASSERT_MASTER_IFSEQ();
   return gex_AD_OpNB_I32(reinterpret_cast<gex_AD_t>(ad), reinterpret_cast<proxy_type*>(result_ptr), 
                          jobrank, raw_ptr, (gex_OP_t)opcode, val1, val2, flags);
 }
@@ -92,6 +94,7 @@ template<>
 gex_Event_t atomic_domain_untyped<4,2>::inject( 
         std::uintptr_t ad, void *result_ptr, intrank_t jobrank, void *raw_ptr,
         atomic_op opcode, proxy_type val1, proxy_type val2, gex_Flags_t flags) {
+  UPCXX_ASSERT_MASTER_IFSEQ();
   return gex_AD_OpNB_FLT(reinterpret_cast<gex_AD_t>(ad), reinterpret_cast<proxy_type*>(result_ptr),
                          jobrank, raw_ptr, (gex_OP_t)opcode, val1, val2, flags);
 }
@@ -99,6 +102,7 @@ template<>
 gex_Event_t atomic_domain_untyped<8,0>::inject( 
         std::uintptr_t ad, void *result_ptr, intrank_t jobrank, void *raw_ptr,
         atomic_op opcode, proxy_type val1, proxy_type val2, gex_Flags_t flags) {
+  UPCXX_ASSERT_MASTER_IFSEQ();
   return gex_AD_OpNB_U64(reinterpret_cast<gex_AD_t>(ad), reinterpret_cast<proxy_type*>(result_ptr),
                          jobrank, raw_ptr, (gex_OP_t)opcode, val1, val2, flags);
 }
@@ -106,6 +110,7 @@ template<>
 gex_Event_t atomic_domain_untyped<8,1>::inject( 
         std::uintptr_t ad, void *result_ptr, intrank_t jobrank, void *raw_ptr,
         atomic_op opcode, proxy_type val1, proxy_type val2, gex_Flags_t flags) {
+  UPCXX_ASSERT_MASTER_IFSEQ();
   return gex_AD_OpNB_I64(reinterpret_cast<gex_AD_t>(ad), reinterpret_cast<proxy_type*>(result_ptr),
                          jobrank, raw_ptr, (gex_OP_t)opcode, val1, val2, flags);
 }
@@ -113,6 +118,7 @@ template<>
 gex_Event_t atomic_domain_untyped<8,2>::inject( 
         std::uintptr_t ad, void *result_ptr, intrank_t jobrank, void *raw_ptr,
         atomic_op opcode, proxy_type val1, proxy_type val2, gex_Flags_t flags) {
+  UPCXX_ASSERT_MASTER_IFSEQ();
   return gex_AD_OpNB_DBL(reinterpret_cast<gex_AD_t>(ad), reinterpret_cast<proxy_type*>(result_ptr),
                          jobrank, raw_ptr, (gex_OP_t)opcode, val1, val2, flags);
 }
@@ -134,6 +140,8 @@ namespace {
 template<std::size_t size, int bit_flavor>
 upcxx::detail::atomic_domain_untyped<size,bit_flavor>::atomic_domain_untyped(
   std::vector<atomic_op> const &ops, const team &tm) {
+  UPCXX_ASSERT_MASTER();
+
   gex_OP_t opmask = 0;
   for (auto next_op : ops) opmask |= static_cast<gex_OP_t>(next_op);
   atomic_gex_ops = opmask;
@@ -148,6 +156,11 @@ upcxx::detail::atomic_domain_untyped<size,bit_flavor>::atomic_domain_untyped(
   parent_tm_ = &tm;
   
   if(opmask) {
+    #if GASNET_DEBUG
+      // spec issue #160: gex_AD_Create currently performs some synchronization in DEBUG mode (only)
+      // so perform a user barrier here to ensure no team members are blocked awaiting an RPC response
+      backend::quiesce(tm, entry_barrier::user);
+    #endif
     // Create the gasnet atomic domain for the world team.
     gex_AD_Create(reinterpret_cast<gex_AD_t*>(&ad_gex_handle),
                   gasnet::handle_of(tm), 
@@ -160,7 +173,7 @@ upcxx::detail::atomic_domain_untyped<size,bit_flavor>::atomic_domain_untyped(
 
 template<std::size_t size, int bit_flavor>
 void upcxx::detail::atomic_domain_untyped<size,bit_flavor>::destroy(entry_barrier eb) {
-  UPCXX_ASSERT(backend::master.active_with_caller());
+  UPCXX_ASSERT_MASTER();
   
   backend::quiesce(*parent_tm_, eb);
 

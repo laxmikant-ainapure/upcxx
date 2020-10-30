@@ -52,7 +52,7 @@ if( UPCXX_META_EXECUTABLE )
     if (uc_CMAKE_BUILD_TYPE STREQUAL "DEBUG")
       set(ENV{UPCXX_CODEMODE} "debug" )
     else()
-      set(ENV{UPCXX_CODEMODE} "O3" )
+      set(ENV{UPCXX_CODEMODE} "O3" ) # O3 is compatible with any version
     endif()
     unset(uc_CMAKE_BUILD_TYPE)
   endif()
@@ -85,8 +85,10 @@ if( UPCXX_META_EXECUTABLE )
   if (UPCXX_CXX_COMPILER MATCHES "[ \t\n]+(.+)$")
      UPCXX_VERB("embedded CXX options: ${CMAKE_MATCH_0}")
      string(REGEX REPLACE "[ \t\n]+.+$" "" UPCXX_CXX_COMPILER ${UPCXX_CXX_COMPILER})
-     set(UPCXX_CXXFLAGS "${CMAKE_MATCH_0} ${UPCXX_CXXFLAGS}")
-     string(STRIP ${UPCXX_CXXFLAGS} UPCXX_CXXFLAGS)
+     string(STRIP "${CMAKE_MATCH_0} ${UPCXX_CXXFLAGS}" UPCXX_CXXFLAGS)
+     string(STRIP "${CMAKE_MATCH_0} ${UPCXX_LDFLAGS}" UPCXX_LDFLAGS)
+     UPCXX_VERB("augmented UPCXX_CXXFLAGS=${UPCXX_CXXFLAGS}")
+     UPCXX_VERB("augmented UPCXX_LDFLAGS=${UPCXX_LDFLAGS}")
   endif()
   UPCXX_VERB("UPCXX_CXX_COMPILER=${UPCXX_CXX_COMPILER}")
   UPCXX_VERB("CMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}")
@@ -198,12 +200,17 @@ if( UPCXX_META_EXECUTABLE )
 endif()
 
 foreach( dir ${UPCXX_INCLUDE_DIRS} )
-  if( EXISTS ${dir}/upcxx/upcxx.hpp )
+  if( EXISTS         ${dir}/upcxx/version.hpp ) # > 2020.3.0
+    set(version_file ${dir}/upcxx/version.hpp ) 
+  elseif ( EXISTS    ${dir}/upcxx/upcxx.hpp ) # <= 2020.3.0
+    set(version_file ${dir}/upcxx/upcxx.hpp ) 
+  endif()
+  if ( version_file )
     set( version_pattern 
       "#[\t ]*define[\t ]+UPCXX_VERSION[\t ]+([0-9]+)"
       )
-    #UPCXX_VERB("checking ${dir}/upcxx/upcxx.hpp for ${version_pattern}" )
-    file( STRINGS ${dir}/upcxx/upcxx.hpp upcxx_version
+    #UPCXX_VERB("checking ${version_file} for ${version_pattern}" )
+    file( STRINGS ${version_file} upcxx_version
       REGEX ${version_pattern} )
     #UPCXX_VERB("upcxx_version ${upcxx_version}" )
 
@@ -212,6 +219,7 @@ foreach( dir ${UPCXX_INCLUDE_DIRS} )
     endif()
 
     unset( upcxx_version )
+    unset( version_file )
     unset( version_pattern )
   endif()
 endforeach()

@@ -323,6 +323,7 @@ int main(void) {
                 }));
     }
     fut.wait();
+    delete [] edges_to_insert;
 
     /*
      * Validation. Assert that for each of our local vertices, any vertex that

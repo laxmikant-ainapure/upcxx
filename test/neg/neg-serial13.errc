@@ -1,0 +1,2 @@
+Template argument of read must be Serializable.
+Cannot return array type from read -- use read_into or read_sequence_into instead.

@@ -1,5 +1,4 @@
-#include <upcxx/segment_allocator.hpp>
-#include <upcxx/diagnostic.hpp>
+#include <upcxx/upcxx.hpp>
 
 #include "util.hpp"
 
@@ -10,6 +9,9 @@ using upcxx::detail::segment_allocator;
 using std::size_t;
 
 int main() {
+  upcxx::init();
+  print_test_header();
+
   constexpr unsigned seg_size = 1<<20;
   void *seg = operator new(seg_size*sizeof(unsigned));
   segment_allocator seg_alloc(seg, seg_size*sizeof(unsigned));
@@ -18,7 +20,7 @@ int main() {
   unsigned **blobs = new unsigned*[max_blobs](/*null...*/);
 
   size_t total = 0;
-  size_t min_total = -1;
+  size_t min_total = (size_t)-1;
   size_t sum_total = 0;
   size_t fail_n = 0;
   
@@ -71,4 +73,8 @@ int main() {
   
   delete[] blobs;
   operator delete(seg);
+
+  upcxx::barrier();
+  print_test_success();
+  upcxx::finalize();
 }

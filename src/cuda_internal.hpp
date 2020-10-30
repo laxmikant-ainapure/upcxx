@@ -45,6 +45,7 @@
         CUcontext context;
         CUstream stream;
         CUdeviceptr segment_to_free;
+        detail::device_allocator_core<upcxx::cuda_device> *allocator_core;
       };
     }
   }

@@ -24,26 +24,24 @@ namespace upcxx {
       std::tuple<T...> results_;
       
     public:
-      future_impl_result(T ...values):
+      future_impl_result(T &&...values):
         results_{std::forward<T>(values)...} {
       }
       
       bool ready() const { return true; }
       
-      detail::constant_function<std::tuple<T&...>> result_lrefs_getter() const {
-        return {
-          detail::tuple_lrefs(const_cast<std::tuple<T...>&>(results_))
-        };
+      detail::tuple_refs_return_t<std::tuple<T...> const&>
+      result_refs_or_vals() const& {
+        return detail::tuple_refs(results_);
       }
-      
-      auto result_rvals()
-        UPCXX_RETURN_DECLTYPE(detail::tuple_rvals(results_)) {
-        return detail::tuple_rvals(results_);
+      detail::tuple_refs_return_t<std::tuple<T...>&&>
+      result_refs_or_vals() && {
+        return detail::tuple_refs(std::move(results_));
       }
       
       typedef future_header_ops_result_ready header_ops;
       
-      future_header* steal_header() {
+      future_header* steal_header() && {
         return &(new future_header_result<T...>(0, std::move(results_)))->base_header;
       }
     };
@@ -52,15 +50,11 @@ namespace upcxx {
     struct future_impl_result<> {
       bool ready() const { return true; }
       
-      detail::constant_function<std::tuple<>> result_lrefs_getter() const {
-        return {std::tuple<>{}};
-      }
-      
-      std::tuple<> result_rvals() { return std::tuple<>{}; }
+      std::tuple<> result_refs_or_vals() const { return std::tuple<>(); }
       
       typedef future_header_ops_result_ready header_ops;
       
-      future_header* steal_header() {
+      future_header* steal_header() && {
         return &future_header_result<>::the_always;
       }
     };
@@ -77,26 +71,20 @@ namespace upcxx {
       
       future_dependency(
           future_header_dependent *suc_hdr,
-          future1<future_kind_result, T...> arg
+          future1<future_kind_result, T...> &&arg
         ):
-        results_{std::move(arg.impl_.results_)} {
+        results_(static_cast<std::tuple<T...>&&>(arg.impl_.results_)) {
+      }
+      future_dependency(
+          future_header_dependent *suc_hdr,
+          future1<future_kind_result, T...> const &arg
+        ):
+        results_(arg.impl_.results_) {
       }
       
-      void cleanup_early() {}
-      
-      detail::constant_function<std::tuple<T&...>> result_lrefs_getter() const {
-        return {
-          detail::tuple_lrefs(const_cast<std::tuple<T...>&>(results_))
-        };
-      }
-      
-      void cleanup_ready() {}
-      
-      future_header* cleanup_ready_get_header() {
-        return &(new future_header_result<T...>(
-            /*not_ready=*/false,
-            /*values=*/std::tuple<T...>{std::move(results_)}
-          ))->base_header;
+      detail::tuple_refs_return_t<std::tuple<T...>&&>
+      result_refs_or_vals() && {
+        return detail::tuple_refs(std::move(results_));
       }
     };
     
@@ -110,19 +98,8 @@ namespace upcxx {
         ) {
       }
       
-      void cleanup_early() {}
-      
-      detail::constant_function<std::tuple<>> result_lrefs_getter() const {
-        return {std::tuple<>{}};
-      }
-      
-      void cleanup_ready() {}
-      
-      future_header* cleanup_ready_get_header() {
-        return &(new future_header_result<>(
-            /*not_ready=*/false,
-            /*value=*/std::tuple<>{}
-          ))->base_header;
+      std::tuple<> result_refs_or_vals() && {
+        return std::tuple<>();
       }
     };
   }

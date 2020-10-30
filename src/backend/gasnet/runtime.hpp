@@ -333,6 +333,8 @@ namespace gasnet {
       this->cmd_align = that.cmd_align;
     }
   };
+
+  extern int watermark_init();
 }}}
 
 //////////////////////////////////////////////////////////////////////
@@ -417,7 +419,7 @@ namespace backend {
 
   template<typename AmBuf>
   void send_prepared_am_master(progress_level level, const team &tm, intrank_t recipient, AmBuf &&am) {
-    UPCXX_ASSERT(!UPCXX_BACKEND_GASNET_SEQ || backend::master.active_with_caller());
+    UPCXX_ASSERT_MASTER_IFSEQ();
 
     if(am.is_eager)
       gasnet::send_am_eager_master(level, tm, recipient, am.buffer, am.cmd_size, am.cmd_align);
@@ -428,7 +430,7 @@ namespace backend {
   template<upcxx::progress_level level, typename Fn>
   void send_am_master(const team &tm, intrank_t recipient, Fn &&fn) {
     #if 0
-      UPCXX_ASSERT(!UPCXX_BACKEND_GASNET_SEQ || backend::master.active_with_caller());
+      UPCXX_ASSERT_MASTER_IFSEQ();
 
       using gasnet::am_send_buffer;
       using gasnet::rpc_as_lpc;
@@ -466,7 +468,7 @@ namespace backend {
       intrank_t recipient_rank, persona *recipient_persona,
       AmBuf &&am
     ) {
-    UPCXX_ASSERT(!UPCXX_BACKEND_GASNET_SEQ || backend::master.active_with_caller());
+    UPCXX_ASSERT_MASTER_IFSEQ();
     
     if(am.is_eager)
       gasnet::send_am_eager_persona(level, tm, recipient_rank, recipient_persona, am.buffer, am.cmd_size, am.cmd_align);
@@ -482,7 +484,7 @@ namespace backend {
       Fn &&fn
     ) {
     #if 0
-      UPCXX_ASSERT(!UPCXX_BACKEND_GASNET_SEQ || backend::master.active_with_caller());
+      UPCXX_ASSERT_MASTER_IFSEQ();
       
       using gasnet::am_send_buffer;
       using gasnet::rpc_as_lpc;
@@ -513,8 +515,8 @@ namespace backend {
     #endif
   }
 
-  template<typename ...T>
-  void send_awaken_lpc(const team &tm, intrank_t recipient, detail::lpc_dormant<T...> *lpc, std::tuple<T...> &&vals) {
+  template<typename ...T, typename ...U>
+  void send_awaken_lpc(const team &tm, intrank_t recipient, detail::lpc_dormant<T...> *lpc, std::tuple<U...> &&vals) {
     auto am_buf(prepare_am(
       upcxx::bind([=](std::tuple<T...> &&vals) {
           lpc->awaken(std::move(vals));
@@ -538,7 +540,7 @@ namespace backend {
   
   template<progress_level level, typename Fn1>
   void bcast_am_master(const team &tm, Fn1 &&fn) {
-    UPCXX_ASSERT(!UPCXX_BACKEND_GASNET_SEQ || backend::master.active_with_caller());
+    UPCXX_ASSERT_MASTER_IFSEQ();
     
     using gasnet::am_send_buffer;
     using gasnet::bcast_as_lpc;
@@ -597,7 +599,7 @@ namespace gasnet {
   // register_handle_cb
 
   inline handle_cb_queue& get_handle_cb_queue() {
-    UPCXX_ASSERT(!UPCXX_BACKEND_GASNET_SEQ || backend::master.active_with_caller());
+    UPCXX_ASSERT_MASTER_IFSEQ();
 
     #if UPCXX_BACKEND_GASNET_SEQ
       return gasnet::master_hcbs;
@@ -615,7 +617,7 @@ namespace gasnet {
   
   template<typename Fn>
   void send_am_restricted(const team &tm, intrank_t recipient, Fn &&fn) {
-    UPCXX_ASSERT(!UPCXX_BACKEND_GASNET_SEQ || backend::master.active_with_caller());
+    UPCXX_ASSERT_MASTER_IFSEQ();
 
     auto am_buf(prepare_am(
       std::forward<Fn>(fn), gasnet::am_size_rdzv_cutover, /*restricted=*/std::true_type()
@@ -664,6 +666,7 @@ namespace gasnet {
       progress_level am_level, AmFn &&am_fn,
       handle_cb *src_cb, reply_cb *rem_cb
     ) {
+    UPCXX_ASSERT_MASTER_IFSEQ();
 
     bool rank_d_is_local = backend::rank_is_local(rank_d);
     

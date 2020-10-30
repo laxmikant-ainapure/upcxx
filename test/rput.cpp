@@ -1,9 +1,4 @@
-#include <upcxx/allocate.hpp>
-#include <upcxx/barrier.hpp>
-#include <upcxx/global_ptr.hpp>
-#include <upcxx/rput.hpp>
-#include <upcxx/rget.hpp>
-#include <upcxx/rpc.hpp>
+#include <upcxx/upcxx.hpp>
 
 #include "util.hpp"
 
@@ -44,6 +39,7 @@ int main() {
     future<global_ptr<int>> fut = upcxx::rpc(nebr, []() { return my_thing; });
     nebr_thing = fut.wait();
   }
+  global_ptr<const int> cnebr_thing = nebr_thing;
   
   future<> done_g;
   bool done_s = false;
@@ -60,7 +56,7 @@ int main() {
   int buf;
   done_g = done_g.then([&]() {
     promise<int> *pro1 = new promise<int>;
-    upcxx::rget(nebr_thing, operation_cx::as_promise(*pro1));
+    upcxx::rget(cnebr_thing, operation_cx::as_promise(*pro1));
     
     promise<> *pro2 = new promise<>;
     upcxx::rget(nebr_thing, &buf, 1,

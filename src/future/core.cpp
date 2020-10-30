@@ -43,8 +43,6 @@ void future_header::dependency_link::unlink() {
 }
 
 void future_header_dependent::entered_active() {
-  this->incref(1); // being in active queue is a reference
-  
   if(active_tail_ != nullptr) {
     // add to existing active queue
     *active_tail_ = this;
@@ -112,7 +110,6 @@ void future_header::entered_ready_with_sucs(future_header *result, dependency_li
       result_refs += result_refs_unit;
       
       if(--suc->status_ <= future_header::status_active) {
-        suc->incref(1); // being in active queue is a reference
         // add to active queue
         *active_tail_ = suc;
         suc->active_next_ = nullptr;
@@ -188,7 +185,8 @@ void future_header_dependent::enter_proxying(
   
   if(proxied->status_ == future_header::status_ready) {
     deferred_delete_3 = body->storage_; // dont need body
-    
+    this->decref(1); // dependent entering ready loses ref
+    UPCXX_ASSERT(this->ref_n_ != 0); // caller should have ensured we have an external observer
     this->enter_ready(future_header::drop_for_result(proxied));
   }
   else {
@@ -252,28 +250,4 @@ void future_header_dependent::enter_proxying(
   future_body::operator delete(deferred_delete_1);
   delete deferred_delete_2;
   future_body::operator delete(deferred_delete_3);
-}
-
-void future_body_proxy_::leave_active(future_header_dependent *hdr) {
-  if(hdr->ref_n_ != 1) { // active queue is not only reference
-    hdr->ref_n_ -= 1; // drop active queue reference
-    
-    future_header *result = this->link_.dep; // link.dep replaced with result in dependency's enter_ready()
-    
-    // discard the body. no destructor needed since future_body_proxy<T...>
-    // is trivially destructible and we dont want to decref the proxied pointer.
-    operator delete(this->storage_);
-    
-    hdr->enter_ready(result);
-  }
-  else { // only reference is active queue, just delete it
-    void *storage = this->storage_;
-    this->destruct_early();
-    operator delete(storage);
-    delete hdr;
-  }
-}
-
-void future_body::destruct_early() {
-  UPCXX_INVOKE_UB(); // never called
 }

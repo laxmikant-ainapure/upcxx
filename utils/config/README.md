@@ -4,12 +4,12 @@
 
 ## Basics:
 
-Scripts in this directory are run to generate content in `upcxx_config.hpp`.
-To be run, they must be named in the `UPCXX_CONFIG_SCRIPTS` variable in
-`bld/config.mak`.
+Sripts below this directory are run to generate content in `upcxx_config.hpp`
+and `gasnet.{codemode}.mak`.  To be run, they must be named in either the
+`UPCXX_CONFIG_SCRIPTS` or `GASNET_CONFIG_SCRIPTS` variable in `bld/config.mak`.
 
-The interface is simple: inputs via environment (below) and
-output on `stdout`.  Everything on `stdout` is sent to the config header.
+The interface is simple: inputs via environment (below) and output on `stdout`.
+Everything on `stdout` is sent to the corresponding config file.
 
 All `stderr` is provided to the user. Exiting non-zero stops the build.
 
@@ -18,12 +18,21 @@ variety of tests to be constructed.  However, be aware that it is not (in
 general) possible to execute test codes when cross-compiling.
 
 Scripts should assume multiple instances will be running concurrently for
-different builds of libupcxx.a, with distinct working directories.  Other than
-sepration of concurrent runs, scripts should not assume any specific working
-directory and should remove any temporary files it creates.  The prefix
-`conftest` is preferred for any temporary files (source, object, etc.) and it
-is permissible to overwrite any pre-exiting files with that prefix (perhaps
-from other probes that failed to cleanup).
+different builds of libupcxx.a, but with distinct working directories.
+
+Scripts should remove any temporary files they create.  The prefix `conftest`
+is preferred for any temporary files (source, object, etc.) and it is
+permissible to overwrite any pre-exiting files with that prefix (perhaps from
+other probes that failed to cleanup).
+
+There is a distinct `upcxx_config.hpp` header for each and every `libupcxx.a`.
+Scripts generating these headers are run in the corresponding `bld/upcxx.*/`
+build directory.
+
+There are only two makefile fragments: `gasnet.opt.mak` and `gasnet.debug.mak`.
+Scripts generating these makefile fragments are run in the corresponding
+`bld/gasnet.{codemode}/` build directory.  Each is built with environment
+variables (below) set for the SEQ build of the default conduit.
 
 ## Environment:
 

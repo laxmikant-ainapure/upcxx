@@ -1,19 +1,7 @@
 #ifndef _a6becf70_cd32_4da7_82e9_379ce395b781
 #define _a6becf70_cd32_4da7_82e9_379ce395b781
 
-// UPCXX_VERSION release identifier format:
-// YYYYMMPPL = [YEAR][MONTH][PATCH]
-#define UPCXX_VERSION 20200302L
-
-// UPCXX_SPEC_VERSION release identifier format:
-// YYYYMM00L = [YEAR][MONTH]
-#define UPCXX_SPEC_VERSION 20200300L
-
-namespace upcxx {
-  long release_version();
-  long spec_version();
-}
-
+#include <upcxx/version.hpp>
 #include <upcxx/allocate.hpp>
 #include <upcxx/atomic.hpp>
 #include <upcxx/backend.hpp>

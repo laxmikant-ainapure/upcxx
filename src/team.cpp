@@ -32,8 +32,9 @@ team::team(team &&that):
   coll_counter_(that.coll_counter_),
   n_(that.n_),
   me_(that.me_) {
-  
-  UPCXX_ASSERT(backend::master.active_with_caller());
+
+  UPCXX_ASSERT_INIT();
+  UPCXX_ASSERT_MASTER();
   UPCXX_ASSERT((that.id_ != digest{~0ull, ~0ull}));
   
   that.id_ = digest{~0ull, ~0ull}; // the tombstone id value
@@ -53,7 +54,9 @@ team::~team() {
 }
 
 team team::split(intrank_t color, intrank_t key) const {
-  UPCXX_ASSERT(backend::master.active_with_caller());
+  UPCXX_ASSERT_INIT();
+  UPCXX_ASSERT_MASTER();
+  UPCXX_ASSERT_COLLECTIVE_SAFE(entry_barrier::user);
   UPCXX_ASSERT(color >= 0 || color == color_none);
   
   gex_TM_t sub_tm = GEX_TM_INVALID;
@@ -90,15 +93,33 @@ team team::split(intrank_t color, intrank_t key) const {
 }
 
 void team::destroy(entry_barrier eb) {
-  UPCXX_ASSERT(backend::master.active_with_caller());
+  UPCXX_ASSERT_INIT();
+  UPCXX_ASSERT_MASTER();
+  UPCXX_ASSERT_COLLECTIVE_SAFE(eb);
+  UPCXX_ASSERT(this != &world(),      "team::destroy() is prohibited on team world()");
+  UPCXX_ASSERT(this != &local_team(), "team::destroy() is prohibited on the local_team()");
+
+  team::destroy(detail::internal_only(), eb);
+}
+
+void team::destroy(detail::internal_only, entry_barrier eb) {
+  UPCXX_ASSERT_MASTER();
   
-  if(this->handle != reinterpret_cast<uintptr_t>(GEX_TM_INVALID)) {
+  gex_TM_t tm = gasnet::handle_of(*this);
+
+  if(tm != GEX_TM_INVALID) {
     backend::quiesce(*this, eb);
+
+    void *scratch = gex_TM_QueryCData(tm);
+
+    if (tm != gasnet::handle_of(detail::the_world_team.value())) {
+        gex_Memvec_t scratch_area;
+        gex_TM_Destroy(tm, &scratch_area, GEX_FLAG_GLOBALLY_QUIESCED);
+
+        if (scratch) UPCXX_ASSERT(scratch == scratch_area.gex_addr);
+    }
     
-    void *scratch = gex_TM_QueryCData(reinterpret_cast<gex_TM_t>(this->handle));
     upcxx::deallocate(scratch);
-    
-    // TODO: destruct with GEX API call when that exists
   }
   
   if(id_ != digest{~0ull, ~0ull})

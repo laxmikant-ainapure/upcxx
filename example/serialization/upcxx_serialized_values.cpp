@@ -1,6 +1,7 @@
 #include <upcxx/upcxx.hpp>
 #include <cassert>
 #include <iostream>
+#include <memory>
 
 /*
  * This example illustrates the use of UPCXX_SERIALIZED_VALUES to serialize an
@@ -32,12 +33,12 @@ class dist_reduction {
          */
         bool deserialized;
         // The values to perform a sum reduction across
-        double values[N];
+        std::unique_ptr<double[]> values;
         // Used to store a local sum reduction result on each rank
         double partial_sum_reduction;
 
         // Default contructor used by user code
-        dist_reduction() {
+        dist_reduction() : values(new double[N]) {
             for (int i = 0; i < N; i++) {
                 values[i] = 1.0;
             }
@@ -82,7 +83,7 @@ int main(void) {
                  */
                 assert(reduce.was_deserialized());
                 *sum_reduction += reduce.partial_sum_reduction;
-            }, sum_reduction, reduce).wait();
+            }, sum_reduction, std::move(reduce)).wait();
 
     upcxx::barrier();
 

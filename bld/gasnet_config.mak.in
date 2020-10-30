@@ -1,0 +1,17 @@
+# BEGIN gasnet_config.mak.in
+# Processed by GASNet's config.status for inclusion in bld/gasnet.{codemode}.mak
+
+# Programs we use
+PERL = @PERL@
+
+# Probed parameters
+CONDUITS = @CONDUITS@
+EXESUFFIX = @EXESUFFIX@
+
+# Probed compiler features
+GASNET_CC_FAMILY  = @CC_FAMILY@
+GASNET_CXX_FAMILY = @CXX_FAMILY@
+GASNET_CC_SUBFAMILY  = @CC_SUBFAMILY@
+GASNET_CXX_SUBFAMILY = @CXX_SUBFAMILY@
+
+# END gasnet_config.mak.in

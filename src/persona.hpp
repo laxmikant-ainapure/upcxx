@@ -81,10 +81,10 @@ namespace upcxx {
     
   public:
     template<typename Fn>
-    void lpc_ff(detail::persona_tls &tls, Fn fn);
+    void lpc_ff(detail::persona_tls &tls, Fn &&fn);
     
     template<typename Fn>
-    void lpc_ff(Fn fn);
+    void lpc_ff(Fn &&fn);
   
   private:
     template<typename Results, typename Promise>
@@ -105,13 +105,15 @@ namespace upcxx {
       
       template<typename ...Args>
       void operator()(Args &&...args) {
-        std::tuple<typename std::decay<Args>::type...> results{
-          std::forward<Args>(args)...
-        };
+        using results_t = std::tuple<typename std::conditional<
+            !std::is_lvalue_reference<Args>::value,
+            typename std::decay<Args>::type,
+            Args
+          >::type...>;
         
         initiator_->lpc_ff(
-          lpc_initiator_finish<decltype(results), Promise>{
-            std::move(results),
+          lpc_initiator_finish<results_t, Promise>{
+            results_t{std::forward<Args>(args)...},
             pro_
           }
         );
@@ -132,10 +134,11 @@ namespace upcxx {
   
   public:
     template<typename Fn>
-    auto lpc(Fn fn)
+    UPCXX_NODISCARD
+    auto lpc(Fn &&fn)
       -> typename detail::future_from_tuple_t<
         detail::future_kind_shref<detail::future_header_ops_general>, // the default future kind
-        typename decltype(upcxx::apply_as_future(fn))::results_type
+        typename decltype(upcxx::apply_as_future(typename std::decay<Fn>::type(fn)))::results_type
       >;
   };
   
@@ -226,6 +229,7 @@ namespace upcxx {
     struct persona_tls {
       int progressing_add_1;
       unsigned burstable_bits;
+      bool is_primordial_thread; // true iff this thread inited the current library
       
       persona default_persona;
       // persona_scope default_scope;
@@ -243,6 +247,7 @@ namespace upcxx {
       constexpr persona_tls():
         progressing_add_1(),
         burstable_bits(),
+        is_primordial_thread(),
         default_persona(internal_only()), // call special constructor that builds default persona
         default_scope_raw(),
         top_xor_default(),
@@ -348,7 +353,11 @@ namespace upcxx {
       // on this thread, but don't think anything would break if it isn't.
       int burst_internal(persona&);
       int burst_user(persona&);
-      
+
+      // A miniature progress engine that reaps the queues for all active
+      // personas. Not used by the runtime since it has more things to do
+      // per-persona than just the queues (also whatever is in backend_state).
+      // Only used by persona-aware unit tests.
       int persona_only_progress();
     };
     
@@ -377,6 +386,7 @@ namespace upcxx {
   }
   
   inline bool persona::active_with_caller() const {
+    UPCXX_ASSERT_INIT();
     return active_with_caller(detail::the_persona_tls);
   }
   
@@ -389,26 +399,30 @@ namespace upcxx {
   }
 
   template<typename Fn>
-  void persona::lpc_ff(Fn fn) {
+  void persona::lpc_ff(Fn &&fn) {
+    UPCXX_ASSERT_INIT();
     this->lpc_ff(detail::the_persona_tls, std::forward<Fn>(fn));
   }
   
   template<typename Fn>
-  void persona::lpc_ff(detail::persona_tls &tls, Fn fn) {
+  void persona::lpc_ff(detail::persona_tls &tls, Fn &&fn) {
     if(this->active_with_caller(tls))
-      this->self_inbox_[(int)progress_level::user].send(std::move(fn));
+      this->self_inbox_[(int)progress_level::user].send(std::forward<Fn>(fn));
     else
-      this->peer_inbox_[(int)progress_level::user].send(std::move(fn));
+      this->peer_inbox_[(int)progress_level::user].send(std::forward<Fn>(fn));
   }
   
   template<typename Fn>
-  auto persona::lpc(Fn fn)
+  UPCXX_NODISCARD
+  auto persona::lpc(Fn &&fn)
     -> typename detail::future_from_tuple_t<
       detail::future_kind_shref<detail::future_header_ops_general>, // the default future kind
-      typename decltype(upcxx::apply_as_future(fn))::results_type
+      typename decltype(upcxx::apply_as_future(typename std::decay<Fn>::type(fn)))::results_type
     > {
+    UPCXX_ASSERT_INIT();
     
-    using results_type = typename decltype(upcxx::apply_as_future(fn))::results_type;
+    using decay_fn = typename std::decay<Fn>::type;
+    using results_type = typename decltype(upcxx::apply_as_future(decay_fn(fn)))::results_type;
     using results_promise = detail::tuple_types_into_t<results_type, promise>;
     
     detail::persona_tls &tls = detail::the_persona_tls;
@@ -417,10 +431,10 @@ namespace upcxx {
     auto ans = pro->get_future();
     
     this->lpc_ff(tls,
-      lpc_recipient_execute<Fn, results_promise>{
+      lpc_recipient_execute<typename std::decay<Fn>::type, results_promise>{
         /*initiator*/tls.get_top_persona(),
         /*promise*/pro,
-        /*fn*/std::move(fn)
+        /*fn*/std::forward<Fn>(fn)
       }
     );
       
@@ -470,12 +484,18 @@ namespace upcxx {
   }
   
   inline persona_scope::persona_scope(persona &p, detail::persona_tls &tls) {
+    UPCXX_ASSERT_INIT_NAMED("upcxx::persona_scope::persona_scope(persona &p)");
     this->lock_ = nullptr;
     this->unlocker_ = nullptr;
     
     bool was_active = p.active();
     UPCXX_ASSERT(!was_active || p.active_with_caller(tls), "Persona already active in another thread.");
-    
+    if (UPCXX_BACKEND_GASNET_SEQ && &p == &master_persona()) 
+       UPCXX_ASSERT(tls.is_primordial_thread,
+        "When compiled in threadmode=seq, only the primordial thread may acquire the master persona.\n"
+        "Multi-threaded applications should compile with `upcxx -threadmode=par` or `UPCXX_THREADMODE=par`.\n"
+        "For details, please see `docs/implementation-defined.md`");
+
     // point this scope at persona
     this->set_persona(&p, tls);
     
@@ -504,6 +524,7 @@ namespace upcxx {
   
   template<typename Mutex>
   persona_scope::persona_scope(Mutex &lock, persona &p, detail::persona_tls &tls) {
+    UPCXX_ASSERT_INIT_NAMED("upcxx::persona_scope::persona_scope(Mutex &lock, persona &p)");
     this->lock_ = &lock;
     this->unlocker_ = (void(*)(void*))[](void *lock) {
       static_cast<Mutex*>(lock)->unlock();
@@ -513,6 +534,11 @@ namespace upcxx {
     
     bool was_active = p.active();
     UPCXX_ASSERT(!was_active || p.active_with_caller(tls), "Persona already active in another thread.");
+    if (UPCXX_BACKEND_GASNET_SEQ && &p == &master_persona()) 
+       UPCXX_ASSERT(tls.is_primordial_thread,
+        "When compiled in threadmode=seq, only the primordial thread may acquire the master persona.\n"
+        "Multi-threaded applications should compile with `upcxx -threadmode=par` or `UPCXX_THREADMODE=par`.\n"
+        "For details, please see `docs/implementation-defined.md`");
     
     // point this scope at persona
     this->set_persona(&p, tls);
@@ -557,20 +583,24 @@ namespace upcxx {
   //////////////////////////////////////////////////////////////////////
   
   inline persona& default_persona() {
+    //UPCXX_ASSERT_INIT(); // allow default_persona() outside init()
     detail::persona_tls &tls = detail::the_persona_tls;
     return tls.default_persona;
   }
   
   inline persona& current_persona() {
+    UPCXX_ASSERT_INIT();
     detail::persona_tls &tls = detail::the_persona_tls;
     return *tls.get_top_scope()->get_persona(tls);
   }
   
   inline persona_scope& default_persona_scope() {
+    UPCXX_ASSERT_INIT();
     return persona_scope::the_default_dummy_;
   }
   
   inline persona_scope& top_persona_scope() {
+    UPCXX_ASSERT_INIT();
     detail::persona_tls &tls = detail::the_persona_tls;
     detail::persona_scope_raw *top = tls.get_top_scope();
     return top == &tls.default_scope_raw
@@ -624,6 +654,20 @@ namespace upcxx {
     constexpr int user = (int)progress_level::user;
     
     promise_meta *meta = &pro_hdr->pro_meta;
+
+    #if UPCXX_ASSERT_ENABLED
+      void *target_queue = future_header_promise<T...>::is_trivially_deletable
+          ? (void*)&per.pros_deferred_trivial_
+          : (void*)&per.self_inbox_[user];
+
+      /* Reasons this assert may die:
+       * 1. Promise deferred into user-level and internal-level queues of same
+       *    persona simultaneously.
+       * 2. Promise deferred into different persona's lpc queues simultaneously.
+       */
+      UPCXX_ASSERT(meta->deferred_queue == nullptr ||
+                   meta->deferred_queue == target_queue);
+    #endif
     
     if(deps == (meta->deferred_decrements += deps)) { // ensure not already in the queue
       // transfer given ref into queue

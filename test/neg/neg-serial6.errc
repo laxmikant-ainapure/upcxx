@@ -1,0 +1,1 @@
+Arguments to UPCXX_SERIALIZED_FIELDS must either be Serializable or arrays of Serializable elements

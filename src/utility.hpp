@@ -70,8 +70,12 @@ namespace detail {
     constant_function(T value): value_(std::move(value)) {}
     
     template<typename ...Arg>
-    T operator()(Arg &&...args) const {
+    T operator()(Arg &&...args) const& {
       return value_;
+    }
+    template<typename ...Arg>
+    T operator()(Arg &&...args) && {
+      return std::move(value_);
     }
   };
   
@@ -85,6 +89,8 @@ namespace detail {
 
   template<std::size_t align>
   inline void memcpy_aligned(void *dst, void const *src, std::size_t sz) noexcept {
+    UPCXX_ASSERT((uintptr_t)src % align == 0);
+    UPCXX_ASSERT((uintptr_t)dst % align == 0);
   #if UPCXX_HAVE___BUILTIN_ASSUME_ALIGNED
     std::memcpy(__builtin_assume_aligned(dst, align),
                 __builtin_assume_aligned(src, align), sz);
@@ -102,7 +108,20 @@ namespace detail {
   // constructed as such.
   template<typename T>
   T* launder_unconstructed(T *p) noexcept {
-    asm("" : "+rm"(p) : "rm"(p) :);
+    #if __INTEL_COMPILER
+      // the intel compiler ICEs on gnu-style extended asm below,
+      // so use this more convoluted variant that means the same thing:
+      // (Note in particular that C++ [basic.lval] aliasing rules permit
+      // modification via char type, which we exploit here)
+      union faketype { T t; volatile char a[sizeof(T)]; };
+      asm volatile ("" : "+m"(((faketype *)p)->a) : "rm"(p) : );
+    #else
+      // the following says we are "killing" the contents of the bytes in memory
+      // for the object pointed-to by p, preventing the compiler analysis from reasoning
+      // about its contents across this point.
+      asm volatile ("" : "+m"(*(volatile char (*)[sizeof(T)])p) : "rm"(p) : );
+    #endif
+
     return p;
   }
 
@@ -153,7 +172,14 @@ namespace detail {
       using T1 = typename std::remove_const<T>::type;
       T1 *ans = reinterpret_cast<T1*>(::new(dest) T1);
       detail::template memcpy_aligned<alignof(T1)>(ans, src, sizeof(T1));
-      return ans;
+      #if UPCXX_ISSUE400_WORKAROUND
+        // issue #400: based on our understanding of the C++ spec, launder should be unnecessary here
+        // because memcpy of a TriviallyCopyable type is sufficient to construct a valid object.
+        // However the GCC 7,8,9 optimizer needs this to avoid incorrect optimization in -O2+
+        return detail::launder_unconstructed<T1>(ans);
+      #else
+        return ans;
+      #endif
     }
     template<typename T>
     T* construct_trivial(void *dest, const void *src, std::true_type deft_ctor, std::false_type triv_copy) {
@@ -534,64 +560,56 @@ namespace detail {
   };
   
   //////////////////////////////////////////////////////////////////////
-  // tuple_lrefs: Get individual lvalue-references to tuple componenets.
-  // For components which are already `&` or `&&` types you'll get those
-  // back unmodified. If the tuple itself isn't passed in with `&`
-  // then this will only work if all components are `&` or `&&`.
-  
-  namespace help {
-    template<typename Tup, int i,
-             typename Ti = typename std::tuple_element<i, typename std::decay<Tup>::type>::type>
-    struct tuple_lrefs_get;
-    
-    template<typename Tup, int i, typename Ti>
-    struct tuple_lrefs_get<Tup&, i, Ti> {
-      Ti& operator()(Tup &tup) const {
-        return std::get<i>(tup);
-      }
-    };
-    template<typename Tup, int i, typename Ti>
-    struct tuple_lrefs_get<Tup&, i, Ti&&> {
-      Ti&& operator()(Tup &tup) const {
-        return static_cast<Ti&&>(std::get<i>(tup));
-      }
-    };
-    template<typename Tup, int i, typename Ti>
-    struct tuple_lrefs_get<Tup&&, i, Ti&> {
-      Ti& operator()(Tup &&tup) const {
-        return std::get<i>(tup);
-      }
-    };
-    template<typename Tup, int i, typename Ti>
-    struct tuple_lrefs_get<Tup&&, i, Ti&&> {
-      Ti&& operator()(Tup &&tup) const {
-        return std::get<i>(tup);
-      }
-    };
-    
-    template<typename Tup, int ...i>
-    inline auto tuple_lrefs(Tup &&tup, index_sequence<i...>)
-      -> std::tuple<decltype(tuple_lrefs_get<Tup&&, i>()(tup))...> {
-      return std::tuple<decltype(tuple_lrefs_get<Tup&&, i>()(tup))...>{
-        tuple_lrefs_get<Tup&&, i>()(tup)...
-      };
-    }
-  }
+  // tuple_refs: Get individual references to tuple componenets. The
+  // reference type of the passed in tuple (&, const&, or &&) determines
+  // the type of the references you get back. For components which are
+  // already `&` or `&&` types you'll get those back unmodified.
+  //
+  // tuple_refs_return<Tup>::type: Computes return type of `tuple_refs(Tup)`,
+  // where `Tup` must be of the form: `std::tuple<T...> [&, const&, or &&]
   
   template<typename Tup>
-  inline auto tuple_lrefs(Tup &&tup)
-    -> decltype(
-      help::tuple_lrefs(
-        std::forward<Tup>(tup),
-        make_index_sequence<std::tuple_size<typename std::decay<Tup>::type>::value>()
-      )
-    ) {
-    return help::tuple_lrefs(
-      std::forward<Tup>(tup),
-      make_index_sequence<std::tuple_size<typename std::decay<Tup>::type>::value>()
+  struct tuple_refs_return;
+  template<typename ...T>
+  struct tuple_refs_return<std::tuple<T...>&> {
+    template<typename U>
+    using element = typename std::conditional<std::is_reference<U>::value, U, U&>::type;
+    using type = std::tuple<element<T>...>;
+  };
+  template<typename ...T>
+  struct tuple_refs_return<std::tuple<T...> const&> {
+    template<typename U>
+    using element = typename std::conditional<std::is_reference<U>::value, U, U const&>::type;
+    using type = std::tuple<element<T>...>;
+  };
+  template<typename ...T>
+  struct tuple_refs_return<std::tuple<T...>&&> {
+    template<typename U>
+    using element = typename std::conditional<std::is_reference<U>::value, U, U&&>::type;
+    using type = std::tuple<element<T>...>;
+  };
+  
+  template<typename Tup>
+  using tuple_refs_return_t = typename tuple_refs_return<Tup>::type;
+  
+  template<typename Tup, typename ...T, int ...i>
+  tuple_refs_return_t<Tup&&> tuple_refs_help(Tup &&tup, std::tuple<T...>*, index_sequence<i...>) {
+    return typename tuple_refs_return<Tup&&>::type(
+      static_cast<typename tuple_refs_return<Tup&&>::template element<T>>(std::template get<i>(static_cast<Tup&&>(tup)))...
     );
   }
   
+  template<typename Tup>
+  tuple_refs_return_t<Tup&&> tuple_refs(Tup &&tup) {
+    using TupD = typename std::decay<Tup>::type;
+    return tuple_refs_help(
+      static_cast<Tup&&>(tup),
+      static_cast<TupD*>(nullptr),
+      make_index_sequence<std::tuple_size<TupD>::value>()
+    );
+  }
+
+  #if 0
   //////////////////////////////////////////////////////////////////////
   // tuple_rvals: Get a tuple of rvalue-references to tuple componenets.
   // Components which are already `&` or `&&` are returned unmodified.
@@ -686,6 +704,7 @@ namespace detail {
       make_index_sequence<std::tuple_size<typename std::decay<Tup>::type>::value>()
     );
   }
+  #endif
   
   //////////////////////////////////////////////////////////////////////
   // forward_as_tuple_decay_rrefs: like std::forward_as_tuple, but drops

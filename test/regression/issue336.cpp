@@ -1,6 +1,7 @@
 #include <upcxx/upcxx.hpp>
 #include <cassert>
 #include <iostream>
+#include <memory>
 
 /*
  * This example illustrates the use of UPCXX_SERIALIZED_FIELDS to serialize a 
@@ -56,6 +57,10 @@ int main(void) {
     assert(!r->deserialized);
 
     std::cout << "serialization..." << std::endl;
+  #if 0
+    // This approach technically works (with a large enough program stack)
+    // but is a bad idea, because it imposes lots of overhead copying the large type
+    // on both sides.
     upcxx::rpc(0, [] (const massive& r_r) {
                 /*
                  * Validate that this is a deserialized instance 
@@ -65,10 +70,38 @@ int main(void) {
                 assert(r_r.value==42);
                 assert(r_r.scratch_space[N-1] == 27);
             }, std::move(*r)).wait();
+  #else
+    // This approach avoids the problem by using a view, which
+    // avoids unnecessary copies on the initiator.
+    upcxx::rpc(0, [] (upcxx::view<massive> r_view) {
+        #if UPCXX_SPEC_VERSION <= 20200300L
+              // Prior to 2020.3.8, this was still not great because the view's deserializing_iterator
+              // forced the large object to be instantiated and returned by value, which still leads
+              // to stack overflows on many platforms.
+              static massive const & r_r = *r_view.begin();
+        #else
+              // Starting in 2020.3.8, we can use deserializing_iterator::deserialize_into()
+              // thereby avoiding all object copies.
+              // This also allows us to exclusively use heap memory for our object
+              // (some systems get finicky about static objects this size, even in static data)
+              std::unique_ptr<massive> p(new massive);
+              massive &r_r = *p;
+              r_view.begin().deserialize_into(&r_r);
+        #endif
+                /*
+                 * Validate that this is a deserialized instance 
+                 * and that the entire object was not sent.
+                 */
+                assert(r_r.deserialized);
+                assert(r_r.value==42);
+                assert(r_r.scratch_space[N-1] == 27);
+            }, upcxx::make_view(r,r+1)).wait();
+  #endif
 
     upcxx::barrier();
 
     if (rank == 0) std::cout << "SUCCESS" << std::endl;
+    delete r;
 
     upcxx::finalize();
 

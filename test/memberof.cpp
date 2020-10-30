@@ -4,6 +4,8 @@
 #include <cassert>
 #include <upcxx/upcxx.hpp>
 
+#include "util.hpp"
+
 #if __cplusplus <= 201703
 using std::is_pod;
 #else 
@@ -107,6 +109,19 @@ struct V : public V1, public V2 { // NOT standard layout, NOT trivial, NOT POD
   V() {}
 }; 
 
+template<typename T, bool is_const = std::is_const<T>::value>
+struct match_const;
+template<typename T>
+struct match_const<T, true> {
+  using char_type = const char;
+  using tricksy_type = const tricksy;
+};
+template<typename T>
+struct match_const<T, false> {
+  using char_type = char;
+  using tricksy_type = tricksy;
+};
+
 volatile bool cuda_enabled;
 upcxx::cuda_device *gpu_device;
 upcxx::device_allocator<upcxx::cuda_device> *gpu_alloc;
@@ -121,27 +136,30 @@ namespace perverse {
     template<typename T>
     void declval();
   }
-  template<typename GP>
+  template<typename C, typename GP>
   void check(GP gp) {
-    upcxx::global_ptr<char> gp_f1 = upcxx_memberof(gp, f1);
-    upcxx::global_ptr<char> gp_f2 = upcxx_memberof_unsafe(gp, f2);
+    upcxx::global_ptr<C> gp_f1 = upcxx_memberof(gp, f1);
+    upcxx::global_ptr<C> gp_f2 = upcxx_memberof_unsafe(gp, f2);
   }
-  template<typename GP>
+  template<typename C, typename GP>
   void check_general(GP gp) {
     auto fut1 = upcxx_memberof_general(gp, f1);
-    upcxx::global_ptr<char> gp_f1 = fut1.wait();
+    upcxx::global_ptr<C> gp_f1 = fut1.wait();
   }
 } // perverse
 
 
 template<typename T, bool stdlayout>
 struct calc { static void _(upcxx::global_ptr<T> gp_o) {
+  using char_t = typename match_const<T>::char_type;
+  using tricksy_t = typename match_const<T>::tricksy_type;
+
   if (!upcxx::rank_me()) std::cout << "Testing standard layout..." << std::endl;
-  upcxx::global_ptr<char> gp_f0 = upcxx_memberof(gp_o, f0);
-  upcxx::global_ptr<char> gp_f1 = upcxx_memberof(gp_o, f1);
-  upcxx::global_ptr<char> gp_f2 = upcxx_memberof(gp_o, f2);
+  upcxx::global_ptr<char_t> gp_f0 = upcxx_memberof(gp_o, f0);
+  upcxx::global_ptr<char_t> gp_f1 = upcxx_memberof(gp_o, f1);
+  upcxx::global_ptr<char_t> gp_f2 = upcxx_memberof(gp_o, f2);
   assert(gp_f0 && gp_f1 && gp_f2);
-  upcxx::global_ptr<char> gp_base = upcxx::reinterpret_pointer_cast<char>(gp_o);
+  upcxx::global_ptr<char_t> gp_base = upcxx::reinterpret_pointer_cast<char_t>(gp_o);
   ssize_t d0 = gp_f0 - gp_base;
   ssize_t d1 = gp_f1 - gp_base;
   ssize_t d2 = gp_f2 - gp_base;
@@ -156,21 +174,21 @@ struct calc { static void _(upcxx::global_ptr<T> gp_o) {
   // test some non-trivial expressions
   volatile int zero = 0;
 
-  upcxx::global_ptr<char> e1_test = upcxx_memberof(gp_o+zero, f1);
+  upcxx::global_ptr<char_t> e1_test = upcxx_memberof(gp_o+zero, f1);
   assert(e1_test == gp_f1);
 
-  upcxx::global_ptr<char> e2_test = upcxx_memberof((gp_o), f1);
+  upcxx::global_ptr<char_t> e2_test = upcxx_memberof((gp_o), f1);
   assert(e2_test == gp_f1);
 
   using gp_T_any = upcxx::global_ptr<T, upcxx::memory_kind::any>;
-  using gp_F_any = upcxx::global_ptr<char, upcxx::memory_kind::any>;
+  using gp_F_any = upcxx::global_ptr<char_t, upcxx::memory_kind::any>;
   gp_T_any gp_o_any = gp_o;
   assert(upcxx_memberof((gp_o_any + zero), f0).kind == upcxx::memory_kind::any);
   gp_F_any e3_test = upcxx_memberof((gp_o_any + zero), f1);
   assert(e3_test == gp_f1);
 
   upcxx::global_ptr<T> const gp_o_c = gp_o; 
-  upcxx::global_ptr<char> e4_test = upcxx_memberof(gp_o_c, f1);
+  upcxx::global_ptr<char_t> e4_test = upcxx_memberof(gp_o_c, f1);
   assert(e4_test == gp_f1);
   upcxx::barrier();
   #endif
@@ -178,18 +196,18 @@ struct calc { static void _(upcxx::global_ptr<T> gp_o) {
   #if 1
   int se = 0; // test for single-evaluation
   auto func = [&](){se++; return gp_o;};
-  upcxx::global_ptr<char> se_test = upcxx_memberof(func(), f0);
+  upcxx::global_ptr<char_t> se_test = upcxx_memberof(func(), f0);
   assert(se == 1);
   upcxx::barrier();
   #endif
 
   #if 1
   // test misused address-of
-  upcxx::global_ptr<tricksy> gp_tz = upcxx_memberof(gp_o, z);
-  upcxx::global_ptr<char> gp_tz_ = upcxx::reinterpret_pointer_cast<char>(gp_tz);
+  upcxx::global_ptr<tricksy_t> gp_tz = upcxx_memberof(gp_o, z);
+  upcxx::global_ptr<char_t> gp_tz_ = upcxx::reinterpret_pointer_cast<char_t>(gp_tz);
   ssize_t dz = gp_tz_ - gp_base;
   assert(dz >= 0 && (size_t)dz < sizeof(T));
-  upcxx::global_ptr<char> gp_tzz = upcxx_memberof(gp_o, z.z);
+  upcxx::global_ptr<char_t> gp_tzz = upcxx_memberof(gp_o, z.z);
   assert(gp_tz_ == gp_tzz);
   #endif
 
@@ -200,11 +218,11 @@ struct calc { static void _(upcxx::global_ptr<T> gp_o) {
     gpu_o = gpu_alloc->allocate<T>(1);
   }
   if (cuda_enabled) { // deliberately separated to discourage optimizations that might hide static errors for non-CUDA
-    upcxx::global_ptr<char,upcxx::memory_kind::cuda_device> gpu_f0 = upcxx_memberof(gpu_o, f0);
-    upcxx::global_ptr<char,upcxx::memory_kind::cuda_device> gpu_f1 = upcxx_memberof(gpu_o, f1);
-    upcxx::global_ptr<char,upcxx::memory_kind::cuda_device> gpu_f2 = upcxx_memberof(gpu_o, f2);
+    upcxx::global_ptr<char_t,upcxx::memory_kind::cuda_device> gpu_f0 = upcxx_memberof(gpu_o, f0);
+    upcxx::global_ptr<char_t,upcxx::memory_kind::cuda_device> gpu_f1 = upcxx_memberof(gpu_o, f1);
+    upcxx::global_ptr<char_t,upcxx::memory_kind::cuda_device> gpu_f2 = upcxx_memberof(gpu_o, f2);
     assert(gpu_f0 && gpu_f1 && gpu_f2);
-    upcxx::global_ptr<char,upcxx::memory_kind::cuda_device> gpu_base = upcxx::reinterpret_pointer_cast<char>(gpu_o);
+    upcxx::global_ptr<char_t,upcxx::memory_kind::cuda_device> gpu_base = upcxx::reinterpret_pointer_cast<char_t>(gpu_o);
     ssize_t gd0 = gpu_f0 - gpu_base;
     ssize_t gd1 = gpu_f1 - gpu_base;
     ssize_t gd2 = gpu_f2 - gpu_base;
@@ -220,18 +238,21 @@ struct calc { static void _(upcxx::global_ptr<T> gp_o) {
   }
   #endif
 
-  perverse::check(gp_o);
+  perverse::check<char_t>(gp_o);
 
 } };
 template<typename T>
 struct calc<T,false>{ static void _(upcxx::global_ptr<T> gp_o){
+  using char_t = typename match_const<T>::char_type;
+  using tricksy_t = typename match_const<T>::tricksy_type;
+
   if (!upcxx::rank_me()) std::cout << "Testing non-standard layout..." << std::endl;
   // upcxx_memberof_unsafe is deliberately unspecified
-  upcxx::global_ptr<char> gp_f0 = upcxx_memberof_unsafe(gp_o, f0);
-  upcxx::global_ptr<char> gp_f1 = upcxx_memberof_unsafe(gp_o, f1);
-  upcxx::global_ptr<char> gp_f2 = upcxx_memberof_unsafe(gp_o, f2);
+  upcxx::global_ptr<char_t> gp_f0 = upcxx_memberof_unsafe(gp_o, f0);
+  upcxx::global_ptr<char_t> gp_f1 = upcxx_memberof_unsafe(gp_o, f1);
+  upcxx::global_ptr<char_t> gp_f2 = upcxx_memberof_unsafe(gp_o, f2);
   assert(gp_f0 && gp_f1 && gp_f2);
-  upcxx::global_ptr<char> gp_base = upcxx::reinterpret_pointer_cast<char>(gp_o);
+  upcxx::global_ptr<char_t> gp_base = upcxx::reinterpret_pointer_cast<char_t>(gp_o);
   ssize_t d0 = gp_f0 - gp_base;
   ssize_t d1 = gp_f1 - gp_base;
   ssize_t d2 = gp_f2 - gp_base;
@@ -245,6 +266,9 @@ struct calc<T,false>{ static void _(upcxx::global_ptr<T> gp_o){
 
 template<typename T>
 void check_general(bool has_virtual) {
+  using char_t = typename match_const<T>::char_type;
+  using tricksy_t = typename match_const<T>::tricksy_type;
+
   upcxx::global_ptr<T> gp_o;
   if (!upcxx::rank_me()) gp_o = upcxx::new_<T>();
   gp_o = upcxx::broadcast(gp_o, 0).wait();
@@ -265,12 +289,12 @@ void check_general(bool has_virtual) {
   if (expect_ready) assert(all_ready);
   else assert(!all_ready);
 
-  upcxx::global_ptr<char> gp_f0 = fut0.wait();
-  upcxx::global_ptr<char> gp_f1 = fut1.wait();
-  upcxx::global_ptr<char> gp_f2 = fut2.wait();
+  upcxx::global_ptr<char_t> gp_f0 = fut0.wait();
+  upcxx::global_ptr<char_t> gp_f1 = fut1.wait();
+  upcxx::global_ptr<char_t> gp_f2 = fut2.wait();
   assert(gp_f0 && gp_f1 && gp_f2);
 
-  upcxx::global_ptr<char> gp_base = upcxx::reinterpret_pointer_cast<char>(gp_o);
+  upcxx::global_ptr<char_t> gp_base = upcxx::reinterpret_pointer_cast<char_t>(gp_o);
   ssize_t d0 = gp_f0 - gp_base;
   ssize_t d1 = gp_f1 - gp_base;
   ssize_t d2 = gp_f2 - gp_base;
@@ -285,16 +309,16 @@ void check_general(bool has_virtual) {
   #if 1
   // test misused address-of
   auto fz = upcxx_memberof_general(gp_o, z);
-  upcxx::global_ptr<tricksy> gp_tz = fz.wait();
-  upcxx::global_ptr<char> gp_tz_ = upcxx::reinterpret_pointer_cast<char>(gp_tz);
+  upcxx::global_ptr<tricksy_t> gp_tz = fz.wait();
+  upcxx::global_ptr<char_t> gp_tz_ = upcxx::reinterpret_pointer_cast<char_t>(gp_tz);
   ssize_t dz = gp_tz_ - gp_base;
   assert(dz >= 0 && (size_t)dz < sizeof(T));
   auto fzz = upcxx_memberof_general(gp_o, z.z);
-  upcxx::global_ptr<char> gp_tzz = fzz.wait();
+  upcxx::global_ptr<char_t> gp_tzz = fzz.wait();
   assert(gp_tz_ == gp_tzz);
   #endif
 
-  perverse::check_general(gp_o);
+  perverse::check_general<char_t>(gp_o);
 
   // objects with virtual bases on a CUDA device cannot be manipulated by the CPU
   // see: https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#virtual-functions
@@ -316,11 +340,11 @@ void check_general(bool has_virtual) {
     bool all_ready = fut0.ready() && fut1.ready() && fut2.ready();
     if (expect_ready) assert(all_ready);
     else assert(!all_ready);
-    upcxx::global_ptr<char,upcxx::memory_kind::cuda_device> gpu_f0 = fut0.wait();
-    upcxx::global_ptr<char,upcxx::memory_kind::cuda_device> gpu_f1 = fut1.wait();
-    upcxx::global_ptr<char,upcxx::memory_kind::cuda_device> gpu_f2 = fut2.wait();
+    upcxx::global_ptr<char_t,upcxx::memory_kind::cuda_device> gpu_f0 = fut0.wait();
+    upcxx::global_ptr<char_t,upcxx::memory_kind::cuda_device> gpu_f1 = fut1.wait();
+    upcxx::global_ptr<char_t,upcxx::memory_kind::cuda_device> gpu_f2 = fut2.wait();
     assert(gpu_f0 && gpu_f1 && gpu_f2);
-    upcxx::global_ptr<char,upcxx::memory_kind::cuda_device> gpu_base = upcxx::reinterpret_pointer_cast<char>(gpu_o);
+    upcxx::global_ptr<char_t,upcxx::memory_kind::cuda_device> gpu_base = upcxx::reinterpret_pointer_cast<char_t>(gpu_o);
     ssize_t gd0 = gpu_f0 - gpu_base;
     ssize_t gd1 = gpu_f1 - gpu_base;
     ssize_t gd2 = gpu_f2 - gpu_base;
@@ -371,14 +395,17 @@ void check() {
   gp_o = upcxx::broadcast(gp_o, 0).wait();
   assert(gp_o);
   calc<T, stdlayout>::_( gp_o );
+  calc<const T, stdlayout>::_( gp_o );
 
   check_general<T>(false);
+  check_general<const T>(false);
 
   upcxx::barrier();
 }
 
 int main() {
   upcxx::init();
+  print_test_header();
 
   #if UPCXX_CUDA_ENABLED
     cuda_enabled = true;
@@ -399,6 +426,7 @@ int main() {
 
   T(V); 
   check_general<V>(true);
+  check_general<const V>(true);
 
   if (cuda_enabled) {
     gpu_device->destroy();
@@ -406,7 +434,7 @@ int main() {
     delete gpu_alloc;
   }
 
-  upcxx::barrier();
-  if (!upcxx::rank_me()) std::cout << "SUCCESS" << std::endl;
+  print_test_success();
   upcxx::finalize();
 }
+

@@ -8,7 +8,7 @@ namespace upcxx {
   namespace detail {
     template<typename T>
     future_header_promise<T>* registered_promise(digest id, int initial_anon) {
-      UPCXX_ASSERT(backend::master.active_with_caller());
+      UPCXX_ASSERT_MASTER();
       
       future_header_promise<T> *pro;
       
@@ -29,7 +29,7 @@ namespace upcxx {
 
     template<typename T, typename ...U>
     T* registered_state(digest id, U &&...ctor_args) {
-      UPCXX_ASSERT(backend::master.active_with_caller());
+      UPCXX_ASSERT_MASTER();
       
       T *thing;
       
@@ -49,13 +49,20 @@ namespace upcxx {
   }
   
   inline bool local_team_contains(intrank_t rank) {
+    UPCXX_ASSERT_INIT();
+    UPCXX_ASSERT(rank >= 0 && rank < upcxx::rank_n(),
+      "local_team_contains(rank) requires rank in [0, world().rank_n()-1] == [0, " << upcxx::rank_n()-1 << "], but given: " << rank);
     return backend::rank_is_local(rank);
   }
   
   inline team& world() {
+    // do NOT assert_init here - world() is the implicit default argument for too many calls,
+    // so asserting here produces a message masking the true culprit that was explicitly invoked.
+    // UPCXX_ASSERT_INIT();
     return detail::the_world_team.value();
   }
   inline team& local_team() {
+    UPCXX_ASSERT_INIT();
     return detail::the_local_team.value();
   }
 
@@ -64,7 +71,7 @@ namespace upcxx {
   struct binding<team&> {
     using on_wire_type = team_id;
     using off_wire_type = team&;
-    using off_wire_future_type = typename detail::make_future<team&>::return_type;
+    using off_wire_future_type = future1<detail::future_kind_result, team&>;
     using stripped_type = team&;
     static constexpr bool immediate = true;
     
@@ -77,7 +84,7 @@ namespace upcxx {
     }
 
     static off_wire_future_type off_wire_future(team_id id) {
-      return upcxx::make_future<team&>(id.here());
+      return detail::make_fast_future<team&>(id.here());
     }
   };
   

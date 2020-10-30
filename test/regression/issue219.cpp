@@ -1,3 +1,5 @@
+// THIS IS A COMPILE-ONLY TEST
+// This test is NOT guaranteed to exhibit correct runtime behavior!!
 #include <upcxx/upcxx.hpp>
 
 int nCount[2];
@@ -8,7 +10,8 @@ int main() {
 
   auto f = [] (int phase){ nCount[phase]++;};
   upcxx::global_ptr<int> uL = upcxx::new_<int>();
-  upcxx::rpc(0, f, phase);
+  // void cast avoids a (justified) warning for this compile-only test
+  (void)upcxx::rpc(0, f, phase);
   if ( uL ){
     rput( 4, uL, upcxx::remote_cx::as_rpc( f , phase) );
   } 

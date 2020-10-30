@@ -1,0 +1,1 @@
+rpc return values may not have type dist_object<T>&, team&, or view<T>

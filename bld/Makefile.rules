@@ -14,6 +14,13 @@ MAKEFLAGS += --no-print-directory
 # Echo an arbitrary make/environment variable
 echovar: force; @echo $(VARNAME)=\"$($(VARNAME))\"
 
+COLOR = 0 # environment is ignored but command line is honored
+# Anything other than COLOR=1 "bleaches" the corresponding flags
+ifneq ($(strip $(COLOR)),1)
+UPCXX_COLOR_CFLAGS =
+UPCXX_COLOR_CXXFLAGS =
+endif
+
 # To prevent application of pass-through rule upon 'include':
 Makefile $(upcxx_src)/bld/Makefile.rules $(upcxx_src)/bld/Makefile.tests: ; @: # empty rule
 $(upcxx_src)/bld/%.mak: ; @: # empty rule
@@ -22,16 +29,19 @@ BLDDIR = $(upcxx_bld)/bld
 GASNET_BLDDIR = $(BLDDIR)/gasnet.$(firstword $(UPCXX_DBGOPT))
 
 include $(upcxx_src)/bld/gasnet.mak
-CONDUITS  = $(call GASNET_VAR,$(GASNET_BLDDIR),CONDUITS)
 
 install-hook: force
-	@CONDUITS='$(CONDUITS)';                             \
+	@export CONDUITS='$(CONDUITS)';                      \
 	 cd $(upcxx_src) &&                                  \
 	 . utils/install-common.sh &&                        \
-	 conduit_default="$$GASNET_CONDUIT" &&               \
+	 conduit_default="$(UPCXX_DEFAULT_NETWORK)" &&       \
 	 install_to="$(prefix)" install_common
 
 install install-opt install-debug: force
+	@if [[ ! '$(prefix)' =~ ^/ ]]; then \
+	   echo 'ERROR: installation prefix "$(prefix)" is not an absolute path' >&2; \
+	   exit 1; \
+	 fi
 	@$(MAKE) -C $(BLDDIR) $@ || $(MAKE) failure TARGET=installation
 	@$(MAKE) install-hook || $(MAKE) failure TARGET=installation
 	@echo; \
@@ -91,24 +101,22 @@ failure: force
 .PHONY: exe run
 
 ## Check/tests targets pass-through to their own Makefile
-TEST_TARGETS = check tests tests-clean test_install run-tests run-tests-installed
+TEST_TARGETS = check tests tests-clean test_install run-tests run-tests-installed \
+	       dev-tests dev-tests-opt dev-tests-debug dev-run-tests \
+	       dev-check dev-check-opt dev-check-debug dev-tests-clean
 $(TEST_TARGETS): force; @$(MAKE) -f $(upcxx_src)/bld/Makefile.tests $@
 .PHONY: $(TEST_TARGETS)
 
 ## GASNet pass-through
-# usage: make gasnet [DO_WHAT=target] [NETWORK=xyz] [UPCXX_CODEMODE={O3,debug}]
+# usage: make gasnet [DO_WHAT=target] [NETWORK=xyz] [UPCXX_CODEMODE={opt,debug}]
 #   DO_WHAT defaults to 'all'
 #   NETWORK defaults to the default network
 #   UPCXX_CODEMODE defaults to 'debug' (unless `--enable-single=opt`)
 gasnet: force
-	@case '$(UPCXX_CODEMODE)' in                   \
-           '') codemode=$(firstword $(UPCXX_DBGOPT));; \
-           O3) codemode=opt;;                          \
-	    *) codemode=$(UPCXX_CODEMODE);;            \
-	 esac;                                         \
+	@codemode=$(firstword $(UPCXX_CODEMODE) $(UPCXX_DBGOPT)); \
 	 set -x;                                       \
 	 $(MAKE) "$${DO_WHAT:-all}"                    \
-	         -C "$(BLDDIR)/gasnet.$$codemode/$${NETWORK:-$(GASNET_CONDUIT)}-conduit"
+	         -C "$(BLDDIR)/gasnet.$$codemode/$${NETWORK:-$(UPCXX_DEFAULT_NETWORK)}-conduit"
 PHONY: gasnet
 
 

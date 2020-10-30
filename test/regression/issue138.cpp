@@ -287,3 +287,4 @@ int main() {
   print_test_success();
   upcxx::finalize();
 }
+

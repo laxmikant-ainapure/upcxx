@@ -122,7 +122,7 @@ namespace upcxx
         backend::send_am_master<progress_level::user>(
           upcxx::world(), cbs->rank_d,
           upcxx::bind(
-            [](CxStateRemote &&st) {
+            [](deserialized_type_t<CxStateRemote> &&st) {
               return st.template operator()<remote_cx_event>();
             },
             std::move(cbs->state_remote)
@@ -409,17 +409,19 @@ namespace upcxx
   
   template<typename SrcIter, typename DestIter,
            typename Cxs=decltype(operation_cx::as_future())>
+  UPCXX_NODISCARD
   typename detail::completions_returner<
     /*EventPredicate=*/detail::event_is_here,
     /*EventValues=*/detail::rput_event_values,
-    Cxs>::return_t  
+    typename std::decay<Cxs>::type>::return_t  
   rput_irregular(
                   SrcIter src_runs_begin, SrcIter src_runs_end,
                   DestIter dst_runs_begin, DestIter dst_runs_end,
-                  Cxs cxs=completions<future_cx<operation_cx_event>>{{}})
+                  Cxs &&cxs=completions<future_cx<operation_cx_event>>{{}})
   {
 
 
+    using CxsDecayed = typename std::decay<Cxs>::type;
     using T = typename std::tuple_element<0,typename std::iterator_traits<DestIter>::value_type>::type::element_type;
     using S = typename std::tuple_element<0,typename std::iterator_traits<SrcIter>::value_type>::type;
 
@@ -429,8 +431,9 @@ namespace upcxx
     static_assert(std::is_convertible<S, const T*>::value,
                   "SrcIter and DestIter need to be over same base T type");
 
-    UPCXX_ASSERT_ALWAYS((detail::completions_has_event<Cxs, operation_cx_event>::value |
-                  detail::completions_has_event<Cxs, remote_cx_event>::value),
+    UPCXX_ASSERT_INIT();
+    UPCXX_ASSERT_ALWAYS((detail::completions_has_event<CxsDecayed, operation_cx_event>::value |
+                  detail::completions_has_event<CxsDecayed, remote_cx_event>::value),
                  "Not requesting either operation or remote completion is surely an "
                  "error. You'll have know way of ever knowing when the target memory is "
                  "safe to read or write again.");
@@ -439,11 +442,11 @@ namespace upcxx
     using cxs_here_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::rput_event_values,
-      Cxs>;
+      CxsDecayed>;
     using cxs_remote_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_remote,
       /*EventValues=*/detail::rput_event_values,
-      Cxs>;
+      CxsDecayed>;
 
  
     constexpr std::size_t tsize=sizeof(T);
@@ -475,12 +478,13 @@ namespace upcxx
         srcsize+=sv->gex_len;
       }
     
-    UPCXX_ASSERT(dstsize==srcsize);
+    UPCXX_ASSERT(dstsize==srcsize, 
+       "rput_irregular: destination size (" << dstsize << "bytes ) does not match source size (" << srcsize << " bytes)");
     
     detail::rput_cbs_irreg<cxs_here_t, cxs_remote_t> cbs_static{
       gpdrank,
-        cxs_here_t(std::move(cxs)),
-        cxs_remote_t(std::move(cxs)),
+        cxs_here_t(std::forward<Cxs>(cxs)),
+        cxs_remote_t(std::forward<Cxs>(cxs)),
         std::move(src), std::move(dest)
         };
 
@@ -491,7 +495,7 @@ namespace upcxx
     auto returner = detail::completions_returner<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::rput_event_values,
-      Cxs
+      CxsDecayed
       >{cbs->state_here};
     
     cbs->initiate();
@@ -501,18 +505,21 @@ namespace upcxx
 
   template<typename SrcIter, typename DestIter,
   typename Cxs=decltype(operation_cx::as_future())>
+    UPCXX_NODISCARD
     typename detail::completions_returner<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::rget_byref_event_values,
-      Cxs
+      typename std::decay<Cxs>::type
     >::return_t
     rget_irregular(
                    SrcIter src_runs_begin, SrcIter src_runs_end,
                    DestIter dst_runs_begin, DestIter dst_runs_end,
-                   Cxs cxs=completions<future_cx<operation_cx_event>>{{}})
+                   Cxs &&cxs=completions<future_cx<operation_cx_event>>{{}})
   {
 
-    using T = typename std::tuple_element<0,typename std::iterator_traits<SrcIter>::value_type>::type::element_type;
+    using CxsDecayed = typename std::decay<Cxs>::type;
+    using U = typename std::tuple_element<0,typename std::iterator_traits<SrcIter>::value_type>::type::element_type;
+    using T = typename std::remove_const<U>::type;
     using D = typename std::tuple_element<0,typename std::iterator_traits<DestIter>::value_type>::type;
 
     static_assert(is_trivially_serializable<T>::value,
@@ -521,22 +528,27 @@ namespace upcxx
     static_assert(std::is_convertible<D, const T*>::value,
                   "SrcIter and DestIter need to be over same base T type");
  
-    
-    UPCXX_ASSERT_ALWAYS((detail::completions_has_event<Cxs, operation_cx_event>::value |
-                  detail::completions_has_event<Cxs, remote_cx_event>::value),
+    UPCXX_ASSERT_INIT();
+    UPCXX_ASSERT_ALWAYS((detail::completions_has_event<CxsDecayed, operation_cx_event>::value |
+                  detail::completions_has_event<CxsDecayed, remote_cx_event>::value),
                  "Not requesting either operation or remote completion is surely an "
                  "error. You'll have know way of ever knowing when the target memory is "
                  "safe to read or write again.");
+    /* rget_irregular supports remote completion, contrary to the spec */
+    UPCXX_ASSERT_ALWAYS(
+      (!detail::completions_has_event<CxsDecayed, source_cx_event>::value),
+      "rget_irregular does not support source completion."
+    );
 
     
     using cxs_here_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::rget_byref_event_values,
-      Cxs>;
+      CxsDecayed>;
     using cxs_remote_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_remote,
       /*EventValues=*/detail::rget_byref_event_values,
-      Cxs>;
+      CxsDecayed>;
 
 
     constexpr std::size_t tsize=sizeof(T);
@@ -569,18 +581,20 @@ namespace upcxx
       }
     
 
-    UPCXX_ASSERT(dstsize==srcsize);
+    UPCXX_ASSERT(dstsize==srcsize, 
+       "rget_irregular: destination size (" << dstsize << " bytes) does not match source size (" << srcsize << " bytes)");
+
     auto *cb = new detail::rget_cb_irreg<cxs_here_t,cxs_remote_t>{
       rank_s,
-      cxs_here_t{std::move(cxs)},
-      cxs_remote_t{std::move(cxs)},
+      cxs_here_t{std::forward<Cxs>(cxs)},
+      cxs_remote_t{std::forward<Cxs>(cxs)},
       std::move(src), std::move(dest)
     };
 
     auto returner = detail::completions_returner<
         /*EventPredicate=*/detail::event_is_here,
         /*EventValues=*/detail::rget_byref_event_values,
-        Cxs
+        CxsDecayed
       >{cb->state_here};
 
     cb->initiate(rank_s);
@@ -591,17 +605,19 @@ namespace upcxx
   
   template<typename SrcIter, typename DestIter,
            typename Cxs=decltype(operation_cx::as_future())>
+  UPCXX_NODISCARD
   typename detail::completions_returner<
     /*EventPredicate=*/detail::event_is_here,
     /*EventValues=*/detail::rput_event_values,
-    Cxs>::return_t  
+    typename std::decay<Cxs>::type>::return_t  
   rput_regular(
                SrcIter src_runs_begin, SrcIter src_runs_end,
                std::size_t src_run_length,
                DestIter dst_runs_begin, DestIter dst_runs_end,
                std::size_t dst_run_length,
-               Cxs cxs=completions<future_cx<operation_cx_event>>{{}})
+               Cxs &&cxs=completions<future_cx<operation_cx_event>>{{}})
   {
+    using CxsDecayed = typename std::decay<Cxs>::type;
    // This computes T by pulling it out of global_ptr<T>.
     using T = typename std::iterator_traits<DestIter>::value_type::element_type;
     
@@ -610,9 +626,10 @@ namespace upcxx
                   "RMA operations only work on TriviallySerializable types."
                   );
     
+    UPCXX_ASSERT_INIT();
     UPCXX_ASSERT_ALWAYS((
-                  detail::completions_has_event<Cxs, operation_cx_event>::value |
-                  detail::completions_has_event<Cxs, remote_cx_event>::value),
+                  detail::completions_has_event<CxsDecayed, operation_cx_event>::value |
+                  detail::completions_has_event<CxsDecayed, remote_cx_event>::value),
                  "Not requesting either operation or remote completion is surely an "
                  "error. You'll have know way of ever knowing when the target memory is "
                  "safe to read or write again.");
@@ -627,11 +644,11 @@ namespace upcxx
     using cxs_here_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::rput_event_values,
-      Cxs>;
+      CxsDecayed>;
     using cxs_remote_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_remote,
       /*EventValues=*/detail::rput_event_values,
-      Cxs>;
+      CxsDecayed>;
 
  
  
@@ -643,13 +660,13 @@ namespace upcxx
     // during the resize. This new way is to do a `reserve` followed by `push_back's`.
     dst_ptrs.reserve(std::distance(dst_runs_begin, dst_runs_end));
  
-    intrank_t dst_rank = upcxx::rank_me(); // default for empty sequence is self
-    if(dst_ptrs.capacity() !=0) dst_rank = (*dst_runs_begin).rank_;
+    intrank_t dst_rank;
+    if(dst_ptrs.capacity()) dst_rank = (*dst_runs_begin).rank_;
+    else                    dst_rank = upcxx::rank_me(); // default for empty sequence is self
     for(DestIter d=dst_runs_begin; !(d == dst_runs_end); ++d) {
       UPCXX_GPTR_CHK(*d);
       UPCXX_ASSERT(*d, "pointer arguments to rput_regular may not be null");
       UPCXX_ASSERT(dst_rank==(*d).rank_, "pointer arguments to rput_regular must all target the same affinity");
-      dst_rank = (*d).rank_;
       dst_ptrs.push_back((*d).raw_ptr_);
     }
 
@@ -664,12 +681,13 @@ namespace upcxx
     }
 
     UPCXX_ASSERT(src_ptrs.size()*src_run_length == dst_ptrs.size()*dst_run_length,
-                 "Source and destination must contain same number of elements.");
+       "rput_regular: destination size (" << dst_ptrs.size()*dst_run_length 
+       << " bytes) does not match source size (" << src_ptrs.size()*src_run_length << " bytes)");
 
     detail::rput_cbs_reg<cxs_here_t, cxs_remote_t> cbs_static{
       dst_rank,
-      cxs_here_t(std::move(cxs)),
-      cxs_remote_t(std::move(cxs)),
+      cxs_here_t(std::forward<Cxs>(cxs)),
+      cxs_remote_t(std::forward<Cxs>(cxs)),
       std::move(src_ptrs), std::move(dst_ptrs)
     };
 
@@ -680,7 +698,7 @@ namespace upcxx
     auto returner = detail::completions_returner<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::rput_event_values,
-      Cxs
+      CxsDecayed
       >{cbs->state_here};
     
     cbs->initiate(dst_run_length*sizeof(T), src_run_length*sizeof(T));
@@ -690,21 +708,24 @@ namespace upcxx
   
   template<typename SrcIter, typename DestIter,
            typename Cxs=decltype(operation_cx::as_future())>
+  UPCXX_NODISCARD
   typename detail::completions_returner<
     /*EventPredicate=*/detail::event_is_here,
     /*EventValues=*/detail::rget_byref_event_values,
-    Cxs
+    typename std::decay<Cxs>::type
     >::return_t
   rget_regular(
                   SrcIter src_runs_begin, SrcIter src_runs_end,
                   std::size_t src_run_length,
                   DestIter dst_runs_begin, DestIter dst_runs_end,
                   std::size_t dst_run_length,
-                  Cxs cxs=completions<future_cx<operation_cx_event>>{{}})
+                  Cxs &&cxs=completions<future_cx<operation_cx_event>>{{}})
   {
 
-    // Pull T out of global_ptr<T> from SrcIter
-    using T = typename std::iterator_traits<SrcIter>::value_type::element_type;
+    using CxsDecayed = typename std::decay<Cxs>::type;
+    // Pull T out of global_ptr</*const*/ T> from SrcIter
+    using U = typename std::iterator_traits<SrcIter>::value_type::element_type;
+    using T = typename std::remove_const<U>::type;
     using D = typename std::iterator_traits<DestIter>::value_type;
     
     static_assert(std::is_convertible</*from*/D, /*to*/const T*>::value,
@@ -713,11 +734,17 @@ namespace upcxx
     static_assert(is_trivially_serializable<T>::value,
                   "RMA operations only work on TriviallySerializable types.");
     
-    UPCXX_ASSERT_ALWAYS((detail::completions_has_event<Cxs, operation_cx_event>::value |
-                  detail::completions_has_event<Cxs, remote_cx_event>::value),
+    UPCXX_ASSERT_INIT();
+    UPCXX_ASSERT_ALWAYS((detail::completions_has_event<CxsDecayed, operation_cx_event>::value |
+                  detail::completions_has_event<CxsDecayed, remote_cx_event>::value),
                  "Not requesting either operation or remote completion is surely an "
                  "error. You'll have know way of ever knowing when the target memory is "
                  "safe to read or write again.");
+    /* rget_regular supports remote completion, contrary to the spec */
+    UPCXX_ASSERT_ALWAYS(
+      (!detail::completions_has_event<CxsDecayed, source_cx_event>::value),
+      "rget_regular does not support source completion."
+    );
     
 
     static_assert( is_trivially_serializable<T>::value,
@@ -726,11 +753,11 @@ namespace upcxx
     using cxs_here_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::rget_byref_event_values,
-      Cxs>;
+      CxsDecayed>;
     using cxs_remote_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_remote,
       /*EventValues=*/detail::rget_byref_event_values,
-      Cxs>;
+      CxsDecayed>;
 
     // Construct list of src run pointers. The old code called `resize` followed
     // by setting elements, which incurred an unnecessary zeroing of the elements
@@ -749,33 +776,33 @@ namespace upcxx
     std::vector<void*> src_ptrs;
     src_ptrs.reserve(std::distance(src_runs_begin, src_runs_end));
    
-    intrank_t src_rank = upcxx::rank_me(); // default for empty sequence is self
-    if(src_ptrs.capacity() != 0) src_rank = (*src_runs_begin).rank_;
+    intrank_t src_rank;
+    if(src_ptrs.capacity()) src_rank = (*src_runs_begin).rank_;
+    else                    src_rank = upcxx::rank_me(); // default for empty sequence is self
     for(SrcIter s=src_runs_begin; !(s == src_runs_end); ++s) {
       UPCXX_GPTR_CHK(*s);
       UPCXX_ASSERT((*s), "pointer arguments to rget_regular may not be null");
       UPCXX_ASSERT(src_rank==(*s).rank_, "pointer arguments to rget_regular must all target the same affinity");
       src_ptrs.push_back((*s).raw_ptr_);
-      src_rank = (*s).rank_;
     }
  
     
-    UPCXX_ASSERT(
-      src_ptrs.size()*src_run_length == dst_ptrs.size()*dst_run_length,
-      "Source and destination runs must contain the same number of elements."
-    );
+    UPCXX_ASSERT(src_ptrs.size()*src_run_length == dst_ptrs.size()*dst_run_length,
+       "rget_regular: destination size (" << dst_ptrs.size()*dst_run_length 
+       << " bytes) does not match source size (" << src_ptrs.size()*src_run_length << " bytes)");
+
     
     auto *cb = new detail::rget_cb_reg<cxs_here_t,cxs_remote_t>{
       src_rank,
-      cxs_here_t{std::move(cxs)},
-      cxs_remote_t{std::move(cxs)},
+      cxs_here_t{std::forward<Cxs>(cxs)},
+      cxs_remote_t{std::forward<Cxs>(cxs)},
       std::move(src_ptrs), std::move(dst_ptrs)
     };
 
     auto returner = detail::completions_returner<
         /*EventPredicate=*/detail::event_is_here,
         /*EventValues=*/detail::rget_byref_event_values,
-        Cxs
+        CxsDecayed
       >{cb->state_here};
 
     cb->initiate(src_rank, src_run_length*sizeof(T), dst_run_length*sizeof(T));
@@ -786,26 +813,29 @@ namespace upcxx
   
   template<std::size_t Dim, typename T,
            typename Cxs=decltype(operation_cx::as_future())>
+  UPCXX_NODISCARD
   typename detail::completions_returner<
     /*EventPredicate=*/detail::event_is_here,
     /*EventValues=*/detail::rput_event_values,
-    Cxs>::return_t  
+    typename std::decay<Cxs>::type>::return_t  
     rput_strided(
        T const *src_base,
        std::ptrdiff_t const *src_strides,
        global_ptr<T> dest_base,
        std::ptrdiff_t const *dest_strides,
        std::size_t const *extents,
-       Cxs cxs=completions<future_cx<operation_cx_event>>{{}})
+       Cxs &&cxs=completions<future_cx<operation_cx_event>>{{}})
   {
+    using CxsDecayed = typename std::decay<Cxs>::type;
     static_assert(
       is_trivially_serializable<T>::value,
       "RMA operations only work on TriviallySerializable types."
     );
     
+    UPCXX_ASSERT_INIT();
     UPCXX_ASSERT_ALWAYS((
-      detail::completions_has_event<Cxs, operation_cx_event>::value |
-      detail::completions_has_event<Cxs, remote_cx_event>::value),
+      detail::completions_has_event<CxsDecayed, operation_cx_event>::value |
+      detail::completions_has_event<CxsDecayed, remote_cx_event>::value),
       "Not requesting either operation or remote completion is surely an "
       "error. You'll have know way of ever knowing when the target memory is "
       "safe to read or write again."
@@ -817,16 +847,16 @@ namespace upcxx
     using cxs_here_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::rput_event_values,
-      Cxs>;
+      CxsDecayed>;
     using cxs_remote_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_remote,
       /*EventValues=*/detail::rput_event_values,
-      Cxs>;
+      CxsDecayed>;
 
     detail::rput_cbs_strided<cxs_here_t, cxs_remote_t> cbs_static{
       dest_base.rank_,
-      cxs_here_t{std::move(cxs)},
-      cxs_remote_t{std::move(cxs)}
+      cxs_here_t{std::forward<Cxs>(cxs)},
+      cxs_remote_t{std::forward<Cxs>(cxs)}
     };
         auto *cbs = decltype(cbs_static)::static_scope
       ? &cbs_static
@@ -835,7 +865,7 @@ namespace upcxx
     auto returner = detail::completions_returner<
         /*EventPredicate=*/detail::event_is_here,
         /*EventValues=*/detail::rput_event_values,
-        Cxs
+        CxsDecayed
       >{cbs->state_here};
     
     cbs->initiate(dest_base.rank_, dest_base.raw_ptr_, dest_strides,
@@ -846,45 +876,54 @@ namespace upcxx
 
   template<std::size_t Dim, typename T,
            typename Cxs=decltype(operation_cx::as_future())>
+  UPCXX_NODISCARD
   typename detail::completions_returner<
     /*EventPredicate=*/detail::event_is_here,
     /*EventValues=*/detail::rput_event_values,
-    Cxs>::return_t  
+    typename std::decay<Cxs>::type>::return_t  
   rput_strided(
                T const *src_base,
                std::array<std::ptrdiff_t,Dim> const &src_strides,
                global_ptr<T> dest_base,
                std::array<std::ptrdiff_t,Dim> const &dest_strides,
                std::array<std::size_t,Dim> const &extents,
-               Cxs cxs=completions<future_cx<operation_cx_event>>{{}})
+               Cxs &&cxs=completions<future_cx<operation_cx_event>>{{}})
   {
     return rput_strided<Dim, T, Cxs>(src_base,&src_strides.front(),
                                      dest_base, &dest_strides.front(),
-                                     &extents.front(), cxs);
+                                     &extents.front(), std::forward<Cxs>(cxs));
   }
   
   template<std::size_t Dim, typename T,
            typename Cxs=decltype(operation_cx::as_future())>
+  UPCXX_NODISCARD
   typename detail::completions_returner<
     /*EventPredicate=*/detail::event_is_here,
     /*EventValues=*/detail::rput_event_values,
-    Cxs>::return_t  
+    typename std::decay<Cxs>::type>::return_t  
   rget_strided(
-               global_ptr<T> src_base,
+               global_ptr<const T> src_base,
                std::ptrdiff_t const *src_strides,
                T* dest_base,
                std::ptrdiff_t const *dest_strides,
                std::size_t const *extents,
-               Cxs cxs=completions<future_cx<operation_cx_event>>{{}})
+               Cxs &&cxs=completions<future_cx<operation_cx_event>>{{}})
   {
+    using CxsDecayed = typename std::decay<Cxs>::type;
     static_assert(is_trivially_serializable<T>::value,
       "RMA operations only work on TriviallySerializable types.");
     
-    UPCXX_ASSERT_ALWAYS((detail::completions_has_event<Cxs, operation_cx_event>::value |
-                  detail::completions_has_event<Cxs, remote_cx_event>::value),
+    UPCXX_ASSERT_INIT();
+    UPCXX_ASSERT_ALWAYS((detail::completions_has_event<CxsDecayed, operation_cx_event>::value |
+                  detail::completions_has_event<CxsDecayed, remote_cx_event>::value),
                  "Not requesting either operation or remote completion is surely an "
                  "error. You'll have know way of ever knowing when the target memory is "
                  "safe to read or write again.");
+    /* rget_strided supports remote completion, contrary to the spec */
+    UPCXX_ASSERT_ALWAYS(
+      (!detail::completions_has_event<CxsDecayed, source_cx_event>::value),
+      "rget_strided does not support source completion."
+    );
  
     UPCXX_GPTR_CHK(src_base);
     UPCXX_ASSERT(src_base && dest_base, "pointer arguments to rget_strided may not be null");
@@ -892,22 +931,22 @@ namespace upcxx
     using cxs_here_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::rput_event_values,
-      Cxs>;
+      CxsDecayed>;
     using cxs_remote_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_remote,
       /*EventValues=*/detail::rput_event_values,
-      Cxs>;
+      CxsDecayed>;
 
     auto *cbs = new detail::rget_cbs_strided<cxs_here_t, cxs_remote_t>{
       src_base.rank_,
-      cxs_here_t{std::move(cxs)},
-      cxs_remote_t{std::move(cxs)}
+      cxs_here_t{std::forward<Cxs>(cxs)},
+      cxs_remote_t{std::forward<Cxs>(cxs)}
     };
     
     auto returner = detail::completions_returner<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::rput_event_values,
-      Cxs
+      CxsDecayed
       >{cbs->state_here};
     
     cbs->initiate(dest_base, dest_strides,
@@ -920,21 +959,22 @@ namespace upcxx
 
   template<std::size_t Dim, typename T,
            typename Cxs=decltype(operation_cx::as_future())>
+  UPCXX_NODISCARD
   typename detail::completions_returner<
     /*EventPredicate=*/detail::event_is_here,
     /*EventValues=*/detail::rput_event_values,
-    Cxs>::return_t  
+    typename std::decay<Cxs>::type>::return_t  
   rget_strided(
-               global_ptr<T> src_base,
+               global_ptr<const T> src_base,
                std::array<std::ptrdiff_t,Dim> const &src_strides,
                T *dest_base,
                std::array<std::ptrdiff_t,Dim> const &dest_strides,
                std::array<std::size_t,Dim> const &extents,
-               Cxs cxs=completions<future_cx<operation_cx_event>>{{}})
+               Cxs &&cxs=completions<future_cx<operation_cx_event>>{{}})
   {
     return rget_strided<Dim, T, Cxs>(src_base,&src_strides.front(),
                               dest_base, &dest_strides.front(),
-                              &extents.front(), cxs);
+                              &extents.front(), std::forward<Cxs>(cxs));
   }
  
 }

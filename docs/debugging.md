@@ -5,7 +5,7 @@ General recommendations for debugging UPC++ programs:
 1. Whenever debugging your UPC++ program, **ALWAYS** build in debug mode, 
 i.e. compile with `export UPCXX_CODEMODE=debug` (or equivalently, `upcxx -g`).  This enables thousands of
 sanity checks system-wide that can greatly accelerate narrowing down the
-problem. Just remember to switch back to production mode `UPCXX_CODEMODE=O3` (`upcxx -O`)
+problem. Just remember to switch back to production mode `UPCXX_CODEMODE=opt` (aka `upcxx -O`)
 for building performance tests!
 
 2. If your problem is a simple enough that a crash stack might help to solve it, 

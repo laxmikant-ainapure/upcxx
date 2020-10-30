@@ -372,15 +372,13 @@ namespace {
 void upcxx::destroy_heap() {
   noise_log noise("upcxx::destroy_heap()");
   
-  UPCXX_ASSERT_ALWAYS(backend::master.active_with_caller());
+  UPCXX_ASSERT_ALWAYS_MASTER();
   UPCXX_ASSERT_ALWAYS(shared_heap_isinit);
   backend::quiesce(upcxx::world(), entry_barrier::user);
 
   quiesce_rdzv(/*in_finalize=*/false, noise);
   
-  gasnet_barrier_notify(0, GASNET_BARRIERFLAG_ANONYMOUS);
-  int ok = gasnet_barrier_wait(0, GASNET_BARRIERFLAG_ANONYMOUS);
-  UPCXX_ASSERT_ALWAYS(ok == GASNET_OK);
+  gex_Event_Wait(gex_Coll_BarrierNB( gasnet::handle_of(upcxx::world()), 0));
   
   if(gasnet::sheap_footprint_user.count != 0)
     noise.warn()<<"destroy_heap() called with "<<gasnet::sheap_footprint_user.count<<" live shared objects.";
@@ -412,7 +410,7 @@ void upcxx::destroy_heap() {
 // all processes, returning them to a live state.
 
 void upcxx::restore_heap(void) {
-  UPCXX_ASSERT_ALWAYS(backend::master.active_with_caller());
+  UPCXX_ASSERT_ALWAYS_MASTER();
   UPCXX_ASSERT_ALWAYS(!shared_heap_isinit);
   UPCXX_ASSERT_ALWAYS(shared_heap_sz > 0);
 
@@ -425,17 +423,23 @@ void upcxx::restore_heap(void) {
   }
   shared_heap_isinit = true;
 
-  gasnet_barrier_notify(0, GASNET_BARRIERFLAG_ANONYMOUS);
-  int ok = gasnet_barrier_wait(0, GASNET_BARRIERFLAG_ANONYMOUS);
-  UPCXX_ASSERT_ALWAYS(ok == GASNET_OK);
+  gex_Event_Wait(gex_Coll_BarrierNB( gasnet::handle_of(upcxx::world()), 0));
 }
 
 ////////////////////////////////////////////////////////////////////////
 // from: upcxx/backend.hpp
 
 void upcxx::init() {
+  UPCXX_ASSERT_COLLECTIVE_SAFE(entry_barrier::none);
   if(0 != backend::init_count++)
     return;
+
+  static int first_init = 1;
+  if (!first_init) 
+    UPCXX_FATAL_ERROR("This implementation does not currently support re-initialization "
+      "of the UPC++ library after it has been completely finalized in a given process.\n\n"
+      "If this capability is important to you, please contact us!");
+  first_init = 0;
 
   noise_log noise("upcxx::init()");
   
@@ -444,6 +448,8 @@ void upcxx::init() {
   #if UPCXX_BACKEND_GASNET_SEQ
     gasnet_seq_thread_id = upcxx::detail::thread_id();
   #endif
+  detail::persona_tls &tls = detail::the_persona_tls;
+  tls.is_primordial_thread = true;
 
   gex_Client_t client;
   gex_EP_t endpoint;
@@ -452,8 +458,13 @@ void upcxx::init() {
   if (upcxx_upc_is_linked()) {
     upcxx_upc_init(&client, &endpoint, &world_tm);
   } else { 
+    // issue 419: we clear init across gex_Client_Init so that any processes forked 
+    // inside this call don't appear to have an initialized UPC++ library, unless they 
+    // return from this call and finish upcxx::init()
+    backend::init_count = 0; 
     ok = gex_Client_Init(&client, &endpoint, &world_tm, "upcxx", nullptr, nullptr, 0);
     UPCXX_ASSERT_ALWAYS(ok == GASNET_OK);
+    backend::init_count = 1;
   }
 
   backend::rank_n = gex_TM_QuerySize(world_tm);
@@ -465,6 +476,8 @@ void upcxx::init() {
                                       gasnett_envstr_display(key,val,is_dflt); });
   
   backend::verbose_noise = os_env<bool>("UPCXX_VERBOSE", false);
+
+  backend::gasnet::watermark_init();
 
   //////////////////////////////////////////////////////////////////////////////
   // UPCXX_SHARED_HEAP_SIZE environment handling
@@ -519,7 +532,7 @@ void upcxx::init() {
 
   // ready master persona
   backend::initial_master_scope = new persona_scope(backend::master);
-  UPCXX_ASSERT_ALWAYS(backend::master.active_with_caller());
+  UPCXX_ASSERT_ALWAYS_MASTER();
   
   // Build team upcxx::world()
   ::new(detail::the_world_team.raw()) upcxx::team(
@@ -587,35 +600,22 @@ void upcxx::init() {
   gex_RankInfo_t *nbhd;
   gex_Rank_t peer_n, peer_me;
   gex_System_QueryNbrhdInfo(&nbhd, &peer_n, &peer_me);
+  void *peer_EP_loc = nullptr;
 
+  // compute local_team membership
   bool contiguous_nbhd = true;
   for(gex_Rank_t p=1; p < peer_n; p++)
     contiguous_nbhd &= (nbhd[p].gex_jobrank == 1 + nbhd[p-1].gex_jobrank);
 
   bool const local_is_world = ((intrank_t)peer_n == backend::rank_n);
-
-  if (!local_is_world) { // determine (upper bound on) scratch requirements for local_team
-    local_scratch_sz = gex_TM_Split(
-      &local_tm, world_tm,
-      /*color*/nbhd[0].gex_jobrank, /*key*/peer_me,
-      nullptr, 0,
-      peer_n == 1
-        ? GEX_FLAG_TM_SCRATCH_SIZE_MIN
-        : GEX_FLAG_TM_SCRATCH_SIZE_RECOMMENDED
-    );
-  }
-
-  // setup shared segment allocator
-  heap_init_internal(segment_size, noise);
-  
   if (local_is_world) {
     if(backend::verbose_noise)
       noise.line() << "Whole world is in same local team.";
     
     backend::pshm_peer_lb = 0;
     backend::pshm_peer_ub = backend::rank_n;
-    peer_n = backend::rank_n;
-    peer_me = backend::rank_me;
+    UPCXX_ASSERT_ALWAYS((intrank_t)peer_n == backend::rank_n);
+    UPCXX_ASSERT_ALWAYS((intrank_t)peer_me == backend::rank_me);
     local_tm = world_tm;
   } else { // !local_is_world
     if(!contiguous_nbhd) {
@@ -630,7 +630,36 @@ void upcxx::init() {
       backend::pshm_peer_lb = nbhd[0].gex_jobrank;
       backend::pshm_peer_ub = nbhd[0].gex_jobrank + peer_n;
     }
+  }
+  backend::pshm_peer_n = peer_n;
+
+  // determine (upper bound on) scratch requirements for local_team
+  if (!local_is_world) { // only if we are creating a GEX-level team
+    // build local_team membership table, avoiding split comms
+    gex_EP_Location_t *peer_ids = new gex_EP_Location_t[peer_n];
+    peer_EP_loc = (void *)peer_ids;
+    for (gex_Rank_t i = 0; i < peer_n; i++) {
+      peer_ids[i].gex_rank = backend::pshm_peer_lb + i;
+      peer_ids[i].gex_ep_index = 0;
+    }
     
+    local_scratch_sz = gex_TM_Create(
+      nullptr, 1,
+      world_tm,
+      peer_ids, peer_n,
+      nullptr, 0,
+      GEX_FLAG_TM_SCRATCH_SIZE_RECOMMENDED |
+      GEX_FLAG_TM_LOCAL_SCRATCH | GEX_FLAG_RANK_IS_JOBRANK
+    );
+
+    UPCXX_ASSERT_ALWAYS(local_scratch_sz);
+  }
+
+  // setup shared segment allocator
+  heap_init_internal(segment_size, noise);
+  
+    
+  if (!local_is_world) {
     if(backend::verbose_noise) {
       struct local_team_stats {
         int count;
@@ -665,22 +694,25 @@ void upcxx::init() {
 
       if(stats.count == backend::rank_n)
         noise.warn()<<"All local team's are singletons. Memory sharing between ranks will never succeed.";
-    }
+    } // verbose_noise
     
     UPCXX_ASSERT_ALWAYS( local_scratch_sz && local_scratch_ptr );
-    
-    gex_TM_Split(
-      &local_tm, world_tm,
-      /*color*/backend::pshm_peer_lb, /*key*/peer_me,
-      local_scratch_ptr, local_scratch_sz,
-      /*flags*/0
+
+    gex_EP_Location_t *peer_ids = (gex_EP_Location_t *)peer_EP_loc;
+    peer_EP_loc = nullptr;
+    gex_TM_Create(
+      &local_tm, 1, 
+      world_tm,
+      peer_ids, peer_n,
+      &local_scratch_ptr, local_scratch_sz,
+      GEX_FLAG_TM_LOCAL_SCRATCH | GEX_FLAG_RANK_IS_JOBRANK
     );
-    
-    if (!upcxx_upc_is_linked()) 
+    delete [] peer_ids;
+
+    if (!upcxx_upc_is_linked()) // UPC mode has custom local_tm scratch cleanup
       gex_TM_SetCData(local_tm, local_scratch_ptr );
   }
   
-  backend::pshm_peer_n = peer_n;
   
   // Build upcxx::local_team()
   ::new(detail::the_local_team.raw()) upcxx::team(
@@ -698,20 +730,16 @@ void upcxx::init() {
 
   if(backend::verbose_noise) {
     // output process identity information, for validating job layout matches user intent
-    ostringstream oss;
-    oss << "UPCXX: Process " 
+    upcxx::say(std::cerr,"") << "UPCXX: Process " 
         << setw(to_string(backend::rank_n-1).size()) << backend::rank_me << "/" << backend::rank_n
         << " (local_team: " << setw(to_string(peer_n-1).size()) << peer_me << "/" << peer_n << ") on "
-        << gasnett_gethostname() << " (" << gasnett_cpu_count() << " processors)" << "\n";
-    std::cerr << oss.str() << std::flush;
+        << gasnett_gethostname() << " (" << gasnett_cpu_count() << " processors)";
   }
 
   //////////////////////////////////////////////////////////////////////////////
   // Exit barrier
   
-  gasnet_barrier_notify(0, GASNET_BARRIERFLAG_ANONYMOUS);
-  ok = gasnet_barrier_wait(0, GASNET_BARRIERFLAG_ANONYMOUS);
-  UPCXX_ASSERT_ALWAYS(ok == GASNET_OK);
+  gex_Event_Wait(gex_Coll_BarrierNB( gasnet::handle_of(upcxx::world()), 0));
 }
 
 namespace {
@@ -835,18 +863,26 @@ namespace {
 }
 
 void upcxx::finalize() {
-  UPCXX_ASSERT_ALWAYS(backend::master.active_with_caller());
+  UPCXX_ASSERT_INIT();
+  UPCXX_ASSERT_ALWAYS_MASTER();
+  UPCXX_ASSERT_COLLECTIVE_SAFE(entry_barrier::user);
   UPCXX_ASSERT_ALWAYS(backend::init_count > 0);
   
-  if(0 != --backend::init_count)
+  if (backend::init_count > 1) {
+    backend::init_count--;
     return;
+  } // final decrement is performed at end
   
   noise_log noise("upcxx::finalize()");
 
   { // barrier
-    gasnet_barrier_notify(0, GASNET_BARRIERFLAG_ANONYMOUS);
-    while(GASNET_OK != gasnet_barrier_try(0, GASNET_BARRIERFLAG_ANONYMOUS))
+    // DO NOT convert this loop to backend::quiesce() which lacks the desired behavior
+    gex_Event_t e = gex_Coll_BarrierNB( gasnet::handle_of(upcxx::world()), 0);
+    do {
+      // issue 384: ensure we invoke user-level progress at least once during
+      // runtime teardown, to harvest any runtime-deferred actions.
       upcxx::progress();
+    } while (gex_Event_Test(e) != 0);
   }
 
   quiesce_rdzv(/*in_finalize=*/true, noise);
@@ -905,11 +941,20 @@ void upcxx::finalize() {
   
   { // Tear down local_team
     if(gasnet::handle_of(detail::the_local_team.value()) !=
-       gasnet::handle_of(detail::the_world_team.value()))
-      {/*TODO: add local team destruct once GEX has the API.*/}
+       gasnet::handle_of(detail::the_world_team.value())) {
+       if (upcxx_upc_is_linked()) {
+         // local_tm scratch has special handling in UPC mode
+         if (local_scratch_ptr) { 
+           if (upcxx_upc_is_pthreads()) upcxx_upc_free(local_scratch_ptr);
+           else upcxx_upc_all_free(local_scratch_ptr);
+           local_scratch_ptr = nullptr;
+         }
+       }
+    }
     
-    detail::the_local_team.value().destroy();
+    detail::the_local_team.value().destroy(detail::internal_only(), entry_barrier::none);
     detail::the_local_team.destruct();
+    local_tm = GEX_TM_INVALID;
   }
   
   // can't just destroy world, it needs special attention
@@ -919,9 +964,12 @@ void upcxx::finalize() {
     delete backend::initial_master_scope;
 
   noise.show();
+  UPCXX_ASSERT_ALWAYS(backend::init_count == 1);
+  backend::init_count = 0;
 }
 
 void upcxx::liberate_master_persona() {
+  UPCXX_ASSERT_INIT();
   UPCXX_ASSERT_ALWAYS(&upcxx::current_persona() == &backend::master);
   UPCXX_ASSERT_ALWAYS(backend::initial_master_scope != nullptr);
   
@@ -931,10 +979,12 @@ void upcxx::liberate_master_persona() {
 }
 
 void* upcxx::allocate(size_t size, size_t alignment) {
+  UPCXX_ASSERT_INIT();
   return gasnet::allocate(size, alignment, &gasnet::sheap_footprint_user);
 }
 
 void  upcxx::deallocate(void *p) {
+  UPCXX_ASSERT_INIT();
   gasnet::deallocate(p, &gasnet::sheap_footprint_user);
 }
 
@@ -955,9 +1005,7 @@ std::string upcxx::detail::shared_heap_stats() {
   
 void* gasnet::allocate(size_t size, size_t alignment, sheap_footprint_t *foot) {
   UPCXX_ASSERT(shared_heap_isinit);
-  #if UPCXX_BACKEND_GASNET_SEQ
-    UPCXX_ASSERT(backend::master.active_with_caller());
-  #endif
+  UPCXX_ASSERT_MASTER_IFSEQ();
 
   std::lock_guard<detail::par_mutex> locked{segment_lock_};
   
@@ -1001,9 +1049,7 @@ void* gasnet::allocate(size_t size, size_t alignment, sheap_footprint_t *foot) {
 
 void gasnet::deallocate(void *p, sheap_footprint_t *foot) {
   UPCXX_ASSERT(shared_heap_isinit);
-  #if UPCXX_BACKEND_GASNET_SEQ
-    UPCXX_ASSERT(backend::master.active_with_caller());
-  #endif
+  UPCXX_ASSERT_MASTER_IFSEQ();
 
   std::lock_guard<detail::par_mutex> locked{segment_lock_};
   
@@ -1030,6 +1076,7 @@ void gasnet::deallocate(void *p, sheap_footprint_t *foot) {
 // from: upcxx/backend.hpp
 
 void backend::quiesce(const team &tm, upcxx::entry_barrier eb) {
+  UPCXX_ASSERT_MASTER_IFSEQ();
   switch(eb) {
   case entry_barrier::none:
     break;
@@ -1039,17 +1086,59 @@ void backend::quiesce(const team &tm, upcxx::entry_barrier eb) {
       //std::atomic_thread_fence(std::memory_order_release);
       
       gex_Event_t e = gex_Coll_BarrierNB( gasnet::handle_of(tm), 0);
-      
-      while(0 != gex_Event_Test(e)) {
-        upcxx::progress(
-          eb == entry_barrier::internal
-            ? progress_level::internal
-            : progress_level::user
-        );
+
+      bool const in_progress = upcxx::in_progress();
+      UPCXX_ASSERT(!(eb == entry_barrier::user && in_progress)); // issue #412
+     
+      if (in_progress) {
+        // issue 412: we are already inside (user) progress in the restricted context,
+        // thus user-level progress is a no-op. Ensure GASNet makes internal progress
+        // to complete this quiescence barrier.
+        gex_Event_Wait(e);
+      } else {
+        while(0 != gex_Event_Test(e)) {
+          upcxx::progress(
+            eb == entry_barrier::internal
+              ? progress_level::internal
+              : progress_level::user
+          );
+        }
       }
       
       //std::atomic_thread_fence(std::memory_order_acquire);
     } break;
+  default:
+    UPCXX_FATAL_ERROR("Invalid entry_barrier value = " << (int)eb);
+  }
+}
+
+void backend::warn_collective_in_progress(const char *fnname, entry_barrier eb) {
+  UPCXX_ASSERT_MASTER();
+  UPCXX_ASSERT(upcxx::in_progress());
+
+  static bool warn = os_env<bool>("UPCXX_WARN_COLLECTIVE_IN_PROGRESS", true);
+  if (warn) {
+    if (!upcxx::rank_me()) { // only output from proc0 to avoid spamminess 
+                             // (at a small risk of missing subteam calls that exclude proc0)
+      upcxx::say("") << std::string(70, '/') << "\n"
+        "WARNING: The following collective UPC++ operation was initiated inside the "
+        "UPC++ restricted context (from a callback running inside user-level progress):\n\n"
+        "   " << fnname << "\n\n"
+        "Initiating a collective from inside progress is a deprecated behavior and may be prohibited in a forthcoming release.\n"
+        "Please contact the UPC++ maintainers at <upcxx@googlegroups.com> if this capability is important to your application!\n"
+        "This warning may be silenced by setting envvar: UPCXX_WARN_COLLECTIVE_IN_PROGRESS=0\n"
+        << std::string(70, '/') << "\n";
+    }
+    warn = false;
+  }
+
+  if (eb == entry_barrier::user) { // issue 412
+    upcxx::fatal_error(
+     "Collective operations with user-level progress semantics are prohibited "
+     "from being initiated inside the restricted context (from a callback already running inside user-level progress).\n"
+     "Please refactor your code and/or request entry_barrier::internal or entry_barrier::none "
+     "(where available).", 
+     "User-progress collective initiated inside progress", fnname);
   }
 }
 
@@ -1128,7 +1217,8 @@ intrank_t backend::team_rank_to_world(const team &tm, intrank_t peer) {
 }
 
 void backend::validate_global_ptr(bool allow_null, intrank_t rank, void *raw_ptr, std::int32_t device,
-                                  memory_kind KindSet, size_t T_align, const char *T_name, const char *context) {
+                                  memory_kind KindSet, size_t T_align, const char *T_name, 
+                                  const char *short_context, const char *context) {
   if_pf (!upcxx::initialized()) return; // don't perform checking before init
   if_pf (!T_name) T_name = "";
 
@@ -1218,9 +1308,9 @@ void backend::validate_global_ptr(bool allow_null, intrank_t rank, void *raw_ptr
   } while (0);
 
   if_pf (error) {
-    if (context && *context) ss << " in " << context << "\n";
-    ss << "  rank = " << rank << ", raw_ptr = " << raw_ptr << ", device = " << device;
-    fatal_error(ss.str(), "fatal global_ptr error");
+    if (short_context && *short_context) ss << " in " << short_context;
+    ss << "\n  rank = " << rank << ", raw_ptr = " << raw_ptr << ", device = " << device;
+    fatal_error(ss.str(), "fatal global_ptr error", context);
   }
 }
 
@@ -1295,7 +1385,7 @@ namespace {
       Fn fn
     ) {
     
-    UPCXX_ASSERT(!UPCXX_BACKEND_GASNET_SEQ || backend::master.active_with_caller());
+    UPCXX_ASSERT_MASTER_IFSEQ();
 
     auto *cb = gasnet::make_handle_cb(std::move(fn));
     
@@ -1753,6 +1843,8 @@ int upcxx::detail::progressing() {
 }
 
 void upcxx::progress(progress_level level) {
+  UPCXX_ASSERT_INIT();
+
   detail::persona_tls &tls = detail::the_persona_tls;
   
   if(tls.get_progressing() >= 0)
@@ -2342,58 +2434,7 @@ namespace upcxx {
 }
 
 ////////////////////////////////////////////////////////////////////////
-// Library version watermarking
-
-#include <upcxx/upcxx.hpp> // for UPCXX_VERSION
-
-#ifndef UPCXX_VERSION
-#error  UPCXX_VERSION missing!
-#endif
-GASNETT_IDENT(UPCXX_IdentString_LibraryVersion, "$UPCXXLibraryVersion: " _STRINGIFY(UPCXX_VERSION) " $");
-
-#ifndef UPCXX_GIT_VERSION
-#include <upcxx/git_version.h>
-#endif
-#ifdef  UPCXX_GIT_VERSION
-GASNETT_IDENT(UPCXX_IdentString_GitVersion, "$UPCXXGitVersion: " _STRINGIFY(UPCXX_GIT_VERSION) " $");
-#endif
+// Other library ident strings live in watermark.cpp
 
 GASNETT_IDENT(UPCXX_IdentString_Network, "$UPCXXNetwork: " _STRINGIFY(GASNET_CONDUIT_NAME) " $");
-
-#if UPCXX_BACKEND_GASNET_SEQ
-GASNETT_IDENT(UPCXX_IdentString_ThreadMode, "$UPCXXThreadMode: SEQ $");
-#elif UPCXX_BACKEND_GASNET_PAR
-GASNETT_IDENT(UPCXX_IdentString_ThreadMode, "$UPCXXThreadMode: PAR $");
-#endif
-
-#if GASNET_DEBUG
-GASNETT_IDENT(UPCXX_IdentString_CodeMode, "$UPCXXCodeMode: debug $");
-#else
-GASNETT_IDENT(UPCXX_IdentString_CodeMode, "$UPCXXCodeMode: opt $");
-#endif
-
-GASNETT_IDENT(UPCXX_IdentString_GASNetVersion, "$UPCXXGASNetVersion: " 
-              _STRINGIFY(GASNET_RELEASE_VERSION_MAJOR) "."
-              _STRINGIFY(GASNET_RELEASE_VERSION_MINOR) "."
-              _STRINGIFY(GASNET_RELEASE_VERSION_PATCH) " $");
-
-#if UPCXX_CUDA_ENABLED
-  GASNETT_IDENT(UPCXX_IdentString_CUDAEnabled, "$UPCXXCUDAEnabled: 1 $");
-#else
-  GASNETT_IDENT(UPCXX_IdentString_CUDAEnabled, "$UPCXXCUDAEnabled: 0 $");
-#endif
-
-GASNETT_IDENT(UPCXX_IdentString_AssertEnabled, "$UPCXXAssertEnabled: " _STRINGIFY(UPCXX_ASSERT_ENABLED) " $");
-
-#if UPCXX_MPSC_QUEUE_ATOMIC
-  GASNETT_IDENT(UPCXX_IdentString_MPSCQueue, "$UPCXXMPSCQueue: atomic $");
-#elif UPCXX_MPSC_QUEUE_BIGLOCK
-  GASNETT_IDENT(UPCXX_IdentString_MPSCQueue, "$UPCXXMPSCQueue: biglock $");
-#endif
-
-GASNETT_IDENT(UPCXX_IdentString_CompilerID, "$UPCXXCompilerID: " PLATFORM_COMPILER_IDSTR " $");
-
-GASNETT_IDENT(UPCXX_IdentString_CompilerStd, "$UPCXXCompilerStd: " _STRINGIFY(__cplusplus) " $");
-
-GASNETT_IDENT(UPCXX_IdentString_BuildTimestamp, "$UPCXXBuildTimestamp: " __DATE__ " " __TIME__ " $");
 

@@ -1,7 +1,4 @@
-#include <upcxx/dist_object.hpp>
-#include <upcxx/backend.hpp>
-#include <upcxx/barrier.hpp>
-#include <upcxx/rpc.hpp>
+#include <upcxx/upcxx.hpp>
 
 #include "util.hpp"
 
@@ -9,6 +6,21 @@
 
 using namespace std;
 using namespace upcxx;
+
+struct asym_type {
+  int i;
+  asym_type(int i_) : i(i_) {}
+  struct upcxx_serialization {
+    template<typename W>
+    static void serialize(W &w, asym_type const &x) {
+      w.template write<int>(x.i);
+    }
+    template<typename R>
+    static int* deserialize(R &r, void *spot) {
+      return ::new int(r.template read<int>());
+    }
+  };
+};
 
 bool got_ff = false;
 
@@ -66,7 +78,11 @@ int main() {
 
     upcxx::dist_object<int> &obj3c = obj3;
     UPCXX_ASSERT_ALWAYS(obj3c.fetch(nebr).wait() == expect);
-    
+
+    upcxx::dist_object<asym_type> obj4{300 + me};
+    future<int> f4 = obj4.fetch(nebr);
+    UPCXX_ASSERT_ALWAYS(f4.wait() == expect);
+
     upcxx::rpc_ff(nebr,
         [=](dist_object<int> &his1, dist_object<int> const &his2) {
           UPCXX_ASSERT_ALWAYS(*his1 == 100 + upcxx::rank_me(), "incorrect value for neighbor 1");

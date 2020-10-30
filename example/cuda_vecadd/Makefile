@@ -16,8 +16,17 @@ UPCXXRUN=$(UPCXX_INSTALL)/bin/upcxx-run
 endif
 endif
 
-UPCXX_CUDA_NVCC ?= nvcc
-NVCC_FLAGS ?= -arch=sm_30
+NVCC ?= nvcc
+
+# Honor user's NVCCARCH_FLAGS (if any) warning if NVCCARCH is also set.
+# Otherwise convert NVCCARCH (if any) to an -arch=... option.
+ifneq ($(strip $(NVCCARCH)),)
+  ifneq ($(strip $(NVCCARCH_FLAGS)),)
+    $(warning Both NVCCARCH and NVCCARCH_FLAGS are set.  Ignoring NVCCARCH.)
+  else
+    NVCCARCH_FLAGS = -arch=$(NVCCARCH)
+  endif
+endif
 
 CXXFLAGS ?= -g # optional command-line override
 
@@ -29,5 +38,5 @@ clean:
 .PHONY: all clean
 
 cuda_vecadd: vecadd.cpp kernels.cu kernels.hpp
-	$(UPCXX_CUDA_NVCC) -c $(NVCC_FLAGS) $(CXXFLAGS) kernels.cu -o kernels.o
+	$(NVCC) $(NVCCFLAGS) $(NVCCARCH_FLAGS) $(CXXFLAGS) -c kernels.cu -o kernels.o
 	$(UPCXX) $(CXXFLAGS) kernels.o vecadd.cpp -o $@

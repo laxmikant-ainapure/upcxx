@@ -1,6 +1,4 @@
-#include <upcxx/backend.hpp>
-#include <upcxx/barrier.hpp>
-#include <upcxx/rpc.hpp>
+#include <upcxx/upcxx.hpp>
 
 #include <iostream>
 

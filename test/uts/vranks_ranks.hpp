@@ -1,8 +1,7 @@
 #ifndef _9d56dedd_fa3c_4193_bb74_ed270f331282
 #define _9d56dedd_fa3c_4193_bb74_ed270f331282
 
-#include <upcxx/backend.hpp>
-#include <upcxx/rpc.hpp>
+#include <upcxx/upcxx.hpp>
 
 #define VRANKS_IMPL "ranks"
 #define VRANK_LOCAL /*empty*/

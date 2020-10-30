@@ -10,6 +10,9 @@
 #endif
 
 #define UPCXX_BACKEND_GASNET (UPCXX_BACKEND_GASNET_SEQ | UPCXX_BACKEND_GASNET_PAR)
+#if UPCXX_BACKEND_GASNET && !UPCXX_BACKEND
+#error Inconsistent UPCXX_BACKEND definition!
+#endif
 
 /* This header declares some core user-facing API to break include
  * cycles with headers included by the real "backend.hpp". This header
@@ -19,10 +22,66 @@
  */
 
 #include <upcxx/future/fwd.hpp>
+#include <upcxx/diagnostic.hpp>
 
 #include <cstddef>
 #include <cstdint>
 #include <string>
+
+////////////////////////////////////////////////////////////////////////////////
+// Argument-checking assertions
+
+// These define the maximum-size (in bytes) of an object that by-value API's will accept without an #error
+#ifndef UPCXX_MAX_VALUE_SIZE
+#define UPCXX_MAX_VALUE_SIZE 512 // user-tunable default
+#endif
+#ifndef UPCXX_MAX_RPC_ARG_SIZE
+#define UPCXX_MAX_RPC_ARG_SIZE 512 // user-tunable default
+#endif
+
+#define UPCXX_STATIC_ASSERT_VALUE_SIZE(T, fnname) \
+  static_assert(sizeof(T) <= UPCXX_MAX_VALUE_SIZE, \
+    "This program is attempting to pass an object with a large static type (over " UPCXX_STRINGIFY(UPCXX_MAX_VALUE_SIZE) " bytes) " \
+    "to the by-value overload of upcxx::" #fnname ". This is ill-advised because the by-value overload is " \
+    "designed and tuned for small scalar values, and will impose significant data copy overheads " \
+    "(and possibly program stack overflow) when used with larger types. Please use the bulk upcxx::" \
+    #fnname " overload instead, which manipulates the data by pointer, avoiding costly by-value copies. " \
+    "The threshold for this error can be adjusted (at your own peril!) via -DUPCXX_MAX_VALUE_SIZE=n" \
+  )
+namespace upcxx { namespace detail {
+  template <typename T>
+  struct type_respects_value_size_limit {
+    static constexpr bool value = sizeof(T) <= UPCXX_MAX_VALUE_SIZE;
+  };
+  template <>
+  struct type_respects_value_size_limit<void> {
+    static constexpr bool value = true;
+  };
+}}
+#define UPCXX_STATIC_ASSERT_VALUE_RETURN_SIZE(fnname, alternate, ...) \
+  static_assert(::upcxx::detail::type_respects_value_size_limit<__VA_ARGS__>::value, \
+    "This program is calling upcxx::" fnname " to request the UPC++ library return an object by-value that has "\
+    "a large static type (over " UPCXX_STRINGIFY(UPCXX_MAX_VALUE_SIZE) " bytes). " \
+    "This is ill-advised because the by-value return of this function is " \
+    "designed and tuned for small scalar values, and will impose significant data copy overheads " \
+    "(and possibly program stack overflow) when used with larger types. " \
+    "Please call the function upcxx::" alternate " instead, which passes data by reference, " \
+    "avoiding costly by-value copies of large data through stack temporaries. " \
+    "The threshold for this error can be adjusted (at your own peril!) via -DUPCXX_MAX_VALUE_SIZE=n" \
+  )
+namespace upcxx { namespace detail {
+  template <typename T>
+  struct type_respects_static_size_limit {
+    static constexpr bool value = sizeof(T) <= UPCXX_MAX_RPC_ARG_SIZE;
+  };
+}}
+#define UPCXX_STATIC_ASSERT_RPC_MSG(fnname) \
+    "This program is attempting to pass an object with a large static type (over " UPCXX_STRINGIFY(UPCXX_MAX_RPC_ARG_SIZE) " bytes) " \
+    "to upcxx::" #fnname ". This is ill-advised because RPC is tuned for top-level argument objects that provide " \
+    "fast move operations, and will impose significant data copy overheads (and possibly program stack overflow) " \
+    "when used with larger types. Please consider instead passing a Serializable container for your large object, " \
+    "such as a upcxx::view (e.g. `upcxx::make_view(&my_large_object, &my_large_object+1)`), to avoid costly data copies. " \
+    "The threshold for this error can be adjusted (at your own peril!) via -DUPCXX_MAX_RPC_ARG_SIZE=n" 
 
 //////////////////////////////////////////////////////////////////////
 // Public API:
@@ -68,7 +127,8 @@ namespace upcxx {
   
   intrank_t rank_n();
   intrank_t rank_me();
-  
+ 
+  UPCXX_NODISCARD 
   void* allocate(std::size_t size,
                  std::size_t alignment = alignof(std::max_align_t));
   void deallocate(void *p);
@@ -131,13 +191,26 @@ namespace backend {
   };
   
   void quiesce(const team &tm, entry_barrier eb);
+
+  void warn_collective_in_progress(const char *fnname, entry_barrier eb=entry_barrier::none);
   
   template<progress_level level, typename Fn>
   void during_level(Fn &&fn, persona &active_per = current_persona());
   
   template<typename Fn>
   void during_user(Fn &&fn, persona &active_per = current_persona());
-  
+
+  /* fulfill_during: enlists a promise to be fulfilled in the given persona's
+   * lpc queue. Since persona headers are lpc's and thus store queue linkage
+   * intrusively, they must not be enlisted in multiple queues simultaneously.
+   * Being in the queues of multiple personas is a race condition on the promise
+   * so that shouldn't happen. Being in different progress-level queues of the
+   * same persona is not a race condition, so it is up to the runtime to ensure
+   * it doesn't use this mechanism for the same promise in different progress
+   * levels. Its not impossible to extend the logic to guard against multi-queue
+   * membership and handle it gracefully, but it would add cycles to what we
+   * consider a critical path and so we'll eat this tougher invariant.
+   */
   template<progress_level level, typename ...T>
   void fulfill_during(
       detail::future_header_promise<T...> *pro, // takes ref
@@ -157,8 +230,8 @@ namespace backend {
   template<progress_level level, typename Fn>
   void send_am_persona(const team &tm, intrank_t recipient_rank, persona *recipient_persona, Fn &&fn);
 
-  template<typename ...T>
-  void send_awaken_lpc(const team &tm, intrank_t recipient, detail::lpc_dormant<T...> *lpc, std::tuple<T...> &&vals);
+  template<typename ...T, typename ...U>
+  void send_awaken_lpc(const team &tm, intrank_t recipient, detail::lpc_dormant<T...> *lpc, std::tuple<U...> &&vals);
 
   template<progress_level level, typename Fn>
   void bcast_am_master(const team &tm, Fn &&fn);
@@ -181,17 +254,25 @@ namespace backend {
 ////////////////////////////////////////////////////////////////////////
 // Public API implementations:
 
-#include <upcxx/diagnostic.hpp>
+#if UPCXX_BACKEND
+  #define UPCXX_ASSERT_INIT_NAMED(fnname) \
+    UPCXX_ASSERT(::upcxx::backend::init_count != 0, \
+     "Attempted to invoke " << fnname << " while the UPC++ library was not initialized. " \
+     "Please call upcxx::init() to initialize the library before calling this function.")
+#else
+  #define UPCXX_ASSERT_INIT_NAMED(fnname) ((void)0)
+#endif
+#define UPCXX_ASSERT_INIT() UPCXX_ASSERT_INIT_NAMED("the library call shown above")
 
 namespace upcxx {
   inline intrank_t rank_n() {
-    UPCXX_ASSERT(backend::rank_n != -1, "upcxx::rank_n() called before upcxx::init()");
+    UPCXX_ASSERT_INIT();
     return backend::rank_n;
   }
   inline intrank_t rank_me() {
-    UPCXX_ASSERT(backend::rank_n != -1, "upcxx::rank_me() called before upcxx::init()");
+    UPCXX_ASSERT_INIT();
     return backend::rank_me;
-   }
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

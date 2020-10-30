@@ -138,6 +138,8 @@ void test_all_ops(const team &tm, global_ptr<T> target_counter, const upcxx::ato
     dom.store(target_counter, (T)42, memory_order_relaxed).wait();
     T v = dom.load(target_counter, memory_order_relaxed).wait();
     CHECK_ATOMIC_VAL(v, 42);
+    v = dom.load(const_pointer_cast<const T>(target_counter), memory_order_relaxed).wait();
+    CHECK_ATOMIC_VAL(v, 42);
     dom.inc(target_counter, memory_order_relaxed).wait();
     v = dom.fetch_inc(target_counter, memory_order_relaxed).wait();
     CHECK_ATOMIC_VAL(v, 43);

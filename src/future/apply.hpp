@@ -2,185 +2,196 @@
 #define _e1661a2a_f7f6_44f7_97dc_4f3e6f4fd018
 
 #include <upcxx/future/core.hpp>
-#include <upcxx/future/make_future.hpp>
+#include <upcxx/future/impl_result.hpp>
 #include <upcxx/utility.hpp>
 
 namespace upcxx {
 namespace detail {
-  //////////////////////////////////////////////////////////////////////
+  //////////////////////////////////////////////////////////////////////////////
   
   // dispatches on return type of function call
-  template<typename Fn, typename Args, typename ArgIxs, typename Return>
+  template<typename FnRef, typename ArgRefTupRef, typename ArgIxs, typename Return>
   struct apply_tupled_as_future_dispatch;
 
-  template<typename Fn, typename Args, typename Return>
+  template<typename FnRef, typename ArgRefTup, typename Return>
   struct apply_variadic_as_future_dispatch;
 
-  //////////////////////////////////////////////////////////////////////
-  // detail::apply_***_as_future_dispatch: return = void
+  //////////////////////////////////////////////////////////////////////////////
+  // detail::apply_***_as_future_dispatch: specializatoin for when lambda
+  // return = void
 
-  template<typename Fn, typename Args, int ...ai>
+  template<typename FnRef, typename ArgRefTupRef, int ...ai>
   struct apply_tupled_as_future_dispatch<
-      Fn, Args,
+      FnRef, ArgRefTupRef,
       /*ArgIxs=*/detail::index_sequence<ai...>,
       /*Return=*/void
     > {
-    using return_type = detail::make_future<>::return_type;
+    using return_type = future1<future_kind_result>;
     
-    return_type operator()(Fn fn, Args args) {
-      static_cast<Fn&&>(fn)(std::get<ai>(static_cast<Args&&>(args))...);
-      return upcxx::make_future();
+    return_type operator()(FnRef fn, ArgRefTupRef args) {
+      static_cast<FnRef>(fn)(std::get<ai>(static_cast<ArgRefTupRef>(args))...);
+      return return_type(future_impl_result<>());
     }
   };
 
-  template<typename Fn, typename ...Arg>
+  template<typename FnRef, typename ...ArgRef>
   struct apply_variadic_as_future_dispatch<
-      Fn, /*Args=*/std::tuple<Arg...>, /*Return=*/void
+      FnRef, /*ArgRefTup=*/std::tuple<ArgRef...>, /*Return=*/void
     > {
-    using return_type = detail::make_future<>::return_type;
+    using return_type = future1<future_kind_result>;
     
-    return_type operator()(Fn fn, Arg ...arg) {
-      static_cast<Fn&&>(fn)(static_cast<Arg&&>(arg)...);
-      return upcxx::make_future();
+    return_type operator()(FnRef fn, ArgRef ...arg) {
+      static_cast<FnRef>(fn)(static_cast<ArgRef>(arg)...);
+      return return_type(future_impl_result<>());
     }
   };
   
-  //////////////////////////////////////////////////////////////////////
-  // detail::apply_***_as_future_dispatch: return not a future and return != void
+  //////////////////////////////////////////////////////////////////////////////
+  // detail::apply_***_as_future_dispatch: specializatoins for when lambda
+  // return not a future and != void
 
-  template<typename Fn, typename Args, int ...ai, typename Return>
+  template<typename FnRef, typename ArgRefTupRef, int ...ai, typename Return>
   struct apply_tupled_as_future_dispatch<
-      Fn, Args,
+      FnRef, ArgRefTupRef,
       /*ArgIxs=*/detail::index_sequence<ai...>,
       Return
     > {
-    using return_type = typename detail::make_future<Return>::return_type;
+    using return_type = future1<future_kind_result, Return>;
     
-    return_type operator()(Fn fn, Args args) {
-      return upcxx::make_future<Return>(
-        static_cast<Fn&&>(fn)(std::get<ai>(static_cast<Args&&>(args))...)
+    return_type operator()(FnRef fn, ArgRefTupRef args) {
+      return return_type(
+        future_impl_result<Return>(
+          static_cast<FnRef>(fn)(std::get<ai>(static_cast<ArgRefTupRef>(args))...)
+        )
       );
     }
   };
 
-  template<typename Fn, typename ...Arg, typename Return>
+  template<typename FnRef, typename ...ArgRef, typename Return>
   struct apply_variadic_as_future_dispatch<
-      Fn, /*Args=*/std::tuple<Arg...>, Return
+      FnRef, /*ArgRefTup=*/std::tuple<ArgRef...>, Return
     > {
-    using return_type = typename detail::make_future<Return>::return_type;
+    using return_type = future1<future_kind_result, Return>;
     
-    return_type operator()(Fn fn, Arg ...arg) {
-      return upcxx::make_future<Return>(
-        static_cast<Fn&&>(fn)(static_cast<Arg&&>(arg)...)
+    return_type operator()(FnRef fn, ArgRef ...arg) {
+      return return_type(
+        future_impl_result<Return>(
+          static_cast<FnRef>(fn)(static_cast<ArgRef>(arg)...)
+        )
       );
     }
   };
   
-  //////////////////////////////////////////////////////////////////////
-  // detail::apply_***_as_future_dispatch: return is future
+  //////////////////////////////////////////////////////////////////////////////
+  // detail::apply_***_as_future_dispatch: lambda return is a future
 
-  template<typename Fn, typename Args, int ...ai, typename Kind, typename ...T>
+  template<typename FnRef, typename ArgRefTupRef, int ...ai, typename Kind, typename ...T>
   struct apply_tupled_as_future_dispatch<
-      Fn, Args,
+      FnRef, ArgRefTupRef,
       /*ArgIxs=*/detail::index_sequence<ai...>,
       /*Return=*/future1<Kind,T...>
     > {
     using return_type = future1<Kind,T...>;
 
-    return_type operator()(Fn fn, Args args) {
-      return static_cast<Fn&&>(fn)(std::get<ai>(static_cast<Args&&>(args))...);
+    return_type operator()(FnRef fn, ArgRefTupRef args) {
+      return static_cast<FnRef>(fn)(std::get<ai>(static_cast<ArgRefTupRef>(args))...);
     }
   };
   
-  template<typename Fn, typename ...Arg, typename Kind, typename ...T>
+  template<typename FnRef, typename ...ArgRef, typename Kind, typename ...T>
   struct apply_variadic_as_future_dispatch<
-      Fn, /*Args=*/std::tuple<Arg...>, /*Return=*/future1<Kind,T...>
+      FnRef, /*ArgRefTup=*/std::tuple<ArgRef...>, /*Return=*/future1<Kind,T...>
     > {
     using return_type = future1<Kind,T...>;
 
-    return_type operator()(Fn fn, Arg ...arg) {
-      return static_cast<Fn&&>(fn)(static_cast<Arg&&>(arg)...);
+    return_type operator()(FnRef fn, ArgRef ...arg) {
+      return static_cast<FnRef>(fn)(static_cast<ArgRef>(arg)...);
     }
   };
-  
-  //////////////////////////////////////////////////////////////////////
-  // future/core.hpp: detail::pply_tupled_as_future
 
-  template<typename Fn, typename Args,
-           typename ArgsD = typename std::decay<Args>::type>
+  //////////////////////////////////////////////////////////////////////
+  // future/fwd.hpp: detail::apply_variadic_as_future
+  
+  template<typename FnRef, typename ...ArgRef>
+  struct apply_variadic_as_future:
+    apply_variadic_as_future_dispatch<
+      FnRef, std::tuple<ArgRef...>,
+      typename std::result_of<FnRef(ArgRef...)>::type
+    > {
+  };
+
+  //////////////////////////////////////////////////////////////////////
+  // future/fwd.hpp: detail::apply_tupled_as_future
+
+  template<typename FnRef, typename ArgRefTupRef,
+           typename ArgRefTup = typename std::decay<ArgRefTupRef>::type>
   struct apply_tupled_as_future_help;
 
-  template<typename Fn, typename Args, typename ...Arg>
+  template<typename FnRef, typename ArgRefTupRef, typename ...ArgRef>
   struct apply_tupled_as_future_help<
-      Fn, Args, /*ArgD=*/std::tuple<Arg...>
+      FnRef, ArgRefTupRef, /*ArgRefTup=*/std::tuple<ArgRef...>
     >:
     apply_tupled_as_future_dispatch<
-      Fn, Args,
-      /*ArgIxs=*/detail::make_index_sequence<sizeof...(Arg)>,
-      /*Return=*/typename std::result_of<Fn(Arg...)>::type
+      FnRef, ArgRefTupRef,
+      /*ArgIxs=*/detail::make_index_sequence<sizeof...(ArgRef)>,
+      /*Return=*/typename std::result_of<FnRef(ArgRef...)>::type
     > {
   };
   
-  template<typename Fn, typename Args>
-  struct apply_tupled_as_future: apply_tupled_as_future_help<Fn,Args> {};
+  template<typename FnRef, typename ArgRefTupRef>
+  struct apply_tupled_as_future: apply_tupled_as_future_help<FnRef,ArgRefTupRef> {};
 
   //////////////////////////////////////////////////////////////////////
-  // future/core.hpp: detail::apply_futured_as_future
+  // future/fwd.hpp: detail::apply_futured_as_future
 
-  template<typename Fn, typename Arg,
-           typename ArgD = typename std::decay<Arg>::type>
+  template<typename FnRef, typename ArgFuRef,
+           typename ArgFu = typename std::decay<ArgFuRef>::type>
   struct apply_futured_as_future_help;
 
-  template<typename Fn, typename Arg, typename Kind, typename ...T>
-  struct apply_futured_as_future_help<Fn, Arg, /*ArgD=*/future1<Kind,T...>> {
+  template<typename FnRef, typename ArgFuRef, typename Kind, typename ...T>
+  struct apply_futured_as_future_help<FnRef, ArgFuRef, /*ArgFu=*/future1<Kind,T...>> {
     using tupled = apply_tupled_as_future_help<
-      Fn, /*Args=*/std::tuple<typename detail::add_lref_if_nonref<T>::type...>
+      FnRef, /*ArgRefTupRef=*/decltype(std::declval<ArgFuRef>().impl_.result_refs_or_vals())&&
     >;
     
     using return_type = typename tupled::return_type;
     
-    return_type operator()(Fn fn, Arg arg) {
+    return_type operator()(FnRef fn, ArgFuRef arg) {
       return tupled()(
-        static_cast<Fn&&>(fn),
-        static_cast<Arg&&>(arg).impl_.result_lrefs_getter()()
+        static_cast<FnRef>(fn),
+        static_cast<ArgFuRef>(arg).impl_.result_refs_or_vals()
       );
     }
     
-    return_type operator()(Fn fn, future_dependency<future1<Kind,T...>> const &arg) {
-      return tupled()(
-        static_cast<Fn&&>(fn),
-        arg.result_lrefs_getter()()
-      );
+    #if 0
+    return_type operator()(FnRef fn, future_dependency<future1<Kind,T...>> const &arg) {
+      return tupled()(static_cast<FnRef>(fn), arg.result_refs_or_vals());
+    }
+    #endif
+
+    return_type operator()(FnRef fn, future_dependency<future1<Kind,T...>> &&arg) {
+      return tupled()(static_cast<FnRef>(fn), static_cast<future_dependency<future1<Kind,T...>>&&>(arg).result_refs_or_vals());
     }
   };
 
-  template<typename Fn, typename Arg>
-  struct apply_futured_as_future: apply_futured_as_future_help<Fn,Arg> {};
+  template<typename FnRef, typename ArgFuRef>
+  struct apply_futured_as_future: apply_futured_as_future_help<FnRef,ArgFuRef> {};
 }}
 
 namespace upcxx {
   template<typename Fn, typename ...Arg>
-  auto apply_as_future(Fn &&fn, Arg &&...arg)
-    UPCXX_RETURN_DECLTYPE(
-      detail::apply_variadic_as_future_dispatch<
-          Fn&&, std::tuple<Arg&&...>,
-          typename std::result_of<Fn&&(Arg&&...)>::type
-        >()(static_cast<Fn&&>(fn), static_cast<Arg&&>(arg)...)
-    ) {
-    return detail::apply_variadic_as_future_dispatch<
-        Fn&&, std::tuple<Arg&&...>,
-        typename std::result_of<Fn&&(Arg&&...)>::type
-      >()(static_cast<Fn&&>(fn), static_cast<Arg&&>(arg)...);
+  typename detail::apply_variadic_as_future<Fn&&, Arg&&...>::return_type
+  apply_as_future(Fn &&fn, Arg &&...arg) {
+    return detail::apply_variadic_as_future<Fn&&, Arg&&...>()(
+      static_cast<Fn&&>(fn),
+      static_cast<Arg&&>(arg)...
+    );
   }
 
   template<typename Fn, typename Args>
-  auto apply_tupled_as_future(Fn &&fn, Args &&args)
-    UPCXX_RETURN_DECLTYPE(
-      detail::apply_tupled_as_future<Fn&&,Args&&>()(
-        static_cast<Fn&&>(fn), static_cast<Args&&>(args)
-      )
-    ) {
-    return detail::apply_tupled_as_future<Fn&&,Args&&>()(
+  typename detail::apply_tupled_as_future<Fn&&,Args&&>::return_type
+  apply_tupled_as_future(Fn &&fn, Args &&args) {
+    return detail::apply_tupled_as_future<Fn&&, Args&&>()(
       static_cast<Fn&&>(fn), static_cast<Args&&>(args)
     );
   }

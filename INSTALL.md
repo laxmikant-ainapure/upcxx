@@ -23,7 +23,8 @@ The current release is known to work on the following configurations:
     - g++ 6.4.0 or newer    
     - clang++ 4.0.0 or newer (with libstdc++ from g++ 6.4.0 or newer)    
     - Intel C++ 17.0.2 or newer (with libstdc++ from g++ 6.4.0 or newer)    
-    - PGI C++ 19.1 or newer (with libstdc++ from g++ 6.4.0 or newer)    
+    - PGI C++ 19.1 or newer (with libstdc++ from g++ 6.4.0 or newer), except that
+      PGI (aka NVIDIA HPC SDK) 20.7 and newer are NOT currently supported  
 
     If `/usr/bin/g++` is older than 6.4.0 (even if using another compiler),
     see [Linux Compiler Notes](#markdown-header-linux-compiler-notes), below.
@@ -31,7 +32,8 @@ The current release is known to work on the following configurations:
 * Linux/ppc64le (aka IBM POWER little-endian) with one of the following compilers:
     - g++ 6.4.0 or newer
     - clang++ 5.0.0 or newer (with libstdc++ from g++ 6.4.0 or newer)    
-    - PGI C++ 18.10 or newer (with libstdc++ from g++ 6.4.0 or newer)    
+    - PGI C++ 18.10 or newer (with libstdc++ from g++ 6.4.0 or newer), except that
+      PGI (aka NVIDIA HPC SDK) 20.7 and newer are NOT currently supported  
 
     If `/usr/bin/g++` is older than 6.4.0 (even if using another compiler),
     see [Linux Compiler Notes](#markdown-header-linux-compiler-notes), below.
@@ -46,14 +48,10 @@ The current release is known to work on the following configurations:
     Note that gcc- and clang-based toolchains from Arm Ltd. exist, but have
     not been tested with UPC++.
 
-    Support for InfiniBand on Linux/aarch64 should be considered experimental.
-    For more information, please see
-    [GASNet bug 3997](https://gasnet-bugs.lbl.gov/bugzilla/show_bug.cgi?id=3997).
-
 * Cray XC/x86\_64 with one of the following PrgEnv environment modules and
   its dependencies (smp and aries conduits):
-    - PrgEnv-gnu with gcc/6.4.0 (or later) loaded.
-    - PrgEnv-intel with gcc/6.4.0 (or later) loaded.
+    - PrgEnv-gnu with gcc/7.1.0 (or later) loaded.
+    - PrgEnv-intel with intel/18.0.1 and gcc/7.1.0 (or later) loaded.
     - PrgEnv-cray with cce/9.0.0 (or later) loaded.
       Note that does not include support for "cce/9.x.y-classic".
 
@@ -211,6 +209,19 @@ distributions.  One may, if desired, return to the configure step and pass
 `--disable-ibv` (or other undesired network) to remove support for a given
 network from the build of UPC\+\+.
 
+By default the test-running step runs each test with a 5 minute time limit
+(assuming the `timeout` command from GNU coreutils appears in `$PATH`).
+If any tests terminate with `FAILED (exitcode=124): probable timeout`, this
+indicates a timeout (which might happen in environments with very slow hardware
+or slow job launch). The simplest workaround in such cases is to set
+`TIMEOUT=false` to disable the timeout. Alternatively, one can set envvar
+`UPCXX_RUN_TIME_LIMIT` to a value in seconds to enforce a longer timeout.
+
+Variables `TESTS` and `NO_TESTS` can optionally be set to a space-delimited
+list of test name substrings used as a filter to select or discard a subset
+of tests to be compiled/run. Variable `EXTRAFLAGS` can optionally inject 
+upcxx compile options, eg `EXTRAFLAGS=-Werror`.
+
 If it is not possible to both compile and run parallel applications in the
 same environment, then one may apply the following two steps in place of
 `make check`:
@@ -291,7 +302,7 @@ pass the appropriate value for your system:
 * `--with-cross=cray-aries-alps`: Cray XC systems using the Cray ALPS job scheduler (aprun)
 
 When Intel compilers are being used (usually the default for these systems),
-`g++` in `$PATH` must be version 6.4.0 or newer.  If the default is too old,
+`g++` in `$PATH` must be version 7.1.0 or newer.  If the default is too old,
 then you may need to explicitly load a `gcc` environment module, e.g.:
 
 ```bash

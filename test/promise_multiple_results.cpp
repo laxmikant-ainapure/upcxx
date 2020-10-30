@@ -1,5 +1,5 @@
-#include <upcxx/backend.hpp>
-#include <upcxx/future.hpp>
+#include <upcxx/upcxx.hpp>
+
 #include <iostream>
 
 int main() {

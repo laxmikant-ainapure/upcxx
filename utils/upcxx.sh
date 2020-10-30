@@ -13,7 +13,7 @@ function verbose {
 }
 
 function set_upcxx_var {
-  local var="UPCXX_$1"
+  local var="$1"
   local val="$2"
   if [[ ${BASH_VERSINFO[0]} -ge 4 ]] ; then 
     # use case modification operators when avail, for efficiency
@@ -28,9 +28,9 @@ function set_upcxx_var {
     UPCXX_CODEMODE)
       # apply some (deliberately undocumented) "fuzzy" leniency to value spelling
       case $val in
-        opt|o|o[1-9]) val=O3 ; ;;
+        opt|o|o[1-9]) val=opt ; ;;
         debug|g|o0) val=debug ;;
-        *) error "Unrecognized -codemode value, must be 'O3' or 'debug'" ;; 
+        *) error "Unrecognized -codemode value, must be 'opt' or 'debug'" ;; 
       esac
       codemode_override=1
     ;;
@@ -56,6 +56,7 @@ export UPCXX_CODEMODE
 dolink=1
 doversion=
 dodebug=
+purgeoption=
 doopt=
 codemode_override=
 docc=
@@ -69,7 +70,7 @@ for ((i = 1 ; i <= $# ; i++)); do
       var="${arg%%=*}"
       var="${var##+(-)}"
       val="${arg#*=}"
-      eval set_upcxx_var "$var" "$val"
+      eval set_upcxx_var UPCXX_"$var" "$val"
       # swallow current arg
       set -- "${@:1:i-1}" "${@:i+1}"
       i=$((i-1))
@@ -77,9 +78,15 @@ for ((i = 1 ; i <= $# ; i++)); do
     +(-)network|+(-)threadmode|+(-)codemode)
       var="${arg##+(-)}"
       val="${@:i+1:1}"
-      eval set_upcxx_var "$var" "$val"
+      eval set_upcxx_var UPCXX_"$var" "$val"
       # swallow current and next arg
       set -- "${@:1:i-1}" "${@:i+2}"
+      i=$((i-1))
+    ;;
+    -purge-option=*)
+      purgeoption="${arg#*=}"
+      # swallow current arg
+      set -- "${@:1:i-1}" "${@:i+1}"
       i=$((i-1))
     ;;
     -Wc,*) # -Wc,anything : anything is passed-thru uninterpreted
@@ -96,8 +103,18 @@ for ((i = 1 ; i <= $# ; i++)); do
       dohelp=1
     ;;
     -g0) dodebug='' ;; # -g0 negates -g
+    -g)  dodebug=1
+      # swallow bare -g to avoid overriding the debug level in our default flags
+      set -- "${@:1:i-1}" "${@:i+1}" 
+      i=$((i-1))
+    ;;
     -g*) dodebug=1 ;;
     -O0) doopt='' ;; # -O0 negates -O
+    -O)  doopt=1
+      # swallow bare -O to avoid overriding the opt level in our default flags
+      set -- "${@:1:i-1}" "${@:i+1}" 
+      i=$((i-1))
+    ;;
     -O*) doopt=1 ;;
     *.c) docc=1 ;;
     *.cxx|*.cpp|*.cc|*.c++|*.C++) docxx=1 ;;
@@ -111,12 +128,17 @@ if [[ $codemode_override ]] ; then
 elif [[ $dodebug && ! $doopt ]] ; then
   UPCXX_CODEMODE=debug
 elif [[ ( $doopt && ! $dodebug ) || $doversion || $dohelp ]] ; then
-  UPCXX_CODEMODE=O3
+  UPCXX_CODEMODE=opt
 elif [[ $UPCXX_CODEMODE ]] ; then
   : # last resort : user environment
+  eval set_upcxx_var UPCXX_CODEMODE "$UPCXX_CODEMODE"
 else
-  error "please specify exactly one of -O or -g, otherwise pass -codemode={O3,debug} or set UPCXX_CODEMODE={O3,debug}"
+  error "please specify one of the -O or -g options supported by your C++ compiler, otherwise pass -codemode={opt,debug} or set UPCXX_CODEMODE={opt,debug} to select the production or development version of the library."
 fi
+
+for var in UPCXX_NETWORK UPCXX_THREADMODE ; do
+  eval "[[ -n \"\$$var\" ]] && set_upcxx_var $var \"\$$var\""
+done
 
 if [[ $docxx && $docc ]] ; then
   error "please do not specify a mix of C and C++ source files on the same invocation"
@@ -137,6 +159,21 @@ done
 
 source $UPCXX_META SET
 [[ -z "$CC" ]] && error "failure in UPCXX_META=$UPCXX_META"
+
+if [[ -n "$purgeoption" ]] ; then
+  # Yuk: BASH regex is horribly broken and non-portable.
+  # For details, see: https://stackoverflow.com/questions/9792702/
+  # However, we want to use the shell facilities to avoid worse problems with inner quoting
+  # The following is NOT perfect, but should be sufficient for the cases we care about
+  for var in CC CFLAGS CXX CXXFLAGS CPPFLAGS LDFLAGS LIBS ; do 
+    space=' '
+    eval $var="\$space\${$var}\$space"    # surround start/end with space to avoid anchors
+    eval $var="\${$var// $purgeoption / }" # space is our option boundary
+    eval $var="\${$var%% }" # strip the space we added
+    eval $var="\${$var## }" # strip the space we added
+  done
+fi
+
 for var in CC CFLAGS CXX CXXFLAGS CPPFLAGS LDFLAGS LIBS ; do 
   eval verbose "$var: \$$var"
 done
@@ -154,7 +191,7 @@ upcxx Wrapper Options:
   -network={ibv|aries|smp|udp|mpi}
                    Use the indicated GASNet network backend for communication.
 		   The default and availability of backends is system-dependent.
-  -codemode={O3|debug}
+  -codemode={opt|debug}
                    Select the optimized or debugging variant of the UPC++ library.
   -threadmode={seq|par}
                    Select the single-threaded or thread-safe variant of the UPC++ library.
@@ -166,7 +203,7 @@ EOF
   $CXX --help
   exit 0
 elif [[ $doversion ]] ; then
-  header="$prefix/upcxx.*/include/upcxx/upcxx.hpp $prefix/include/upcxx/upcxx.hpp" # installed or build-tree
+  header="$prefix/upcxx.*/include/upcxx/version.hpp $prefix/include/upcxx/version.hpp" # build-tree or installed
   version=$(grep "# *define  *UPCXX_VERSION " ${header} 2>/dev/null| head -1)
   if [[ "$version" =~ ([0-9]{4})([0-9]{2})([0-9]{2}) ]]; then
     version="${BASH_REMATCH[1]}.${BASH_REMATCH[2]#0}.${BASH_REMATCH[3]#0}"

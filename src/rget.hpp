@@ -86,7 +86,7 @@ namespace upcxx {
         backend::send_am_master<progress_level::user>(
           upcxx::world(), rank_s,
           upcxx::bind(
-            [](CxStateRemote &&st) {
+            [](deserialized_type_t<CxStateRemote> &&st) {
               return st.template operator()<remote_cx_event>();
             },
             std::move(state_remote)
@@ -166,16 +166,18 @@ namespace upcxx {
   
   template<typename T,
            typename Cxs = completions<future_cx<operation_cx_event>>>
+  UPCXX_NODISCARD
   typename detail::completions_returner<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::rget_byval_event_values<T>,
-      Cxs
+      typename std::decay<Cxs>::type
     >::return_t
   rget(
-      global_ptr<T> gp_s,
-      Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
+      global_ptr<const T> gp_s,
+      Cxs &&cxs = completions<future_cx<operation_cx_event>>{{}}
     ) {
 
+    using CxsDecayed = typename std::decay<Cxs>::type;
     namespace gasnet = upcxx::backend::gasnet;
     
     static_assert(
@@ -183,37 +185,45 @@ namespace upcxx {
       "RMA operations only work on TriviallySerializable types."
     );
 
+    UPCXX_STATIC_ASSERT_VALUE_SIZE(T, rget); // issue 392: prevent large types by-value
+
     UPCXX_ASSERT_ALWAYS(
-      (detail::completions_has_event<Cxs, operation_cx_event>::value),
+      (detail::completions_has_event<CxsDecayed, operation_cx_event>::value),
       "Not requesting operation completion is surely an error. You'll have no "
       "way of ever knowing when then the source or target memory are safe to "
       "access again without incurring a data race."
     );
-   
+    /* rget supports remote completion, contrary to the spec */
+    UPCXX_ASSERT_ALWAYS(
+      (!detail::completions_has_event<CxsDecayed, source_cx_event>::value),
+      "rget does not support source completion."
+    );
+  
+    UPCXX_ASSERT_INIT();
     UPCXX_GPTR_CHK(gp_s);
     UPCXX_ASSERT(gp_s, "pointer arguments to rget may not be null");
     
     using cxs_here_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::rget_byval_event_values<T>,
-      Cxs>;
+      CxsDecayed>;
     using cxs_remote_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_remote,
       /*EventValues=*/detail::rget_byval_event_values<T>,
-      Cxs>;
+      CxsDecayed>;
     
     using detail::rma_get_done;
     
     auto *cb = new detail::rget_cb_byval<T,cxs_here_t,cxs_remote_t>{
       gp_s.rank_,
-      cxs_here_t{std::move(cxs)},
-      cxs_remote_t{std::move(cxs)}
+      cxs_here_t{std::forward<Cxs>(cxs)},
+      cxs_remote_t{std::forward<Cxs>(cxs)}
     };
 
     auto returner = detail::completions_returner<
         /*EventPredicate=*/detail::event_is_here,
         /*EventValues=*/detail::rget_byval_event_values<T>,
-        Cxs
+        CxsDecayed
       >{cb->state_here};
     
     rma_get_done done = detail::rma_get_nb(
@@ -239,17 +249,19 @@ namespace upcxx {
   
   template<typename T,
            typename Cxs = completions<future_cx<operation_cx_event>>>
+  UPCXX_NODISCARD
   typename detail::completions_returner<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::rget_byref_event_values,
-      Cxs
+      typename std::decay<Cxs>::type
     >::return_t
   rget(
-      global_ptr<T> gp_s,
+      global_ptr<const T> gp_s,
       T *buf_d, std::size_t n,
-      Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
+      Cxs &&cxs = completions<future_cx<operation_cx_event>>{{}}
     ) {
 
+    using CxsDecayed = typename std::decay<Cxs>::type;
     namespace gasnet = upcxx::backend::gasnet;
     
     static_assert(
@@ -258,28 +270,34 @@ namespace upcxx {
     );
 
     UPCXX_ASSERT_ALWAYS(
-      (detail::completions_has_event<Cxs, operation_cx_event>::value),
+      (detail::completions_has_event<CxsDecayed, operation_cx_event>::value),
       "Not requesting operation completion is surely an error. You'll have no "
       "way of ever knowing when then the source or target memory are safe to "
       "access again without incurring a data race."
     );
+    /* rget supports remote completion, contrary to the spec */
+    UPCXX_ASSERT_ALWAYS(
+      (!detail::completions_has_event<CxsDecayed, source_cx_event>::value),
+      "rget does not support source completion."
+    );
     
+    UPCXX_ASSERT_INIT();
     UPCXX_GPTR_CHK(gp_s);
     UPCXX_ASSERT(buf_d && gp_s, "pointer arguments to rget may not be null");
 
     using cxs_here_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::rget_byref_event_values,
-      Cxs>;
+      CxsDecayed>;
     using cxs_remote_t = detail::completions_state<
       /*EventPredicate=*/detail::event_is_remote,
       /*EventValues=*/detail::rget_byref_event_values,
-      Cxs>;
+      CxsDecayed>;
     
     detail::rget_cb_byref<cxs_here_t,cxs_remote_t> cb(
       gp_s.rank_,
-      cxs_here_t{std::move(cxs)},
-      cxs_remote_t{std::move(cxs)}
+      cxs_here_t{std::forward<Cxs>(cxs)},
+      cxs_remote_t{std::forward<Cxs>(cxs)}
     );
     
     using detail::rma_get_done;
@@ -287,7 +305,7 @@ namespace upcxx {
     auto returner = detail::completions_returner<
         /*EventPredicate=*/detail::event_is_here,
         /*EventValues=*/detail::rget_byref_event_values,
-        Cxs
+        CxsDecayed
       >{cb.state_here};
     
     rma_get_done done = detail::rma_get_nb(

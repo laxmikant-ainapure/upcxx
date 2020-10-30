@@ -14,7 +14,7 @@ function echo_and_die {
 }
 
 # Validate the cross-compile Cray CPU target, if any
-UPCXX_CRAY_CPU_TARGET=${CROSS:+$CRAY_CPU_TARGET}
+UPCXX_CRAY_CPU_TARGET=${UPCXX_CROSS:+$CRAY_CPU_TARGET}
 if test -n "\$UPCXX_CRAY_CPU_TARGET" && test "\$UPCXX_CRAY_CPU_TARGET" != "\$CRAY_CPU_TARGET"; then
   echo "WARNING: This UPC++ installation was built for \$UPCXX_CRAY_CPU_TARGET CPUs, but you are currently compiling for \$CRAY_CPU_TARGET"
   echo "WARNING: This can lead to non-working executables and/or serious performance degradation."
@@ -35,22 +35,30 @@ if [[ \$FAIL == true ]]; then
     echo_and_die "Error: parameter passed to upcxx-meta must be one of \$PARAMS"
 fi
 
+###################################################################
+# validate and normalize inputs
+shopt -s nocasematch # ensure case-insensitive match below
+
 case \${UPCXX_CODEMODE} in
-"")
-  UPCXX_CODEMODE=O3
+""|opt|o[1-9])
+  UPCXX_CODEMODE=opt
   ;;
-debug|O3)
+debug|g|o0)
+  UPCXX_CODEMODE=debug
   ;;
 *)
-  echo_and_die "UPCXX_CODEMODE must be set to one of: O3 (default), debug"
+  echo_and_die "UPCXX_CODEMODE must be set to one of: opt (default), debug"
   ;;
 esac
 
 case \${UPCXX_THREADMODE} in
-"")
+""|seq)
   UPCXX_THREADMODE=seq
+  UPCXX_BACKEND=gasnet_seq
   ;;
-seq|par)
+par)
+  UPCXX_THREADMODE=par
+  UPCXX_BACKEND=gasnet_par
   ;;
 *)
   echo_and_die "UPCXX_THREADMODE must be set to one of: seq (default), par"
@@ -58,6 +66,12 @@ seq|par)
 esac
 
 UPCXX_NETWORK=\${UPCXX_NETWORK:-\$UPCXX_GASNET_CONDUIT} # backwards-compat
+if [[ \${BASH_VERSINFO[0]} -ge 4 ]] ; then
+  # use case modification operators when avail, for efficiency
+  UPCXX_NETWORK="\${UPCXX_NETWORK,,}"
+else
+  UPCXX_NETWORK=\$(tr '[A-Z]' '[a-z]' <<<\$UPCXX_NETWORK)
+fi
 case "\${UPCXX_NETWORK}" in
 '')
   UPCXX_NETWORK="${conduit_default}"
@@ -69,14 +83,8 @@ ${conduits_pipes})
   ;;
 esac
 
-case \${UPCXX_THREADMODE} in
-seq)
-  UPCXX_BACKEND=gasnet_seq
-  ;;
-par)
-  UPCXX_BACKEND=gasnet_par
-  ;;
-esac
+shopt -u nocasematch # end validation
+###################################################################
 
 meta="${install_to}/upcxx.\${UPCXX_CODEMODE}.\${UPCXX_BACKEND}.\${UPCXX_NETWORK}/bin/upcxx-meta"
 
@@ -125,7 +133,7 @@ EOF
   # install environment module
   (
     modulefiles="${DESTDIR}${install_to}/share/modulefiles/upcxx"
-    header="${upcxx_src}/src/upcxx.hpp"
+    header="${upcxx_src}/src/version.hpp"
     [[ $(grep "#define UPCXX_VERSION" ${header} | head -1) =~ ([0-9]{4})([0-9]{2})([0-9]{2}) ]]
     VERSION="${BASH_REMATCH[1]}.${BASH_REMATCH[2]#0}.${BASH_REMATCH[3]#0}" # drop any leading 0 from MONTH and PATCH
     mkdir -p $modulefiles

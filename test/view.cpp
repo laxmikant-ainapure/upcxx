@@ -1,9 +1,10 @@
-#include <upcxx/barrier.hpp>
-#include <upcxx/rpc.hpp>
-#include <upcxx/view.hpp>
-#include <upcxx/dist_object.hpp>
+#include <upcxx/upcxx.hpp>
 
 #include "util.hpp"
+
+#if !UPCXX_THREADMODE
+  #error This test may only be compiled in PAR threadmode
+#endif
 
 #include <atomic>
 #include <deque>
@@ -12,6 +13,7 @@
 #include <cmath>
 #include <string>
 #include <thread>
+#include <type_traits>
 
 using namespace upcxx;
 using namespace std;
@@ -110,6 +112,72 @@ static_assert(!is_trivially_serializable<pair_t>::value, "ERROR");
 static_assert(is_serializable<pair_t>::value, "ERROR");
 static_assert(!is_actually_trivially_serializable<pair_t>::value, "ERROR");
 #undef pair_t
+
+// test deserialized types for asymmetric and (undocumented) nested views
+struct D {
+  int w,x;
+};
+struct S { // asymmetric serialization
+  int x,y,z;
+  struct upcxx_serialization {
+    template<typename Writer>
+    static void serialize (Writer& writer, S const & t) {
+        writer.write(t.x);
+    }
+    template<typename Reader>
+    static D* deserialize(Reader& reader, void* storage) {
+        int x = reader.template read<int>();
+        D *up = new(storage) D();
+        up->x = x;
+        return up;
+    }
+  };
+};
+
+template<typename T>
+using in = upcxx::view<T, T*>;
+template<typename T>
+using out = upcxx::view<T>;
+template<typename T>
+using dt = upcxx::deserialized_type_t<T>;
+
+template<typename T, typename U>
+struct check {
+  using I1 = T;
+  using I2 = in<I1>;
+  using I3 = in<I2>;
+  using I4 = in<I3>;
+  using O1 = I1;
+  using O2 = out<O1>;
+  using O3 = out<O2>;
+  using O4 = out<O3>;
+  assert_same<dt<T>, U> a;
+  assert_same<dt<I2>, O2> b;
+  assert_same<dt<I3>, O3> c;
+  assert_same<dt<I4>, O4> d;
+};
+
+check<int, int> check_trivial;
+check<S, D> check_asymmetric;
+
+// large type with nontrivial serialization
+struct big_nontrivial {
+  std::array<int, 10000> data;
+  ~big_nontrivial() {}
+  struct upcxx_serialization {
+    template<typename Writer>
+    static void serialize(Writer &w, const big_nontrivial &x) {
+      w.write_sequence(x.data.begin(), x.data.end(), x.data.size());
+    }
+    template<typename Reader>
+    static big_nontrivial* deserialize(Reader &r, void *spot) {
+      auto result = new(spot) big_nontrivial;
+      r.template read_sequence_into<int>(result->data.data(),
+                                         result->data.size());
+      return result;
+    }
+  };
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 // runtime test
@@ -281,6 +349,24 @@ int main() {
       rpc_done2->get_future().wait();
       delete rpc_done2;
     }
+
+    // test deserialize_into
+    big_nontrivial *bn = new big_nontrivial;
+    bn->data.fill(upcxx::rank_me());
+    upcxx::rpc(
+      (upcxx::rank_me()+1)%upcxx::rank_n(),
+      [](upcxx::view<big_nontrivial> v) {
+        auto spot =
+          new typename std::aligned_storage<sizeof(big_nontrivial),
+                                            alignof(big_nontrivial)>::type;
+        big_nontrivial *z = v.begin().deserialize_into(spot);
+        UPCXX_ASSERT_ALWAYS(
+          z->data[z->data.size()/2] == (upcxx::rank_me()+upcxx::rank_n()-1)%upcxx::rank_n()
+        );
+        delete z;
+      },
+      upcxx::make_view(bn, bn+1)).wait();
+    delete bn;
 
     // quiesce the world
     upcxx::barrier();

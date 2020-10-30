@@ -1,10 +1,7 @@
 #ifndef _f387e40c_d7ab_4dbf_a130_3bcd835cc3b9
 #define _f387e40c_d7ab_4dbf_a130_3bcd835cc3b9
 
-#include <upcxx/backend.hpp>
-#include <upcxx/persona.hpp>
-#include <upcxx/rpc.hpp>
-#include <upcxx/os_env.hpp>
+#include <upcxx/upcxx.hpp>
 
 #include <atomic>
 #include <thread>
@@ -12,8 +9,8 @@
 
 #include <sched.h>
 
-#if defined(UPCXX_BACKEND) && !UPCXX_BACKEND_GASNET_PAR
-  #error "UPCXX_BACKEND must be gasnet_par"
+#if !UPCXX_THREADMODE
+  #error This test may only be compiled in PAR threadmode
 #endif
 
 #define VRANKS_IMPL "ranks+threads"

@@ -10,7 +10,16 @@ class val_chunk {
         int n;
         int *vals;
 
-        val_chunk() { }
+        val_chunk() { vals = nullptr; }
+
+        ~val_chunk() { delete [] vals; vals = nullptr; }
+
+        val_chunk(val_chunk && other) { 
+          rank = other.rank;
+          n = other.n;
+          vals = other.vals;
+          other.vals = nullptr; 
+        }
 
         val_chunk(int _n) {
             n = _n;
@@ -69,7 +78,7 @@ int main(void) {
                 for (int i = 0; i < N; i++) {
                     assert(chunk.vals[i] == chunk.rank + i);
                 }
-            }, chunk).wait();
+            }, std::move(chunk)).wait();
 
     upcxx::barrier();
 

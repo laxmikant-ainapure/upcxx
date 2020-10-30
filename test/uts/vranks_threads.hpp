@@ -1,8 +1,14 @@
 #ifndef _62625b7f_859f_4b3a_a765_ff3505ce3d8b
 #define _62625b7f_859f_4b3a_a765_ff3505ce3d8b
 
-#include <upcxx/persona.hpp>
-#include <upcxx/os_env.hpp>
+// This version of this test deliberately avoids initializing the UPC++/GASNet backend, 
+// but still uses some of the UPC++ internals to test them in isolation.
+// This is NOT in any way supported for user code!!
+#if UPCXX_BACKEND_GASNET_SEQ
+#error thread-safe libupcxx is required
+#endif
+
+#include <upcxx/upcxx.hpp>
 
 #include <atomic>
 #include <thread>
@@ -18,7 +24,8 @@ namespace vranks {
   
   template<typename Fn>
   void send(int vrank, Fn msg) {
-    vranks[vrank]->lpc_ff(std::move(msg));
+    // use the internal version to avoid the init check:
+    vranks[vrank]->lpc_ff(upcxx::detail::the_persona_tls, std::move(msg));
   }
   
   inline void progress() {

@@ -86,12 +86,11 @@ struct nonpod1: nonpod_base {
 
 struct nonpod2: nonpod_base {
   nonpod2(char h, char i): nonpod_base(h,i) {}
-  nonpod2(char h, char i, int x123[3], char const *dummy):
+  nonpod2(char h, char i, const std::string& dummy):
     nonpod_base(h,i) {
-    UPCXX_ASSERT_ALWAYS(x123[0]==1 && x123[1]==2 && x123[2]==3);
-    UPCXX_ASSERT_ALWAYS(std::string(dummy) == "dummy");
+    UPCXX_ASSERT_ALWAYS(dummy == "dummy");
   }
-  UPCXX_SERIALIZED_VALUES(h,i,_123,"dummy")
+  UPCXX_SERIALIZED_VALUES(h,i,std::string("dummy"))
 };
 
 struct nonpod3: nonpod_base {
@@ -308,6 +307,40 @@ struct my_seq2: public my_seq_base<my_seq2<T>, T> {
   }
 };
 
+struct array_write_read_into {
+  // test write<T[n]> and read_into<T[n>
+  int arr1[4];
+  std::string arr2[2];
+
+  struct upcxx_serialization {
+    template<typename Writer>
+    static void serialize(Writer &w, array_write_read_into const &x) {
+      w.write(x.arr1);
+      w.write(x.arr2);
+    }
+
+    template<typename Reader>
+    static array_write_read_into* deserialize(Reader &r, void *spot) {
+      auto result = new(spot) array_write_read_into;
+      r.template read_into<int[4]>(result->arr1);
+      r.template read_into<std::string[2]>(result->arr2);
+      return result;
+    }
+  };
+
+  friend bool operator==(array_write_read_into const &a,
+                         array_write_read_into const &b) {
+    bool result = true;
+    for (std::size_t i = 0; i < 4; ++i) {
+      result = result && a.arr1[i] == b.arr1[i];
+    }
+    for (std::size_t i = 0; i < 2; ++i) {
+      result = result && a.arr2[i] == b.arr2[i];
+    }
+    return result;
+  }
+};
+
 struct noserz {
   UPCXX_SERIALIZED_DELETE()
 };
@@ -329,6 +362,11 @@ int main() {
   // roundtrip checks using serialization_traits::deserialized_value()
   UPCXX_ASSERT_ALWAYS(upcxx::serialization_traits<int>::deserialized_value(0xbeef) == 0xbeef);
   UPCXX_ASSERT_ALWAYS(upcxx::serialization_traits<std::string>::deserialized_value(std::string(10000,'x')) == std::string(10000,'x'));
+  {
+    std::array<int,1000> foo;
+    for(int i=0; i < 1000; i++) foo[i] = i*i;
+    UPCXX_ASSERT_ALWAYS((upcxx::serialization_traits<std::array<int,1000>>::deserialized_value(foo) == foo));
+  }
   {
     std::forward_list<int> fwd0;
     for(int i=0; i < 10000; i++)
@@ -471,6 +509,11 @@ int main() {
         }
       )
     });
+  }
+
+  {
+    array_write_read_into a = {{-1, -2, 3, 4}, {"hello", "world"}};
+    roundtrip(a);
   }
 
   print_test_success();

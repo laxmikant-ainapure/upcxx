@@ -2,6 +2,7 @@
 #define _af3a33ad_9fc7_4d84_990b_b9caa94daf02
 
 #include <upcxx/utility.hpp>
+#include <upcxx/backend_fwd.hpp>
 
 #include <algorithm>
 #include <cstdint>
@@ -67,6 +68,12 @@ namespace upcxx {
     static constexpr bool value = serialization_traits<T>::is_serializable;
   };
   
+  namespace detail {
+    // whether a type is serializable or an array of serializable type
+    template<typename T>
+    struct is_serializable_type_or_array;
+  }
+
   template<typename T>
   struct deserialized_type {
     using type = typename serialization_traits<T>::deserialized_type;
@@ -292,17 +299,23 @@ namespace upcxx {
       struct reserve_handle { void *ptr; };
 
       template<typename T>
+      UPCXX_NODISCARD
       reserve_handle<T> reserve() {
+        UPCXX_ASSERT_INIT();
         return reserve_handle<T>{this->place(storage_size_of<T>())};
       }
 
       template<typename T>
       void commit(reserve_handle<T> handle, T const &val) {
+        UPCXX_ASSERT_INIT();
         ::new(handle.ptr) T(val);
       }
       
-      template<typename T>
+      template<typename T, bool AssertSerializable= true>
       void write(T const &x) {
+        UPCXX_ASSERT_INIT();
+        static_assert(!AssertSerializable || detail::is_serializable_type_or_array<T>::value,
+                     "Argument to write must either be Serializable or an array of Serializable elements.");
         upcxx::template serialization_traits<T>::serialize(*static_cast<Writer*>(this), x);
       }
 
@@ -312,7 +325,7 @@ namespace upcxx {
         detail::template memcpy_aligned<alignof(T)>(spot, &x, sizeof(T));
       }
     };
-    
+
     template<bool bounded>
     class serialization_writer;
 
@@ -335,7 +348,7 @@ namespace upcxx {
       std::size_t size() const { return size_; }
       std::size_t align() const { return align_; }
 
-      bool contained_in_initial() const {
+      /*TODO: constexpr*/ bool contained_in_initial() const {
         return true;
       }
 
@@ -375,10 +388,14 @@ namespace upcxx {
     public:
       template<typename Iter>
       std::size_t write_sequence(Iter beg, Iter end, std::size_t n=-1) {
+        UPCXX_ASSERT_INIT();
         using T = typename std::remove_cv<
             typename std::iterator_traits<Iter>::value_type
           >::type;
-        
+
+        static_assert(is_serializable<T>::value,
+                     "value_type of iterators passed to write_sequence must be Serializable.");
+
         return this->template write_sequence_<T,Iter>(beg, end,
           /*trivial_and_contiguous=*/std::integral_constant<bool,
               serialization_traits<T>::is_actually_trivially_serializable &&
@@ -569,19 +586,27 @@ namespace upcxx {
     public:
       template<typename Iter>
       std::size_t write_sequence(Iter beg, Iter end) {
+        UPCXX_ASSERT_INIT();
         using T = typename std::remove_cv<
             typename std::iterator_traits<Iter>::value_type
           >::type;
         
+        static_assert(is_serializable<T>::value,
+                     "value_type of iterators passed to write_sequence must be Serializable.");
+
         return this->template write_sequence_<T,Iter>(beg, end, std::false_type(), 0, serialization_traits<T>::static_ubound);
       }
       
       template<typename Iter>
       std::size_t write_sequence(Iter beg, Iter end, std::size_t n) {
+        UPCXX_ASSERT_INIT();
         using T = typename std::remove_cv<
             typename std::iterator_traits<Iter>::value_type
           >::type;
         
+        static_assert(is_serializable<T>::value,
+                     "value_type of iterators passed to write_sequence must be Serializable.");
+
         return this->template write_sequence_<T,Iter>(beg, end, std::true_type(), n, serialization_traits<T>::static_ubound);
       }
     };
@@ -598,15 +623,28 @@ namespace upcxx {
       
       void jump(std::uintptr_t delta) { head_ += delta; }
       
-      template<typename T, typename T1 = typename serialization_traits<T>::deserialized_type>
-      T1 read() {
+      template<typename T, bool AssertSerializable = true,
+               typename T1 = typename serialization_traits<T>::deserialized_type>
+      typename ::std::conditional<!::std::is_array<T1>::value, T1, void>::type read() {
+        UPCXX_ASSERT_INIT();
+        static_assert(!AssertSerializable || is_serializable<T>::value,
+                     "Template argument of read must be Serializable.");
+        static_assert(!::std::is_array<T1>::value,
+                     "Cannot return array type from read -- use read_into or read_sequence_into instead.");
+        UPCXX_STATIC_ASSERT_VALUE_RETURN_SIZE("[Reader]::read()", "[Reader]::read_into()", T1);
+
         detail::raw_storage<T1> raw;
         upcxx::template serialization_traits<T>::deserialize(*this, &raw);
         return raw.value_and_destruct();
       }
 
-      template<typename T, typename T1 = typename serialization_traits<T>::deserialized_type>
+      template<typename T, bool AssertSerializable = true,
+               typename T1 = typename serialization_traits<T>::deserialized_type>
       T1* read_into(void *raw) {
+        UPCXX_ASSERT_INIT();
+        static_assert(!AssertSerializable || detail::is_serializable_type_or_array<T>::value,
+                     "Template argument of read_into must either be Serializable or an array of Serializable elements.");
+
         return upcxx::template serialization_traits<T>::deserialize(*this, raw);
       }
 
@@ -659,6 +697,7 @@ namespace upcxx {
       template<typename T,
                typename T1 = typename serialization_traits<T>::deserialized_type>
       T1* read_sequence_into(void *raw, std::size_t n) {
+        UPCXX_ASSERT_INIT();
         return this->template read_sequence_into_<T,T1>(raw, n,
             std::integral_constant<bool, serialization_traits<T>::is_actually_trivially_serializable>()
           );
@@ -680,10 +719,26 @@ namespace upcxx {
       template<typename T>
       void skip_sequence(std::size_t n) {
         if(n != 0) {
+          // Skip the leading element to get us to the correct alignment to
+          // potentially skip the remaining elements in bulk.
           this->template skip<T>();
           n -= 1;
-          if(serialization_traits<T>::static_ubound_t::is_valid)
-            this->unplace(serialization_traits<T>::static_ubound.arrayed(n)); // skip rest
+
+          if(serialization_traits<T>::static_ubound_t::is_valid) {
+            // Here we utilize that static bounds are exact and that the sequence
+            // of cat's applied to the input prefix are 1-to-1 with writes. To
+            // compute the difference between consecutive elements we do a difference
+            // of bound sizes *after* one element is already there to bring the
+            // alignment padding to its steady state.
+            constexpr std::size_t delta = decltype(
+                serialization_traits<T>::ubound(
+                  std::declval<typename serialization_traits<T>::static_ubound_t>(),
+                  std::declval<T const&>()
+                )
+              )::static_size - serialization_traits<T>::static_ubound_t::static_size;
+
+            this->jump(n*delta);
+          }
           else {
             while(n--)
               this->template skip<T>();
@@ -815,6 +870,12 @@ namespace upcxx {
     template<typename TupRefs, int i, int n>
     struct serialization_fields_each {
       using Ti = typename std::remove_reference<typename std::tuple_element<i, TupRefs>::type>::type;
+
+      static_assert( detail::is_serializable_type_or_array<Ti>::value,
+                     "Arguments to UPCXX_SERIALIZED_FIELDS must either be Serializable or arrays of Serializable elements.");
+
+      static_assert( !std::is_const<Ti>::value,
+                     "Arguments to UPCXX_SERIALIZED_FIELDS cannot be const -- use UPCXX_SERIALIZED_VALUES instead.");
 
       static_assert(
         std::is_same<Ti, typename serialization_traits<Ti>::deserialized_type>::value,
@@ -982,6 +1043,9 @@ namespace upcxx {
       // Ti = decay(TupRefs[i]) but without decaying arrays, leave those be!
       using Ti = typename std::remove_cv<typename std::remove_reference<typename std::tuple_element<i, TupRefs>::type>::type>::type;
       using recurse_tail = serialization_values_each<TupRefs, i+1, n>;
+
+      static_assert( is_serializable<Ti>::value,
+                     "All arguments to UPCXX_SERIALIZED_VALUES must be Serializable."); 
       
       template<typename Prefix>
       static auto ubound(Prefix pre, TupRefs const &refs)
@@ -1245,22 +1309,50 @@ namespace upcxx {
     };
     template<typename T>
     struct serialization_traits_deserialized_value<T,
-        // this specialization fails if deserilized_value has an invalid signature
+        // this specialization fails if deserilized_value() would have a non-returnable
+        // return type
         typename std::conditional<true, void, typename serialization_traits2<T>::deserialized_type(*)()>::type
       > {
       static typename serialization_traits2<T>::deserialized_type
       deserialized_value(T const &x) {
-        using T1 = typename serialization_traits2<T>::deserialized_type;
+        UPCXX_ASSERT_INIT();
+
+        // We access T's serialization through serialization_traits2 instead of
+        // serialization_traits to avoid inheritance circularity since we are
+        // currently in one of serializatoin_traits's base classes. If you are
+        // referencing this code to learn how to manage serialization resources
+        // don't do this, please just use serialization_traits.
+        using the_traits = serialization_traits2<T>;
         
-        auto ub = serialization_traits2<T>::ubound(empty_storage_size, x);
+        using T1 = typename the_traits::deserialized_type;
+
+        auto ub = the_traits::ubound(empty_storage_size, x);
+
+        // Guard against bludgeoning stack with massive static size.
+        // ub::static_size will be massive (-1 or -2) for invalid or dynamic
+        // cases so this unsigned comparison still works.
         constexpr std::size_t static_storage_size = (decltype(ub)::static_size) < 512 ? decltype(ub)::static_size : 512;
-        detail::xaligned_storage<static_storage_size, serialization_align_max> static_storage;
+
+        // Grab some stack. This will be used unless we have a valid bound that
+        // exceeds 512, in which case we heap the bounded buffer. We only need
+        // one but grab an array of 2 so that we can poison the second entry
+        // and catch overflow errors.
+        detail::xaligned_storage<static_storage_size, serialization_align_max> static_storage[2];
         
         void *storage;
         std::size_t storage_size;
-        
-        if(decltype(ub)::is_static || !decltype(ub)::is_valid) {
-          storage = static_storage.storage();
+
+        // We use the stack space if any of the three following conditions hold:
+        // 1. We have size bound within 512.
+        // 2. We have a static size bound within 512. This is implied by the first
+        //    but when true the compiler will be able to prove this branch is
+        //    always taken and prune code.
+        // 3. We have no bound. The stack space is used as the writer's initial hunk.
+        if(/*1*/ ub.size <= 512 ||
+           /*2*/ (decltype(ub)::static_size) <= 512 ||
+           /*3*/ !decltype(ub)::is_valid
+          ) {
+          storage = static_storage[0].storage();
           storage_size = static_storage_size;
         }
         else {
@@ -1269,8 +1361,13 @@ namespace upcxx {
         }
         
         detail::serialization_writer</*bounded=*/decltype(ub)::is_valid> w(storage, storage_size);
-        
-        serialization_traits2<T>::serialize(w, x);
+
+        the_traits::serialize(w, x);
+
+        // Write to space after our static storage to ensure we corrupt any
+        // accidental overflow. This has negligible cost, is only to catch bugs
+        // in testing, and this function probably isn't performance critical anyway.
+        *(std::uint8_t*)static_storage[1].storage() = 0x99;
         
         if(!w.contained_in_initial()) {
           storage_size = w.size();
@@ -1280,9 +1377,9 @@ namespace upcxx {
         
         detail::serialization_reader r(storage);
         detail::raw_storage<T1> x1_raw;
-        (void)serialization_traits2<T>::deserialize(r, &x1_raw);
+        (void)the_traits::deserialize(r, &x1_raw);
         
-        if(storage != static_storage.storage())
+        if(storage != static_storage[0].storage())
           std::free(storage);
         
         return x1_raw.value_and_destruct();
@@ -1312,17 +1409,23 @@ namespace upcxx {
   
   //////////////////////////////////////////////////////////////////////////////
 
+  // references and cv qualifiers
+
   namespace detail {
     struct serialization_not_supported {
       static constexpr bool is_serializable = false;
     };
   }
-  
-  template<typename T>
-  struct serialization<T&>: detail::serialization_not_supported {};
-  template<typename T>
-  struct serialization<T&&>: detail::serialization_not_supported {};
 
+  // a reference is serialized by serializing the referent
+  template<typename T>
+  struct serialization<T&>: serialization_traits<typename std::remove_const<T>::type> {};
+  template<typename T>
+  struct serialization<T&&>: serialization_traits<typename std::remove_const<T>::type> {};
+
+  // T const is [trivially] serializable if T is
+  template<typename T>
+  struct is_trivially_serializable<T const>: is_trivially_serializable<T> {};
   template<typename T>
   struct serialization<T const>: serialization_traits<T> {
     // inherit is_serializable
@@ -1343,7 +1446,21 @@ namespace upcxx {
 
     // inherit skip
   };
-  
+
+  // T[&,&&] volatile is not serializable
+  template<typename T>
+  struct serialization_traits<T volatile>: detail::serialization_not_supported {};
+  template<typename T>
+  struct serialization<T volatile>: detail::serialization_not_supported {};
+  template<typename T>
+  struct serialization_traits<T volatile&>: detail::serialization_not_supported {};
+  template<typename T>
+  struct serialization<T volatile&>: detail::serialization_not_supported {};
+  template<typename T>
+  struct serialization_traits<T volatile&&>: detail::serialization_not_supported {};
+  template<typename T>
+  struct serialization<T volatile&&>: detail::serialization_not_supported {};
+
   //////////////////////////////////////////////////////////////////////////////
 
   template<typename R, typename ...A>
@@ -1591,15 +1708,36 @@ namespace upcxx {
   
   //////////////////////////////////////////////////////////////////////////////
 
+  namespace detail {
+    template<typename T>
+    struct is_serializable_type_or_array:
+      ::std::integral_constant<bool, is_serializable<T>::value> {
+    };
+    template<typename T, std::size_t n>
+    struct is_serializable_type_or_array<T[n]>:
+      is_serializable_type_or_array<T> {
+    };
+  }
+
   template<typename T, std::size_t n>
   struct is_trivially_serializable<T[n]>:
-    is_trivially_serializable<T> {
+    std::false_type {
+  };
+  template<typename T, std::size_t n>
+  struct is_trivially_serializable<const T[n]>:
+    std::false_type {
   };
   
   template<typename T, std::size_t n>
   struct serialization<T[n]> {
-    static constexpr bool is_serializable = serialization_traits<T>::is_serializable;
+    static constexpr bool is_actually_trivially_serializable =
+      serialization_traits<T>::is_actually_trivially_serializable;
 
+    // arrays are technically not Serializable
+    static constexpr bool is_serializable = false;
+
+    // but we define serialization for use in UPCXX_SERIALIZED_FIELDS,
+    // Writer::write, and Reader::read_into
     template<typename Prefix>
     static constexpr auto ubound(Prefix pre, T const(&x)[n])
       UPCXX_RETURN_DECLTYPE(
@@ -1632,6 +1770,15 @@ namespace upcxx {
     }
   };
 
+  template<typename T, std::size_t n>
+  struct serialization<const T[n]>:
+    detail::serialization_not_supported {
+  };
+  template<typename T, std::size_t n>
+  struct serialization_traits<const T[n]>:
+    detail::serialization_not_supported {
+  };
+
   //////////////////////////////////////////////////////////////////////////////
 
   #ifndef UPCXX_CREDUCE_SLIM
@@ -1657,11 +1804,11 @@ namespace upcxx {
    * Q) Does this work if the user nests serialization into the class via
    *    subclass or macros?
    * A) Yes. detail::serialization_dispatch1 will find that and ignore the value
-   *    we're pushing here for bless_trivial_defalut, which is only utilized
+   *    we're pushing here for bless_trivial_default, which is only utilized
    *    when no serialization was found nested in class.
    *
    * Q) Does this work if user specializes is_trivially_serializable<T> to true?
-   * A) Yes. serialization_triats<T> first looks at is_trivially_serializable<T>
+   * A) Yes. serialization_traits<T> first looks at is_trivially_serializable<T>
    *    before anything else, so again, nothing we do here will matter.
    */
 

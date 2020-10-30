@@ -5,6 +5,114 @@ This is the ChangeLog for public releases of [UPC++](https://upcxx.lbl.gov).
 For information on using UPC++, see: [README.md](README.md)    
 For information on installing UPC++, see: [INSTALL.md](INSTALL.md)
 
+### 2020.10.30: Release 2020.10.0
+
+General features/enhancements: (see specification and programmer's guide for full details)
+
+* Added support for `global_ptr<const T>` with implicit conversion
+  from `global_ptr<T>` to `global_ptr<const T>`. Communication
+  operations now take a `global_ptr<const T>` where appropriate.
+* `local_team()` creation during `upcxx::init()` in multi-node runs is now more scalable
+  in time and memory, providing noticeable improvements at large scale.
+* `team::destroy()` now frees GASNet-level team resources that were previously leaked.
+* `when_all(...)` now additionally accepts non-future arguments and implicitly
+  promotes them to trivially ready futures (as with `to_future`) before performing
+  future concatenation. The main consequence is `when_all()` can now replace
+  most uses of `make_future` and `to_future` for constructing trivially ready futures,
+  and continue to serve as the future combinator.
+* Static checking has been strengthened in a number of places, to help provide or improve
+  compile-time diagnostics for incorrect or otherwise problematic use cases.
+* Added many precondition sanity checks in debug mode, to help users find
+  bugs in their code when compiling with `-codemode=debug` (aka, `upcxx -g`).
+* Shared heap exhaustion in `upcxx::new_(array)` now throws `upcxx::bad_shared_alloc` (a type
+  derived from `std::bad_alloc`) which provides additional diagnostics about the failure.
+
+Improvements to RPC and Serialization:
+
+* Added support for serialization of reference types where the referent is Serializable.
+* Rpc's which return future values experience one less heap allocation and
+  virtual dispatch in the runtime's critical path.
+* Rpc's which return future values no longer copy the underlying data prior to serialization.
+* `dist_object<T>::fetch()` no longer copies the remote object prior to serialization.
+* Added `deserializing_iterator<T>::deserialize_into` to avoid copying large
+  objects when iterating over a `view` of non-TriviallySerializable elements.
+* Objects passed as lvalues to RPC will now be serialized directly from the provided 
+  object, reducing copy overhead and enabling passing of non-copyable (but movable) types.
+* Non-copyable (but movable) types can now be returned from RPC by reference
+
+Build system changes:
+
+* Improved compatibility with heap analysis tools like Valgrind (at some
+  potential performance cost) using new configure option --enable-valgrind
+* `configure --enable-X` is now equivalent to `--with-X`, similarly for `--disable`/`--without`
+* Tests run by `make check` and friends now enforce a 5m time limit by default
+
+Requirements changes:
+
+* The minimum required `gcc` environment module version for PrgEnv-gnu and
+  PrgEnv-intel on a Cray XC has risen from 6.4.0 to 7.1.0.
+* The minimum required Intel compiler version for PrgEnv-intel on a Cray XC
+  has risen from 17.0.2 to 18.0.1.
+
+Notable bug fixes:
+
+* issue #151: Validate requested completions against the events supported by an
+  operation
+* issue #262: Implement view buffer lifetime extension for `remote_cx::as_rpc`
+* issue #288: (partial fix) future-producing calls like `upcxx::make_future` now
+  return the exact type `future<T>`. Sole remaining exception is `when_all`.
+* issue #313: implement `future::{result,wait}_reference`
+* issue #336: Add `static_assert` to prohibit massive types as top-level arguments to RPC
+* issue #344: poor handling for `make install prefix=relative-path`
+* issue #345: configure with single-dash arguments
+* issue #346: `configure --cross=cray*` ignores `--with-cc/--with-cxx`
+* issue #355: `upcxx::view<T>` broken with asymmetric deserialization of `T`
+* issue #361: upcxx::rpc broken when mixing arguments of `T&&` and `dist_object&`
+* issue #364: Stray "-e" output on macOS and possibly elsewhere
+* issue #375: Improve error message for C array types by-value arguments to RPC
+* issue #376: warnings from GCC 10.1 in reduce.hpp for boolean reductions
+* issue #384: finalize can complete without invoking progress, leading to obscure leaks
+* issue #386: `upcxx_memberof_general` prohibits member designators that end with an array access
+* issue #388: `deserialized_value()` overflows buffer for massive static types
+* issue #389: `future::result*()` should assert readiness
+* issue #391: View of containers of `UPCXX_SERIALIZED_FIELDS` crashes in deserialization
+* issue #392: Prevent silent use of by-value communication APIs for huge types
+* issue #393: Improve type check error for l-value reference args to RPC callbacks
+* issue #400: `UPCXX_SERIALIZED_VALUES()` misoptimized by GCC{7,8,9} with -O2+
+* issue #402: Cannot use `promise<T>::fulfill_result()` when T is not MoveConstructible
+* issue #405: regression: `upcxx::copy(T*,global_ptr<T>,size_t)` fails to compile
+* issue #407: RPC breaks if an argument asymmetrically deserializes to a type that
+  itself has asymmetric deserialization
+* issue #412: entry barriers deadlock when invoked inside user-level progress callbacks
+* issue #413: LPC callback that returns a reference produces a future containing
+  a dangling reference
+* issue #419: Ensure correct/portable behavior of `upcxx::initialized()` in static destructors
+* spec issue 104: Provide a universal variadic factory for future
+* spec issue 158: prohibit reference types in `global_ptr` and `upcxx_memberof_general`
+* spec issue 160: Deadlocks arising from synchronous collective calls with internal progress
+* spec issue 167: `dist_object<T>::fetch` does not correctly handle `T` with asymmetric serialization
+* spec issue 169: Deprecate collective calls inside progress callbacks
+* spec issue 170: Implement `upcxx::in_progress()` query
+
+This library release conforms to the
+[UPC++ v1.0 Specification, Revision 2020.10.0](docs/spec.pdf).
+All currently specified features are fully implemented.
+See the [UPC++ issue tracker](https://upcxx-bugs.lbl.gov) for status of known bugs.
+
+Breaking changes:
+
+* Build-time `UPCXX_CODEMODE`/`-codemode` value "O3" has been renamed to "opt".
+  For backwards compat, the former is still accepted.
+* `upcxx_memberof(_general)(gp, mem)` now produce a `global_ptr<T>` when `mem` 
+  names an array whose element type is `T`.
+* `atomic_domain` construction now has user-level progress
+* Initiating collective operations with progress level `user` from inside the restricted 
+  context (within a callback running inside progress) is now prohibited, and diagnosed
+  with a runtime error.  Most such calls previously led to silent deadlock.
+* Initiating collective operations with a progress level of `internal` or `none` from within
+  the restricted context (within a callback running inside progress) is now a deprecated
+  behavior, and diagnosted with a runtime warning. For details, see spec issue 169.
+
 ### 2020.07.17: Bug-fix release 2020.3.2
 
 New features/enhancements:
@@ -78,11 +186,11 @@ Notable bug fixes:
 * issue #304: Bad behavior for misspelled CC or CXX
 * issue #323: Incorrect behavior for `global_ptr<T>(nullptr).is_local()` in multi-node jobs
 * issue #333: Multiply defined symbol `detail::device_allocator_core<cuda_device>::min_alignment` w/ std=c++2a
-* [spec issue #148](https://bitbucket.org/berkeleylab/upcxx-spec/issues/148): Missing `const` qualifiers on team and other API objects
-* [spec issue #155](https://bitbucket.org/berkeleylab/upcxx-spec/issues/155): value argument type to value collectives is changed to a simple by-value T
+* spec issue 148: Missing `const` qualifiers on team and other API objects
+* spec issue 155: value argument type to value collectives is changed to a simple by-value T
 
 This library release mostly conforms to the
-[UPC++ v1.0 Specification, Revision 2020.3.0](docs/spec.pdf).
+[UPC++ v1.0 Specification, Revision 2020.3.0](https://bitbucket.org/berkeleylab/upcxx/downloads/upcxx-spec-2020.3.0.pdf).
 The following features from that specification are not yet implemented:
 
 * view buffer lifetime extension for `remote_cx::as_rpc` (issue #262)
@@ -155,8 +263,8 @@ Notable bug fixes:
 * issue #260: `GASNET_CONFIGURE_ARGS` can break UPC++ build
 * issue #264: `upcxx-meta CXX` and `CC` are not full-path expanded
 * issue #268: Completion handlers can't accept `&&` references
-* [spec issue #141](https://bitbucket.org/berkeleylab/upcxx-spec/issues/141): resolve empty transfer ambiguities (count=0 RMA)
-* [spec issue #142](https://bitbucket.org/berkeleylab/upcxx-spec/issues/142): add `persona::active_with_caller()`
+* spec issue 141: resolve empty transfer ambiguities (count=0 RMA)
+* spec issue 142: add `persona::active_with_caller()`
 
 This library release mostly conforms to the
 [UPC++ v1.0 Specification, Revision 2019.9.0](https://bitbucket.org/berkeleylab/upcxx/downloads/upcxx-spec-2019.9.0.pdf).

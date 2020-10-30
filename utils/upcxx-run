@@ -123,7 +123,7 @@ def heapsz_type(a):
     
 def load_args():
     global _parser
-    _parser = argparse.ArgumentParser(description='A portable parallel job launcher for UPC++ programs, v2020.3.2')
+    _parser = argparse.ArgumentParser(description='A portable parallel job launcher for UPC++ programs, v2020.10.0')
     _parser.add_argument('-n', '-np', dest='nranks', type=ranks_type, default=None, metavar='NUM',
                          help='Spawn NUM number of UPC++ processes. Required.')
     _parser.add_argument('-N', dest='nnodes', type=nodes_type, default=None, metavar='NUM',
@@ -294,7 +294,7 @@ def main():
         cmd = ['-np', str(args.nranks)] + cmd
         if args.localhost:
             os.environ['GASNET_SPAWNFN'] = 'L'
-        else:
+        elif os.environ.get('GASNET_SPAWNFN') in [None , 'S', 's']:
             set_ssh_servers(args.sshservers, args.nranks, conduit)
     elif conduit in ['mpi', 'ibv', 'aries', 'pami', 'ucx']:
         spawner = 'gasnetrun_' + conduit

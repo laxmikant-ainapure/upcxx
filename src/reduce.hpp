@@ -31,7 +31,7 @@ namespace upcxx {
   /* `detail::opfn_[add|...]` is the function object which actually implements
    * `operator()` and is used as the value for `OpFn` in `op_wrap`.
    */
-  #define UPCXX_INFIX_OP(tok, name, integral_only1) \
+  #define UPCXX_INFIX_OP(tok, tok_bool, name, integral_only1) \
     namespace detail {\
       struct opfn_##name {\
         static constexpr bool integral_only = integral_only1;\
@@ -40,16 +40,21 @@ namespace upcxx {
           a tok##= std::forward<Tb>(b);\
           return static_cast<T&&>(a);\
         }\
+        template<typename Tb>\
+        bool operator()(bool a, Tb &&b) const {\
+          a tok_bool##= std::forward<Tb>(b);\
+          return static_cast<bool&&>(a);\
+        }\
       };\
     }\
     constexpr detail::op_wrap<detail::opfn_##name, /*fast_demanded=*/false> op_##name = {};\
     constexpr detail::op_wrap<detail::opfn_##name, /*fast_demanded=*/true> op_fast_##name = {};
   
-  UPCXX_INFIX_OP(+, add, false)
-  UPCXX_INFIX_OP(*, mul, false)
-  UPCXX_INFIX_OP(&, bit_and, true)
-  UPCXX_INFIX_OP(|, bit_or, true)
-  UPCXX_INFIX_OP(^, bit_xor, true)
+  UPCXX_INFIX_OP(+, |, add, false)
+  UPCXX_INFIX_OP(*, &, mul, false)
+  UPCXX_INFIX_OP(&, &, bit_and, true)
+  UPCXX_INFIX_OP(|, |, bit_or, true)
+  UPCXX_INFIX_OP(^, ^, bit_xor, true)
   #undef UPCXX_INFIX_OP
   
   namespace detail {
@@ -232,14 +237,15 @@ namespace upcxx {
     typename detail::completions_returner<
         /*EventPredicate=*/detail::event_is_here,
         /*EventValues=*/detail::reduce_scalar_event_values<T>,
-        Cxs
+        typename std::decay<Cxs>::type
       >::return_t
     reduce_one_or_all_trivial(
         T1 &&value, BinaryOp op, intrank_t root_or_all/*-1 = all*/,
         const team &tm = upcxx::world(),
-        Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
+        Cxs &&cxs = completions<future_cx<operation_cx_event>>{{}}
       ) {
       
+      using CxsDecayed = typename std::decay<Cxs>::type;
       static_assert(
         upcxx::is_trivially_serializable<T>::value,
         "`upcxx::reduce_[all|one]<T>` only permitted for TriviallySerializable T. "
@@ -248,14 +254,19 @@ namespace upcxx {
       );
       
       UPCXX_ASSERT_ALWAYS(
-        (detail::completions_has_event<Cxs, operation_cx_event>::value),
+        (detail::completions_has_event<CxsDecayed, operation_cx_event>::value),
         "Not requesting operation completion is surely an error."
+      );
+      UPCXX_ASSERT_ALWAYS(
+        (!detail::completions_has_event<CxsDecayed, source_cx_event>::value &&
+         !detail::completions_has_event<CxsDecayed, remote_cx_event>::value),
+        "Reductions do not support source or remote completion."
       );
       
       using cxs_state_here_t = detail::completions_state<
         /*EventPredicate=*/detail::event_is_here,
         /*EventValues=*/detail::reduce_scalar_event_values<T>,
-        Cxs>;
+        CxsDecayed>;
       
       struct my_cb final: backend::gasnet::handle_cb {
         T in_out;
@@ -277,13 +288,13 @@ namespace upcxx {
       my_cb *cb = new my_cb(
           std::forward<T1>(value),
           std::move(op),
-          cxs_state_here_t{std::move(cxs)}
+          cxs_state_here_t{std::forward<Cxs>(cxs)}
         );
       
       auto returner = detail::completions_returner<
           /*EventPredicate=*/detail::event_is_here,
           /*EventValues=*/detail::reduce_scalar_event_values<T>,
-          Cxs
+          CxsDecayed
         >(cb->cxs_st);
       
       reduce_one_or_all_trivial_erased(
@@ -304,19 +315,36 @@ namespace upcxx {
     typename detail::completions_returner<
         /*EventPredicate=*/detail::event_is_here,
         /*EventValues=*/detail::reduce_vector_event_values,
-        Cxs
+        typename std::decay<Cxs>::type
       >::return_t
     reduce_one_or_all_trivial(
         T const *src, T *dst, std::size_t n,
         BinaryOp op, intrank_t root_or_all/*-1 = all*/,
         const team &tm = upcxx::world(),
-        Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
+        Cxs &&cxs = completions<future_cx<operation_cx_event>>{{}}
       ) {
+      using CxsDecayed = typename std::decay<Cxs>::type;
+      static_assert(
+        upcxx::is_trivially_serializable<T>::value,
+        "`upcxx::reduce_[all|one]<T>` only permitted for TriviallySerializable T. "
+        "Consider using `upcxx::reduce_[all|one]_nontrivial<T>` instead "
+        "(experimental feature, use at own risk)."
+      );
+
+      UPCXX_ASSERT_ALWAYS(
+        (detail::completions_has_event<CxsDecayed, operation_cx_event>::value),
+        "Not requesting operation completion is surely an error."
+      );
+      UPCXX_ASSERT_ALWAYS(
+        (!detail::completions_has_event<CxsDecayed, source_cx_event>::value &&
+         !detail::completions_has_event<CxsDecayed, remote_cx_event>::value),
+        "Reductions do not support source or remote completion."
+      );
       
       using cxs_state_here_t = detail::completions_state<
         /*EventPredicate=*/detail::event_is_here,
         /*EventValues=*/detail::reduce_vector_event_values,
-        Cxs>;
+        CxsDecayed>;
       
       struct my_cb final: backend::gasnet::handle_cb {
         BinaryOp op;
@@ -333,12 +361,12 @@ namespace upcxx {
         }
       };
       
-      my_cb *cb = new my_cb(std::move(op), cxs_state_here_t{std::move(cxs)});
+      my_cb *cb = new my_cb(std::move(op), cxs_state_here_t{std::forward<Cxs>(cxs)});
       
       auto returner = detail::completions_returner<
           /*EventPredicate=*/detail::event_is_here,
           /*EventValues=*/detail::reduce_vector_event_values,
-          Cxs
+          CxsDecayed
         >(cb->cxs_st);
       
       reduce_one_or_all_trivial_erased(
@@ -386,40 +414,52 @@ namespace upcxx {
   template<typename T1, typename BinaryOp,
            typename Cxs = completions<future_cx<operation_cx_event>>,
            typename T = typename std::decay<T1>::type>
+  UPCXX_NODISCARD
   typename detail::completions_returner<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::reduce_scalar_event_values<T>,
-      Cxs
+      typename std::decay<Cxs>::type
     >::return_t
   reduce_one(
       T1 value, BinaryOp op, intrank_t root,
       const team &tm = upcxx::world(),
-      Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
+      Cxs &&cxs = completions<future_cx<operation_cx_event>>{{}}
     ) {
-    UPCXX_ASSERT(0 <= root && root < tm.rank_n());
+    UPCXX_STATIC_ASSERT_VALUE_SIZE(T, reduce_one); // issue 392: prevent large types by-value
+
+    UPCXX_ASSERT_INIT();
+    UPCXX_ASSERT_MASTER();
+    UPCXX_ASSERT_COLLECTIVE_SAFE_NAMED("upcxx::reduce_one(value)", entry_barrier::internal);
+    UPCXX_ASSERT(root >= 0 && root < tm.rank_n(),
+      "reduce_one(..., root, team) requires root in [0, team.rank_n()-1] == [0, " << tm.rank_n()-1 << "], but given: " << root);
     
     return detail::reduce_one_or_all_trivial<T1,BinaryOp,Cxs,T>(
-        std::move(value), std::move(op), root, tm, std::move(cxs)
+        std::move(value), std::move(op), root, tm, std::forward<Cxs>(cxs)
       );
   }
   
   template<typename T, typename BinaryOp,
            typename Cxs = completions<future_cx<operation_cx_event>>>
+  UPCXX_NODISCARD
   typename detail::completions_returner<
         /*EventPredicate=*/detail::event_is_here,
         /*EventValues=*/detail::reduce_vector_event_values,
-        Cxs
+        typename std::decay<Cxs>::type
       >::return_t
    reduce_one(
       T const *src, T *dst, std::size_t n,
       BinaryOp op, intrank_t root,
       const team &tm = upcxx::world(),
-      Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
+      Cxs &&cxs = completions<future_cx<operation_cx_event>>{{}}
     ) {
-    UPCXX_ASSERT(0 <= root && root < tm.rank_n());
+    UPCXX_ASSERT_INIT();
+    UPCXX_ASSERT_MASTER();
+    UPCXX_ASSERT_COLLECTIVE_SAFE_NAMED("upcxx::reduce_one(bulk)", entry_barrier::internal);
+    UPCXX_ASSERT(root >= 0 && root < tm.rank_n(),
+      "reduce_one(..., root, team) requires root in [0, team.rank_n()-1] == [0, " << tm.rank_n()-1 << "], but given: " << root);
     
     return detail::reduce_one_or_all_trivial<T,BinaryOp,Cxs>(
-        src, dst, n, std::move(op), root, tm, std::move(cxs)
+        src, dst, n, std::move(op), root, tm, std::forward<Cxs>(cxs)
       );
   }
   
@@ -433,15 +473,15 @@ namespace upcxx {
     typename detail::completions_returner<
         /*EventPredicate=*/detail::event_is_here,
         /*EventValues=*/detail::reduce_scalar_event_values<T>,
-        Cxs
+        typename std::decay<Cxs>::type
       >::return_t
     reduce_one_nontrivial(
         T1 &&value, BinaryOp op, intrank_t root,
         const team &tm,
-        Cxs cxs,
+        Cxs &&cxs,
         std::true_type trivial_yes
       ) {
-      return reduce_one(std::forward<T1>(value), std::move(op), root, tm, std::move(cxs));
+      return reduce_one(std::forward<T1>(value), std::move(op), root, tm, std::forward<Cxs>(cxs));
     }
     
     template<typename T1, typename BinaryOp,
@@ -450,23 +490,33 @@ namespace upcxx {
     typename detail::completions_returner<
         /*EventPredicate=*/detail::event_is_here,
         /*EventValues=*/detail::reduce_scalar_event_values<T>,
-        Cxs
+        typename std::decay<Cxs>::type
       >::return_t
     reduce_one_nontrivial(
         T1 &&value, BinaryOp op, intrank_t root,
         const team &tm,
-        Cxs cxs,
+        Cxs &&cxs,
         std::false_type trivial_no
       ) {
+      using CxsDecayed = typename std::decay<Cxs>::type;
+      UPCXX_ASSERT_ALWAYS(
+        (detail::completions_has_event<CxsDecayed, operation_cx_event>::value),
+        "Not requesting operation completion is surely an error."
+      );
+      UPCXX_ASSERT_ALWAYS(
+        (!detail::completions_has_event<CxsDecayed, source_cx_event>::value &&
+         !detail::completions_has_event<CxsDecayed, remote_cx_event>::value),
+        "Reductions do not support source or remote completion."
+      );
       
-      using reduce_state = detail::reduce_state<T,BinaryOp,/*one_not_all=*/true,Cxs>;
+      using reduce_state = detail::reduce_state<T,BinaryOp,/*one_not_all=*/true,CxsDecayed>;
       
-      typename reduce_state::cxs_state_t cxs_st{std::move(cxs)};
+      typename reduce_state::cxs_state_t cxs_st{std::forward<Cxs>(cxs)};
       
       auto returner = detail::completions_returner<
           /*EventPredicate=*/detail::event_is_here,
           /*EventValues=*/detail::reduce_scalar_event_values<T>,
-          Cxs
+          CxsDecayed
         >(cxs_st);
         
       digest id = const_cast<team*>(&tm)->next_collective_id(detail::internal_only());
@@ -482,19 +532,25 @@ namespace upcxx {
   template<typename T1, typename BinaryOp,
            typename Cxs = completions<future_cx<operation_cx_event>>,
            typename T = typename std::decay<T1>::type>
+  UPCXX_NODISCARD
   typename detail::completions_returner<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::reduce_scalar_event_values<T>,
-      Cxs
+      typename std::decay<Cxs>::type
     >::return_t
   reduce_one_nontrivial(
       T1 &&value, BinaryOp op, intrank_t root,
       const team &tm = upcxx::world(),
-      Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
+      Cxs &&cxs = completions<future_cx<operation_cx_event>>{{}}
     ) {
+    UPCXX_ASSERT_INIT();
+    UPCXX_ASSERT_MASTER();
+    UPCXX_ASSERT_COLLECTIVE_SAFE_NAMED("upcxx::reduce_one_nontrivial()", entry_barrier::internal);
+    UPCXX_ASSERT(root >= 0 && root < tm.rank_n(),
+      "reduce_one_nontrivial(..., root, team) requires root in [0, team.rank_n()-1] == [0, " << tm.rank_n()-1 << "], but given: " << root);
       
     return detail::reduce_one_nontrivial(
-        std::forward<T1>(value), std::move(op), root, tm, std::move(cxs),
+        std::forward<T1>(value), std::move(op), root, tm, std::forward<Cxs>(cxs),
         std::integral_constant<bool, upcxx::is_trivially_serializable<T>::value>()
       );
   }
@@ -505,36 +561,45 @@ namespace upcxx {
   template<typename T1, typename BinaryOp,
            typename Cxs = completions<future_cx<operation_cx_event>>,
            typename T = typename std::decay<T1>::type>
+  UPCXX_NODISCARD
   typename detail::completions_returner<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::reduce_scalar_event_values<T>,
-      Cxs
+      typename std::decay<Cxs>::type
     >::return_t
   reduce_all(
       T1 value, BinaryOp op,
       const team &tm = upcxx::world(),
-      Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
+      Cxs &&cxs = completions<future_cx<operation_cx_event>>{{}}
     ) {
+    UPCXX_STATIC_ASSERT_VALUE_SIZE(T, reduce_all); // issue 392: prevent large types by-value
+    UPCXX_ASSERT_INIT();
+    UPCXX_ASSERT_MASTER();
+    UPCXX_ASSERT_COLLECTIVE_SAFE_NAMED("upcxx::reduce_all(value)", entry_barrier::internal);
     return detail::reduce_one_or_all_trivial<T1,BinaryOp,Cxs,T>(
-        std::move(value), std::move(op), /*all=*/-1, tm, std::move(cxs)
+        std::move(value), std::move(op), /*all=*/-1, tm, std::forward<Cxs>(cxs)
       );
   }
   
   template<typename T, typename BinaryOp,
            typename Cxs = completions<future_cx<operation_cx_event>>>
+  UPCXX_NODISCARD
   typename detail::completions_returner<
       /*EventPredicate=*/detail::event_is_here,
       /*EventValues=*/detail::reduce_vector_event_values,
-      Cxs
+      typename std::decay<Cxs>::type
     >::return_t
   reduce_all(
       T const *src, T *dst, std::size_t n,
       BinaryOp op,
       const team &tm = upcxx::world(),
-      Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
+      Cxs &&cxs = completions<future_cx<operation_cx_event>>{{}}
     ) {
+    UPCXX_ASSERT_INIT();
+    UPCXX_ASSERT_MASTER();
+    UPCXX_ASSERT_COLLECTIVE_SAFE_NAMED("upcxx::reduce_all(bulk)", entry_barrier::internal);
     return detail::reduce_one_or_all_trivial<T,BinaryOp,Cxs>(
-        src, dst, n, std::move(op), /*all=*/-1, tm, std::move(cxs)
+        src, dst, n, std::move(op), /*all=*/-1, tm, std::forward<Cxs>(cxs)
       );
   }
   
@@ -545,42 +610,57 @@ namespace upcxx {
     template<typename T1, typename BinaryOp,
              typename Cxs = completions<future_cx<operation_cx_event>>,
              typename T = typename std::decay<T1>::type>
+    UPCXX_NODISCARD
     typename detail::completions_returner<
         /*EventPredicate=*/detail::event_is_here,
         /*EventValues=*/detail::reduce_scalar_event_values<T>,
-        Cxs
+        typename std::decay<Cxs>::type
       >::return_t
     reduce_all_nontrivial(
         T1 &&value, BinaryOp op,
         const team &tm,
-        Cxs cxs,
+        Cxs &&cxs,
         std::true_type trivial_yes
       ) {
-      return reduce_all(std::forward<T1>(value), std::move(op), tm, std::move(cxs));
+      UPCXX_ASSERT_INIT();
+      return reduce_all(std::forward<T1>(value), std::move(op), tm, std::forward<Cxs>(cxs));
     }
     
     template<typename T1, typename BinaryOp,
              typename Cxs = completions<future_cx<operation_cx_event>>,
              typename T = typename std::decay<T1>::type>
+    UPCXX_NODISCARD
     typename detail::completions_returner<
         /*EventPredicate=*/detail::event_is_here,
         /*EventValues=*/detail::reduce_scalar_event_values<T>,
-        Cxs
+        typename std::decay<Cxs>::type
       >::return_t
     reduce_all_nontrivial(
         T1 &&value, BinaryOp op,
         const team &tm,
-        Cxs cxs,
+        Cxs &&cxs,
         std::false_type trivial_no
       ) {
-      using reduce_state = detail::reduce_state<T,BinaryOp,/*one_not_all=*/false,Cxs>;
+      using CxsDecayed = typename std::decay<Cxs>::type;
+      UPCXX_ASSERT_INIT();
+      UPCXX_ASSERT_ALWAYS(
+        (detail::completions_has_event<CxsDecayed, operation_cx_event>::value),
+        "Not requesting operation completion is surely an error."
+      );
+      UPCXX_ASSERT_ALWAYS(
+        (!detail::completions_has_event<CxsDecayed, source_cx_event>::value &&
+         !detail::completions_has_event<CxsDecayed, remote_cx_event>::value),
+        "Reductions do not support source or remote completion."
+      );
+
+      using reduce_state = detail::reduce_state<T,BinaryOp,/*one_not_all=*/false,CxsDecayed>;
       
-      typename reduce_state::cxs_state_t cxs_st{std::move(cxs)};
+      typename reduce_state::cxs_state_t cxs_st{std::forward<Cxs>(cxs)};
       
       auto returner = detail::completions_returner<
           /*EventPredicate=*/detail::event_is_here,
           /*EventValues=*/detail::reduce_scalar_event_values<T>,
-          Cxs
+          CxsDecayed
         >(cxs_st);
       
       digest id = const_cast<team*>(&tm)->next_collective_id(detail::internal_only());
@@ -597,18 +677,22 @@ namespace upcxx {
   template<typename T1, typename BinaryOp,
            typename Cxs = completions<future_cx<operation_cx_event>>,
            typename T = typename std::decay<T1>::type>
+  UPCXX_NODISCARD
   typename detail::completions_returner<
         /*EventPredicate=*/detail::event_is_here,
         /*EventValues=*/detail::reduce_scalar_event_values<T>,
-        Cxs
+        typename std::decay<Cxs>::type
       >::return_t
   reduce_all_nontrivial(
       T1 &&value, BinaryOp op,
       const team &tm = upcxx::world(),
-      Cxs cxs = completions<future_cx<operation_cx_event>>{{}}
+      Cxs &&cxs = completions<future_cx<operation_cx_event>>{{}}
     ) {
+    UPCXX_ASSERT_INIT();
+    UPCXX_ASSERT_MASTER();
+    UPCXX_ASSERT_COLLECTIVE_SAFE_NAMED("upcxx::reduce_all_nontrivial()", entry_barrier::internal);
     return detail::reduce_all_nontrivial(
-        std::forward<T1>(value), std::move(op), tm, std::move(cxs),
+        std::forward<T1>(value), std::move(op), tm, std::forward<Cxs>(cxs),
         std::integral_constant<bool, upcxx::is_trivially_serializable<T>::value>()
       );
   }
@@ -624,7 +708,7 @@ namespace upcxx {
         typename reduce_state::cxs_state_t *cxs_st
       ) {
       
-      UPCXX_ASSERT(backend::master.active_with_caller());
+      UPCXX_ASSERT_MASTER();
       detail::persona_scope_redundant master_as_top(backend::master, detail::the_persona_tls);
       
       intrank_t rank_n = tm.rank_n();

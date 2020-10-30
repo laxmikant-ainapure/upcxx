@@ -13,7 +13,7 @@
 
 ////////////////////////////////////////////////////////////////////////
 
-void upcxx::fatal_error(const char *msg, const char *title, const char *file, int line) {
+void upcxx::fatal_error(const char *msg, const char *title, const char *func, const char *file, int line) {
   std::stringstream ss;
 
   ss << std::string(70, '/') << '\n';
@@ -37,6 +37,11 @@ void upcxx::fatal_error(const char *msg, const char *title, const char *file, in
     if (line > 0) ss << ':' << line;
     ss << '\n';
   }
+  if (func && *func) {
+    ss << " in function: " << func;
+    if (func[strlen(func)-1] != ')') ss << "()";
+    ss << '\n';
+  }
   if(msg && msg[0]) {
     ss << '\n' << msg << '\n';
   }
@@ -52,24 +57,44 @@ void upcxx::fatal_error(const char *msg, const char *title, const char *file, in
   ss << std::string(70, '/') << '\n';
   
   #if UPCXX_BACKEND_GASNET
-    gasnett_fatalerror("\n%s", ss.str().c_str());
+    #ifdef gasnett_fatalerror_nopos
+      gasnett_fatalerror_nopos("\n%s", ss.str().c_str());
+    #else
+      gasnett_fatalerror("\n%s", ss.str().c_str());
+    #endif
   #else
     std::cerr << ss.str();
     std::abort();
   #endif
 }
 
-void upcxx::assert_failed(const char *file, int line, const char *msg) {
-  upcxx::fatal_error(msg, "assertion failure", file, line);
+void upcxx::assert_failed(const char *func, const char *file, int line, const char *msg) {
+  upcxx::fatal_error(msg, "assertion failure", func, file, line);
 }
 
-upcxx::say::say() {
+upcxx::say::say(std::ostream &output, const char *prefix) : target(output) {
+  if (!prefix) return;
+  intrank_t myrank = -1;
   #ifdef UPCXX_BACKEND
-    ss << '[' << upcxx::backend::rank_me << "] ";
+    if (upcxx::initialized()) myrank = upcxx::rank_me();
   #endif
+  std::unique_ptr<char[]> buf;
+  if (strchr(prefix,'%')) {
+    if (myrank < 0) prefix = "";
+    else {
+      std::size_t sz = strlen(prefix)+10;
+      buf = std::unique_ptr<char[]>( new char[sz] );
+      snprintf(buf.get(), sz, prefix, myrank);
+      prefix = buf.get();
+    }
+  }
+  ss << prefix;
 }
 
 upcxx::say::~say() {
-  ss << std::endl;
-  std::cerr << ss.str();
+  std::string result = ss.str();
+  if (!result.empty()) {
+    if (result.back() != '\n') result.push_back('\n');
+    target << result << std::flush;
+  }
 }
