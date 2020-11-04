@@ -13,7 +13,7 @@ namespace upcxx {
 
   class cuda_device {
     friend struct detail::device_allocator_core<cuda_device>;
-    friend struct device_allocator<cuda_device>;
+    friend class device_allocator<cuda_device>;
     int device_;
     int heap_idx_;
     
