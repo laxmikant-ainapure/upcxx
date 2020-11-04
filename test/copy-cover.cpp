@@ -156,7 +156,7 @@ int main(int argc, char *argv[]) {
           const bool rconly = (step%5 == 1);
         #endif
 
-        for(int i=0; i < bufelems; i++) {
+        for(size_t i=0; i < bufelems; i++) {
           priv_src[i] = VAL(me, step, i);
           priv_dst[i] = 0;
         }
@@ -237,7 +237,7 @@ int main(int argc, char *argv[]) {
         #endif
 
         std::string mismatch;
-        for(int i=0; i < bufelems; i++) {
+        for(size_t i=0; i < bufelems; i++) {
           val_t got = priv_dst[i];
           val_t expect = VAL(me, step, i);
           if (got != expect && !mismatch.size()) {
@@ -268,7 +268,7 @@ int main(int argc, char *argv[]) {
         step++;
       }} // A/B bufs
 
-      do { upcxx::progress(); } while (rc_count < 3 * bufcnt*bufcnt);
+      do { upcxx::progress(); } while (rc_count < 3 * uint64_t(bufcnt)*bufcnt);
       rc_count = 0;
       upcxx::barrier();
      } // bufelems
