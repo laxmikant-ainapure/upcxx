@@ -592,6 +592,9 @@ void upcxx::init() {
   ok = gex_EP_RegisterHandlers(endpoint0, am_table, sizeof(am_table)/sizeof(am_table[0]));
   UPCXX_ASSERT_ALWAYS(ok == GASNET_OK);
 
+  //////////////////////////////////////////////////////////////////////////////
+  // Determine RPC Eager/Rendezvous Threshold
+  
   size_t am_medium_size = gex_AM_MaxRequestMedium(
     world_tm,
     GEX_RANK_INVALID,
@@ -600,7 +603,19 @@ void upcxx::init() {
     3
   );
   
-  /* TODO: I pulled this from thin air. We want to lean towards only
+  /* 
+   * Original default calculcation, though 2020.11.0 (comments added reflect that version)
+   *
+   * gasnet::am_size_rdzv_cutover =
+   *   am_medium_size < 1<<10 ? 256 : // no current conduits with default configure args
+   *   am_medium_size < 8<<10 ? 512 : // ucx-conduit and aries-conduit default (both around 4KB)
+   *                            1024; // all other conduits
+   *
+   * Original Rationale: 
+   * (The following misleading statement is based on a misunderstanding of how
+   * AMs are actually implemented in most conduits, and should mostly be ignored)
+   *
+   * This default was pulled this from thin air. We want to lean towards only
    * sending very small messages eagerly so as not to clog the landing
    * zone, which would force producers to block on their next send. By
    * using a low threshold for rendezvous we increase the probability
@@ -608,11 +623,29 @@ void upcxx::init() {
    * yet another rendezvous. I'm using the max medium size as a heuristic
    * means to approximate the landing zone size. This is not at all
    * accurate, we should be doing something conduit dependent.
+   *
    */
+
+  // compute a default threshold
   gasnet::am_size_rdzv_cutover =
-    am_medium_size < 1<<10 ? 256 :
-    am_medium_size < 8<<10 ? 512 :
+    am_medium_size < 8<<10 ? 512 : 
                              1024;
+
+  gasnet::am_size_rdzv_cutover = os_env("UPCXX_RPC_EAGER_THRESHOLD", 
+                                        gasnet::am_size_rdzv_cutover, 1); // default units = bytes
+
+  // enforce limits
+  if (gasnet::am_size_rdzv_cutover < gasnet::am_size_rdzv_cutover_min) {
+    noise.warn() << "Requested UPCXX_RPC_EAGER_THRESHOLD (" << gasnet::am_size_rdzv_cutover 
+                 << ") is too small. Raised to minimum value (" << gasnet::am_size_rdzv_cutover_min << ")";
+    gasnet::am_size_rdzv_cutover = gasnet::am_size_rdzv_cutover_min;
+  }
+  if (gasnet::am_size_rdzv_cutover > am_medium_size) {
+    noise.warn() << "Requested UPCXX_RPC_EAGER_THRESHOLD (" << gasnet::am_size_rdzv_cutover 
+                 << ") is too large. Lowered to current maximum value (" << am_medium_size << ")";
+    gasnet::am_size_rdzv_cutover = am_medium_size;
+  }
+
   UPCXX_ASSERT(gasnet::am_size_rdzv_cutover_min <= gasnet::am_size_rdzv_cutover);
 
   //////////////////////////////////////////////////////////////////////////////
