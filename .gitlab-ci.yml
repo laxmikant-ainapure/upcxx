@@ -414,9 +414,10 @@ theta.PrgEnv-intel:
 
 # Theta PrgEnv-cray
 theta.PrgEnv-cray:
-  extends: [ .dev_ci, .new_cray, .theta.compute, .rules_manual ]
+  extends: [ .dev_ci, .new_cray, .theta.compute ]
   variables:
     DEV_CI_PRGENV: cray
+    DEV_CI_COMPILER: cce/10.0.3
 
 ################################################################################
 ##
