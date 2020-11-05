@@ -17,6 +17,12 @@ only a prototype. All aspects of the APIs and capabilities first
 introduced on this branch are subject to non-trivial changes before
 the prototype stage ends.
 
+### 20XX.YY.ZZ: PENDING
+
+Infrastructure changes:
+
+* The `install` script, deprecated since 2020.3.0, has been removed.
+
 ### 2020.10.30: Memory Kinds Prototype 2020.11.0
 
 This is a **prototype** release of UPC++ demonstrating the new GPUDirect RDMA (GDR)
