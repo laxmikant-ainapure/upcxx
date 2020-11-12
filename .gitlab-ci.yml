@@ -537,55 +537,55 @@ dirac.clang_floor:
 
 ################################################################################
 ##
-## macOS 10.15 (Catalina) runner w/ Xcode 11.x
+## VM with current versions of macOS and Xcode
 ##
 
-.catalina:
+.macos-current:
   tags: [ shell, lbnl, class, xcode-latest ]
   variables:
     CI_MAKE_PARALLEL: "-j4"
     MY_OS:   'macos'
     MY_CPU:  'x86_64'
-    MY_HOST: 'catalina'
+    MY_HOST: 'macos-current'
     GASNET_SPAWNFN: L
     GASNET_SUPERNODE_MAXSIZE: 2
     UPCXX_RUN_TIME_LIMIT: 360
 
-catalina.xcode:
-  extends: [ .dev_ci, .new_xcode, .catalina ]
+macos-current.xcode:
+  extends: [ .dev_ci, .new_xcode, .macos-current ]
   variables:
-    ci_script: catalina-xcode
+    ci_script: macos-xcode
 
-catalina.gcc:
-  extends: [ .generic, .new_gnu, .catalina ]
+macos-current.gcc:
+  extends: [ .generic, .new_gnu, .macos-current ]
   variables:
     CC:  gcc-10
     CXX: g++-10
 
 ################################################################################
 ##
-## macOS 10.11 (El-Capitan) runner w/ Xcode 8.x
+## VM with "floor" versions of macOS and Xcode
 ##
 
-.el-capitan:
+.macos-floor:
   tags: [ shell, lbnl, class, xcode-floor ]
   variables:
     CI_MAKE_PARALLEL: "-j4"
     MY_OS:   'macos'
     MY_CPU:  'x86_64'
-    MY_HOST: 'el-capitan'
+    MY_HOST: 'macos-floor'
     GASNET_SPAWNFN: L
     GASNET_SUPERNODE_MAXSIZE: 2
     UPCXX_RUN_TIME_LIMIT: 360
 
-el-capitan.xcode_floor:
-  extends: [ .dev_ci, .new_xcode, .el-capitan ]
+macos-floor.xcode_floor:
+  extends: [ .dev_ci, .new_xcode, .macos-floor ]
   variables:
-    ci_script: el-capitan-xcode_old
+    ci_script: macos-xcode_old
 
 # Is actually gcc 6.5.0 where 6.4.0 is our documented floor
-el-capitan.gcc_floor:
-  extends: [ .generic, .old_gnu, .el-capitan ]
+macos-floor.gcc_floor:
+  extends: [ .generic, .old_gnu, .macos-floor ]
   variables:
     CC:  gcc-6
     CXX: g++-6

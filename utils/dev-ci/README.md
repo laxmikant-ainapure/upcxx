@@ -8,12 +8,9 @@ have, or can obtain, access and an allocation of time (where necessary).
 
 ## The Catalog
 
-+ `catalina-xcode`  
-    CLaSS's macOS 10.15 VM  
-    Newest-available Apple Xcode (11.x)
-+ `el_capitan-xcode_old`  
-    CLaSS's macOS 10.11 VM  
-    Oldest-supported Apple Xcode (8.x)
++ `macos-xcode{,_old}`  
+    CLaSS's macOS VMs
+    Newest-available (and oldest-supported) macOS and Apple Xcode releases
 + `dirac-{clang,gcc,intel,pgi}{,_old}`  
     CLaSS's Linux/x86-64 cluster with InfiniBand  
     Newest-available and oldest-supported versions of four compiler families
