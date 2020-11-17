@@ -627,9 +627,9 @@ void upcxx::init() {
    */
 
   // compute a default threshold
-  gasnet::am_size_rdzv_cutover =
-    am_medium_size < 8<<10 ? 512 : 
-                             1024;
+  // 2020-11: testing across all conduits show that maximizing the eager threshold 
+  //          provides the best microbenchmark performance in practice for network RPC
+  gasnet::am_size_rdzv_cutover = am_medium_size;
 
   gasnet::am_size_rdzv_cutover = os_env("UPCXX_RPC_EAGER_THRESHOLD", 
                                         gasnet::am_size_rdzv_cutover, 1); // default units = bytes
