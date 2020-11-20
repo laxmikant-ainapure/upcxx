@@ -119,8 +119,7 @@ namespace upcxx
       void send_remote() {
         auto *cbs = static_cast<FinalType*>(this);
         
-        backend::send_am_master<progress_level::user>(
-          upcxx::world(), cbs->rank_d,
+        backend::send_am_master<progress_level::user>( cbs->rank_d,
           upcxx::bind(
             [](deserialized_type_t<CxStateRemote> &&st) {
               return st.template operator()<remote_cx_event>();

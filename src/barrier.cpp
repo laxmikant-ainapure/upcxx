@@ -85,7 +85,7 @@ namespace {
         
         team_id tm_id = tm.id();
         backend::send_am_master<progress_level::internal>(
-          tm, parent,
+          backend::team_rank_to_world(tm, parent),
           [=]() {
             team &tm = tm_id.here();
             barrier_state *me = barrier_state::lookup(tm, id);
@@ -106,7 +106,7 @@ namespace {
       
       team_id tm_id = tm.id();
       backend::template send_am_master<progress_level::internal>(
-        tm, mid,
+        team_rank_to_world(tm, mid),
         [=]() {
           barrier_state *me = (barrier_state*)detail::registry.at(id);
           me->broadcast(tm_id.here(), id, rank_ub);

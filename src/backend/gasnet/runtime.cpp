@@ -1416,7 +1416,6 @@ void backend::validate_global_ptr(bool allow_null, intrank_t rank, void *raw_ptr
 // from: upcxx/backend/gasnet/runtime.hpp
 
 void gasnet::send_am_eager_restricted(
-    const team &tm,
     intrank_t recipient,
     void *buf,
     std::size_t buf_size,
@@ -1424,7 +1423,7 @@ void gasnet::send_am_eager_restricted(
   ) {
   
   gex_AM_RequestMedium1(
-    handle_of(tm), recipient,
+    world_tm, recipient,
     id_am_eager_restricted, buf, buf_size,
     GEX_EVENT_NOW, /*flags*/0,
     buf_align
@@ -1435,7 +1434,6 @@ void gasnet::send_am_eager_restricted(
 
 void gasnet::send_am_eager_master(
     progress_level level,
-    const team &tm,
     intrank_t recipient,
     void *buf,
     std::size_t buf_size,
@@ -1443,7 +1441,7 @@ void gasnet::send_am_eager_master(
   ) {
   
   gex_AM_RequestMedium1(
-    handle_of(tm), recipient,
+    world_tm, recipient,
     id_am_eager_master, buf, buf_size,
     GEX_EVENT_NOW, /*flags*/0,
     buf_align<<1 | (level == progress_level::user ? 1 : 0)
@@ -1454,7 +1452,6 @@ void gasnet::send_am_eager_master(
 
 void gasnet::send_am_eager_persona(
     progress_level level,
-    const team &tm,
     intrank_t recipient_rank,
     persona *recipient_persona,
     void *buf,
@@ -1463,7 +1460,7 @@ void gasnet::send_am_eager_persona(
   ) {
 
   gex_AM_RequestMedium3(
-    handle_of(tm), recipient_rank,
+    world_tm, recipient_rank,
     id_am_eager_persona, buf, buf_size,
     GEX_EVENT_NOW, /*flags*/0,
     buf_align<<1 | (level == progress_level::user ? 1 : 0),
@@ -1501,7 +1498,6 @@ namespace {
 
 void gasnet::send_am_rdzv(
     progress_level level,
-    const team &tm,
     intrank_t rank_d,
     persona *persona_d,
     void *buf_s,
@@ -1512,7 +1508,7 @@ void gasnet::send_am_rdzv(
   intrank_t rank_s = backend::rank_me;
   
   backend::send_am_persona<progress_level::internal>(
-    tm, rank_d, persona_d,
+    rank_d, persona_d,
     [=]() {
       if(backend::rank_is_local(rank_s)) {
         void *payload = backend::localize_memory_nonnull(rank_s, reinterpret_cast<std::uintptr_t>(buf_s));
@@ -1543,8 +1539,7 @@ void gasnet::send_am_rdzv(
             tls.enqueue(*tls.get_top_persona(), level, m, /*known_active=*/std::true_type());
             
             // Notify source rank it can free buffer.
-            gasnet::send_am_restricted(
-              upcxx::world(), rank_s,
+            gasnet::send_am_restricted( rank_s,
               [=]() { gasnet::deallocate(buf_s, &gasnet::sheap_footprint_rdzv); }
             );
           }
@@ -1663,7 +1658,7 @@ void gasnet::bcast_am_master_rdzv(
     intrank_t sub_ub = rank_d_ub - translate;
     
     backend::send_am_master<progress_level::internal>(
-      tm, sub_lb,
+      backend::team_rank_to_world(tm, sub_lb),
       [=]() {
         if(backend::rank_is_local(wrank_sender)) {
           bcast_payload_header *payload_target =
@@ -1720,8 +1715,7 @@ void gasnet::bcast_am_master_rdzv(
               tls.enqueue(*tls.get_top_persona(), level, m, /*known_active=*/std::true_type());
               
               // Notify source rank it can free buffer.
-              send_am_restricted(
-                upcxx::world(), wrank_owner,
+              send_am_restricted( wrank_owner,
                 [=]() {
                   if(0 == -1 + payload_owner->rdzv_refs.fetch_add(-1, std::memory_order_acq_rel))
                     gasnet::deallocate(payload_owner, &gasnet::sheap_footprint_rdzv);
@@ -1755,8 +1749,7 @@ namespace gasnet {
               backend::globalize_memory_nonnull(me->rdzv_rank_s, me->payload)
             );
            
-          send_am_restricted(
-            upcxx::world(), me->rdzv_rank_s,
+          send_am_restricted( me->rdzv_rank_s,
             [=]() { gasnet::deallocate(buf_s, &gasnet::sheap_footprint_rdzv); }
           );
           
@@ -1803,8 +1796,7 @@ namespace gasnet {
               backend::globalize_memory_nonnull(me->rdzv_rank_s, hdr)
             );
           
-          send_am_restricted(
-            upcxx::world(), me->rdzv_rank_s,
+          send_am_restricted( me->rdzv_rank_s,
             [=]() { gasnet::deallocate(buf_s, &gasnet::sheap_footprint_rdzv); }
           );
         }
@@ -2139,14 +2131,13 @@ namespace {
 
 template<gasnet::rma_put_then_am_sync sync_lb, bool packed_protocol>
 gasnet::rma_put_then_am_sync gasnet::rma_put_then_am_master_protocol(
-    const team &tm, intrank_t rank_d,
+    intrank_t rank_d,
     void *buf_d, void const *buf_s, std::size_t buf_size,
     progress_level am_level, void *am_cmd, std::size_t am_size, std::size_t am_align,
     gasnet::handle_cb *src_cb,
     gasnet::reply_cb *rem_cb
   ) {
 
-  gex_TM_t tm_h = gasnet::handle_of(tm);
   gex_Event_t src_h = GEX_EVENT_INVALID, *src_ph;
 
   switch(sync_lb) {
@@ -2159,11 +2150,11 @@ gasnet::rma_put_then_am_sync gasnet::rma_put_then_am_master_protocol(
     break;
   }
   
-  size_t am_long_max = gex_AM_MaxRequestLong(tm_h, rank_d, src_ph, /*flags*/0, 16);
+  size_t am_long_max = gex_AM_MaxRequestLong(world_tm, rank_d, src_ph, /*flags*/0, 16);
   
   if(am_long_max < buf_size) {
     (void)gex_RMA_PutBlocking(
-      tm_h, rank_d,
+      world_tm, rank_d,
       buf_d, const_cast<void*>(buf_s), buf_size - am_long_max,
       /*flags*/0
     );
@@ -2180,7 +2171,7 @@ gasnet::rma_put_then_am_sync gasnet::rma_put_then_am_master_protocol(
     std::memcpy((void*)cmd_arg, am_cmd, am_size);
     
     gex_AM_RequestLong16(
-      tm_h, rank_d,
+      world_tm, rank_d,
       id_am_long_master_packed_cmd,
       const_cast<void*>(buf_s), buf_size, buf_d,
       src_ph,
@@ -2203,7 +2194,7 @@ gasnet::rma_put_then_am_sync gasnet::rma_put_then_am_master_protocol(
     std::memcpy(&nonce, &nonce_u, sizeof(gex_AM_Arg_t));
     
     (void)gex_AM_RequestLong5(
-      tm_h, rank_d,
+      world_tm, rank_d,
       id_am_long_master_payload_part,
       const_cast<void*>(buf_s), buf_size, buf_d,
       src_ph,
@@ -2213,7 +2204,7 @@ gasnet::rma_put_then_am_sync gasnet::rma_put_then_am_master_protocol(
     );
 
     size_t part_size_max = gex_AM_MaxRequestMedium(
-      tm_h, rank_d, GEX_EVENT_NOW, /*flags*/0, /*num_args*/6
+      world_tm, rank_d, GEX_EVENT_NOW, /*flags*/0, /*num_args*/6
     );
     size_t part_offset = 0;
     
@@ -2221,7 +2212,7 @@ gasnet::rma_put_then_am_sync gasnet::rma_put_then_am_master_protocol(
       size_t part_size = std::min(part_size_max, am_size - part_offset);
       
       (void)gex_AM_RequestMedium4(
-        tm_h, rank_d,
+        world_tm, rank_d,
         id_am_long_master_cmd_part,
         (char*)am_cmd + part_offset, part_size,
         GEX_EVENT_NOW,
@@ -2249,7 +2240,7 @@ gasnet::rma_put_then_am_sync gasnet::rma_put_then_am_master_protocol(
   template \
   gasnet::rma_put_then_am_sync \
   gasnet::rma_put_then_am_master_protocol<sync_lb, packed_protocol>( \
-      const team &tm, intrank_t rank_d, \
+      intrank_t rank_d, \
       void *buf_d, void const *buf_s, std::size_t buf_size, \
       progress_level am_level, void *am_cmd, std::size_t am_size, std::size_t am_align, \
       gasnet::handle_cb *src_cb, \

@@ -135,8 +135,7 @@ namespace upcxx {
     UPCXX_ASSERT(recipient >= 0 && recipient < world().rank_n(),
       "rpc_ff(recipient, ...) requires recipient in [0, rank_n()-1] == [0, " << world().rank_n()-1 << "], but given: " << recipient);
 
-    backend::template send_am_master<progress_level::user>(
-      world(), recipient,
+    backend::template send_am_master<progress_level::user>( recipient,
       upcxx::bind_rvalue_as_lvalue(std::forward<Fn>(fn), std::forward<Arg>(args)...)
     );
   }
@@ -221,8 +220,7 @@ namespace upcxx {
         CxsDecayed
       >{state};
     
-    backend::template send_am_master<progress_level::user>(
-      world(), recipient,
+    backend::template send_am_master<progress_level::user>( recipient,
       upcxx::bind_rvalue_as_lvalue(std::forward<Fn>(fn), std::forward<Arg>(args)...)
     );
     
@@ -264,7 +262,7 @@ namespace upcxx {
       template<typename ...Arg>
       void operator()(Arg &&...arg) const {
         backend::template send_awaken_lpc(
-          upcxx::world(), initiator,
+          initiator,
           remote_lpc, std::tuple<Arg&&...>(std::forward<Arg>(arg)...)
         );
       }
@@ -386,8 +384,7 @@ namespace upcxx {
       
       using fn_bound_t = typename detail::bind<const Fn&, const Arg&...>::return_type;
 
-      backend::template send_am_master<progress_level::user>(
-        world(), recipient,
+      backend::template send_am_master<progress_level::user>( recipient,
         upcxx::bind_rvalue_as_lvalue(
           [=](deserialized_type_t<fn_bound_t> &&fn_bound) {
             return upcxx::apply_as_future(

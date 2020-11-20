@@ -286,13 +286,13 @@ namespace backend {
     );
   
   template<progress_level level, typename Fn>
-  void send_am_master(const team &tm, intrank_t recipient, Fn &&fn);
+  void send_am_master(intrank_t recipient, Fn &&fn);
   
   template<progress_level level, typename Fn>
-  void send_am_persona(const team &tm, intrank_t recipient_rank, persona *recipient_persona, Fn &&fn);
+  void send_am_persona(intrank_t recipient_rank, persona *recipient_persona, Fn &&fn);
 
   template<typename ...T, typename ...U>
-  void send_awaken_lpc(const team &tm, intrank_t recipient, detail::lpc_dormant<T...> *lpc, std::tuple<U...> &&vals);
+  void send_awaken_lpc(intrank_t recipient, detail::lpc_dormant<T...> *lpc, std::tuple<U...> &&vals);
 
   template<progress_level level, typename Fn>
   void bcast_am_master(const team &tm, Fn &&fn);
