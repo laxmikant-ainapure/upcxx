@@ -288,7 +288,7 @@ while [[ $# -gt 0 ]]; do
 
     # Not yet relevant to GASNet's configure (but might move there later):
     -with-cuda)                 UPCXX_CUDA=1; export UPCXX_CUDA;;
-    -without-cuda)              UPCXX_CUDA=0; export UPCXX_CUDA;;
+    -without-cuda)              unset UPCXX_CUDA;;
     -with-nvcc?(=*))            UPCXX_CUDA_NVCC="$(get_arg_val $arg)";     export UPCXX_CUDA_NVCC;;
     -with-cuda-cppflags?(=*))   UPCXX_CUDA_CPPFLAGS="$(get_arg_val $arg)"; export UPCXX_CUDA_CPPFLAGS;;
     -with-cuda-libflags?(=*))   UPCXX_CUDA_LIBFLAGS="$(get_arg_val $arg)"; export UPCXX_CUDA_LIBFLAGS;;

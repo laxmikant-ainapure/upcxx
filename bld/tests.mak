@@ -120,7 +120,7 @@ test_exclude_all += \
 	test/uts/uts_threads.cpp
 
 # Conditionally exclude tests that require CUDA support:
-ifeq ($(strip $(UPCXX_CUDA)),)
+ifneq ($(UPCXX_CUDA),1)
 test_exclude_all += \
 	bench/cuda_microbenchmark.cpp \
 	test/bad-segment-alloc.cpp \
