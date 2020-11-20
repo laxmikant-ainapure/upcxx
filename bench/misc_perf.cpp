@@ -141,11 +141,30 @@ upcxx::global_ptr<double> gp;
 upcxx::global_ptr<double> gp_peer;
 upcxx::global_ptr<std::int64_t> gpi64;
 upcxx::global_ptr<std::int64_t> gpi64_peer;
+struct dummy64_t { char data[64]; }; // 64 bytes of TriviallySerializable data
 void doit2() {
     upcxx::dist_object<upcxx::global_ptr<double>> dod(upcxx::new_<double>(0));
     gp = *dod;
     gp_peer = dod.fetch(peer).wait();
     TIME_OPERATION("upcxx::rput<double>(self)",upcxx::rput(0.,gp).wait());
+    {
+      static int flag;
+      TIME_OPERATION("upcxx::rput<double>(self, RC)", 
+                       flag = 0;
+                       upcxx::rput(0.,gp, upcxx::remote_cx::as_rpc([](){flag=1;}));
+                       do { upcxx::progress(); } while (!flag)
+                    );
+    }
+
+    {
+      static int flag;
+      static dummy64_t dummy;
+      TIME_OPERATION("upcxx::rput<double>(self, RC-64b)", 
+                       flag = 0;
+                       upcxx::rput(0.,gp, upcxx::remote_cx::as_rpc([](const dummy64_t &){flag=1;},dummy));
+                       do { upcxx::progress(); } while (!flag)
+                    );
+    }
 
     upcxx::dist_object<upcxx::global_ptr<std::int64_t>> doi(upcxx::new_<std::int64_t>(0));
     gpi64 = *doi;
@@ -177,6 +196,23 @@ void doit3() {
         [](int d1, int d2, int d3, int d4, int d5, int d6, int d7, int d8){},
         0,0,0,0,0,0,0,0).wait());
     TIME_OPERATION("upcxx::rput<double>(peer)",upcxx::rput(0.,gp_peer).wait());
+    {
+      static std::int64_t sent=0,recv=0;
+      TIME_OPERATION("upcxx::rput<double>(peer, RC)", 
+                       sent++;
+                       upcxx::rput(0.,gp_peer, upcxx::remote_cx::as_rpc([](){recv++;}));
+                       do { upcxx::progress(); } while (recv<sent)
+                    );
+    }
+    {
+      static std::int64_t sent=0,recv=0;
+      static dummy64_t dummy;
+      TIME_OPERATION("upcxx::rput<double>(peer, RC-64b)", 
+                       sent++;
+                       upcxx::rput(0.,gp_peer, upcxx::remote_cx::as_rpc([](const dummy64_t &){recv++;},dummy));
+                       do { upcxx::progress(); } while (recv<sent)
+                    );
+    }
 
     using upcxx::atomic_op;
     { upcxx::promise<> p;
