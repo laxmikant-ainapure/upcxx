@@ -98,9 +98,9 @@ General features/enhancements: (see specification and programmer's guide for ful
 Improvements to RPC and Serialization:
 
 * Added support for serialization of reference types where the referent is Serializable.
-* Rpc's which return future values experience one less heap allocation and
+* RPC's which return future values experience one less heap allocation and
   virtual dispatch in the runtime's critical path.
-* Rpc's which return future values no longer copy the underlying data prior to serialization.
+* RPC's which return future values no longer copy the underlying data prior to serialization.
 * `dist_object<T>::fetch()` no longer copies the remote object prior to serialization.
 * Added `deserializing_iterator<T>::deserialize_into` to avoid copying large
   objects when iterating over a `view` of non-TriviallySerializable elements.
@@ -135,7 +135,7 @@ Notable bug fixes:
 * issue #345: configure with single-dash arguments
 * issue #346: `configure --cross=cray*` ignores `--with-cc/--with-cxx`
 * issue #355: `upcxx::view<T>` broken with asymmetric deserialization of `T`
-* issue #361: upcxx::rpc broken when mixing arguments of `T&&` and `dist_object&`
+* issue #361: `upcxx::rpc` broken when mixing arguments of `T&&` and `dist_object&`
 * issue #364: Stray "-e" output on macOS and possibly elsewhere
 * issue #375: Improve error message for C array types by-value arguments to RPC
 * issue #376: warnings from GCC 10.1 in reduce.hpp for boolean reductions
@@ -179,7 +179,7 @@ Breaking changes:
   with a runtime error.  Most such calls previously led to silent deadlock.
 * Initiating collective operations with a progress level of `internal` or `none` from within
   the restricted context (within a callback running inside progress) is now a deprecated
-  behavior, and diagnosted with a runtime warning. For details, see spec issue 169.
+  behavior, and diagnosed with a runtime warning. For details, see spec issue 169.
 
 ### 2020.07.17: Bug-fix release 2020.3.2
 
@@ -282,7 +282,7 @@ New features/enhancements: (see specification and programmer's guide for full de
 
 * `upcxx` has several new convenience options (see `upcxx -help`)
 * `upcxx::rput(..., remote_cx::as_rpc(...))` has received an improved implementation
-  for remote peers where the dependent rpc is injected immediately following
+  for remote peers where the dependent RPC is injected immediately following
   the put. This pipelining reduces latency and sensitivity to initiator attentiveness,
   improving performance in most cases (for the exception, see issue #261).
 * Accounting measures have been added to track the shared-heap utilization of the
@@ -382,7 +382,7 @@ New features/enhancements: (see specification and programmer's guide for full de
 Notable bug fixes:
 
 * issue #100: Fix shared heap setting propagation on loosely-coupled clusters
-* issue #118: Enforce GEX version interlock at compile time
+* issue #118: Enforce GASNet-EX version interlock at compile time
 * issue #177: Completion broken for non-fetching binary AMOs
 * issue #183: `bench/{put_flood,nebr_exchange}` were failing to compile
 * issue #185: Fix argument order for `dist_object` constructor to match spec
@@ -495,7 +495,7 @@ New features/enhancements:
  * Generalized completion. This allows the application to be notified about the
    status of UPC\+\+ operations in a handful of ways. For each event, the user
    is free to choose among: futures, promises, callbacks, delivery of remote
-   rpc, and in some cases even blocking until the event has occurred.
+   procedure calls, and in some cases even blocking until the event has occurred.
  * Internal use of lock-free datastructures for `lpc` queues.
  * Improvements to the `upcxx-run` command.
  * Improvements to internal assertion checking and diagnostics.
@@ -534,9 +534,9 @@ This release is not performant, and may be unstable or buggy.
 
 ### 2017.09.01: Release v1.0-pre
 
-This is a prerelease of v1.0. This prerelease supports most of the functionality
+This is a pre-release of v1.0. This pre-release supports most of the functionality
 covered in the UPC++ specification, except personas, promise-based completion,
-teams, serialization, and non-contiguous transfers. This prerelease is not
+teams, serialization, and non-contiguous transfers. This pre-release is not
 performant, and may be unstable or buggy. Please notify us of issues by sending
 email to `upcxx@googlegroups.com`.
 
