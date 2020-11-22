@@ -21,6 +21,7 @@ namespace backend {
 namespace gasnet {
   static constexpr std::size_t am_size_rdzv_cutover_min = 256;
   extern std::size_t am_size_rdzv_cutover;
+  extern std::size_t am_size_rdzv_cutover_local;
   extern std::size_t am_long_size_max;
 
   struct sheap_footprint_t {
@@ -386,10 +387,26 @@ namespace backend {
   //////////////////////////////////////////////////////////////////////
   // send_am_{master|persona}
 
-  template<typename Fn, bool restricted=false>
+  // prepare_am(): Serialize a callable in a buffer appropriate for the protocol it will
+  // use to travel as an AM.
+  //
+  // Template Args:
+  // * eagerNPAMArgs: the number of AMMedium arguments in eager protocol, or -1 to disable use of NPAM
+  // * knownLocality: 1 if recipient statically known to be local, 0 for known non-local, -1 unknown
+  // * forceEager: force use of eager protocol
+  //
+  // Function Args:
+  // * fn: the callable
+  // * recipient: the job rank that is the target of the AM
+  // * restricted1: pass std::true_type() for a restricted callable that should execute inside AM handler
+  //
+  // Returns:
+  // gasnet::am_send_buffer that references the populated buffer (possibly an embedded field! AVOID MOVES),
+  // with fields/parameters that indicate the selected protocol, based partially on the ubound of fn
+  template<int eagerNPAMArgs, int knownLocality=-1, bool forceEager=false, typename Fn, bool restricted=false>
   auto prepare_am(
       Fn &&fn,
-      std::size_t rdzv_cutover_size = gasnet::am_size_rdzv_cutover,
+      intrank_t recipient,
       std::integral_constant<bool, restricted> restricted1={}
     ) -> gasnet::am_send_buffer<decltype(detail::command<detail::lpc_base*>::ubound(empty_storage_size, fn))> {
     
@@ -399,6 +416,15 @@ namespace backend {
     auto ub = detail::command<detail::lpc_base*>::ubound(empty_storage_size, fn);
     
     constexpr bool definitely_not_rdzv = ub.static_size <= gasnet::am_size_rdzv_cutover_min;
+
+    const bool is_local = (knownLocality >= 0) ? bool(knownLocality)
+                                               : backend::rank_is_local(recipient);
+
+    const std::size_t rdzv_cutover_size = (
+       forceEager ? std::size_t(-1)
+                  : ( is_local ? gasnet::am_size_rdzv_cutover_local
+                               : gasnet::am_size_rdzv_cutover )
+    );
 
     am_send_buffer<decltype(ub)> am_buf;
     auto w = am_buf.prepare_writer(ub, rdzv_cutover_size);
@@ -426,7 +452,7 @@ namespace backend {
   template<upcxx::progress_level level, typename Fn>
   void send_am_master(intrank_t recipient, Fn &&fn) {
       backend::send_prepared_am_master(
-        level, recipient, prepare_am(std::forward<Fn>(fn))
+        level, recipient, prepare_am<1>(std::forward<Fn>(fn), recipient)
       );
   }
 
@@ -453,19 +479,19 @@ namespace backend {
     ) {
       backend::send_prepared_am_persona(
         level, recipient_rank, recipient_persona,
-        prepare_am(std::forward<Fn>(fn))
+        prepare_am<3>(std::forward<Fn>(fn), recipient_rank)
       );
   }
 
   template<typename ...T, typename ...U>
   void send_awaken_lpc(intrank_t recipient, detail::lpc_dormant<T...> *lpc, std::tuple<U...> &&vals) {
-    auto am_buf(prepare_am(
+    auto am_buf(prepare_am<1>(
       upcxx::bind([=](std::tuple<T...> &&vals) {
           lpc->awaken(std::move(vals));
         },
         std::move(vals)
       ),
-      gasnet::am_size_rdzv_cutover,
+      recipient,
       /*restricted=*/std::true_type()
     ));
 
@@ -561,8 +587,8 @@ namespace gasnet {
   void send_am_restricted(intrank_t recipient, Fn &&fn) {
     UPCXX_ASSERT_MASTER_IFSEQ();
 
-    auto am_buf(prepare_am(
-      std::forward<Fn>(fn), gasnet::am_size_rdzv_cutover, /*restricted=*/std::true_type()
+    auto am_buf(prepare_am<1>(
+      std::forward<Fn>(fn), recipient, /*restricted=*/std::true_type()
     ));
     
     UPCXX_ASSERT(am_buf.is_eager);
@@ -614,16 +640,19 @@ namespace gasnet {
     
     constexpr std::size_t arg_size = sizeof(std::int32_t);
 
-    auto am(backend::prepare_am(std::forward<AmFn>(am_fn), 
-                                rank_d_is_local ? am_size_rdzv_cutover : /*rdzv disabled=*/std::size_t(-1)));
-
     if(rank_d_is_local) {
+      auto am(backend::prepare_am<1,/*knownLocality=*/1>
+                                 (std::forward<AmFn>(am_fn), rank_d));
+
       void *buf_d_local = backend::localize_memory_nonnull(rank_d, reinterpret_cast<std::uintptr_t>(buf_d));
       std::memcpy(buf_d_local, buf_s, buf_size);
       backend::send_prepared_am_master(am_level, rank_d, std::move(am));
       return rma_put_then_am_sync::op_now;
     }
     else {
+      auto am(backend::prepare_am<-1/*disableNPAM*/,/*knownLocality=*/0,/*forceEager=*/true>
+                                 (std::forward<AmFn>(am_fn), rank_d));
+
       if(am.cmd_size_static_ub <= 13*arg_size || am.cmd_size <= 13*arg_size) {
         return gasnet::template rma_put_then_am_master_protocol<sync_lb, /*packed=*/true>(
           rank_d, buf_d, buf_s, buf_size,

@@ -106,6 +106,7 @@ unique_ptr<uintptr_t[/*local_team.size()*/]> backend::pshm_size;
 // from: upcxx/backend/gasnet/runtime.hpp
 
 size_t gasnet::am_size_rdzv_cutover;
+size_t gasnet::am_size_rdzv_cutover_local;
 
 sheap_footprint_t gasnet::sheap_footprint_rdzv;
 sheap_footprint_t gasnet::sheap_footprint_misc;
@@ -646,7 +647,10 @@ void upcxx::init() {
     gasnet::am_size_rdzv_cutover = am_medium_size;
   }
 
+  gasnet::am_size_rdzv_cutover_local = std::min(std::size_t(4096),gasnet::am_size_rdzv_cutover); // TODO: knob
+
   UPCXX_ASSERT(gasnet::am_size_rdzv_cutover_min <= gasnet::am_size_rdzv_cutover);
+  UPCXX_ASSERT(gasnet::am_size_rdzv_cutover_min <= gasnet::am_size_rdzv_cutover_local);
 
   //////////////////////////////////////////////////////////////////////////////
   // Determine if we're oversubscribed.
