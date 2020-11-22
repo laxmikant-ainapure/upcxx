@@ -425,37 +425,9 @@ namespace backend {
   
   template<upcxx::progress_level level, typename Fn>
   void send_am_master(intrank_t recipient, Fn &&fn) {
-    #if 0
-      UPCXX_ASSERT_MASTER_IFSEQ();
-
-      using gasnet::am_send_buffer;
-      using gasnet::rpc_as_lpc;
-      
-      using Fn = typename std::decay<Fn1>::type;
-
-      auto ub = detail::command<detail::lpc_base*>::ubound(empty_storage_size, fn);
-      
-      constexpr bool definitely_not_rdzv = ub.static_size <= gasnet::am_size_rdzv_cutover_min;
-      
-      am_send_buffer<decltype(ub)> am_buf;
-      auto w = am_buf.prepare_writer(ub, gasnet::am_size_rdzv_cutover);
-      
-      detail::command<detail::lpc_base*>::template serialize<
-          rpc_as_lpc::reader_of,
-          rpc_as_lpc::template cleanup</*definitely_not_rdzv=*/definitely_not_rdzv>
-        >(w, ub.size, fn);
-
-      am_buf.finalize_buffer(std::move(w), gasnet::am_size_rdzv_cutover);
-      
-      if(am_buf.is_eager)
-        gasnet::send_am_eager_master(level, recipient, am_buf.buffer, am_buf.cmd_size, am_buf.cmd_align);
-      else
-        gasnet::send_am_rdzv(level, recipient, /*master*/nullptr, am_buf.buffer, am_buf.cmd_size, am_buf.cmd_align);
-    #else
       backend::send_prepared_am_master(
         level, recipient, prepare_am(std::forward<Fn>(fn))
       );
-    #endif
   }
 
   template<typename AmBuf>
@@ -479,37 +451,10 @@ namespace backend {
       persona *recipient_persona,
       Fn &&fn
     ) {
-    #if 0
-      UPCXX_ASSERT_MASTER_IFSEQ();
-      
-      using gasnet::am_send_buffer;
-      using gasnet::rpc_as_lpc;
-      
-      auto ub = detail::command<detail::lpc_base*>::ubound(empty_storage_size, fn);
-      
-      constexpr bool definitely_not_rdzv = ub.static_size <= gasnet::am_size_rdzv_cutover_min;
-
-      am_send_buffer<decltype(ub)> am_buf;
-      auto w = am_buf.prepare_writer(ub, gasnet::am_size_rdzv_cutover);
-      
-      detail::command<detail::lpc_base*>::template serialize<
-          rpc_as_lpc::reader_of,
-          rpc_as_lpc::template cleanup</*definitely_not_rdzv=*/definitely_not_rdzv>
-        >(w, ub.size, fn);
-
-      am_buf.finalize_buffer(std::move(w), gasnet::am_size_rdzv_cutover);
-      
-      if(am_buf.is_eager)
-        gasnet::send_am_eager_persona(level, tm, recipient_rank, recipient_persona, am_buf.buffer, am_buf.cmd_size, am_buf.cmd_align);
-      else
-        gasnet::send_am_rdzv(level, recipient_rank, 
-                             recipient_persona, am_buf.buffer, am_buf.cmd_size, am_buf.cmd_align);
-    #else
       backend::send_prepared_am_persona(
         level, recipient_rank, recipient_persona,
         prepare_am(std::forward<Fn>(fn))
       );
-    #endif
   }
 
   template<typename ...T, typename ...U>
