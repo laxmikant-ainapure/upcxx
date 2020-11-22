@@ -614,7 +614,8 @@ namespace gasnet {
     
     constexpr std::size_t arg_size = sizeof(std::int32_t);
 
-    auto am(backend::prepare_am(am_fn, rank_d_is_local ? am_size_rdzv_cutover : /*rdzv disabled=*/std::size_t(-1)));
+    auto am(backend::prepare_am(std::forward<AmFn>(am_fn), 
+                                rank_d_is_local ? am_size_rdzv_cutover : /*rdzv disabled=*/std::size_t(-1)));
 
     if(rank_d_is_local) {
       void *buf_d_local = backend::localize_memory_nonnull(rank_d, reinterpret_cast<std::uintptr_t>(buf_d));
