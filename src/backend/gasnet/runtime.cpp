@@ -627,30 +627,32 @@ void upcxx::init() {
    *
    */
 
+  #define ENV_THRESH(var, varname, defaultval) do { \
+    var = os_env(varname, defaultval, 1/* units: bytes */); \
+    /* enforce limits */ \
+    if (var < gasnet::am_size_rdzv_cutover_min) { \
+      noise.warn() << "Requested "<<varname<<" (" << var \
+                   << ") is too small. Raised to minimum value (" << gasnet::am_size_rdzv_cutover_min << ")"; \
+      var = gasnet::am_size_rdzv_cutover_min; \
+    } \
+    if (var > am_medium_size) { \
+      noise.warn() << "Requested "<<varname<<" (" << var \
+                   << ") is too large. Lowered to current maximum value (" << am_medium_size << ")"; \
+      var = am_medium_size; \
+    } \
+    UPCXX_ASSERT(gasnet::am_size_rdzv_cutover_min <= var); \
+  } while(0)
+
   // compute a default threshold
   // 2020-11: testing across all conduits show that maximizing the eager threshold 
   //          provides the best microbenchmark performance in practice for network RPC
-  gasnet::am_size_rdzv_cutover = am_medium_size;
+  ENV_THRESH(gasnet::am_size_rdzv_cutover, "UPCXX_RPC_EAGER_THRESHOLD", 
+             am_medium_size);
 
-  gasnet::am_size_rdzv_cutover = os_env("UPCXX_RPC_EAGER_THRESHOLD", 
-                                        gasnet::am_size_rdzv_cutover, 1); // default units = bytes
+  // optimal PSHM threshold seems to be around 4KB
+  ENV_THRESH(gasnet::am_size_rdzv_cutover_local, "UPCXX_RPC_EAGER_THRESHOLD_LOCAL", 
+             std::min(std::size_t(4096),gasnet::am_size_rdzv_cutover)); 
 
-  // enforce limits
-  if (gasnet::am_size_rdzv_cutover < gasnet::am_size_rdzv_cutover_min) {
-    noise.warn() << "Requested UPCXX_RPC_EAGER_THRESHOLD (" << gasnet::am_size_rdzv_cutover 
-                 << ") is too small. Raised to minimum value (" << gasnet::am_size_rdzv_cutover_min << ")";
-    gasnet::am_size_rdzv_cutover = gasnet::am_size_rdzv_cutover_min;
-  }
-  if (gasnet::am_size_rdzv_cutover > am_medium_size) {
-    noise.warn() << "Requested UPCXX_RPC_EAGER_THRESHOLD (" << gasnet::am_size_rdzv_cutover 
-                 << ") is too large. Lowered to current maximum value (" << am_medium_size << ")";
-    gasnet::am_size_rdzv_cutover = am_medium_size;
-  }
-
-  gasnet::am_size_rdzv_cutover_local = std::min(std::size_t(4096),gasnet::am_size_rdzv_cutover); // TODO: knob
-
-  UPCXX_ASSERT(gasnet::am_size_rdzv_cutover_min <= gasnet::am_size_rdzv_cutover);
-  UPCXX_ASSERT(gasnet::am_size_rdzv_cutover_min <= gasnet::am_size_rdzv_cutover_local);
 
   //////////////////////////////////////////////////////////////////////////////
   // Determine if we're oversubscribed.
