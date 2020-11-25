@@ -332,7 +332,7 @@ namespace upcxx {
   
   namespace detail {
     template<typename Cxs, typename Fn, typename ...Arg>
-    auto rpc(const team &tm, intrank_t recipient, Fn &&fn, Arg &&...args, Cxs &&cxs, int /*dummy*/)
+    auto rpc_internal(const team &tm, intrank_t recipient, Fn &&fn, Arg &&...args, Cxs &&cxs, int /*dummy*/)
       // computes our return type, but SFINAE's out if fn(args...) is ill-formed
       -> typename detail::rpc_return<Fn(Arg...), typename std::decay<Cxs>::type>::type {
       using CxsDecayed = typename std::decay<Cxs>::type;
@@ -418,7 +418,7 @@ namespace upcxx {
     // folded into the parameter pack for ...Arg, forcing it into the
     // variadic arguments here.
     template<typename Cxs, typename Fn, typename ...Arg>
-    future<> rpc(const team &, intrank_t, Fn &&, Arg &&..., Cxs&&, ...) {
+    future<> rpc_internal(const team &, intrank_t, Fn &&, Arg &&..., Cxs&&, ...) {
       using CxsDecayed = typename std::decay<Cxs>::type;
       // check that this overload is not unintentionally invoked
       static_assert(
@@ -449,7 +449,7 @@ namespace upcxx {
     UPCXX_ASSERT(recipient >= 0 && recipient < tm.rank_n(),
       "rpc(team, recipient, ...) requires recipient in [0, team.rank_n()-1] == [0, " << tm.rank_n()-1 << "], but given: " << recipient);
 
-    return detail::template rpc<Cxs, Fn&&, Arg&&...>(
+    return detail::template rpc_internal<Cxs, Fn&&, Arg&&...>(
         tm, recipient, std::forward<Fn>(fn), std::forward<Arg>(args)...,
         std::forward<Cxs>(cxs), 0
       );
@@ -468,7 +468,7 @@ namespace upcxx {
     UPCXX_ASSERT(recipient >= 0 && recipient < world().rank_n(),
       "rpc(recipient, ...) requires recipient in [0, rank_n()-1] == [0, " << world().rank_n()-1 << "], but given: " << recipient);
 
-    return detail::template rpc<Cxs, Fn&&, Arg&&...>(
+    return detail::template rpc_internal<Cxs, Fn&&, Arg&&...>(
         world(), recipient, std::forward<Fn>(fn), std::forward<Arg>(args)...,
         std::forward<Cxs>(cxs), 0
       );
@@ -488,7 +488,7 @@ namespace upcxx {
     UPCXX_ASSERT(recipient >= 0 && recipient < tm.rank_n(),
       "rpc(team, recipient, ...) requires recipient in [0, team.rank_n()-1] == [0, " << tm.rank_n()-1 << "], but given: " << recipient);
 
-    return detail::template rpc<completions<future_cx<operation_cx_event>>, Fn&&, Arg&&...>(
+    return detail::template rpc_internal<completions<future_cx<operation_cx_event>>, Fn&&, Arg&&...>(
       tm, recipient, std::forward<Fn>(fn), std::forward<Arg>(args)...,
       operation_cx::as_future(), 0
     );
@@ -507,7 +507,7 @@ namespace upcxx {
     UPCXX_ASSERT(recipient >= 0 && recipient < world().rank_n(),
       "rpc(recipient, ...) requires recipient in [0, rank_n()-1] == [0, " << world().rank_n()-1 << "], but given: " << recipient);
 
-    return detail::template rpc<completions<future_cx<operation_cx_event>>, Fn&&, Arg&&...>(
+    return detail::template rpc_internal<completions<future_cx<operation_cx_event>>, Fn&&, Arg&&...>(
       world(), recipient, std::forward<Fn>(fn), std::forward<Arg>(args)...,
       operation_cx::as_future(), 0
     );
