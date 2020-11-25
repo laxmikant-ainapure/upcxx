@@ -23,6 +23,10 @@ Infrastructure changes:
 
 * The `install` script, deprecated since 2020.3.0, has been removed.
 
+Notable bug fixes:
+
+* issue #428: Regression in `rpc(team,rank,..,view)` overload resolution
+
 ### 2020.10.30: Memory Kinds Prototype 2020.11.0
 
 This is a **prototype** release of UPC++ demonstrating the new GPUDirect RDMA (GDR)

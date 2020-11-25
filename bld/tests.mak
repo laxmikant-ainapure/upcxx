@@ -95,6 +95,7 @@ test_exclude_compile_only = \
 	issue219 \
 	issue224 \
 	issue333 \
+	issue428 \
 	nodiscard \
 	promise_multiple_results \
 	promise_reused \
