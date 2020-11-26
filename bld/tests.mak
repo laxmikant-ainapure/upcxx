@@ -60,6 +60,7 @@ test_dirs = \
 	test/regression \
 	test/neg \
 	test/uts \
+	bench \
 	example/prog-guide \
 	example/serialization
 
@@ -112,6 +113,7 @@ test_exclude_compile_only = \
 # TODO: distinguish `dev-tests` from `dev-check` to make this
 # exclusion conditional, thus allowing for compile-only tests
 test_exclude_all += \
+	bench/alloc_burn.cpp \
 	test/hello.cpp \
 	test/hello_threads.cpp \
 	test/uts/uts_omp.cpp \
@@ -120,6 +122,7 @@ test_exclude_all += \
 # Conditionally exclude tests that require CUDA support:
 ifeq ($(strip $(UPCXX_CUDA)),)
 test_exclude_all += \
+	bench/cuda_microbenchmark.cpp \
 	test/bad-segment-alloc.cpp \
 	example/prog-guide/h-d.cpp \
 	example/prog-guide/h-d-remote.cpp
@@ -204,6 +207,18 @@ test_pgi_debug_symbols_broken = \
 	ISSUE138
 endif
 $(foreach test,$(test_pgi_debug_symbols_broken),$(eval export TEST_FLAGS_$(test):=$(TEST_FLAGS_$(test)) -purge-option=-g))
+
+# 
+# Section 4. 
+# Environment variables and command-line arguments to affect test runs.
+# Note use of export to ensure shell can use these
+# Also note these settings currently do NOT support env values or individual args with 
+# embedded spaces or other special shell characters. Don't do that.
+
+# Tweak benchmarks for efficient coverage, these parameters are too small for good measurements
+export TEST_ENV_PUT_FLOOD=fixed_iters=10
+export TEST_ARGS_CUDA_MICROBENCHMARK='-t 1 -w 1'
+export TEST_ARGS_MISC_PERF='1000'
 
 #
 # End of configuration
