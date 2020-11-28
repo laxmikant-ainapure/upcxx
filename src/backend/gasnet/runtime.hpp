@@ -55,7 +55,8 @@ namespace gasnet {
     intrank_t recipient,
     void *command_buf,
     std::size_t buf_size,
-    std::size_t buf_align
+    std::size_t buf_align,
+    std::uintptr_t npam_nonce
   );
   
   // Send fully bound callable, receiver executes in handler.
@@ -68,7 +69,8 @@ namespace gasnet {
     intrank_t recipient,
     void *command_buf,
     std::size_t buf_size,
-    std::size_t buf_align
+    std::size_t buf_align,
+    std::uintptr_t npam_nonce
   );
   void send_am_eager_persona(
     progress_level level,
@@ -76,7 +78,8 @@ namespace gasnet {
     persona *recipient_persona, // if low-bit set then this is a persona** to be dereferenced remotely
     void *command_buf,
     std::size_t buf_size,
-    std::size_t buf_align
+    std::size_t buf_align,
+    std::uintptr_t npam_nonce
   );
   
   // Send AM (packed command) via rendezvous, receiver executes druing `level`.
@@ -87,6 +90,9 @@ namespace gasnet {
     void *command_buf,
     std::size_t buf_size, std::size_t buf_align
   );
+
+  void *prepare_npam_medium(intrank_t recipient, std::size_t buf_size,          
+                            int numargs, std::uintptr_t &npam_nonce);
 
   struct bcast_payload_header;
   
@@ -203,17 +209,20 @@ namespace gasnet {
     bool is_eager;
     std::uint16_t cmd_align;
     std::size_t cmd_size;
+    std::uintptr_t npam_nonce = 0;
 
     static constexpr std::size_t cmd_size_static_ub = std::size_t(-1);
     
     static constexpr std::size_t tiny_size = 512 < serialization_align_max ? 512 : serialization_align_max;
     detail::xaligned_storage<tiny_size, serialization_align_max> tiny_;
     
-    detail::serialization_writer</*bounded=*/false> prepare_writer(invalid_storage_size_t, std::size_t rdzv_cutover_size) {
+    detail::serialization_writer</*bounded=*/false> prepare_writer(invalid_storage_size_t, std::size_t rdzv_cutover_size,
+                                                                   int eagerNPAMArgs, intrank_t recipient) {
       return detail::serialization_writer<false>(tiny_.storage(), tiny_size);
     }
     
-    void finalize_buffer(detail::serialization_writer<false> &&w, std::size_t rdzv_cutover_size) {
+    void finalize_buffer(detail::serialization_writer<false> &&w, std::size_t rdzv_cutover_size,
+                         int eagerNPAMArgs, intrank_t recipient) {
       is_eager = w.size() <= gasnet::am_size_rdzv_cutover_min ||
                  w.size() <= rdzv_cutover_size;
       cmd_size = w.size();
@@ -222,10 +231,15 @@ namespace gasnet {
       if(is_eager && w.contained_in_initial())
         buffer = tiny_.storage();
       else {
-        if(is_eager)
-          buffer = detail::alloc_aligned(w.size(), w.align());
-        else
+        if(is_eager) {
+          if (eagerNPAMArgs >= 0) // NPAM
+            buffer = gasnet::prepare_npam_medium(recipient, w.size(), eagerNPAMArgs, npam_nonce);
+          else // FPAM
+            buffer = detail::alloc_aligned(w.size(), w.align());
+          UPCXX_ASSERT(detail::is_aligned(buffer, w.align()));
+        } else { // rendezvous
           buffer = gasnet::allocate(w.size(), w.align(), &gasnet::sheap_footprint_rdzv);
+        }
         
         w.compact_and_invalidate(buffer);
       }
@@ -240,11 +254,12 @@ namespace gasnet {
       this->tiny_ = that.tiny_;
       this->cmd_size = that.cmd_size;
       this->cmd_align = that.cmd_align;
+      this->npam_nonce = that.npam_nonce;
       that.is_eager = false; // disables destructor
     }
 
     ~am_send_buffer() {
-      if(is_eager && buffer != tiny_.storage())
+      if(is_eager && buffer != tiny_.storage() && !npam_nonce)
         std::free(buffer);
     }
   };
@@ -255,6 +270,7 @@ namespace gasnet {
     bool is_eager;
     std::uint16_t cmd_align;
     std::size_t cmd_size;
+    std::uintptr_t npam_nonce = 0;
 
     static constexpr std::size_t cmd_size_static_ub = std::size_t(-1);
     
@@ -262,16 +278,20 @@ namespace gasnet {
     static constexpr std::size_t tiny_align = (Ub::static_align_ub < serialization_align_max) ? Ub::static_align_ub : serialization_align_max;
     detail::xaligned_storage<tiny_size, tiny_align> tiny_;
 
-    detail::serialization_writer</*bounded=*/true> prepare_writer(Ub ub, std::size_t rdzv_cutover_size) {
+    detail::serialization_writer</*bounded=*/true> prepare_writer(Ub ub, std::size_t rdzv_cutover_size,
+                                                                  int eagerNPAMArgs, intrank_t recipient) {
       is_eager = ub.size <= gasnet::am_size_rdzv_cutover_min ||
                  ub.size <= rdzv_cutover_size;
       
       if(is_eager) {
         UPCXX_ASSERT(ub.align <= serialization_align_max);
-        if(ub.size <= tiny_size)
+        if (eagerNPAMArgs >= 0) // NPAM
+          buffer = gasnet::prepare_npam_medium(recipient, ub.size, eagerNPAMArgs, npam_nonce);
+        else if(ub.size <= tiny_size)
           buffer = tiny_.storage();
         else
           buffer = detail::alloc_aligned(ub.size, ub.align);
+        UPCXX_ASSERT(detail::is_aligned(buffer, ub.align));
       }
       else
         buffer = gasnet::allocate(ub.size, ub.align, &gasnet::sheap_footprint_rdzv);
@@ -279,7 +299,8 @@ namespace gasnet {
       return detail::serialization_writer<true>(buffer);
     }
 
-    void finalize_buffer(detail::serialization_writer<true> &&w, std::size_t rdzv_cutover_size) {
+    void finalize_buffer(detail::serialization_writer<true> &&w, std::size_t rdzv_cutover_size,
+                         int eagerNPAMArgs, intrank_t recipient) {
       cmd_size = w.size();
       cmd_align = w.align();
     }
@@ -293,11 +314,12 @@ namespace gasnet {
       this->tiny_ = that.tiny_;
       this->cmd_size = that.cmd_size;
       this->cmd_align = that.cmd_align;
+      this->npam_nonce = that.npam_nonce;
       that.is_eager = false; // disables destructor
     }
     
     ~am_send_buffer() {
-      if(is_eager && buffer != tiny_.storage())
+      if(is_eager && buffer != tiny_.storage() && !npam_nonce)
         std::free(buffer);
     }
   };
@@ -308,15 +330,24 @@ namespace gasnet {
     static constexpr bool is_eager = true;
     std::uint16_t cmd_align;
     std::size_t cmd_size;
-    void *const buffer = buf_.storage();
+    std::uintptr_t npam_nonce = 0;
+    void * buffer;
 
     static constexpr std::size_t cmd_size_static_ub = Ub::static_size;
     
-    detail::serialization_writer</*bounded=*/true> prepare_writer(Ub, std::size_t rdzv_cutover_size) {
-      return detail::serialization_writer<true>(buf_.storage());
+    detail::serialization_writer</*bounded=*/true> prepare_writer(Ub ub, std::size_t rdzv_cutover_size,
+                                                                  int eagerNPAMArgs, intrank_t recipient) {
+      UPCXX_ASSERT(ub.size <= rdzv_cutover_size);
+      if (eagerNPAMArgs >= 0) // NPAM
+        buffer = gasnet::prepare_npam_medium(recipient, ub.size, eagerNPAMArgs, npam_nonce);
+      else
+        buffer = buf_.storage();
+      UPCXX_ASSERT(detail::is_aligned(buffer, ub.align));
+      return detail::serialization_writer<true>(buffer);
     }
     
-    void finalize_buffer(detail::serialization_writer<true> &&w, std::size_t rdzv_cutover_size) {
+    void finalize_buffer(detail::serialization_writer<true> &&w, std::size_t rdzv_cutover_size,
+                         int eagerNPAMArgs, intrank_t recipient) {
       cmd_size = w.size();
       cmd_align = w.align();
     }
@@ -326,8 +357,10 @@ namespace gasnet {
     
     am_send_buffer(am_send_buffer &&that) {
       this->buf_ = that.buf_;
+      this->buffer = that.buffer == that.buf_.storage() ? this->buf_.storage() : that.buffer;
       this->cmd_size = that.cmd_size;
       this->cmd_align = that.cmd_align;
+      this->npam_nonce = that.npam_nonce;
     }
   };
 
@@ -420,6 +453,17 @@ namespace backend {
     const bool is_local = (knownLocality >= 0) ? bool(knownLocality)
                                                : backend::rank_is_local(recipient);
 
+    #ifndef UPCXX_USE_NPAM
+      #if UPCXX_GASNET_NATIVE_NP_REQ_MEDIUM || \
+          UPCXX_NETWORK_SMP /* PSHM always provides native NPAM, this improves static analysis */
+        #define UPCXX_USE_NPAM 1
+      #else
+        #define UPCXX_USE_NPAM is_local // network NPAM non-native, use NPAM iff target is local
+      #endif
+    #endif
+    const int usingNPAMArgs = ( (eagerNPAMArgs < 0 ) ? -1/*disabled*/
+                                : ( UPCXX_USE_NPAM ? eagerNPAMArgs : -1/*disabled*/ ) );
+
     const std::size_t rdzv_cutover_size = (
        forceEager ? std::size_t(-1)
                   : ( is_local ? gasnet::am_size_rdzv_cutover_local
@@ -427,14 +471,14 @@ namespace backend {
     );
 
     am_send_buffer<decltype(ub)> am_buf;
-    auto w = am_buf.prepare_writer(ub, rdzv_cutover_size);
+    auto w = am_buf.prepare_writer(ub, rdzv_cutover_size, usingNPAMArgs, recipient);
     
     detail::command<detail::lpc_base*>::template serialize<
         &rpc_as_lpc::reader_of,
         &rpc_as_lpc::template cleanup<definitely_not_rdzv, restricted>
       >(w, ub.size, fn);
 
-    am_buf.finalize_buffer(std::move(w), rdzv_cutover_size);
+    am_buf.finalize_buffer(std::move(w), rdzv_cutover_size, usingNPAMArgs, recipient);
     
     return am_buf;
   }
@@ -444,7 +488,7 @@ namespace backend {
     UPCXX_ASSERT_MASTER_IFSEQ();
 
     if(am.is_eager)
-      gasnet::send_am_eager_master(level, recipient, am.buffer, am.cmd_size, am.cmd_align);
+      gasnet::send_am_eager_master(level, recipient, am.buffer, am.cmd_size, am.cmd_align, am.npam_nonce);
     else
       gasnet::send_am_rdzv(level, recipient, /*master*/nullptr, am.buffer, am.cmd_size, am.cmd_align);
   }
@@ -465,7 +509,7 @@ namespace backend {
     UPCXX_ASSERT_MASTER_IFSEQ();
     
     if(am.is_eager)
-      gasnet::send_am_eager_persona(level, recipient_rank, recipient_persona, am.buffer, am.cmd_size, am.cmd_align);
+      gasnet::send_am_eager_persona(level, recipient_rank, recipient_persona, am.buffer, am.cmd_size, am.cmd_align, am.npam_nonce);
     else
       gasnet::send_am_rdzv(level, recipient_rank, 
                            recipient_persona, am.buffer, am.cmd_size, am.cmd_align);
@@ -496,7 +540,7 @@ namespace backend {
     ));
 
     if(am_buf.is_eager)
-      gasnet::send_am_eager_restricted(recipient, am_buf.buffer, am_buf.cmd_size, am_buf.cmd_align);
+      gasnet::send_am_eager_restricted(recipient, am_buf.buffer, am_buf.cmd_size, am_buf.cmd_align, am_buf.npam_nonce);
     else
       gasnet::send_am_rdzv(
         progress_level::internal, recipient,
@@ -524,7 +568,7 @@ namespace backend {
     
     am_send_buffer<decltype(ub)> am_buf;
 
-    auto w = am_buf.prepare_writer(ub, rdzv_cutover_size);
+    auto w = am_buf.prepare_writer(ub, rdzv_cutover_size, -1/*npam disabled*/, 0);
     w.place(storage_size_of<bcast_payload_header>());
     
     detail::command<detail::lpc_base*>::template serialize<
@@ -532,7 +576,7 @@ namespace backend {
         bcast_as_lpc::template cleanup</*definitely_not_rdzv=*/definitely_not_rdzv>
       >(w, ub.size, fn);
     
-    am_buf.finalize_buffer(std::move(w), rdzv_cutover_size);
+    am_buf.finalize_buffer(std::move(w), rdzv_cutover_size, -1/*npam disabled*/, 0);
 
     bcast_payload_header *payload = new(am_buf.buffer) bcast_payload_header;
     payload->tm_id = tm.id();
@@ -592,7 +636,7 @@ namespace gasnet {
     ));
     
     UPCXX_ASSERT(am_buf.is_eager);
-    gasnet::send_am_eager_restricted(recipient, am_buf.buffer, am_buf.cmd_size, am_buf.cmd_align);
+    gasnet::send_am_eager_restricted(recipient, am_buf.buffer, am_buf.cmd_size, am_buf.cmd_align, am_buf.npam_nonce);
   }
   
   //////////////////////////////////////////////////////////////////////////////

@@ -65,6 +65,11 @@ static_assert(
 );
 
 static_assert(
+  sizeof(gex_AM_SrcDesc_t) <= sizeof(uintptr_t),
+  "Failed: sizeof(gex_AM_SrcDesc_t) <= sizeof(uintptr_t)"
+);
+
+static_assert(
   sizeof(gex_TM_t) == sizeof(uintptr_t),
   "Failed: sizeof(gex_TM_t) == sizeof(uintptr_t)"
 );
@@ -1421,19 +1426,52 @@ void backend::validate_global_ptr(bool allow_null, intrank_t rank, void *raw_ptr
 ////////////////////////////////////////////////////////////////////////
 // from: upcxx/backend/gasnet/runtime.hpp
 
+void *gasnet::prepare_npam_medium(
+    intrank_t recipient, std::size_t buf_size, 
+    int numargs, std::uintptr_t &npam_nonce) {
+  UPCXX_ASSERT(numargs >= 0 && numargs <= 16);
+  UPCXX_ASSERT(buf_size <= gex_AM_MaxRequestMedium(world_tm, recipient, GEX_EVENT_NOW, 0, numargs));
+
+  gex_AM_SrcDesc_t sd = 
+    gex_AM_PrepareRequestMedium(
+      world_tm, recipient,
+      /*gex buf*/nullptr, 
+      buf_size, buf_size, 
+      /*lc_opt*/nullptr, /*flags*/0, numargs);
+
+  UPCXX_ASSERT(sd != GEX_AM_SRCDESC_NO_OP);
+  UPCXX_ASSERT(gex_AM_SrcDescSize(sd) >= buf_size);
+  void *buf = gex_AM_SrcDescAddr(sd);
+  UPCXX_ASSERT(buf);
+  npam_nonce = reinterpret_cast<std::uintptr_t>(sd);
+  UPCXX_ASSERT(npam_nonce != 0);
+  return buf;
+}
+
+
+
 void gasnet::send_am_eager_restricted(
     intrank_t recipient,
     void *buf,
     std::size_t buf_size,
-    std::size_t buf_align
+    std::size_t buf_align,
+    std::uintptr_t npam_nonce
   ) {
-  
-  gex_AM_RequestMedium1(
-    world_tm, recipient,
-    id_am_eager_restricted, buf, buf_size,
-    GEX_EVENT_NOW, /*flags*/0,
-    buf_align
-  );
+ 
+  if (npam_nonce) {
+    gex_AM_CommitRequestMedium1(
+      reinterpret_cast<gex_AM_SrcDesc_t>(npam_nonce),
+      id_am_eager_restricted, buf_size,
+      buf_align
+    );
+  } else { // FPAM
+    gex_AM_RequestMedium1(
+      world_tm, recipient,
+      id_am_eager_restricted, buf, buf_size,
+      GEX_EVENT_NOW, /*flags*/0,
+      buf_align
+    );
+  }
   
   after_gasnet();
 }
@@ -1443,15 +1481,25 @@ void gasnet::send_am_eager_master(
     intrank_t recipient,
     void *buf,
     std::size_t buf_size,
-    std::size_t buf_align
+    std::size_t buf_align,
+    std::uintptr_t npam_nonce
   ) {
+  gex_AM_Arg_t const a0 = buf_align<<1 | (level == progress_level::user ? 1 : 0);
   
-  gex_AM_RequestMedium1(
-    world_tm, recipient,
-    id_am_eager_master, buf, buf_size,
-    GEX_EVENT_NOW, /*flags*/0,
-    buf_align<<1 | (level == progress_level::user ? 1 : 0)
-  );
+  if (npam_nonce) {
+    gex_AM_CommitRequestMedium1(
+      reinterpret_cast<gex_AM_SrcDesc_t>(npam_nonce),
+      id_am_eager_master, buf_size,
+      a0
+    );
+  } else { // FPAM
+    gex_AM_RequestMedium1(
+      world_tm, recipient,
+      id_am_eager_master, buf, buf_size,
+      GEX_EVENT_NOW, /*flags*/0,
+      a0
+    );
+  }
   
   after_gasnet();
 }
@@ -1462,16 +1510,27 @@ void gasnet::send_am_eager_persona(
     persona *recipient_persona,
     void *buf,
     std::size_t buf_size,
-    std::size_t buf_align
+    std::size_t buf_align,
+    std::uintptr_t npam_nonce
   ) {
+  gex_AM_Arg_t const a0 = buf_align<<1 | (level == progress_level::user ? 1 : 0);
+  gex_AM_Arg_t const a1 = am_arg_encode_ptr_lo(recipient_persona);
+  gex_AM_Arg_t const a2 = am_arg_encode_ptr_hi(recipient_persona);
 
-  gex_AM_RequestMedium3(
-    world_tm, recipient_rank,
-    id_am_eager_persona, buf, buf_size,
-    GEX_EVENT_NOW, /*flags*/0,
-    buf_align<<1 | (level == progress_level::user ? 1 : 0),
-    am_arg_encode_ptr_lo(recipient_persona), am_arg_encode_ptr_hi(recipient_persona)
-  );
+  if (npam_nonce) {
+    gex_AM_CommitRequestMedium3(
+      reinterpret_cast<gex_AM_SrcDesc_t>(npam_nonce),
+      id_am_eager_persona, buf_size,
+      a0, a1, a2
+    );
+  } else { // FPAM
+    gex_AM_RequestMedium3(
+      world_tm, recipient_rank,
+      id_am_eager_persona, buf, buf_size,
+      GEX_EVENT_NOW, /*flags*/0,
+      a0, a1, a2
+    );
+  }
   
   after_gasnet();
 }
