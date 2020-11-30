@@ -200,11 +200,14 @@ namespace gasnet {
   };
   
   template<typename Ub,
-           bool is_static_and_eager = (Ub::static_size <= gasnet::am_size_rdzv_cutover_min)>
+           int static_npam_args = -1/*disabled*/,
+           bool is_static_and_eager = (Ub::static_size <= gasnet::am_size_rdzv_cutover_min),
+           typename Enable = void>
   struct am_send_buffer;
 
-  template<>
-  struct am_send_buffer</*Ub=*/invalid_storage_size_t, /*is_static_and_eager=*/false> {
+  // am_send_buffer<UNBOUNDED>
+  template<int static_npam_args>
+  struct am_send_buffer</*Ub=*/invalid_storage_size_t, static_npam_args, /*is_static_and_eager=*/false> {
     void *buffer;
     bool is_eager;
     std::uint16_t cmd_align;
@@ -232,7 +235,7 @@ namespace gasnet {
         buffer = tiny_.storage();
       else {
         if(is_eager) {
-          if (eagerNPAMArgs >= 0) // NPAM
+          if (static_npam_args >= 0 || eagerNPAMArgs >= 0) // NPAM
             buffer = gasnet::prepare_npam_medium(recipient, w.size(), eagerNPAMArgs, npam_nonce);
           else // FPAM
             buffer = detail::alloc_aligned(w.size(), w.align());
@@ -264,8 +267,10 @@ namespace gasnet {
     }
   };
 
+  // am_send_buffer<BOUNDED, not statically NPAM, not statically eager>
   template<typename Ub>
-  struct am_send_buffer<Ub, /*is_static_and_eager=*/false> {
+  struct am_send_buffer<Ub, /*static_npam_args=*/-1, /*is_static_and_eager=*/false,
+                        typename std::enable_if<!std::is_same<Ub, invalid_storage_size_t>::value>::type> {
     void *buffer;
     bool is_eager;
     std::uint16_t cmd_align;
@@ -326,8 +331,9 @@ namespace gasnet {
     }
   };
 
+  // am_send_buffer<BOUNDED, not statically NPAM, statically eager>
   template<typename Ub>
-  struct am_send_buffer<Ub, /*is_static_and_eager=*/true> {
+  struct am_send_buffer<Ub, /*static_npam_args=*/-1, /*is_static_and_eager=*/true> {
     detail::xaligned_storage<Ub::static_size, Ub::static_align> buf_;
     static constexpr bool is_eager = true;
     std::uint16_t cmd_align;
@@ -364,6 +370,60 @@ namespace gasnet {
       this->cmd_align = that.cmd_align;
       this->npam_nonce = that.npam_nonce;
     }
+  };
+
+  // am_send_buffer<BOUNDED, statically NPAM>
+  template<typename Ub, int static_npam_args, bool is_static_and_eager>
+  struct am_send_buffer<Ub, static_npam_args, is_static_and_eager,
+                        typename std::enable_if<
+                              !std::is_same<Ub, invalid_storage_size_t>::value
+                              && static_npam_args >= 0
+                            >::type> {
+    void *buffer;
+    bool is_eager;
+    std::uint16_t cmd_align;
+    std::size_t cmd_size;
+    std::uintptr_t npam_nonce;
+
+    static constexpr std::size_t cmd_size_static_ub = Ub::static_size;
+    
+    detail::serialization_writer</*bounded=*/true> prepare_writer(Ub ub, std::size_t rdzv_cutover_size,
+                                                                  int eagerNPAMArgs, intrank_t recipient) {
+      is_eager = is_static_and_eager || 
+                 ub.size <= rdzv_cutover_size;
+
+      if(is_eager) {
+        UPCXX_ASSERT(ub.align <= serialization_align_max);
+        UPCXX_ASSERT(ub.size <= rdzv_cutover_size);
+        UPCXX_ASSERT(eagerNPAMArgs >= 0 && eagerNPAMArgs == static_npam_args);
+
+        buffer = gasnet::prepare_npam_medium(recipient, ub.size, static_npam_args, npam_nonce);
+      } else {
+        buffer = gasnet::allocate(ub.size, ub.align, &gasnet::sheap_footprint_rdzv);
+      }
+      UPCXX_ASSERT(detail::is_aligned(buffer, ub.align));
+      
+      return detail::serialization_writer<true>(buffer);
+    }
+
+    void finalize_buffer(detail::serialization_writer<true> &&w, std::size_t rdzv_cutover_size,
+                         int eagerNPAMArgs, intrank_t recipient) {
+      cmd_size = w.size();
+      cmd_align = w.align();
+    }
+    
+    am_send_buffer() = default;
+    am_send_buffer(am_send_buffer const&) = delete;
+
+    am_send_buffer(am_send_buffer &&that) {
+      this->is_eager = that.is_eager;
+      this->buffer = that.buffer;
+      this->cmd_size = that.cmd_size;
+      this->cmd_align = that.cmd_align;
+      this->npam_nonce = that.npam_nonce;
+    }
+    
+    ~am_send_buffer() = default;
   };
 
   extern int watermark_init();
@@ -422,6 +482,26 @@ namespace backend {
   //////////////////////////////////////////////////////////////////////
   // send_am_{master|persona}
 
+  // NPAM protocol control:
+  // We want to use the NPAM protocol iff NPAM MediumRequest has a native zero-copy implementation
+  // This is true for any target rank on certain native conduits, 
+  // and for local targets only on other conduits.
+  #ifndef UPCXX_USE_NPAM
+    #if UPCXX_GASNET_NATIVE_NP_REQ_MEDIUM || \
+        UPCXX_NETWORK_SMP /* PSHM always provides native NPAM, this improves static analysis */
+      #define UPCXX_USE_NPAM 1
+    #else
+      #define UPCXX_USE_NPAM is_local // network NPAM non-native, use NPAM iff target is local
+    #endif
+  #endif
+  #ifndef UPCXX_USE_NPAM_STATIC
+    #if UPCXX_USE_NPAM
+      #define UPCXX_USE_NPAM_STATIC 1
+    #else // relies on undefined is_local symbol evaluating to zero
+      #define UPCXX_USE_NPAM_STATIC 0
+    #endif
+  #endif
+
   // prepare_am(): Serialize a callable in a buffer appropriate for the protocol it will
   // use to travel as an AM.
   //
@@ -443,7 +523,8 @@ namespace backend {
       Fn &&fn,
       intrank_t recipient,
       std::integral_constant<bool, restricted> restricted1={}
-    ) -> gasnet::am_send_buffer<decltype(detail::command<detail::lpc_base*>::ubound(empty_storage_size, fn))> {
+    ) -> gasnet::am_send_buffer<decltype(detail::command<detail::lpc_base*>::ubound(empty_storage_size, fn)),
+                                (UPCXX_USE_NPAM_STATIC ? eagerNPAMArgs : -1)> {
     
     using gasnet::am_send_buffer;
     using gasnet::rpc_as_lpc;
@@ -455,14 +536,6 @@ namespace backend {
     const bool is_local = (knownLocality >= 0) ? bool(knownLocality)
                                                : backend::rank_is_local(recipient);
 
-    #ifndef UPCXX_USE_NPAM
-      #if UPCXX_GASNET_NATIVE_NP_REQ_MEDIUM || \
-          UPCXX_NETWORK_SMP /* PSHM always provides native NPAM, this improves static analysis */
-        #define UPCXX_USE_NPAM 1
-      #else
-        #define UPCXX_USE_NPAM is_local // network NPAM non-native, use NPAM iff target is local
-      #endif
-    #endif
     const int usingNPAMArgs = ( (eagerNPAMArgs < 0 ) ? -1/*disabled*/
                                 : ( UPCXX_USE_NPAM ? eagerNPAMArgs : -1/*disabled*/ ) );
 
@@ -472,7 +545,7 @@ namespace backend {
                                : gasnet::am_size_rdzv_cutover )
     );
 
-    am_send_buffer<decltype(ub)> am_buf;
+    am_send_buffer<decltype(ub), (UPCXX_USE_NPAM_STATIC ? eagerNPAMArgs : -1)> am_buf;
     auto w = am_buf.prepare_writer(ub, rdzv_cutover_size, usingNPAMArgs, recipient);
     
     detail::command<detail::lpc_base*>::template serialize<
