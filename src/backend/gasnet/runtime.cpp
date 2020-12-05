@@ -651,12 +651,23 @@ void upcxx::init() {
   // compute a default threshold
   // 2020-11: testing across all conduits show that maximizing the eager threshold 
   //          provides the best microbenchmark performance in practice for network RPC
+  #ifndef UPCXX_RPC_EAGER_THRESHOLD_DEFAULT
+    #if GASNET_CONDUIT_UCX
+      // except on ucx-conduit which peaks around 2kb
+      #define UPCXX_RPC_EAGER_THRESHOLD_DEFAULT 2048
+    #else
+      #define UPCXX_RPC_EAGER_THRESHOLD_DEFAULT am_medium_size
+    #endif
+  #endif
   ENV_THRESH(gasnet::am_size_rdzv_cutover, "UPCXX_RPC_EAGER_THRESHOLD", 
-             am_medium_size);
+             std::min(std::size_t(UPCXX_RPC_EAGER_THRESHOLD_DEFAULT),am_medium_size));
 
   // optimal PSHM threshold seems to be around 4KB
+  #ifndef UPCXX_RPC_EAGER_THRESHOLD_LOCAL_DEFAULT
+    #define UPCXX_RPC_EAGER_THRESHOLD_LOCAL_DEFAULT 4096
+  #endif
   ENV_THRESH(gasnet::am_size_rdzv_cutover_local, "UPCXX_RPC_EAGER_THRESHOLD_LOCAL", 
-             std::min(std::size_t(4096),gasnet::am_size_rdzv_cutover)); 
+             std::min(std::size_t(UPCXX_RPC_EAGER_THRESHOLD_LOCAL_DEFAULT),gasnet::am_size_rdzv_cutover)); 
 
 
   //////////////////////////////////////////////////////////////////////////////
