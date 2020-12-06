@@ -5,6 +5,11 @@
 #else
   #undef DEBUG
 #endif
+/*
+ * Added for upcxx, so that the name shift #defines at the top of dl_malloc.h
+ * also mangle the function names in this file.
+ */
+#include "dl_malloc.h"
 
 /*
   This is a version (aka dlmalloc) of malloc/free/realloc written by
