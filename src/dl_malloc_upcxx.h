@@ -3,6 +3,14 @@
 
 // Added for upcxx:
 #define ONLY_MSPACES 1
+#if UPCXX_ASSERT_ENABLED
+  #define DEBUG 1
+#else
+  #undef DEBUG
+#endif
+
+// Added for upcxx:
+#define ONLY_MSPACES 1
 
 /*
  * Added for upcxx. This block of defines name shifts dlmalloc functions to have
