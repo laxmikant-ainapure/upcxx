@@ -32,22 +32,28 @@
  * occur when two libraries that use dlmalloc are linked to the same application
  * causing linker errors as they both define the dlmalloc symbols.
  */
-#define mspace_malloc upcxx_mspace_malloc
-#define mspace_free upcxx_mspace_free
-#define mspace_calloc upcxx_mspace_calloc
 #define create_mspace upcxx_create_mspace
 #define create_mspace_with_base upcxx_create_mspace_with_base
-#define mspace_track_large_chunks upcxx_mspace_track_large_chunks
 #define destroy_mspace upcxx_destroy_mspace
-#define mspace_realloc upcxx_mspace_realloc
-#define mspace_memalign upcxx_mspace_memalign
+#define mspace_bulk_free upcxx_mspace_bulk_free
+#define mspace_calloc upcxx_mspace_calloc
+#define mspace_footprint upcxx_mspace_footprint
+#define mspace_footprint_limit upcxx_mspace_footprint_limit
+#define mspace_free upcxx_mspace_free
 #define mspace_independent_calloc upcxx_mspace_independent_calloc
 #define mspace_independent_comalloc upcxx_mspace_independent_comalloc
-#define mspace_trim upcxx_mspace_trim
-#define mspace_footprint upcxx_mspace_footprint
-#define mspace_max_footprint upcxx_mspace_max_footprint
-#define mspace_usable_size upcxx_mspace_usable_size
+#define mspace_mallinfo upcxx_mspace_mallinfo
+#define mspace_malloc upcxx_mspace_malloc
+#define mspace_malloc_stats upcxx_mspace_malloc_stats
 #define mspace_mallopt upcxx_mspace_mallopt
+#define mspace_max_footprint upcxx_mspace_max_footprint
+#define mspace_memalign upcxx_mspace_memalign
+#define mspace_realloc upcxx_mspace_realloc
+#define mspace_realloc_in_place upcxx_mspace_realloc_in_place
+#define mspace_set_footprint_limit upcxx_mspace_set_footprint_limit
+#define mspace_track_large_chunks upcxx_mspace_track_large_chunks
+#define mspace_trim upcxx_mspace_trim
+#define mspace_usable_size upcxx_mspace_usable_size
   
 #ifdef __cplusplus
 extern "C" {
