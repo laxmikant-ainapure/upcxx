@@ -2280,7 +2280,7 @@ gasnet::rma_put_then_am_sync gasnet::rma_put_then_am_master_protocol(
     );
 
     size_t part_size_max = gex_AM_MaxRequestMedium(
-      world_tm, rank_d, GEX_EVENT_NOW, /*flags*/0, /*num_args*/6
+      world_tm, rank_d, GEX_EVENT_NOW, /*flags*/0, /*num_args*/4
     );
     size_t part_offset = 0;
     
