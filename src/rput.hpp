@@ -235,7 +235,7 @@ namespace upcxx {
         auto *o = static_cast<Obj*>(this);
 
         auto sync_out = backend::gasnet::template rma_put_then_am_master<sync_lb1>(
-          upcxx::world(), rank_d, buf_d, buf_s, buf_size,
+          rank_d, buf_d, buf_s, buf_size,
           progress_level::user, std::move(remote),
           this->the_src_cb(),
           this->the_reply_cb()
@@ -280,7 +280,7 @@ namespace upcxx {
         auto sync_out = backend::gasnet::template rma_put_then_am_master<
             backend::gasnet::rma_put_then_am_sync::src_now
           >(
-          upcxx::world(), rank_d, buf_d, buf_s, buf_size,
+          rank_d, buf_d, buf_s, buf_size,
           progress_level::user, std::move(remote),
           nullptr,
           static_cast<backend::gasnet::reply_cb*>(this)
@@ -327,7 +327,7 @@ namespace upcxx {
         ) {
         //upcxx::say()<<"amlong without reply";
         auto sync_out = backend::gasnet::template rma_put_then_am_master<sync_lb1>(
-          upcxx::world(), rank_d, buf_d, buf_s, buf_size,
+          rank_d, buf_d, buf_s, buf_size,
           progress_level::user, std::move(remote),
           this->the_src_cb(), nullptr
         );

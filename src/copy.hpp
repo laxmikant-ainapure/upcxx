@@ -148,8 +148,7 @@ namespace upcxx {
     if (initiator != rank_d && initiator != rank_s) { // 3rd party copy
       UPCXX_ASSERT(heap_s != detail::private_heap && heap_d != detail::private_heap);
       
-      backend::send_am_master<progress_level::internal>(
-        upcxx::world(), rank_d,
+      backend::send_am_master<progress_level::internal>( rank_d,
         upcxx::bind([=](deserialized_type_t<cxs_remote_t> &&cxs_remote) {
           auto operation_cx_as_internal_future = upcxx::completions<upcxx::future_cx<upcxx::operation_cx_event, progress_level::internal>>{{}};
           deserialized_type_t<cxs_remote_t> *cxs_remote_heaped = (
@@ -166,7 +165,7 @@ namespace upcxx {
             }
             
             backend::send_am_persona<progress_level::internal>(
-              upcxx::world(), initiator, initiator_per,
+              initiator, initiator_per,
               [=]() {
                 cxs_here->template operator()<source_cx_event>();
                 cxs_here->template operator()<operation_cx_event>();
@@ -212,8 +211,7 @@ namespace upcxx {
         must_ack = true;
       } else must_ack |= copy_traits::want_source;
 
-      backend::send_am_master<progress_level::internal>(
-        upcxx::world(), rank_d,
+      backend::send_am_master<progress_level::internal>( rank_d,
         upcxx::bind([=](deserialized_type_t<cxs_remote_t> &&cxs_remote) {
           // at target
           deserialized_type_t<cxs_remote_t> *cxs_remote_heaped = (
@@ -230,7 +228,7 @@ namespace upcxx {
 
               if (must_ack) {
                  backend::send_am_persona<progress_level::internal>(
-                   upcxx::world(), rank_s, initiator_per,
+                   rank_s, initiator_per,
                    [=]() {
                      // back at initiator
                      if (bounce_s) backend::gasnet::deallocate(bounce_s, &backend::gasnet::sheap_footprint_rdzv);
@@ -264,8 +262,7 @@ namespace upcxx {
             if (rank_d == initiator) { // in-place RC
               serialization_traits<cxs_remote_t>::deserialized_value(cxs_remote).template operator()<remote_cx_event>();
             } else { // initiator-chained RC
-              backend::send_am_master<progress_level::internal>(
-                upcxx::world(), rank_d,
+              backend::send_am_master<progress_level::internal>( rank_d,
                 upcxx::bind([=](deserialized_type_t<cxs_remote_t> &&cxs_remote) {
                   cxs_remote.template operator()<remote_cx_event>();
                 }, std::move(cxs_remote))
@@ -292,8 +289,7 @@ namespace upcxx {
         bounce_d = backend::gasnet::allocate(size, 64, &backend::gasnet::sheap_footprint_rdzv);
       }
 
-      backend::send_am_master<progress_level::internal>(
-        upcxx::world(), rank_s,
+      backend::send_am_master<progress_level::internal>( rank_s,
         [=]() {
           auto make_bounce_s_cont = [=](void *bounce_s) {
             return [=]() {
@@ -303,7 +299,7 @@ namespace upcxx {
                     backend::gasnet::deallocate(bounce_s, &backend::gasnet::sheap_footprint_rdzv);
                   
                   backend::send_am_persona<progress_level::internal>(
-                    upcxx::world(), rank_d, initiator_per,
+                    rank_d, initiator_per,
                     [=]() {
                       cxs_here->template operator()<source_cx_event>();
                       
@@ -357,8 +353,7 @@ namespace upcxx {
             cxs_here->template operator()<source_cx_event>();
           }
           
-          backend::send_am_master<progress_level::internal>(
-            upcxx::world(), rank_d,
+          backend::send_am_master<progress_level::internal>( rank_d,
             upcxx::bind(
               [=](deserialized_type_t<cxs_remote_t> &&cxs_remote) {
                 void *bounce_d = heap_d == host_heap ? buf_d : backend::gasnet::allocate(size, 64, &backend::gasnet::sheap_footprint_rdzv);
@@ -378,7 +373,7 @@ namespace upcxx {
                       }
 
                       backend::send_am_persona<progress_level::internal>(
-                        upcxx::world(), rank_s, initiator_per,
+                        rank_s, initiator_per,
                         [=]() {
                           if (heap_s != host_heap)
                             backend::gasnet::deallocate(bounce_s, &backend::gasnet::sheap_footprint_rdzv);

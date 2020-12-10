@@ -65,6 +65,11 @@ static_assert(
 );
 
 static_assert(
+  sizeof(gex_AM_SrcDesc_t) <= sizeof(uintptr_t),
+  "Failed: sizeof(gex_AM_SrcDesc_t) <= sizeof(uintptr_t)"
+);
+
+static_assert(
   sizeof(gex_TM_t) == sizeof(uintptr_t),
   "Failed: sizeof(gex_TM_t) == sizeof(uintptr_t)"
 );
@@ -106,6 +111,7 @@ unique_ptr<uintptr_t[/*local_team.size()*/]> backend::pshm_size;
 // from: upcxx/backend/gasnet/runtime.hpp
 
 size_t gasnet::am_size_rdzv_cutover;
+size_t gasnet::am_size_rdzv_cutover_local;
 
 sheap_footprint_t gasnet::sheap_footprint_rdzv;
 sheap_footprint_t gasnet::sheap_footprint_misc;
@@ -592,15 +598,30 @@ void upcxx::init() {
   ok = gex_EP_RegisterHandlers(endpoint0, am_table, sizeof(am_table)/sizeof(am_table[0]));
   UPCXX_ASSERT_ALWAYS(ok == GASNET_OK);
 
-  size_t am_medium_size = gex_AM_MaxRequestMedium(
-    world_tm,
-    GEX_RANK_INVALID,
-    GEX_EVENT_NOW,
-    /*flags*/0,
-    3
-  );
+  //////////////////////////////////////////////////////////////////////////////
+  // Determine RPC Eager/Rendezvous Threshold
+ 
+  #define UPCXX_MAX_RPC_AM_ARGS 3
+  size_t fpam_medium_size = gex_AM_MaxRequestMedium( world_tm, GEX_RANK_INVALID, GEX_EVENT_NOW, 
+                                                     /*flags*/0, UPCXX_MAX_RPC_AM_ARGS);
+  size_t npam_medium_size = gex_AM_MaxRequestMedium( world_tm, GEX_RANK_INVALID, GEX_EVENT_NOW, 
+                                                     GEX_FLAG_AM_PREPARE_LEAST_ALLOC, UPCXX_MAX_RPC_AM_ARGS);
+  // the two values above are usually the same, this is just for paranoia:
+  size_t am_medium_size = std::min(fpam_medium_size, npam_medium_size);
   
-  /* TODO: I pulled this from thin air. We want to lean towards only
+  /* 
+   * Original default calculcation, though 2020.11.0 (comments added reflect that version)
+   *
+   * gasnet::am_size_rdzv_cutover =
+   *   am_medium_size < 1<<10 ? 256 : // no current conduits with default configure args
+   *   am_medium_size < 8<<10 ? 512 : // ucx-conduit and aries-conduit default (both around 4KB)
+   *                            1024; // all other conduits
+   *
+   * Original Rationale: 
+   * (The following misleading statement is based on a misunderstanding of how
+   * AMs are actually implemented in most conduits, and should mostly be ignored)
+   *
+   * This default was pulled this from thin air. We want to lean towards only
    * sending very small messages eagerly so as not to clog the landing
    * zone, which would force producers to block on their next send. By
    * using a low threshold for rendezvous we increase the probability
@@ -608,12 +629,46 @@ void upcxx::init() {
    * yet another rendezvous. I'm using the max medium size as a heuristic
    * means to approximate the landing zone size. This is not at all
    * accurate, we should be doing something conduit dependent.
+   *
    */
-  gasnet::am_size_rdzv_cutover =
-    am_medium_size < 1<<10 ? 256 :
-    am_medium_size < 8<<10 ? 512 :
-                             1024;
-  UPCXX_ASSERT(gasnet::am_size_rdzv_cutover_min <= gasnet::am_size_rdzv_cutover);
+
+  #define ENV_THRESH(var, varname, defaultval) do { \
+    var = os_env(varname, defaultval, 1/* units: bytes */); \
+    /* enforce limits */ \
+    if (var < gasnet::am_size_rdzv_cutover_min) { \
+      noise.warn() << "Requested "<<varname<<" (" << var \
+                   << ") is too small. Raised to minimum value (" << gasnet::am_size_rdzv_cutover_min << ")"; \
+      var = gasnet::am_size_rdzv_cutover_min; \
+    } \
+    if (var > am_medium_size) { \
+      noise.warn() << "Requested "<<varname<<" (" << var \
+                   << ") is too large. Lowered to current maximum value (" << am_medium_size << ")"; \
+      var = am_medium_size; \
+    } \
+    UPCXX_ASSERT(gasnet::am_size_rdzv_cutover_min <= var); \
+  } while(0)
+
+  // compute a default threshold
+  // 2020-11: testing across all conduits show that maximizing the eager threshold 
+  //          provides the best microbenchmark performance in practice for network RPC
+  #ifndef UPCXX_RPC_EAGER_THRESHOLD_DEFAULT
+    #if GASNET_CONDUIT_UCX
+      // except on ucx-conduit which peaks around 2kb
+      #define UPCXX_RPC_EAGER_THRESHOLD_DEFAULT 2048
+    #else
+      #define UPCXX_RPC_EAGER_THRESHOLD_DEFAULT am_medium_size
+    #endif
+  #endif
+  ENV_THRESH(gasnet::am_size_rdzv_cutover, "UPCXX_RPC_EAGER_THRESHOLD", 
+             std::min(std::size_t(UPCXX_RPC_EAGER_THRESHOLD_DEFAULT),am_medium_size));
+
+  // optimal PSHM threshold seems to be around 4KB
+  #ifndef UPCXX_RPC_EAGER_THRESHOLD_LOCAL_DEFAULT
+    #define UPCXX_RPC_EAGER_THRESHOLD_LOCAL_DEFAULT 4096
+  #endif
+  ENV_THRESH(gasnet::am_size_rdzv_cutover_local, "UPCXX_RPC_EAGER_THRESHOLD_LOCAL", 
+             std::min(std::size_t(UPCXX_RPC_EAGER_THRESHOLD_LOCAL_DEFAULT),gasnet::am_size_rdzv_cutover)); 
+
 
   //////////////////////////////////////////////////////////////////////////////
   // Determine if we're oversubscribed.
@@ -1382,60 +1437,111 @@ void backend::validate_global_ptr(bool allow_null, intrank_t rank, void *raw_ptr
 ////////////////////////////////////////////////////////////////////////
 // from: upcxx/backend/gasnet/runtime.hpp
 
+void *gasnet::prepare_npam_medium(
+    intrank_t recipient, std::size_t buf_size, 
+    int numargs, std::uintptr_t &npam_nonce) {
+  UPCXX_ASSERT(numargs >= 0 && numargs <= UPCXX_MAX_RPC_AM_ARGS);
+  UPCXX_ASSERT(buf_size <= gex_AM_MaxRequestMedium(world_tm, recipient, GEX_EVENT_NOW, GEX_FLAG_AM_PREPARE_LEAST_ALLOC, numargs));
+
+  gex_AM_SrcDesc_t sd = 
+    gex_AM_PrepareRequestMedium(
+      world_tm, recipient,
+      /*gex buf*/nullptr, 
+      buf_size, buf_size, 
+      /*lc_opt*/nullptr, /*flags*/0, numargs);
+
+  UPCXX_ASSERT(sd != GEX_AM_SRCDESC_NO_OP);
+  UPCXX_ASSERT(gex_AM_SrcDescSize(sd) >= buf_size);
+  void *buf = gex_AM_SrcDescAddr(sd);
+  UPCXX_ASSERT(buf);
+  npam_nonce = reinterpret_cast<std::uintptr_t>(sd);
+  UPCXX_ASSERT(npam_nonce != 0);
+  return buf;
+}
+
+
+
 void gasnet::send_am_eager_restricted(
-    const team &tm,
     intrank_t recipient,
     void *buf,
     std::size_t buf_size,
-    std::size_t buf_align
+    std::size_t buf_align,
+    std::uintptr_t npam_nonce
   ) {
-  
-  gex_AM_RequestMedium1(
-    handle_of(tm), recipient,
-    id_am_eager_restricted, buf, buf_size,
-    GEX_EVENT_NOW, /*flags*/0,
-    buf_align
-  );
+ 
+  if (npam_nonce) {
+    gex_AM_CommitRequestMedium1(
+      reinterpret_cast<gex_AM_SrcDesc_t>(npam_nonce),
+      id_am_eager_restricted, buf_size,
+      buf_align
+    );
+  } else { // FPAM
+    gex_AM_RequestMedium1(
+      world_tm, recipient,
+      id_am_eager_restricted, buf, buf_size,
+      GEX_EVENT_NOW, /*flags*/0,
+      buf_align
+    );
+  }
   
   after_gasnet();
 }
 
 void gasnet::send_am_eager_master(
     progress_level level,
-    const team &tm,
     intrank_t recipient,
     void *buf,
     std::size_t buf_size,
-    std::size_t buf_align
+    std::size_t buf_align,
+    std::uintptr_t npam_nonce
   ) {
+  gex_AM_Arg_t const a0 = buf_align<<1 | (level == progress_level::user ? 1 : 0);
   
-  gex_AM_RequestMedium1(
-    handle_of(tm), recipient,
-    id_am_eager_master, buf, buf_size,
-    GEX_EVENT_NOW, /*flags*/0,
-    buf_align<<1 | (level == progress_level::user ? 1 : 0)
-  );
+  if (npam_nonce) {
+    gex_AM_CommitRequestMedium1(
+      reinterpret_cast<gex_AM_SrcDesc_t>(npam_nonce),
+      id_am_eager_master, buf_size,
+      a0
+    );
+  } else { // FPAM
+    gex_AM_RequestMedium1(
+      world_tm, recipient,
+      id_am_eager_master, buf, buf_size,
+      GEX_EVENT_NOW, /*flags*/0,
+      a0
+    );
+  }
   
   after_gasnet();
 }
 
 void gasnet::send_am_eager_persona(
     progress_level level,
-    const team &tm,
     intrank_t recipient_rank,
     persona *recipient_persona,
     void *buf,
     std::size_t buf_size,
-    std::size_t buf_align
+    std::size_t buf_align,
+    std::uintptr_t npam_nonce
   ) {
+  gex_AM_Arg_t const a0 = buf_align<<1 | (level == progress_level::user ? 1 : 0);
+  gex_AM_Arg_t const a1 = am_arg_encode_ptr_lo(recipient_persona);
+  gex_AM_Arg_t const a2 = am_arg_encode_ptr_hi(recipient_persona);
 
-  gex_AM_RequestMedium3(
-    handle_of(tm), recipient_rank,
-    id_am_eager_persona, buf, buf_size,
-    GEX_EVENT_NOW, /*flags*/0,
-    buf_align<<1 | (level == progress_level::user ? 1 : 0),
-    am_arg_encode_ptr_lo(recipient_persona), am_arg_encode_ptr_hi(recipient_persona)
-  );
+  if (npam_nonce) {
+    gex_AM_CommitRequestMedium3(
+      reinterpret_cast<gex_AM_SrcDesc_t>(npam_nonce),
+      id_am_eager_persona, buf_size,
+      a0, a1, a2
+    );
+  } else { // FPAM
+    gex_AM_RequestMedium3(
+      world_tm, recipient_rank,
+      id_am_eager_persona, buf, buf_size,
+      GEX_EVENT_NOW, /*flags*/0,
+      a0, a1, a2
+    );
+  }
   
   after_gasnet();
 }
@@ -1468,7 +1574,6 @@ namespace {
 
 void gasnet::send_am_rdzv(
     progress_level level,
-    const team &tm,
     intrank_t rank_d,
     persona *persona_d,
     void *buf_s,
@@ -1479,7 +1584,7 @@ void gasnet::send_am_rdzv(
   intrank_t rank_s = backend::rank_me;
   
   backend::send_am_persona<progress_level::internal>(
-    tm, rank_d, persona_d,
+    rank_d, persona_d,
     [=]() {
       if(backend::rank_is_local(rank_s)) {
         void *payload = backend::localize_memory_nonnull(rank_s, reinterpret_cast<std::uintptr_t>(buf_s));
@@ -1510,8 +1615,7 @@ void gasnet::send_am_rdzv(
             tls.enqueue(*tls.get_top_persona(), level, m, /*known_active=*/std::true_type());
             
             // Notify source rank it can free buffer.
-            gasnet::send_am_restricted(
-              upcxx::world(), rank_s,
+            gasnet::send_am_restricted( rank_s,
               [=]() { gasnet::deallocate(buf_s, &gasnet::sheap_footprint_rdzv); }
             );
           }
@@ -1630,7 +1734,7 @@ void gasnet::bcast_am_master_rdzv(
     intrank_t sub_ub = rank_d_ub - translate;
     
     backend::send_am_master<progress_level::internal>(
-      tm, sub_lb,
+      backend::team_rank_to_world(tm, sub_lb),
       [=]() {
         if(backend::rank_is_local(wrank_sender)) {
           bcast_payload_header *payload_target =
@@ -1687,8 +1791,7 @@ void gasnet::bcast_am_master_rdzv(
               tls.enqueue(*tls.get_top_persona(), level, m, /*known_active=*/std::true_type());
               
               // Notify source rank it can free buffer.
-              send_am_restricted(
-                upcxx::world(), wrank_owner,
+              send_am_restricted( wrank_owner,
                 [=]() {
                   if(0 == -1 + payload_owner->rdzv_refs.fetch_add(-1, std::memory_order_acq_rel))
                     gasnet::deallocate(payload_owner, &gasnet::sheap_footprint_rdzv);
@@ -1722,8 +1825,7 @@ namespace gasnet {
               backend::globalize_memory_nonnull(me->rdzv_rank_s, me->payload)
             );
            
-          send_am_restricted(
-            upcxx::world(), me->rdzv_rank_s,
+          send_am_restricted( me->rdzv_rank_s,
             [=]() { gasnet::deallocate(buf_s, &gasnet::sheap_footprint_rdzv); }
           );
           
@@ -1770,8 +1872,7 @@ namespace gasnet {
               backend::globalize_memory_nonnull(me->rdzv_rank_s, hdr)
             );
           
-          send_am_restricted(
-            upcxx::world(), me->rdzv_rank_s,
+          send_am_restricted( me->rdzv_rank_s,
             [=]() { gasnet::deallocate(buf_s, &gasnet::sheap_footprint_rdzv); }
           );
         }
@@ -2106,14 +2207,13 @@ namespace {
 
 template<gasnet::rma_put_then_am_sync sync_lb, bool packed_protocol>
 gasnet::rma_put_then_am_sync gasnet::rma_put_then_am_master_protocol(
-    const team &tm, intrank_t rank_d,
+    intrank_t rank_d,
     void *buf_d, void const *buf_s, std::size_t buf_size,
     progress_level am_level, void *am_cmd, std::size_t am_size, std::size_t am_align,
     gasnet::handle_cb *src_cb,
     gasnet::reply_cb *rem_cb
   ) {
 
-  gex_TM_t tm_h = gasnet::handle_of(tm);
   gex_Event_t src_h = GEX_EVENT_INVALID, *src_ph;
 
   switch(sync_lb) {
@@ -2126,11 +2226,11 @@ gasnet::rma_put_then_am_sync gasnet::rma_put_then_am_master_protocol(
     break;
   }
   
-  size_t am_long_max = gex_AM_MaxRequestLong(tm_h, rank_d, src_ph, /*flags*/0, 16);
+  size_t am_long_max = gex_AM_MaxRequestLong(world_tm, rank_d, src_ph, /*flags*/0, 16);
   
   if(am_long_max < buf_size) {
     (void)gex_RMA_PutBlocking(
-      tm_h, rank_d,
+      world_tm, rank_d,
       buf_d, const_cast<void*>(buf_s), buf_size - am_long_max,
       /*flags*/0
     );
@@ -2147,7 +2247,7 @@ gasnet::rma_put_then_am_sync gasnet::rma_put_then_am_master_protocol(
     std::memcpy((void*)cmd_arg, am_cmd, am_size);
     
     gex_AM_RequestLong16(
-      tm_h, rank_d,
+      world_tm, rank_d,
       id_am_long_master_packed_cmd,
       const_cast<void*>(buf_s), buf_size, buf_d,
       src_ph,
@@ -2170,7 +2270,7 @@ gasnet::rma_put_then_am_sync gasnet::rma_put_then_am_master_protocol(
     std::memcpy(&nonce, &nonce_u, sizeof(gex_AM_Arg_t));
     
     (void)gex_AM_RequestLong5(
-      tm_h, rank_d,
+      world_tm, rank_d,
       id_am_long_master_payload_part,
       const_cast<void*>(buf_s), buf_size, buf_d,
       src_ph,
@@ -2180,7 +2280,7 @@ gasnet::rma_put_then_am_sync gasnet::rma_put_then_am_master_protocol(
     );
 
     size_t part_size_max = gex_AM_MaxRequestMedium(
-      tm_h, rank_d, GEX_EVENT_NOW, /*flags*/0, /*num_args*/6
+      world_tm, rank_d, GEX_EVENT_NOW, /*flags*/0, /*num_args*/4
     );
     size_t part_offset = 0;
     
@@ -2188,7 +2288,7 @@ gasnet::rma_put_then_am_sync gasnet::rma_put_then_am_master_protocol(
       size_t part_size = std::min(part_size_max, am_size - part_offset);
       
       (void)gex_AM_RequestMedium4(
-        tm_h, rank_d,
+        world_tm, rank_d,
         id_am_long_master_cmd_part,
         (char*)am_cmd + part_offset, part_size,
         GEX_EVENT_NOW,
@@ -2216,7 +2316,7 @@ gasnet::rma_put_then_am_sync gasnet::rma_put_then_am_master_protocol(
   template \
   gasnet::rma_put_then_am_sync \
   gasnet::rma_put_then_am_master_protocol<sync_lb, packed_protocol>( \
-      const team &tm, intrank_t rank_d, \
+      intrank_t rank_d, \
       void *buf_d, void const *buf_s, std::size_t buf_size, \
       progress_level am_level, void *am_cmd, std::size_t am_size, std::size_t am_align, \
       gasnet::handle_cb *src_cb, \

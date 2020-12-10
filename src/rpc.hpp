@@ -92,7 +92,7 @@ namespace upcxx {
   
   // defaulted completions
   template<typename Fn, typename ...Arg>
-  auto rpc_ff(const team &tm, intrank_t recipient, Fn &&fn, Arg &&...args)
+  auto rpc_ff(intrank_t recipient, Fn &&fn, Arg &&...args)
     // computes our return type, but SFINAE's out if fn is a completions type
     -> typename std::enable_if<
          !detail::is_completions<Fn>::value,
@@ -132,17 +132,16 @@ namespace upcxx {
     );
 
     UPCXX_ASSERT_INIT();
-    UPCXX_ASSERT(recipient >= 0 && recipient < tm.rank_n(),
-      "rpc_ff(team, recipient, ...) requires recipient in [0, team.rank_n()-1] == [0, " << tm.rank_n()-1 << "], but given: " << recipient);
+    UPCXX_ASSERT(recipient >= 0 && recipient < world().rank_n(),
+      "rpc_ff(recipient, ...) requires recipient in [0, rank_n()-1] == [0, " << world().rank_n()-1 << "], but given: " << recipient);
 
-    backend::template send_am_master<progress_level::user>(
-      tm, recipient,
+    backend::template send_am_master<progress_level::user>( recipient,
       upcxx::bind_rvalue_as_lvalue(std::forward<Fn>(fn), std::forward<Arg>(args)...)
     );
   }
   
   template<typename Fn, typename ...Arg>
-  auto rpc_ff(intrank_t recipient, Fn &&fn, Arg &&...args)
+  auto rpc_ff(const team &tm, intrank_t recipient, Fn &&fn, Arg &&...args)
     // computes our return type, but SFINAE's out if fn is a completions type
     -> typename std::enable_if<
          !detail::is_completions<Fn>::value,
@@ -150,16 +149,16 @@ namespace upcxx {
        >::type {
 
     UPCXX_ASSERT_INIT();
-    UPCXX_ASSERT(recipient >= 0 && recipient < world().rank_n(),
-      "rpc_ff(recipient, ...) requires recipient in [0, rank_n()-1] == [0, " << world().rank_n()-1 << "], but given: " << recipient);
+    UPCXX_ASSERT(recipient >= 0 && recipient < tm.rank_n(),
+      "rpc_ff(team, recipient, ...) requires recipient in [0, team.rank_n()-1] == [0, " << tm.rank_n()-1 << "], but given: " << recipient);
 
-    return rpc_ff(world(), recipient, std::forward<Fn>(fn), std::forward<Arg>(args)...);
+    return rpc_ff(backend::team_rank_to_world(tm, recipient), std::forward<Fn>(fn), std::forward<Arg>(args)...);
   }
 
   // explicit completions
   template<typename Cxs, typename Fn, typename ...Arg>
   UPCXX_NODISCARD
-  auto rpc_ff(const team &tm, intrank_t recipient, Cxs &&cxs, Fn &&fn, Arg &&...args)
+  auto rpc_ff(intrank_t recipient, Cxs &&cxs, Fn &&fn, Arg &&...args)
     // computes our return type, but SFINAE's out if cxs is not a completions type
     -> typename std::enable_if<
          detail::is_completions<typename std::decay<Cxs>::type>::value,
@@ -200,8 +199,8 @@ namespace upcxx {
     );
 
     UPCXX_ASSERT_INIT();
-    UPCXX_ASSERT(recipient >= 0 && recipient < tm.rank_n(),
-      "rpc_ff(team, recipient, ...) requires recipient in [0, team.rank_n()-1] == [0, " << tm.rank_n()-1 << "], but given: " << recipient);
+    UPCXX_ASSERT(recipient >= 0 && recipient < world().rank_n(),
+      "rpc_ff(recipient, ...) requires recipient in [0, rank_n()-1] == [0, " << world().rank_n()-1 << "], but given: " << recipient);
 
     UPCXX_ASSERT_ALWAYS(
       (!detail::completions_has_event<CxsDecayed, remote_cx_event>::value &&
@@ -221,8 +220,7 @@ namespace upcxx {
         CxsDecayed
       >{state};
     
-    backend::template send_am_master<progress_level::user>(
-      tm, recipient,
+    backend::template send_am_master<progress_level::user>( recipient,
       upcxx::bind_rvalue_as_lvalue(std::forward<Fn>(fn), std::forward<Arg>(args)...)
     );
     
@@ -235,7 +233,7 @@ namespace upcxx {
   
   template<typename Cxs, typename Fn, typename ...Arg>
   UPCXX_NODISCARD
-  auto rpc_ff(intrank_t recipient, Cxs &&cxs, Fn &&fn, Arg &&...args)
+  auto rpc_ff(const team &tm, intrank_t recipient, Cxs &&cxs, Fn &&fn, Arg &&...args)
     // computes our return type, but SFINAE's out if cxs is not a completions type
     -> typename std::enable_if<
          detail::is_completions<typename std::decay<Cxs>::type>::value,
@@ -243,10 +241,10 @@ namespace upcxx {
        >::type {
   
     UPCXX_ASSERT_INIT();
-    UPCXX_ASSERT(recipient >= 0 && recipient < world().rank_n(),
-      "rpc_ff(recipient, ...) requires recipient in [0, rank_n()-1] == [0, " << world().rank_n()-1 << "], but given: " << recipient);
+    UPCXX_ASSERT(recipient >= 0 && recipient < tm.rank_n(),
+      "rpc_ff(team, recipient, ...) requires recipient in [0, team.rank_n()-1] == [0, " << tm.rank_n()-1 << "], but given: " << recipient);
 
-    return rpc_ff(world(), recipient, std::forward<Cxs>(cxs), std::forward<Fn>(fn), std::forward<Arg>(args)...);
+    return rpc_ff(backend::team_rank_to_world(tm, recipient), std::forward<Cxs>(cxs), std::forward<Fn>(fn), std::forward<Arg>(args)...);
   }
   
   //////////////////////////////////////////////////////////////////////
@@ -264,7 +262,7 @@ namespace upcxx {
       template<typename ...Arg>
       void operator()(Arg &&...arg) const {
         backend::template send_awaken_lpc(
-          upcxx::world(), initiator,
+          initiator,
           remote_lpc, std::tuple<Arg&&...>(std::forward<Arg>(arg)...)
         );
       }
@@ -332,7 +330,7 @@ namespace upcxx {
   
   namespace detail {
     template<typename Cxs, typename Fn, typename ...Arg>
-    auto rpc_internal(const team &tm, intrank_t recipient, Fn &&fn, Arg &&...args, Cxs &&cxs, int /*dummy*/)
+    auto rpc_internal(intrank_t recipient, Fn &&fn, Arg &&...args, Cxs &&cxs, int /*dummy*/)
       // computes our return type, but SFINAE's out if fn(args...) is ill-formed
       -> typename detail::rpc_return<Fn(Arg...), typename std::decay<Cxs>::type>::type {
       using CxsDecayed = typename std::decay<Cxs>::type;
@@ -386,8 +384,7 @@ namespace upcxx {
       
       using fn_bound_t = typename detail::bind<const Fn&, const Arg&...>::return_type;
 
-      backend::template send_am_master<progress_level::user>(
-        tm, recipient,
+      backend::template send_am_master<progress_level::user>( recipient,
         upcxx::bind_rvalue_as_lvalue(
           [=](deserialized_type_t<fn_bound_t> &&fn_bound) {
             return upcxx::apply_as_future(
@@ -418,7 +415,7 @@ namespace upcxx {
     // folded into the parameter pack for ...Arg, forcing it into the
     // variadic arguments here.
     template<typename Cxs, typename Fn, typename ...Arg>
-    future<> rpc_internal(const team &, intrank_t, Fn &&, Arg &&..., Cxs&&, ...) {
+    future<> rpc_internal(intrank_t, Fn &&, Arg &&..., Cxs&&, ...) {
       using CxsDecayed = typename std::decay<Cxs>::type;
       // check that this overload is not unintentionally invoked
       static_assert(
@@ -450,7 +447,7 @@ namespace upcxx {
       "rpc(team, recipient, ...) requires recipient in [0, team.rank_n()-1] == [0, " << tm.rank_n()-1 << "], but given: " << recipient);
 
     return detail::template rpc_internal<Cxs, Fn&&, Arg&&...>(
-        tm, recipient, std::forward<Fn>(fn), std::forward<Arg>(args)...,
+        backend::team_rank_to_world(tm, recipient), std::forward<Fn>(fn), std::forward<Arg>(args)...,
         std::forward<Cxs>(cxs), 0
       );
   }
@@ -469,7 +466,7 @@ namespace upcxx {
       "rpc(recipient, ...) requires recipient in [0, rank_n()-1] == [0, " << world().rank_n()-1 << "], but given: " << recipient);
 
     return detail::template rpc_internal<Cxs, Fn&&, Arg&&...>(
-        world(), recipient, std::forward<Fn>(fn), std::forward<Arg>(args)...,
+        recipient, std::forward<Fn>(fn), std::forward<Arg>(args)...,
         std::forward<Cxs>(cxs), 0
       );
   }
@@ -489,7 +486,7 @@ namespace upcxx {
       "rpc(team, recipient, ...) requires recipient in [0, team.rank_n()-1] == [0, " << tm.rank_n()-1 << "], but given: " << recipient);
 
     return detail::template rpc_internal<completions<future_cx<operation_cx_event>>, Fn&&, Arg&&...>(
-      tm, recipient, std::forward<Fn>(fn), std::forward<Arg>(args)...,
+      backend::team_rank_to_world(tm, recipient), std::forward<Fn>(fn), std::forward<Arg>(args)...,
       operation_cx::as_future(), 0
     );
   }
@@ -508,7 +505,7 @@ namespace upcxx {
       "rpc(recipient, ...) requires recipient in [0, rank_n()-1] == [0, " << world().rank_n()-1 << "], but given: " << recipient);
 
     return detail::template rpc_internal<completions<future_cx<operation_cx_event>>, Fn&&, Arg&&...>(
-      world(), recipient, std::forward<Fn>(fn), std::forward<Arg>(args)...,
+      recipient, std::forward<Fn>(fn), std::forward<Arg>(args)...,
       operation_cx::as_future(), 0
     );
   }

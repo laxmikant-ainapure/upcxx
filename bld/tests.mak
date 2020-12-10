@@ -219,6 +219,7 @@ $(foreach test,$(test_pgi_debug_symbols_broken),$(eval export TEST_FLAGS_$(test)
 export TEST_ENV_PUT_FLOOD=fixed_iters=10
 export TEST_ARGS_CUDA_MICROBENCHMARK='-t 1 -w 1'
 export TEST_ARGS_MISC_PERF='1000'
+export TEST_ARGS_RPC_PERF='100 10 1048576'
 
 #
 # End of configuration
