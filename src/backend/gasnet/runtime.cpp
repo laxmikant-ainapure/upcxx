@@ -600,14 +600,14 @@ void upcxx::init() {
 
   //////////////////////////////////////////////////////////////////////////////
   // Determine RPC Eager/Rendezvous Threshold
-  
-  size_t am_medium_size = gex_AM_MaxRequestMedium(
-    world_tm,
-    GEX_RANK_INVALID,
-    GEX_EVENT_NOW,
-    /*flags*/0,
-    3
-  );
+ 
+  #define UPCXX_MAX_RPC_AM_ARGS 3
+  size_t fpam_medium_size = gex_AM_MaxRequestMedium( world_tm, GEX_RANK_INVALID, GEX_EVENT_NOW, 
+                                                     /*flags*/0, UPCXX_MAX_RPC_AM_ARGS);
+  size_t npam_medium_size = gex_AM_MaxRequestMedium( world_tm, GEX_RANK_INVALID, GEX_EVENT_NOW, 
+                                                     GEX_FLAG_AM_PREPARE_LEAST_ALLOC, UPCXX_MAX_RPC_AM_ARGS);
+  // the two values above are usually the same, this is just for paranoia:
+  size_t am_medium_size = std::min(fpam_medium_size, npam_medium_size);
   
   /* 
    * Original default calculcation, though 2020.11.0 (comments added reflect that version)
@@ -1440,8 +1440,8 @@ void backend::validate_global_ptr(bool allow_null, intrank_t rank, void *raw_ptr
 void *gasnet::prepare_npam_medium(
     intrank_t recipient, std::size_t buf_size, 
     int numargs, std::uintptr_t &npam_nonce) {
-  UPCXX_ASSERT(numargs >= 0 && numargs <= 16);
-  UPCXX_ASSERT(buf_size <= gex_AM_MaxRequestMedium(world_tm, recipient, GEX_EVENT_NOW, 0, numargs));
+  UPCXX_ASSERT(numargs >= 0 && numargs <= UPCXX_MAX_RPC_AM_ARGS);
+  UPCXX_ASSERT(buf_size <= gex_AM_MaxRequestMedium(world_tm, recipient, GEX_EVENT_NOW, GEX_FLAG_AM_PREPARE_LEAST_ALLOC, numargs));
 
   gex_AM_SrcDesc_t sd = 
     gex_AM_PrepareRequestMedium(
