@@ -19,6 +19,14 @@ the prototype stage ends.
 
 ### 20XX.YY.ZZ: PENDING
 
+Improvements to RPC and Serialization:
+
+* The RPC implementation has been tuned and now incurs one less payload copy on
+  ibv and aries networks on moderately sized RPCs. Additionally, internal
+  protocol cross-over points have been adjusted on all networks. These changes
+  may result in noticable performance improvement for RPCs with a total size 
+  (including serialized arguments) under about 64kb (exact limit varies with network).
+
 Infrastructure changes:
 
 * The `install` script, deprecated since 2020.3.0, has been removed.
