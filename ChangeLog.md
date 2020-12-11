@@ -35,6 +35,7 @@ Notable bug fixes:
 
 * issue #428: Regression in `rpc(team,rank,..,view)` overload resolution
 * issue #429: upcxx library exposes dlmalloc symbols
+* issue #432: Some `upcxx::copy()` cases do not `discharge()` properly
 
 ### 2020.10.30: Memory Kinds Prototype 2020.11.0
 
