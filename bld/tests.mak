@@ -81,6 +81,7 @@ test_exclude_all = \
 
 test_exclude_seq = \
 	test/par-threadmode.cpp \
+	test/regression/issue432.cpp \
 	$(TEST_EXCLUDE_SEQ)
 
 test_exclude_par = \
@@ -124,6 +125,7 @@ ifneq ($(UPCXX_CUDA),1)
 test_exclude_all += \
 	bench/cuda_microbenchmark.cpp \
 	test/bad-segment-alloc.cpp \
+	test/regression/issue432.cpp \
 	example/prog-guide/h-d.cpp \
 	example/prog-guide/h-d-remote.cpp
 endif
