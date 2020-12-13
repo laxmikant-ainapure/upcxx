@@ -40,6 +40,7 @@ namespace upcxx {
       static constexpr bool want_op = completions_has_event<typename std::decay<Cxs>::type, operation_cx_event>::value;
       static constexpr bool want_remote = completions_has_event<typename std::decay<Cxs>::type, remote_cx_event>::value;
       static constexpr bool want_source = completions_has_event<typename std::decay<Cxs>::type, source_cx_event>::value;
+      static constexpr bool want_initevt = want_op || want_source;
 
       template<typename T>
       static void assert_sane() {
@@ -150,6 +151,7 @@ namespace upcxx {
       
       backend::send_am_master<progress_level::internal>( rank_d,
         upcxx::bind([=](deserialized_type_t<cxs_remote_t> &&cxs_remote) {
+          // at target
           auto operation_cx_as_internal_future = upcxx::completions<upcxx::future_cx<upcxx::operation_cx_event, progress_level::internal>>{{}};
           deserialized_type_t<cxs_remote_t> *cxs_remote_heaped = (
             copy_traits::want_remote ?
@@ -163,27 +165,36 @@ namespace upcxx {
               cxs_remote_heaped->template operator()<remote_cx_event>();
               delete cxs_remote_heaped;
             }
-            
-            backend::send_am_persona<progress_level::internal>(
-              initiator, initiator_per,
-              [=]() {
-                cxs_here->template operator()<source_cx_event>();
-                cxs_here->template operator()<operation_cx_event>();
-                delete cxs_here;
-              }
-            );
+
+            if (copy_traits::want_initevt) {
+              backend::send_am_persona<progress_level::internal>(
+                initiator, initiator_per,
+                [=]() {
+                  // at initiator
+                  cxs_here->template operator()<source_cx_event>();
+                  cxs_here->template operator()<operation_cx_event>();
+                  delete cxs_here;
+                }
+              );
+            }
           });
         }, std::move(cxs_remote))
       );
+      // initiator
+      if (!copy_traits::want_initevt) delete cxs_here;
     }
     else if(rank_d == rank_s) { // fully loopback on the calling process
       UPCXX_ASSERT(rank_d == initiator); 
+      if (copy_traits::want_remote) initiator_per->undischarged_n_++;
       detail::rma_copy_local(heap_d, buf_d, heap_s, buf_s, size,
         cuda::make_event_cb([=]() {
           cxs_here->template operator()<source_cx_event>();
           cxs_here->template operator()<operation_cx_event>();
-          serialization_traits<cxs_remote_t>::deserialized_value(cxs_remote).template operator()<remote_cx_event>();
           delete cxs_here;
+          if (copy_traits::want_remote) {
+            initiator_per->undischarged_n_--;
+            serialization_traits<cxs_remote_t>::deserialized_value(cxs_remote).template operator()<remote_cx_event>();
+          }
         })
       );
     }
@@ -199,7 +210,7 @@ namespace upcxx {
       void *eff_buf_s = buf_s;
       int eff_heap_s = heap_s;
       void *bounce_s = nullptr;
-      bool must_ack = copy_traits::want_op;
+      bool must_ack = copy_traits::want_op; // must_ack is true iff initiator_per is awaiting an event
       if (heap_s == private_heap) {
         // must use a bounce buffer to make the source remotely accessible
         bounce_s = backend::gasnet::allocate(size, 64, &backend::gasnet::sheap_footprint_rdzv);
@@ -208,7 +219,6 @@ namespace upcxx {
         eff_heap_s = host_heap;
         // we can signal source_cx as soon as it's populated
         cxs_here->template operator()<source_cx_event>();
-        must_ack = true;
       } else must_ack |= copy_traits::want_source;
 
       backend::send_am_master<progress_level::internal>( rank_d,
@@ -226,7 +236,7 @@ namespace upcxx {
                 delete cxs_remote_heaped;
               }
 
-              if (must_ack) {
+              if (copy_traits::want_op || must_ack) {
                  backend::send_am_persona<progress_level::internal>(
                    rank_s, initiator_per,
                    [=]() {
@@ -236,7 +246,12 @@ namespace upcxx {
                      cxs_here->template operator()<operation_cx_event>();
                      delete cxs_here;
                    }); // AM to initiator
-              } // must_ack
+              } else if (bounce_s) {
+                 // issue #432: initiator persona might be defunct, just need to free the bounce buffer
+                 backend::gasnet::send_am_restricted( rank_s,
+                   [=]() { backend::gasnet::deallocate(bounce_s, &backend::gasnet::sheap_footprint_rdzv); }
+                 );
+              }
             }) // gasnet::make_handle_cb
           ); // rma_copy_remote
         }, std::move(cxs_remote)) // bind
@@ -248,6 +263,7 @@ namespace upcxx {
     else if (backend::heap_state::use_mk()) { // MK-enabled GASNet backend
       // GASNet will do a direct source-to-dest memory transfer.
       // No bounce buffering, we just need to orchestrate the completions
+      if (copy_traits::want_remote) initiator_per->undischarged_n_++;
       detail::rma_copy_remote(heap_s, rank_s, buf_s, heap_d, rank_d, buf_d, size,
         backend::gasnet::make_handle_cb([=]() {
           // issue #423: Ensure completion is delivered to the correct persona
@@ -256,19 +272,20 @@ namespace upcxx {
               cxs_here->template operator()<source_cx_event>();
               cxs_here->template operator()<operation_cx_event>();
               delete cxs_here;
-            }, /*known_active=*/std::false_type());
           
-          if (copy_traits::want_remote) {
-            if (rank_d == initiator) { // in-place RC
-              serialization_traits<cxs_remote_t>::deserialized_value(cxs_remote).template operator()<remote_cx_event>();
-            } else { // initiator-chained RC
-              backend::send_am_master<progress_level::internal>( rank_d,
-                upcxx::bind([=](deserialized_type_t<cxs_remote_t> &&cxs_remote) {
-                  cxs_remote.template operator()<remote_cx_event>();
-                }, std::move(cxs_remote))
-              );
-            }
-          } // want_remote
+              if (copy_traits::want_remote) {
+                initiator_per->undischarged_n_--;
+                if (rank_d == initiator) { // in-place RC
+                  serialization_traits<cxs_remote_t>::deserialized_value(cxs_remote).template operator()<remote_cx_event>();
+                } else { // initiator-chained RC
+                  backend::send_am_master<progress_level::internal>( rank_d,
+                    upcxx::bind([=](deserialized_type_t<cxs_remote_t> &&cxs_remote) {
+                      cxs_remote.template operator()<remote_cx_event>();
+                    }, std::move(cxs_remote))
+                  );
+                }
+              } // want_remote
+            }, /*known_active=*/std::false_type()); // during(initiator_per,internal)
         })
       );
     }
@@ -289,6 +306,7 @@ namespace upcxx {
         bounce_d = backend::gasnet::allocate(size, 64, &backend::gasnet::sheap_footprint_rdzv);
       }
 
+      if (copy_traits::want_remote) initiator_per->undischarged_n_++;
       backend::send_am_master<progress_level::internal>( rank_s,
         [=]() {
           auto make_bounce_s_cont = [=](void *bounce_s) {
@@ -301,6 +319,7 @@ namespace upcxx {
                   backend::send_am_persona<progress_level::internal>(
                     rank_d, initiator_per,
                     [=]() {
+                      // at initiator
                       cxs_here->template operator()<source_cx_event>();
                       
                       auto bounce_d_cont = [=]() {
@@ -308,6 +327,7 @@ namespace upcxx {
                           backend::gasnet::deallocate(bounce_d, &backend::gasnet::sheap_footprint_rdzv);
 
                         if (copy_traits::want_remote) {
+                          initiator_per->undischarged_n_--;
                           serialization_traits<cxs_remote_t>::deserialized_value(*cxs_remote_heaped).template operator()<remote_cx_event>();
                           delete cxs_remote_heaped;
                         }
@@ -345,9 +365,11 @@ namespace upcxx {
       /* We are the source, so semantically this is a PUT even though we use a
        * GET to transfer over network.
        */
+      // must_ack is true iff initiator_per is left awaiting an event
+      const bool must_ack = copy_traits::want_op || (copy_traits::want_source && heap_s == host_heap);
       auto make_bounce_s_cont = [&](void *bounce_s) {
         return [=]() {
-          if(heap_s != host_heap) {
+          if(copy_traits::want_source && heap_s != host_heap) {
             // since source side has a bounce buffer, we can signal source_cx as soon
             // as its populated
             cxs_here->template operator()<source_cx_event>();
@@ -356,6 +378,7 @@ namespace upcxx {
           backend::send_am_master<progress_level::internal>( rank_d,
             upcxx::bind(
               [=](deserialized_type_t<cxs_remote_t> &&cxs_remote) {
+                // at target
                 void *bounce_d = heap_d == host_heap ? buf_d : backend::gasnet::allocate(size, 64, &backend::gasnet::sheap_footprint_rdzv);
                 deserialized_type_t<cxs_remote_t> *cxs_remote_heaped = (
                   copy_traits::want_remote ?
@@ -372,20 +395,28 @@ namespace upcxx {
                         delete cxs_remote_heaped;
                       }
 
-                      backend::send_am_persona<progress_level::internal>(
-                        rank_s, initiator_per,
-                        [=]() {
-                          if (heap_s != host_heap)
-                            backend::gasnet::deallocate(bounce_s, &backend::gasnet::sheap_footprint_rdzv);
-                          else {
-                            // source didnt use bounce buffer, need to source_cx now
-                            cxs_here->template operator()<source_cx_event>();
-                          }
-                          cxs_here->template operator()<operation_cx_event>();
+                      if (must_ack) {
+                        backend::send_am_persona<progress_level::internal>(
+                          rank_s, initiator_per,
+                          [=]() {
+                            // at initiator
+                            if (heap_s != host_heap)
+                              backend::gasnet::deallocate(bounce_s, &backend::gasnet::sheap_footprint_rdzv);
+                            else {
+                              // source didnt use bounce buffer, need to source_cx now
+                              cxs_here->template operator()<source_cx_event>();
+                            }
+                            cxs_here->template operator()<operation_cx_event>();
                           
-                          delete cxs_here;
-                        }
-                      );
+                            delete cxs_here;
+                          }
+                        );
+                      } else if (heap_s != host_heap) {
+                        // issue #432: initiator persona might be defunct, just need to free the bounce buffer
+                       backend::gasnet::send_am_restricted( rank_s,
+                          [=]() { backend::gasnet::deallocate(bounce_s, &backend::gasnet::sheap_footprint_rdzv); }
+                       );
+                      }
                     };
                     
                     if(heap_d == host_heap)
@@ -407,6 +438,8 @@ namespace upcxx {
         
         detail::rma_copy_local(host_heap, bounce_s, heap_s, buf_s, size, cuda::make_event_cb(make_bounce_s_cont(bounce_s)));
       }
+
+      if (!must_ack) delete cxs_here;
     }
 
     return returner();
