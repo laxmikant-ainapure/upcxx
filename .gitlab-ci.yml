@@ -295,7 +295,7 @@ variables:
       - environment
       - bld/gasnet.*/config.*
       - test-results
-#   reports: { junit: test_results }
+    reports: { junit: ./test-results/*/*.xml }
     expire_in: 1 week
     when: always
   script:
