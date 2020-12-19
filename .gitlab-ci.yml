@@ -26,7 +26,7 @@
 #   - Build results for 'develop' are automatically reported to
 #     `https://bitbucket.org/berkeleylab/upcxx`
 #   - Reports use a key of "$CI_JOB_NAME.(dev-)check".  For instance the keys
-#     'dirac.gcc.check' and 'dirac.gcc.dev-check'.
+#     'dirac-gcc.check' and 'dirac-gcc.dev-check'.
 #   - Since keys omit any time or sequence info, a rerun can/will overwrite a
 #     previous failure.  This is useful to deal with (fairly rare) timeouts or
 #     other external factors which may cause a build to fail.
@@ -63,7 +63,7 @@
 #     - CI_CPU:      x86_64, knl, ppc64le, aarch64
 #     - CI_OS:       linux, cnl, macos
 #     - CI_HOST:     theta, theta-fe, dirac
-#     - CI_NAME:     name of a specific job, such as "theta.PrgEnv-llvm_floor"
+#     - CI_NAME:     name of a specific job, such as "theta-PrgEnv_llvm_floor"
 #   - The following control what is tested or how, with example legal values
 #     - CI_DEV_CHECK       Must be 0 or 1 (or blank/unset for the default)
 #     - CI_RUN_TESTS       Must be 0 or 1 (or blank/unset for the default)
@@ -81,8 +81,8 @@
 #   - The following per-host/per-job variables provide additional fine-grained
 #     control:
 #     - CI_THETA_RUN_ALL_PRGENV
-#       - Defaults to empty.  Only theta.PrgEnv-llvm{,_floor} run their tests.
-#       - Set to '1' to enable *all* theta.PrgEnv-* jobs to submit the tests
+#       - Defaults to empty.  Only theta-PrgEnv_llvm{,_floor} run their tests.
+#       - Set to '1' to enable *all* theta-PrgEnv_* jobs to submit the tests
 #         to be run on the compute nodes.
 #   - Any variable set when requesting the run is propagated to the environment.
 #     - In the `CI_DEV_CHECK=1` case, this means `TEST_*` environment
@@ -111,7 +111,7 @@ variables:
   CI_CPU: ""               # x86_64, knl, ppc64le
   CI_OS: ""                # linux, cnl, macos
   CI_HOST: ""              # theta, theta-fe, dirac
-  CI_NAME: ""              # name of a specific job, such as "dirac.pgi"
+  CI_NAME: ""              # name of a specific job, such as "dirac-pgi"
   CI_NETWORKS: "smp udp"
   CI_RANKS: 4
   CI_MAKE: make
@@ -366,7 +366,7 @@ variables:
 ## Theta compute nodes
 ##
 ## Host-specific note:
-##  Unless CI_THETA_RUN_ALL_PRGENV=1, only PrgEnv-llvm{,_floor} will run the tests.
+##  Unless CI_THETA_RUN_ALL_PRGENV=1, only PrgEnv_llvm{,_floor} will run the tests.
 ##
 
 .theta.compute:
@@ -385,35 +385,35 @@ variables:
         DEV_CI_STAGES="${DEV_CI_STAGES:-configure,build,tests}"
       fi
 
-# Theta PrgEnv-llvm
-theta.PrgEnv-llvm:
+# Theta PrgEnv_llvm
+theta-PrgEnv_llvm:
   extends: [ .dev_ci, .new_llvm, .theta.compute ]
   variables:
     CI_THETA_RUN_ALL_PRGENV: 1
     UPCXX_HAVE_OPENMP: ''
 
-# Theta PrgEnv-llvm_floor
-theta.PrgEnv-llvm_floor:
+# Theta PrgEnv_llvm_floor
+theta-PrgEnv_llvm_floor:
   extends: [ .dev_ci, .old_llvm, .theta.compute ]
   variables:
     DEV_CI_PRGENV: llvm/4.0
     CI_THETA_RUN_ALL_PRGENV: 1
     UPCXX_HAVE_OPENMP: ''
 
-# Theta PrgEnv-gnu
-theta.PrgEnv-gnu:
+# Theta PrgEnv_gnu
+theta-PrgEnv_gnu:
   extends: [ .dev_ci, .new_gnu, .theta.compute ]
   variables:
     DEV_CI_PRGENV: gnu
 
-# Theta PrgEnv-intel
-theta.PrgEnv-intel:
+# Theta PrgEnv_intel
+theta-PrgEnv_intel:
   extends: [ .dev_ci, .new_intel, .theta.compute ]
   variables:
     DEV_CI_PRGENV: intel
 
-# Theta PrgEnv-cray
-theta.PrgEnv-cray:
+# Theta PrgEnv_cray
+theta-PrgEnv_cray:
   extends: [ .dev_ci, .new_cray, .theta.compute ]
   variables:
     DEV_CI_PRGENV: cray
@@ -439,21 +439,21 @@ theta.PrgEnv-cray:
     MY_HOST: 'theta-fe'
 
 # Theta login node GNU
-theta.gnu:
+theta-gnu:
   extends: [ .generic, .new_gnu, .theta.login ]
   before_script:
     - module load gcc
     - export CC=gcc CXX=g++
 
 # Theta login node Intel
-theta.intel:
+theta-intel:
   extends: [ .generic, .new_intel, .theta.login ]
   before_script:
     - module load intel
     - export CC=icc CXX=icpc
 
 # Theta login node LLVM
-theta.llvm:
+theta-llvm:
   extends: [ .generic, .new_llvm, .theta.login ]
   variables:
     UPCXX_HAVE_OPENMP: ''
@@ -481,34 +481,34 @@ theta.llvm:
     GASNET_SUPERNODE_MAXSIZE: 2
 
 # TODO: remove '.rules_manual' from extends once issue 421 is resolved
-dirac.pgi:
+dirac-pgi:
   extends: [ .generic, .new_pgi, .dirac, .rules_manual ]
   resource_group: pgi_license
   before_script:
     - module load PrgEnv/pgi
     - export CC=pgcc CXX=pgc++
 
-dirac.intel:
+dirac-intel:
   extends: [ .generic, .new_intel, .dirac ]
   resource_group: intel_license
   before_script:
     - module load PrgEnv/intel
     - export CC=icc CXX=icpc
 
-dirac.gcc:
+dirac-gcc:
   extends: [ .generic, .new_gnu, .dirac ]
   before_script:
     - module load PrgEnv/gnu
     - export CC=gcc CXX=g++
 
-dirac.clang:
+dirac-clang:
   extends: [ .generic, .new_llvm, .dirac ]
   before_script:
     - module load PrgEnv/llvm
     - export CC=clang CXX=clang++
 
 # TODO: remove '.rules_manual' from extends once issue 421 is resolved
-dirac.pgi_floor:
+dirac-pgi_floor:
   extends: [ .generic, .old_pgi, .dirac, .rules_manual ]
   resource_group: pgi_license
   before_script:
@@ -516,20 +516,20 @@ dirac.pgi_floor:
     - export CC=pgcc CXX=pgc++
     - export PGI_DEBUG_SYMBOLS_BROKEN=1
 
-dirac.intel_floor:
+dirac-intel_floor:
   extends: [ .generic, .old_intel, .dirac ]
   resource_group: intel_license
   before_script:
     - module load PrgEnv/intel/2017.2.174
     - export CC=icc CXX=icpc
 
-dirac.gcc_floor:
+dirac-gcc_floor:
   extends: [ .generic, .old_gnu, .dirac ]
   before_script:
     - module load PrgEnv/gnu/6.4.0
     - export CC=gcc CXX=g++
 
-dirac.clang_floor:
+dirac-clang_floor:
   extends: [ .generic, .old_llvm, .dirac ]
   before_script:
     - module load PrgEnv/llvm/4.0.0-gcc640
@@ -540,24 +540,24 @@ dirac.clang_floor:
 ## VM with current versions of macOS and Xcode
 ##
 
-.macos-current:
+.macos_current:
   tags: [ shell, lbnl, class, xcode-latest ]
   variables:
     CI_MAKE_PARALLEL: "-j4"
     MY_OS:   'macos'
     MY_CPU:  'x86_64'
-    MY_HOST: 'macos-current'
+    MY_HOST: 'macos_current'
     GASNET_SPAWNFN: L
     GASNET_SUPERNODE_MAXSIZE: 2
     UPCXX_RUN_TIME_LIMIT: 360
 
-macos-current.xcode:
-  extends: [ .dev_ci, .new_xcode, .macos-current ]
+macos_current-xcode:
+  extends: [ .dev_ci, .new_xcode, .macos_current ]
   variables:
     ci_script: macos-xcode
 
-macos-current.gcc:
-  extends: [ .generic, .new_gnu, .macos-current ]
+macos_current-gcc:
+  extends: [ .generic, .new_gnu, .macos_current ]
   variables:
     CC:  gcc-10
     CXX: g++-10
@@ -567,25 +567,25 @@ macos-current.gcc:
 ## VM with "floor" versions of macOS and Xcode
 ##
 
-.macos-floor:
+.macos_floor:
   tags: [ shell, lbnl, class, xcode-floor ]
   variables:
     CI_MAKE_PARALLEL: "-j4"
     MY_OS:   'macos'
     MY_CPU:  'x86_64'
-    MY_HOST: 'macos-floor'
+    MY_HOST: 'macos_floor'
     GASNET_SPAWNFN: L
     GASNET_SUPERNODE_MAXSIZE: 2
     UPCXX_RUN_TIME_LIMIT: 360
 
-macos-floor.xcode_floor:
-  extends: [ .dev_ci, .new_xcode, .macos-floor ]
+macos_floor-xcode_floor:
+  extends: [ .dev_ci, .new_xcode, .macos_floor ]
   variables:
     ci_script: macos-xcode_old
 
 # Is actually gcc 6.5.0 where 6.4.0 is our documented floor
-macos-floor.gcc_floor:
-  extends: [ .generic, .old_gnu, .macos-floor ]
+macos_floor-gcc_floor:
+  extends: [ .generic, .old_gnu, .macos_floor ]
   variables:
     CC:  gcc-6
     CXX: g++-6
@@ -607,31 +607,31 @@ macos-floor.gcc_floor:
     GASNET_CONFIGURE_ARGS: '--enable-force-posix-realtime'
 
 # TODO: remove '.rules_manual' from extends once issue 421 is resolved
-power9.pgi:
+power9-pgi:
   extends: [ .generic, .new_pgi, .power9, .rules_manual ]
   before_script:
     - module load pgi
     - export CC=pgcc CXX=pgc++
 
-power9.gcc:
+power9-gcc:
   extends: [ .generic, .new_gnu, .power9 ]
   before_script:
     - module load gcc
     - export CC=gcc CXX=g++
 
-power9.clang:
+power9-clang:
   extends: [ .generic, .new_llvm, .power9 ]
   before_script:
     - module load clang
     - export CC=clang CXX=clang++
 
-power9.gcc_floor:
+power9-gcc_floor:
   extends: [ .generic, .old_gnu, .power9 ]
   before_script:
     - module load gcc/6.4.0
     - export CC=gcc CXX=g++
 
-power9.clang_floor:
+power9-clang_floor:
   extends: [ .generic, .old_llvm, .power9 ]
   before_script:
     - module load clang/5.0.0-gcc640
@@ -655,22 +655,22 @@ power9.clang_floor:
     MY_CPU:  'aarch64'
     MY_HOST: 'wombat'
 
-wombat.gcc:
+wombat-gcc:
   extends: [ .dev_ci, .new_gnu, .wombat ]
   variables:
     ci_script: wombat-gcc
 
-wombat.clang:
+wombat-clang:
   extends: [ .dev_ci, .new_llvm, .wombat ]
   variables:
     ci_script: wombat-clang
 
-wombat.gcc_floor:
+wombat-gcc_floor:
   extends: [ .dev_ci, .old_gnu, .wombat ]
   variables:
     ci_script: wombat-gcc_old
 
-wombat.clang_floor:
+wombat-clang_floor:
   extends: [ .dev_ci, .old_llvm, .wombat ]
   variables:
     ci_script: wombat-clang_old
@@ -694,34 +694,34 @@ wombat.clang_floor:
     MY_CPU:  'x86_64'
     MY_HOST: 'cori_hsw'
 
-# Cori PrgEnv-cray
-cori_hsw.PrgEnv-cray:
+# Cori PrgEnv_cray
+cori_hsw-PrgEnv_cray:
   extends: [ .dev_ci, .new_cray, .cori_hsw.compute ]
 
-# Cori PrgEnv-intel
-cori_hsw.PrgEnv-intel:
+# Cori PrgEnv_intel
+cori_hsw-PrgEnv_intel:
   extends: [ .dev_ci, .new_intel, .cori_hsw.compute ]
   before_script:
     - export DEV_CI_PRGENV=intel
     - export DEV_CI_COMPILER=$(module -t avail intel |& sort -rV | grep -m1 ^intel) # newest
 
-# Cori PrgEnv-gnu
-cori_hsw.PrgEnv-gnu:
+# Cori PrgEnv_gnu
+cori_hsw-PrgEnv_gnu:
   extends: [ .dev_ci, .new_gnu, .cori_hsw.compute ]
   before_script:
     - export DEV_CI_PRGENV=gnu
     - export DEV_CI_COMPILER=$(module -t avail gcc |& sort -rV | grep -m1 ^gcc) # newest
 
-# Cori PrgEnv-cray_floor
-cori_hsw.PrgEnv-cray_floor:
+# Cori PrgEnv_cray_floor
+cori_hsw-PrgEnv_cray_floor:
   extends: [ .dev_ci, .old_cray, .cori_hsw.compute ]
   before_script:
     - export DEV_CI_COMPILER=cce/9.0.0
     # COMPILER_PATH is a hack to replace broken linker in out-of-date cce/9.0.0
     - export COMPILER_PATH=/opt/cray/pe/cce/default/binutils/x86_64/bin
 
-# Cori PrgEnv-intel_floor
-cori_hsw.PrgEnv-intel_floor:
+# Cori PrgEnv_intel_floor
+cori_hsw-PrgEnv_intel_floor:
   extends: [ .dev_ci, .old_intel, .cori_hsw.compute ]
   before_script:
     - export DEV_CI_PRGENV=intel
@@ -731,8 +731,8 @@ cori_hsw.PrgEnv-intel_floor:
     # GXX_INCLUDE is a hack to get archived Intel and GCC versions working together
     - export GXX_INCLUDE=$(dirname $(dirname $(which g++)))/snos/include/g++
 
-# Cori PrgEnv-gnu_floor
-cori_hsw.PrgEnv-gnu_floor:
+# Cori PrgEnv_gnu_floor
+cori_hsw-PrgEnv_gnu_floor:
   extends: [ .dev_ci, .old_gnu, .cori_hsw.compute ]
   before_script:
     - export DEV_CI_PRGENV=gnu
