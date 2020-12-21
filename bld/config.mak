@@ -15,7 +15,8 @@ UPCXX_CONFIG_SCRIPTS = \
 	issue400_workaround.sh
 # Scripts (in $(upcxx_src)/utils/config/gasnet) to be run IN ORDER
 GASNET_CONFIG_SCRIPTS = \
-	config_status.sh
+	config_status.sh \
+	openmp.sh
 
 # Environment (UPCXX_* prefixed) to export to configure probe scripts
 UPCXX_CONFIG_VARS = \

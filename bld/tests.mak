@@ -131,7 +131,6 @@ test_exclude_all += \
 endif
 
 # Conditionally exclude tests that require OpenMP:
-# TODO: configure logic to enable UPCXX_HAVE_OPENMP
 ifeq ($(strip $(UPCXX_HAVE_OPENMP)),)
 test_exclude_all += \
 	test/rput_omp.cpp \
