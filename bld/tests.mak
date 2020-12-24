@@ -198,16 +198,22 @@ TEST_FLAGS_MEMBEROF_GNU=-Wno-invalid-offsetof
 TEST_FLAGS_MEMBEROF_Clang=-Wno-invalid-offsetof
 export TEST_FLAGS_MEMBEROF=$(TEST_FLAGS_MEMBEROF_$(GASNET_CXX_FAMILY))
 
-ifeq ($(strip $(PGI_DEBUG_SYMBOLS_BROKEN)),1)
+ifeq ($(strip $(UPCXX_PLATFORM_HAS_ISSUE_390)),1)
 # issue #390: the following tests are known to ICE PGI floor version when debugging symbols are enabled
 # this compiler lacks a '-g0' option, so we use our home-grown alternative to strip off -g
 test_pgi_debug_symbols_broken = \
 	RPC_CTOR_TRACE \
 	NODISCARD \
 	MEMBEROF \
+	MISC_PERF \
 	ISSUE138
 endif
 $(foreach test,$(test_pgi_debug_symbols_broken),$(eval export TEST_FLAGS_$(test):=$(TEST_FLAGS_$(test)) -purge-option=-g))
+
+ifeq ($(strip $(UPCXX_PLATFORM_IBV_CUDA_HAS_BUG_4150)),1)
+  # Compile-time measure(s) to avoid known failures attributable to GASNet bug 4150
+  export TEST_FLAGS_COPY_COVER:=$(TEST_FLAGS_COPY_COVER) -DSKIP_KILL
+endif
 
 # 
 # Section 4. 
@@ -221,6 +227,18 @@ export TEST_ENV_PUT_FLOOD=fixed_iters=10
 export TEST_ARGS_CUDA_MICROBENCHMARK='-t 1 -w 1'
 export TEST_ARGS_MISC_PERF='1000'
 export TEST_ARGS_RPC_PERF='100 10 1048576'
+
+ifeq ($(strip $(UPCXX_PLATFORM_IBV_CUDA_HAS_BUG_4148)),1)
+  # Run-time measures to eliminate multiple communications paths, and
+  # thus avoid known failures attributable to GASNet bug 4148
+  test_ibv_cuda_bug_4148 = \
+	COPY_COVER
+  ifneq ($(strip $(GASNET_IBV_PORTS)),) # non-empty
+    # Reduce GASNET_IBV_PORTS, if any, to its first '+'-delimited element
+    TEST_IBV_SINGLE_PORT_SETTING = GASNET_IBV_PORTS=$(shell cut -d+ -f1 <<<$(GASNET_IBV_PORTS))
+  endif
+endif
+$(foreach test,$(test_ibv_cuda_bug_4148), $(eval export TEST_ENV_$(test):=$(TEST_ENV_$(test)) GASNET_SUPERNODE_MAXSIZE=1 $(TEST_IBV_SINGLE_PORT_SETTING)))
 
 #
 # End of configuration
