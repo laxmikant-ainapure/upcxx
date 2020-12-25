@@ -383,5 +383,9 @@ platform_settings() {
      *)
        ;;
    esac
+   if [[ $UPCXX_CROSS =~ ^cray-aries- ]]; then
+     # ~8kb is experimentally the best max AM threshold for RPC eager protocol on aries
+     GASNET_CONFIGURE_ARGS="--with-aries-max-medium=8128 ${GASNET_CONFIGURE_ARGS}"
+   fi
 }
 
