@@ -26,6 +26,9 @@ Improvements to RPC and Serialization:
   protocol cross-over points have been adjusted on all networks. These changes
   may result in noticable performance improvement for RPCs with a total size 
   (including serialized arguments) under about 64kb (exact limit varies with network).
+* The default aries-conduit max AM Medium size has been doubled to ~8kb to improve
+  performance of the RPC eager protocol. See aries-conduit README for details on
+  the available configure/envvar knobs to control this quantity.
 
 Infrastructure changes:
 
