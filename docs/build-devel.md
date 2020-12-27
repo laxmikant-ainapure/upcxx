@@ -179,7 +179,11 @@ options for configure and logic for running tests on batch-scheduled systems.
 These are maintained to include representative coverage of the range of
 compilers and networks which we document as officially supported.
 
-For details see [utils/dev-ci/README.md](../utils/dev-ci/README.md).
+These are maintained in a distinct git repository:
+[upcxx-ci](https://bitbucket.org/berkeleylab/upcxx-ci).
+
+If that repo is cloned *within* the top-level `upcxx` source directory, then
+the `upcxx-ci/dev-ci/*` scripts can be run in place.
   
 ## Internal-Only Make Options
 
