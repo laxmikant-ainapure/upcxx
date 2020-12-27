@@ -9,9 +9,10 @@ trap cleanup EXIT
 
 # Note use of GASNET_CONFIGURE_ARGS is a slight "cheat" to get all
 # arguments not consumed by the UPC++ configure script itself:
-eval $($UPCXX_GMAKE -C "$UPCXX_TOPBLD" echovar VARNAME=GASNET_CONFIGURE_ARGS)
-option=$( egrep -o -e '--?((en|dis)able|with(out)?)-openmp\>' <<<"$GASNET_CONFIGURE_ARGS" | tail -1 ) >& /dev/null
-
+option=$(
+  $UPCXX_GMAKE -C "$UPCXX_TOPBLD" echovar VARNAME=GASNET_CONFIGURE_ARGS |
+  egrep -o -e '--?((en|dis)able|with(out)?)-openmp\>' |
+  tail -1 ) >& /dev/null
 if [[ ${option} =~ -(disable|without)- ]]; then
   echo -e "\n# Optional OpenMP support disabled via configure"
   exit 0
