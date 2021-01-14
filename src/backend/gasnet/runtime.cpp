@@ -712,6 +712,7 @@ void upcxx::init() {
     backend::pshm_peer_ub = backend::rank_n;
     UPCXX_ASSERT_ALWAYS((intrank_t)peer_n == backend::rank_n);
     UPCXX_ASSERT_ALWAYS((intrank_t)peer_me == backend::rank_me);
+    UPCXX_ASSERT_ALWAYS(contiguous_nbhd);
     local_tm = world_tm;
   } else { // !local_is_world
     if(!contiguous_nbhd) {
@@ -760,9 +761,11 @@ void upcxx::init() {
       struct local_team_stats {
         int count;
         int min_size, max_size;
+        gex_Rank_t min_discontig_rank;
       };
       
-      local_team_stats stats = {peer_me == 0 ? 1 : 0, (int)peer_n, (int)peer_n};
+      local_team_stats stats = {peer_me == 0 ? 1 : 0, (int)peer_n, (int)peer_n,
+                                (contiguous_nbhd ? GEX_RANK_INVALID : backend::rank_me)};
       
       gex_Event_Wait(gex_Coll_ReduceToOneNB(
           world_tm, 0,
@@ -776,6 +779,7 @@ void upcxx::init() {
               acc[i].count += in[i].count;
               acc[i].min_size = std::min(acc[i].min_size, in[i].min_size);
               acc[i].max_size = std::max(acc[i].max_size, in[i].max_size);
+              acc[i].min_discontig_rank = std::min(acc[i].min_discontig_rank, in[i].min_discontig_rank);
             }
           },
           nullptr, 0
@@ -786,10 +790,20 @@ void upcxx::init() {
         <<"Local team statistics:"<<'\n'
         <<"  local teams = "<<stats.count<<'\n'
         <<"  min rank_n = "<<stats.min_size<<'\n'
-        <<"  max rank_n = "<<stats.max_size;
+        <<"  max rank_n = "<<stats.max_size<<'\n'
+        <<"  min discontig_rank = "<<(stats.min_discontig_rank==GEX_RANK_INVALID?"None":to_string(stats.min_discontig_rank));
 
       if(stats.count == backend::rank_n)
         noise.warn()<<"All local team's are singletons. Memory sharing between ranks will never succeed.";
+
+      if (stats.min_discontig_rank != GEX_RANK_INVALID) 
+        noise.warn()<<"One or more processes (including rank " << stats.min_discontig_rank << ")"
+          << " are co-located in a GASNet neighborhood with discontiguous rank IDs. "
+          << "As a result, these ranks will use a singleton local_team().\n"
+          << "This generally arises when the job spawner is directed to assign processes "
+          << "to nodes in a manner other than pure-blocked layout.\n"
+          << "For details, see issue #438";
+
     } // verbose_noise
     
     UPCXX_ASSERT_ALWAYS( local_scratch_sz && local_scratch_ptr );
