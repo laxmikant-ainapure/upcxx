@@ -1326,6 +1326,17 @@ intrank_t backend::team_rank_to_world(const team &tm, intrank_t peer) {
   return gex_TM_TranslateRankToJobrank(gasnet::handle_of(tm), peer);
 }
 
+// issue #440: This is a temporary hack, to be replaced once GEX expands segment query.
+// Until then we need to track AM handler context to avoid invoking segment query there.
+// The relevant call in backend::validate_global_ptr is currently only reachable from am_eager_restricted(),
+// so we deploy a point solution for that specific case.
+#ifndef UPCXX_TRACK_AM_CONTEXT
+#define UPCXX_TRACK_AM_CONTEXT UPCXX_ASSERT_ENABLED
+#endif
+#if UPCXX_TRACK_AM_CONTEXT
+static __thread bool inside_am_handler;
+#endif
+
 void backend::validate_global_ptr(bool allow_null, intrank_t rank, void *raw_ptr, std::int32_t heap_idx,
                                   memory_kind KindSet, size_t T_align, const char *T_name, 
                                   const char *short_context, const char *context) {
@@ -1392,8 +1403,12 @@ void backend::validate_global_ptr(bool allow_null, intrank_t rank, void *raw_ptr
       size_t size = 0;
 
       gex_TM_t tm = GEX_TM_INVALID;
-      if (heap_idx == 0) tm = world_tm; // host memory segment, ask GASNet
-      else { // device segment
+      if (heap_idx == 0) { // host memory segment
+        if (rank == backend::rank_me) { // local device, bounds are trivially available
+          owner_vbase = shared_heap_base;
+          size = shared_heap_sz;
+        } else tm = world_tm; // not this process, ask GASNet
+      } else { // device segment
         if (rank == backend::rank_me) { // local device, we have bounds
           backend::heap_state *hs = backend::heap_state::get(heap_idx, true);
           if_pf (!hs || !hs->alloc_base) {
@@ -1412,7 +1427,14 @@ void backend::validate_global_ptr(bool allow_null, intrank_t rank, void *raw_ptr
         #endif
       }
 
-      if (tm != GEX_TM_INVALID) {
+      if (tm != GEX_TM_INVALID &&
+       // issue #440: Cannot call in gex_Segment_QueryBound in AM handler context
+       #if UPCXX_TRACK_AM_CONTEXT
+          !inside_am_handler
+       #else
+          false // unknown context, conservative assumption
+       #endif
+       ) {
         int result = gex_Segment_QueryBound(tm, rank, &owner_vbase, nullptr, &size);
         if_pf (result != GASNET_OK) { // can only be remote device heap that does not exist
           UPCXX_ASSERT(heap_idx > 0);
@@ -2115,10 +2137,19 @@ namespace {
       std::memcpy((void**)tmp, (void**)buf, buf_size);
     }
 
+    #if UPCXX_TRACK_AM_CONTEXT // issue #440
+      UPCXX_ASSERT(!inside_am_handler);
+      inside_am_handler = true;
+    #endif
+
     gasnet::rpc_as_lpc dummy;
     dummy.payload = tmp;
     dummy.is_rdzv = false;
     command<detail::lpc_base*>::get_executor(detail::serialization_reader(tmp))(&dummy);
+
+    #if UPCXX_TRACK_AM_CONTEXT
+      inside_am_handler = false; 
+    #endif
 
     if(tmp != buf)
       std::free(tmp);
