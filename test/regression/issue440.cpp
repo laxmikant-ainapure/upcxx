@@ -41,7 +41,7 @@ struct A {
    assert(&top_persona_scope() == &ps);
    assert(&current_persona() == &p);
   }
-  UPCXX_SERIALIZED_VALUES(g);
+  UPCXX_SERIALIZED_VALUES(g)
 };
 
 int main() {
