@@ -1112,6 +1112,20 @@ std::string upcxx::detail::shared_heap_stats() {
     <<                       noise_log::size(gasnet::sheap_footprint_misc.bytes)<<'\n';
   return ss.str();
 }
+
+int64_t upcxx::shared_segment_size() {
+  UPCXX_ASSERT_INIT();
+  UPCXX_ASSERT(shared_heap_isinit);
+  return shared_heap_sz;
+}
+
+int64_t upcxx::shared_segment_used() {
+  UPCXX_ASSERT_INIT();
+  UPCXX_ASSERT(shared_heap_isinit);
+  return gasnet::sheap_footprint_user.bytes
+       + gasnet::sheap_footprint_rdzv.bytes
+       + gasnet::sheap_footprint_misc.bytes;
+}
   
 void* gasnet::allocate(size_t size, size_t alignment, sheap_footprint_t *foot) {
   UPCXX_ASSERT(shared_heap_isinit);
