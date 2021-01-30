@@ -137,6 +137,8 @@ namespace upcxx {
   namespace detail {
     std::string shared_heap_stats();
   }
+  std::int64_t shared_segment_size();
+  std::int64_t shared_segment_used();
   
   void progress(progress_level level = progress_level::user);
   

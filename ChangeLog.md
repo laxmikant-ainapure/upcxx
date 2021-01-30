@@ -19,6 +19,11 @@ the prototype stage ends.
 
 ### 20XX.YY.ZZ: PENDING
 
+General features/enhancements: (see specification and programmer's guide for full details)
+
+* New `shared_segment_{size,used}` queries return snapshots of the host shared segment
+  size and utilization.
+
 Improvements to RPC and Serialization:
 
 * The RPC implementation has been tuned and now incurs one less payload copy on
@@ -36,6 +41,7 @@ Infrastructure changes:
 
 Notable bug fixes:
 
+* issue #382: Expose shared heap usage at runtime
 * issue #428: Regression in `rpc(team,rank,..,view)` overload resolution
 * issue #429: upcxx library exposes dlmalloc symbols
 * issue #432: Some `upcxx::copy()` cases do not `discharge()` properly
