@@ -296,9 +296,29 @@ platform_sanity_checks() {
         elif echo "$CXXVERS" | egrep 'Apple LLVM version ([8-9]\.|[1-9][0-9])' 2>&1 > /dev/null ; then
             COMPILER_GOOD=1
         elif echo "$CXXVERS" | egrep 'PGI Compilers and Tools'  > /dev/null ; then
+            if [[ $UPCXX_CROSS =~ ^cray-aries- ]]; then
+               : # PrgEnv-pgi: currently neither GOOD nor BAD
+            elif egrep ' +(20\.[789]|20\.1[0-2]|2[1-9]\.[0-9]+)-' <<<"$CXXVERS" 2>&1 >/dev/null ; then
+               # Ex: "pgc++ (aka nvc++) 20.7-0 LLVM 64-bit target on x86-64 Linux -tp nehalem"
+               # 20.7 and up are known BAD
+               # TODO: update with end range before 2030
                COMPILER_BAD=1
                EXTRA_RECOMMEND='
-       As an exception to the above, the PGI (aka NVIDIA HPC SDK) compiler is NOT currently supported in this prototype.'
+       As an exception to the above, PGI (aka NVIDIA HPC SDK) 20.7 and newer are NOT currently supported.'
+            elif [[ "$ARCH,$KERNEL" = 'x86_64,Linux' ]] &&
+                 egrep ' +(19|[2-9][0-9])\.[0-9]+-' <<<"$CXXVERS" 2>&1 >/dev/null ; then
+               # Ex: "pgc++ 19.7-0 LLVM 64-bit target on x86-64 Linux -tp nehalem"
+               # 19.1 and newer "GOOD"
+               COMPILER_GOOD=1
+            elif [[ "$ARCH,$KERNEL" = 'ppc64le,Linux' ]] &&
+                 egrep ' +(18\.10|(19|[2-9][0-9])\.[0-9]+)-' <<<"$CXXVERS" 2>&1 >/dev/null ; then
+               # Ex: "pgc++ 18.10-0 linuxpower target on Linuxpower"
+               # 18.10 and newer "GOOD" (no 18.x was released for x > 10)
+               COMPILER_GOOD=1
+            else
+               # Unsuported platform or version
+               COMPILER_BAD=1
+            fi
         elif echo "$CXXVERS" | egrep 'IBM XL'  > /dev/null ; then
             COMPILER_BAD=1
         elif echo "$CXXVERS" | egrep 'Free Software Foundation' 2>&1 > /dev/null &&
