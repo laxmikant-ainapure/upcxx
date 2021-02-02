@@ -37,7 +37,7 @@ int main() {
       int64_t delta = new_used - used;
       upcxx::say() << " allocated=" << sz << ": used=" << new_used << " delta=" << delta;
 
-      assert(delta >= sz); // NOT guaranteed by spec, but should be true in this particular case
+      assert(delta >= (int64_t)sz); // NOT guaranteed by spec, but should be true in this particular case
 
       used = new_used;
     }
