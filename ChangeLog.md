@@ -39,6 +39,14 @@ Infrastructure changes:
 
 * The `install` script, deprecated since 2020.3.0, has been removed.
 
+Requirements changes:
+
+* The PGI-branded C++ compiler (version <= 20.4) is conditionally supported
+  in this version. There is a known problem with the optimizer that breaks
+  `upcxx::copy()` (issue #421), so the affected function is disabled at
+  runtime. NVIDIA-branded compilers (20.7 and later) remain unsupported, due
+  to unrelated problems.
+
 Notable bug fixes:
 
 * issue #382: Expose shared heap usage at runtime

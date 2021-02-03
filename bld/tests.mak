@@ -120,14 +120,15 @@ test_exclude_all += \
 	test/uts/uts_omp.cpp \
 	test/uts/uts_threads.cpp
 
-# Conditionally exclude tests that require CUDA support:
-ifneq ($(UPCXX_CUDA),1)
-test_exclude_all += \
+# Conditionally exclude tests that require a valid CUDA device at runtime:
+test_requires_cuda_device = \
 	bench/cuda_microbenchmark.cpp \
 	test/bad-segment-alloc.cpp \
 	test/regression/issue432.cpp \
 	example/prog-guide/h-d.cpp \
 	example/prog-guide/h-d-remote.cpp
+ifneq ($(UPCXX_CUDA),1)
+test_exclude_all += $(test_requires_cuda_device)
 endif
 
 # Conditionally exclude tests that require OpenMP:
@@ -184,6 +185,17 @@ test_exclude_fail_all = \
 test_exclude_fail_seq =
 
 test_exclude_fail_par =
+
+# issue #421: upcxx::copy unsupported on PGI, exclude all tests that use cuda_device or upcxx::copy
+ifeq ($(strip $(GASNET_CXX_FAMILY)),PGI)
+test_exclude_all += \
+	$(test_requires_cuda_device) \
+	test/copy-cover.cpp \
+	test/copy.cpp \
+	test/regression/issue405.cpp \
+	test/regression/issue421.cpp \
+	test/regression/issue421b.cpp 
+endif
 
 # 
 # Section 3. 

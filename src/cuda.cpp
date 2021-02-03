@@ -193,7 +193,7 @@ upcxx::cuda_device::cuda_device(int device):
         cuInit(0);
         res = cuDevicePrimaryCtxRetain(&ctx, device);
       }
-      CU_CHECK_ALWAYS(("cuDevicePrimaryCtxRetain()", res));
+      CU_CHECK_ALWAYS(((void)"cuDevicePrimaryCtxRetain()", res));
       CU_CHECK_ALWAYS(cuCtxPushCurrent(ctx));
 
       cuda::device_state *st = new cuda::device_state{};

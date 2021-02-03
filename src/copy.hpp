@@ -122,6 +122,10 @@ namespace upcxx {
   copy(const int heap_s, const intrank_t rank_s, void *const buf_s,
        const int heap_d, const intrank_t rank_d, void *const buf_d,
        const std::size_t size, Cxs &&cxs) {
+
+    #if __PGI && !UPCXX_FORCE_PGI_COPY
+      UPCXX_FATAL_ERROR("upcxx::copy() is currently not supported with the PGI/Nvidia C++ compiler (issue #421)");
+    #endif
     
     using CxsDecayed = typename std::decay<Cxs>::type;
     using cxs_here_t = detail::completions_state<
