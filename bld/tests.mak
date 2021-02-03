@@ -179,8 +179,7 @@ test_exclude_seq += \
 #
 
 test_exclude_fail_all = \
-	test/regression/issue242.cpp \
-	test/regression/issue336.cpp
+	test/regression/issue242.cpp 
 
 test_exclude_fail_seq =
 
