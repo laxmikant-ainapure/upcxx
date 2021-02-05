@@ -88,7 +88,7 @@ int main() {
         }
         else {
           gpu[dev-1] = new cuda_device(cuda_device::invalid_device_id);
-          seg[dev-1] = nullptr;
+          seg[dev-1] = new device_allocator<cuda_device>(*gpu[dev-1], 0);
         }
       }
     #endif
@@ -212,8 +212,7 @@ int main() {
         }
         gpu[dev-1]->destroy();
         delete gpu[dev-1];
-        if(me < 2)
-          delete seg[dev-1]; // delete segment after device since that's historically buggy in implementation
+        delete seg[dev-1]; // delete segment after device since that's historically buggy in implementation
       }
     #endif
   }

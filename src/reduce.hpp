@@ -781,7 +781,7 @@ namespace upcxx {
           team_id tm_id = tm.id();
           
           backend::template send_am_master<progress_level::internal>(
-            tm, parent,
+            backend::team_rank_to_world(tm, parent),
             upcxx::bind(
               //[=](T &value, decltype(detail::globalize_fnptr(std::declval<Op>())) const &op) {
               [=](T &&value, typename detail::globalize_fnptr_return<Op>::type const &op)->void {

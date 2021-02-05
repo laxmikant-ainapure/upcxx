@@ -93,6 +93,7 @@ do-gasnet-configure: force
 	@dir=$(GASNETDIR);                                                            \
 	 if test \! -f "$$dir/gasnet_config.h" ; then                                 \
 	   echo "Configuring $(GASNET_CODEMODE)-mode build of GASNet";                \
+	   export GASNET_SUPPRESS_DEBUG_WARNING=1 ;                                   \
 	   if test -n "$(UPCXX_CROSS)"; then                                                \
 	     cmd="SRCDIR=$(GASNET) $(GASNET)/other/contrib/cross-configure-$(UPCXX_CROSS)"; \
 	   else                                                                       \

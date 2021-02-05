@@ -172,7 +172,7 @@ function version {
   fi
   githash=$(git describe --always 2> /dev/null)
   echo "UPC++ version $version $githash"
-  echo "Copyright (c) 2020, The Regents of the University of California,"
+  echo "Copyright (c) 2021, The Regents of the University of California,"
   echo "through Lawrence Berkeley National Laboratory."
   echo "https://upcxx.lbl.gov"
   echo ""
@@ -288,7 +288,7 @@ while [[ $# -gt 0 ]]; do
 
     # Not yet relevant to GASNet's configure (but might move there later):
     -with-cuda)                 UPCXX_CUDA=1; export UPCXX_CUDA;;
-    -without-cuda)              UPCXX_CUDA=0; export UPCXX_CUDA;;
+    -without-cuda)              unset UPCXX_CUDA;;
     -with-nvcc?(=*))            UPCXX_CUDA_NVCC="$(get_arg_val $arg)";     export UPCXX_CUDA_NVCC;;
     -with-cuda-cppflags?(=*))   UPCXX_CUDA_CPPFLAGS="$(get_arg_val $arg)"; export UPCXX_CUDA_CPPFLAGS;;
     -with-cuda-libflags?(=*))   UPCXX_CUDA_LIBFLAGS="$(get_arg_val $arg)"; export UPCXX_CUDA_LIBFLAGS;;
@@ -412,7 +412,7 @@ check_tool_path() {
 # Default GASNet source
 # Enable offline installers with an embedded GASNet-EX tarball
 #
-GASNET_DEFAULT='https://gasnet-bugs.lbl.gov/nightly/unlisted/GASNet-stable.tar.gz'
+GASNET_DEFAULT='https://gasnet-bugs.lbl.gov/nightly/unlisted/GASNet-memory_kinds.tar.gz'
 gex_offline=`/bin/ls "$UPCXX_SRC"/src/GASNet-{stable,2???.*}.tar.gz 2> /dev/null | sort -t. -k1,1 -k2,2n -k3n | tail -1`
 if [[ -n "$GASNET" ]]; then
   : # keep defn
@@ -448,10 +448,23 @@ elif [ -r "$GASNET/gasnet_config.h.in" ]; then
 elif [ -r "$GASNET/gasnetex.h" ]; then
   echo_and_die "GASNET='$GASNET' appears to be an un-bootstraped source tree.  Please run '$GASNET/Bootstrap'"
 elif expr "$GASNET" : '.*\.tar\.gz' >/dev/null; then
-  # Unpack tarball into bld/ unless already present
+  # Unpack tarball into bld/
   gex_dir="$PWD/bld/`basename $GASNET .tar.gz`"
   gex_tmp=''
-  if [ ! -r "$gex_dir/gasnet_config.h.in" ]; then
+
+  if [[ -r "$gex_dir" ]]; then
+    # Sort out what to do about a conflicting destination
+    if [[ -n "$gasnet_help" ]]; then
+      : # leave it alone to ensure that --help=recursive is non-destructive
+    elif [[ ! -r "$gex_dir/gasnet_config.h.in" ]]; then
+      # Does not appear to be from a GASNet-EX tarball - give up rather than clobber
+      echo_and_die "Refusing to remove '$gex_dir', which does not appear to be a bootstrapped GASNet-EX source directory.  You may need to manually rename or remove it to proceed."
+    else
+      rm -Rf "$gex_dir"
+    fi
+  fi
+
+  if [[ ! -r "$gex_dir" ]]; then
     trap - ERR # suspend error handler for detailed diagnostics
     mkdir -p bld
     if expr "$GASNET" : http >/dev/null; then

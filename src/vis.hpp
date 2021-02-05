@@ -119,8 +119,7 @@ namespace upcxx
       void send_remote() {
         auto *cbs = static_cast<FinalType*>(this);
         
-        backend::send_am_master<progress_level::user>(
-          upcxx::world(), cbs->rank_d,
+        backend::send_am_master<progress_level::user>( cbs->rank_d,
           upcxx::bind(
             [](deserialized_type_t<CxStateRemote> &&st) {
               return st.template operator()<remote_cx_event>();
@@ -435,7 +434,7 @@ namespace upcxx
     UPCXX_ASSERT_ALWAYS((detail::completions_has_event<CxsDecayed, operation_cx_event>::value |
                   detail::completions_has_event<CxsDecayed, remote_cx_event>::value),
                  "Not requesting either operation or remote completion is surely an "
-                 "error. You'll have know way of ever knowing when the target memory is "
+                 "error. You'll have no way of ever knowing when the target memory is "
                  "safe to read or write again.");
 
                  
@@ -532,7 +531,7 @@ namespace upcxx
     UPCXX_ASSERT_ALWAYS((detail::completions_has_event<CxsDecayed, operation_cx_event>::value |
                   detail::completions_has_event<CxsDecayed, remote_cx_event>::value),
                  "Not requesting either operation or remote completion is surely an "
-                 "error. You'll have know way of ever knowing when the target memory is "
+                 "error. You'll have no way of ever knowing when the target memory is "
                  "safe to read or write again.");
     /* rget_irregular supports remote completion, contrary to the spec */
     UPCXX_ASSERT_ALWAYS(
@@ -631,7 +630,7 @@ namespace upcxx
                   detail::completions_has_event<CxsDecayed, operation_cx_event>::value |
                   detail::completions_has_event<CxsDecayed, remote_cx_event>::value),
                  "Not requesting either operation or remote completion is surely an "
-                 "error. You'll have know way of ever knowing when the target memory is "
+                 "error. You'll have no way of ever knowing when the target memory is "
                  "safe to read or write again.");
  
     static_assert(std::is_convertible<
@@ -738,7 +737,7 @@ namespace upcxx
     UPCXX_ASSERT_ALWAYS((detail::completions_has_event<CxsDecayed, operation_cx_event>::value |
                   detail::completions_has_event<CxsDecayed, remote_cx_event>::value),
                  "Not requesting either operation or remote completion is surely an "
-                 "error. You'll have know way of ever knowing when the target memory is "
+                 "error. You'll have no way of ever knowing when the target memory is "
                  "safe to read or write again.");
     /* rget_regular supports remote completion, contrary to the spec */
     UPCXX_ASSERT_ALWAYS(
@@ -837,7 +836,7 @@ namespace upcxx
       detail::completions_has_event<CxsDecayed, operation_cx_event>::value |
       detail::completions_has_event<CxsDecayed, remote_cx_event>::value),
       "Not requesting either operation or remote completion is surely an "
-      "error. You'll have know way of ever knowing when the target memory is "
+      "error. You'll have no way of ever knowing when the target memory is "
       "safe to read or write again."
                          );
     
@@ -917,7 +916,7 @@ namespace upcxx
     UPCXX_ASSERT_ALWAYS((detail::completions_has_event<CxsDecayed, operation_cx_event>::value |
                   detail::completions_has_event<CxsDecayed, remote_cx_event>::value),
                  "Not requesting either operation or remote completion is surely an "
-                 "error. You'll have know way of ever knowing when the target memory is "
+                 "error. You'll have no way of ever knowing when the target memory is "
                  "safe to read or write again.");
     /* rget_strided supports remote completion, contrary to the spec */
     UPCXX_ASSERT_ALWAYS(

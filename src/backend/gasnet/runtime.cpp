@@ -65,6 +65,11 @@ static_assert(
 );
 
 static_assert(
+  sizeof(gex_AM_SrcDesc_t) <= sizeof(uintptr_t),
+  "Failed: sizeof(gex_AM_SrcDesc_t) <= sizeof(uintptr_t)"
+);
+
+static_assert(
   sizeof(gex_TM_t) == sizeof(uintptr_t),
   "Failed: sizeof(gex_TM_t) == sizeof(uintptr_t)"
 );
@@ -78,6 +83,12 @@ intrank_t backend::rank_n = -1;
 intrank_t backend::rank_me; // leave undefined so valgrind can catch it.
 
 bool backend::verbose_noise = false;
+
+backend::heap_state *backend::heap_state::heaps[backend::heap_state::max_heaps] = {/*nullptr...*/};
+int backend::heap_state::heap_count = 1; // host segment is implicitly idx 0
+bool backend::heap_state::use_mk_ = false;  // set by heap_state::init()
+bool backend::heap_state::recycle = false; // set by heap_state::init()
+bool backend::heap_state::bug4148_workaround_ = false; // set by heap_state::init()
 
 persona backend::master;
 persona_scope *backend::initial_master_scope = nullptr;
@@ -100,6 +111,7 @@ unique_ptr<uintptr_t[/*local_team.size()*/]> backend::pshm_size;
 // from: upcxx/backend/gasnet/runtime.hpp
 
 size_t gasnet::am_size_rdzv_cutover;
+size_t gasnet::am_size_rdzv_cutover_local;
 
 sheap_footprint_t gasnet::sheap_footprint_rdzv;
 sheap_footprint_t gasnet::sheap_footprint_misc;
@@ -249,9 +261,38 @@ namespace {
 
 #include <upcxx/dl_malloc.h>
 
+void upcxx::backend::heap_state::init() {
+  heap_state::use_mk_ = false 
+  #if UPCXX_CUDA_ENABLED
+     || upcxx::cuda::use_mk()
+  #endif
+  /* || otherkind::use_mk() ... */;
+
+  // currently we do not recycle heap_idx when using GASNet memory kinds,
+  // until GASNet grows the ability to recycle endpoints
+  heap_state::recycle = !heap_state::use_mk_;
+
+  #if UPCXX_CUDA_USE_MK
+    #if UPCXX_NETWORK_IBV
+      gex_Rank_t num_nbrhd;
+      gex_System_QueryMyPosition(&num_nbrhd, 0, 0, 0);
+      UPCXX_ASSERT(intrank_t(num_nbrhd) <= backend::rank_n);
+      bool bug4148 = // GASNet bug 4148 arises in two scenarios:
+         (intrank_t(num_nbrhd) < backend::rank_n) // some node is using PSHM bypass
+         || upcxx::os_env<bool>("GASNET_USE_FENCED_PUTS", false); // or ibv multi-rail
+    #else
+      bool bug4148 = false;
+    #endif
+    heap_state::bug4148_workaround_ =
+      upcxx::os_env<bool>("UPCXX_BUG4148_WORKAROUND", bug4148);
+  #endif
+}
+
+
 namespace {
   gex_TM_t world_tm;
   gex_TM_t local_tm;
+  gex_EP_t endpoint0;
 
   detail::par_mutex segment_lock_;
   mspace segment_mspace_;
@@ -344,6 +385,8 @@ namespace {
         UPCXX_ASSERT_ALWAYS(local_scratch_ptr);
       }
     }
+
+    backend::heap_state::init();
   }
   void init_localheap_tables(void);
 }
@@ -452,18 +495,18 @@ void upcxx::init() {
   tls.is_primordial_thread = true;
 
   gex_Client_t client;
-  gex_EP_t endpoint;
   gex_Segment_t segment;
 
   if (upcxx_upc_is_linked()) {
-    upcxx_upc_init(&client, &endpoint, &world_tm);
+    upcxx_upc_init(&client, &endpoint0, &world_tm);
   } else { 
     // issue 419: we clear init across gex_Client_Init so that any processes forked 
     // inside this call don't appear to have an initialized UPC++ library, unless they 
     // return from this call and finish upcxx::init()
     backend::init_count = 0; 
-    ok = gex_Client_Init(&client, &endpoint, &world_tm, "upcxx", nullptr, nullptr, 0);
+    ok = gex_Client_Init(&client, &endpoint0, &world_tm, "upcxx", nullptr, nullptr, 0);
     UPCXX_ASSERT_ALWAYS(ok == GASNET_OK);
+    UPCXX_ASSERT_ALWAYS(gex_EP_QueryIndex(endpoint0) == 0);
     backend::init_count = 1;
   }
 
@@ -552,18 +595,33 @@ void upcxx::init() {
   }
 
   // AM handler registration
-  ok = gex_EP_RegisterHandlers(endpoint, am_table, sizeof(am_table)/sizeof(am_table[0]));
+  ok = gex_EP_RegisterHandlers(endpoint0, am_table, sizeof(am_table)/sizeof(am_table[0]));
   UPCXX_ASSERT_ALWAYS(ok == GASNET_OK);
 
-  size_t am_medium_size = gex_AM_MaxRequestMedium(
-    world_tm,
-    GEX_RANK_INVALID,
-    GEX_EVENT_NOW,
-    /*flags*/0,
-    3
-  );
+  //////////////////////////////////////////////////////////////////////////////
+  // Determine RPC Eager/Rendezvous Threshold
+ 
+  #define UPCXX_MAX_RPC_AM_ARGS 3
+  size_t fpam_medium_size = gex_AM_MaxRequestMedium( world_tm, GEX_RANK_INVALID, GEX_EVENT_NOW, 
+                                                     /*flags*/0, UPCXX_MAX_RPC_AM_ARGS);
+  size_t npam_medium_size = gex_AM_MaxRequestMedium( world_tm, GEX_RANK_INVALID, GEX_EVENT_NOW, 
+                                                     GEX_FLAG_AM_PREPARE_LEAST_ALLOC, UPCXX_MAX_RPC_AM_ARGS);
+  // the two values above are usually the same, this is just for paranoia:
+  size_t am_medium_size = std::min(fpam_medium_size, npam_medium_size);
   
-  /* TODO: I pulled this from thin air. We want to lean towards only
+  /* 
+   * Original default calculcation, though 2020.11.0 (comments added reflect that version)
+   *
+   * gasnet::am_size_rdzv_cutover =
+   *   am_medium_size < 1<<10 ? 256 : // no current conduits with default configure args
+   *   am_medium_size < 8<<10 ? 512 : // ucx-conduit and aries-conduit default (both around 4KB)
+   *                            1024; // all other conduits
+   *
+   * Original Rationale: 
+   * (The following misleading statement is based on a misunderstanding of how
+   * AMs are actually implemented in most conduits, and should mostly be ignored)
+   *
+   * This default was pulled this from thin air. We want to lean towards only
    * sending very small messages eagerly so as not to clog the landing
    * zone, which would force producers to block on their next send. By
    * using a low threshold for rendezvous we increase the probability
@@ -571,12 +629,50 @@ void upcxx::init() {
    * yet another rendezvous. I'm using the max medium size as a heuristic
    * means to approximate the landing zone size. This is not at all
    * accurate, we should be doing something conduit dependent.
+   *
    */
-  gasnet::am_size_rdzv_cutover =
-    am_medium_size < 1<<10 ? 256 :
-    am_medium_size < 8<<10 ? 512 :
-                             1024;
-  UPCXX_ASSERT(gasnet::am_size_rdzv_cutover_min <= gasnet::am_size_rdzv_cutover);
+
+  #define ENV_THRESH(var, varname, defaultval) do { \
+    var = os_env(varname, defaultval, 1/* units: bytes */); \
+    /* enforce limits */ \
+    if (var < gasnet::am_size_rdzv_cutover_min) { \
+      noise.warn() << "Requested "<<varname<<" (" << var \
+                   << ") is too small. Raised to minimum value (" << gasnet::am_size_rdzv_cutover_min << ")"; \
+      var = gasnet::am_size_rdzv_cutover_min; \
+    } \
+    if (var > am_medium_size) { \
+      noise.warn() << "Requested "<<varname<<" (" << var \
+                   << ") is too large. Lowered to current maximum value (" << am_medium_size << ")"; \
+      var = am_medium_size; \
+    } \
+    UPCXX_ASSERT(gasnet::am_size_rdzv_cutover_min <= var); \
+  } while(0)
+
+  // compute a default threshold
+  // 2020-11: testing across all conduits show that maximizing the eager threshold usually
+  //          provides the best microbenchmark performance in practice for network RPC
+  #ifndef UPCXX_RPC_EAGER_THRESHOLD_DEFAULT
+    #if GASNET_CONDUIT_UCX
+      // except on ucx-conduit which peaks around 2kb
+      #define UPCXX_RPC_EAGER_THRESHOLD_DEFAULT 2048
+    #elif GASNET_CONDUIT_ARIES
+      // aries maxmedium defaults to ~4k but can be raised higher via configure
+      // 2020-11 testing shows the right crossover is around 8kb on knl and haswell
+      #define UPCXX_RPC_EAGER_THRESHOLD_DEFAULT 8192
+    #else
+      #define UPCXX_RPC_EAGER_THRESHOLD_DEFAULT am_medium_size
+    #endif
+  #endif
+  ENV_THRESH(gasnet::am_size_rdzv_cutover, "UPCXX_RPC_EAGER_THRESHOLD", 
+             std::min(std::size_t(UPCXX_RPC_EAGER_THRESHOLD_DEFAULT),am_medium_size));
+
+  // optimal PSHM threshold seems to be around 4KB
+  #ifndef UPCXX_RPC_EAGER_THRESHOLD_LOCAL_DEFAULT
+    #define UPCXX_RPC_EAGER_THRESHOLD_LOCAL_DEFAULT 4096
+  #endif
+  ENV_THRESH(gasnet::am_size_rdzv_cutover_local, "UPCXX_RPC_EAGER_THRESHOLD_LOCAL", 
+             std::min(std::size_t(UPCXX_RPC_EAGER_THRESHOLD_LOCAL_DEFAULT),gasnet::am_size_rdzv_cutover)); 
+
 
   //////////////////////////////////////////////////////////////////////////////
   // Determine if we're oversubscribed.
@@ -616,6 +712,7 @@ void upcxx::init() {
     backend::pshm_peer_ub = backend::rank_n;
     UPCXX_ASSERT_ALWAYS((intrank_t)peer_n == backend::rank_n);
     UPCXX_ASSERT_ALWAYS((intrank_t)peer_me == backend::rank_me);
+    UPCXX_ASSERT_ALWAYS(contiguous_nbhd);
     local_tm = world_tm;
   } else { // !local_is_world
     if(!contiguous_nbhd) {
@@ -664,9 +761,11 @@ void upcxx::init() {
       struct local_team_stats {
         int count;
         int min_size, max_size;
+        gex_Rank_t min_discontig_rank;
       };
       
-      local_team_stats stats = {peer_me == 0 ? 1 : 0, (int)peer_n, (int)peer_n};
+      local_team_stats stats = {peer_me == 0 ? 1 : 0, (int)peer_n, (int)peer_n,
+                                (contiguous_nbhd ? GEX_RANK_INVALID : backend::rank_me)};
       
       gex_Event_Wait(gex_Coll_ReduceToOneNB(
           world_tm, 0,
@@ -680,6 +779,7 @@ void upcxx::init() {
               acc[i].count += in[i].count;
               acc[i].min_size = std::min(acc[i].min_size, in[i].min_size);
               acc[i].max_size = std::max(acc[i].max_size, in[i].max_size);
+              acc[i].min_discontig_rank = std::min(acc[i].min_discontig_rank, in[i].min_discontig_rank);
             }
           },
           nullptr, 0
@@ -690,10 +790,20 @@ void upcxx::init() {
         <<"Local team statistics:"<<'\n'
         <<"  local teams = "<<stats.count<<'\n'
         <<"  min rank_n = "<<stats.min_size<<'\n'
-        <<"  max rank_n = "<<stats.max_size;
+        <<"  max rank_n = "<<stats.max_size<<'\n'
+        <<"  min discontig_rank = "<<(stats.min_discontig_rank==GEX_RANK_INVALID?"None":to_string(stats.min_discontig_rank));
 
       if(stats.count == backend::rank_n)
         noise.warn()<<"All local team's are singletons. Memory sharing between ranks will never succeed.";
+
+      if (stats.min_discontig_rank != GEX_RANK_INVALID) 
+        noise.warn()<<"One or more processes (including rank " << stats.min_discontig_rank << ")"
+          << " are co-located in a GASNet neighborhood with discontiguous rank IDs. "
+          << "As a result, these ranks will use a singleton local_team().\n"
+          << "This generally arises when the job spawner is directed to assign processes "
+          << "to nodes in a manner other than pure-blocked layout.\n"
+          << "For details, see issue #438";
+
     } // verbose_noise
     
     UPCXX_ASSERT_ALWAYS( local_scratch_sz && local_scratch_ptr );
@@ -1002,6 +1112,20 @@ std::string upcxx::detail::shared_heap_stats() {
     <<                       noise_log::size(gasnet::sheap_footprint_misc.bytes)<<'\n';
   return ss.str();
 }
+
+int64_t upcxx::shared_segment_size() {
+  UPCXX_ASSERT_INIT();
+  UPCXX_ASSERT(shared_heap_isinit);
+  return shared_heap_sz;
+}
+
+int64_t upcxx::shared_segment_used() {
+  UPCXX_ASSERT_INIT();
+  UPCXX_ASSERT(shared_heap_isinit);
+  return gasnet::sheap_footprint_user.bytes
+       + gasnet::sheap_footprint_rdzv.bytes
+       + gasnet::sheap_footprint_misc.bytes;
+}
   
 void* gasnet::allocate(size_t size, size_t alignment, sheap_footprint_t *foot) {
   UPCXX_ASSERT(shared_heap_isinit);
@@ -1216,7 +1340,18 @@ intrank_t backend::team_rank_to_world(const team &tm, intrank_t peer) {
   return gex_TM_TranslateRankToJobrank(gasnet::handle_of(tm), peer);
 }
 
-void backend::validate_global_ptr(bool allow_null, intrank_t rank, void *raw_ptr, std::int32_t device,
+// issue #440: This is a temporary hack, to be replaced once GEX expands segment query.
+// Until then we need to track AM handler context to avoid invoking segment query there.
+// The relevant call in backend::validate_global_ptr is currently only reachable from am_eager_restricted(),
+// so we deploy a point solution for that specific case.
+#ifndef UPCXX_TRACK_AM_CONTEXT
+#define UPCXX_TRACK_AM_CONTEXT UPCXX_ASSERT_ENABLED
+#endif
+#if UPCXX_TRACK_AM_CONTEXT
+static __thread bool inside_am_handler;
+#endif
+
+void backend::validate_global_ptr(bool allow_null, intrank_t rank, void *raw_ptr, std::int32_t heap_idx,
                                   memory_kind KindSet, size_t T_align, const char *T_name, 
                                   const char *short_context, const char *context) {
   if_pf (!upcxx::initialized()) return; // don't perform checking before init
@@ -1243,9 +1378,10 @@ void backend::validate_global_ptr(bool allow_null, intrank_t rank, void *raw_ptr
 
   do { // run diagnostics
     bool is_null = !raw_ptr;
+      // TODO: this will need adjustment when introducing offset-addressable kinds
 
     if (is_null) {
-      if_pf(device != -1 || rank != 0) {
+      if_pf(heap_idx != 0 || rank != 0) {
         ss << pretty_type() << " representation corrupted, bad null\n";
         error = true; break;
       }
@@ -1262,38 +1398,76 @@ void backend::validate_global_ptr(bool allow_null, intrank_t rank, void *raw_ptr
       error = true; break;
     }
 
-    #if UPCXX_CUDA_ENABLED
-      const int max_cuda_device = upcxx::cuda::max_devices - 1;
-    #else
-      const int max_cuda_device = -1;
-    #endif
-
     if_pf (
-        (KindSet == memory_kind::host && device != -1) // host should always be device -1
-     || ((int(KindSet) & int(memory_kind::host)) == 0 && device == -1) // non-host gptr cannot ref host device
-     || (device < -1) // currently never use other negative devices
-     || (KindSet == memory_kind::cuda_device && device > max_cuda_device) // invalid cuda device
+        (KindSet == memory_kind::host && heap_idx != 0) // host should always be heap_idx 0
+     || ((int(KindSet) & int(memory_kind::host)) == 0 && heap_idx == 0) // non-host gptr cannot ref host device
+     || (heap_idx < 0) // currently never use negative heap_idx
+     || (heap_idx >= backend::heap_state::max_heaps) // invalid heap_idx
       ) {
-      ss << pretty_type() << " representation corrupted, bad device\n";
+      ss << pretty_type() << " representation corrupted, bad heap_idx\n";
       error = true; break;
     }
 
     #ifndef UPCXX_GPTR_CHECK_SCALE
     #define UPCXX_GPTR_CHECK_SCALE 1024 // job size limit where we stop bounds-checking remote segs
     #endif
-    if (device == -1 && // host memory segment bounds-check
-        (rank_is_local(rank) || backend::rank_n <= UPCXX_GPTR_CHECK_SCALE)) {
-      void *owner_vbase;
-      uintptr_t size;
+    if (rank_is_local(rank) || backend::rank_n <= UPCXX_GPTR_CHECK_SCALE) {
+      // compute segment bounds
+      void *owner_vbase = nullptr;
+      size_t size = 0;
 
-      gex_Segment_QueryBound(world_tm, rank,
-                             &owner_vbase, nullptr, &size);
-      UPCXX_ASSERT_ALWAYS(owner_vbase && size);
-      void *owner_vlim = (void *)(((char*)owner_vbase) + size - 1);
-      if_pf (raw_ptr < owner_vbase || raw_ptr > owner_vlim) {
-        ss << pretty_type() << " out-of-bounds of host segment [" 
-           << owner_vbase << ", " << owner_vlim << "]\n";
-        error = true; break;
+      gex_TM_t tm = GEX_TM_INVALID;
+      if (heap_idx == 0) { // host memory segment
+        if (rank == backend::rank_me) { // local device, bounds are trivially available
+          owner_vbase = shared_heap_base;
+          size = shared_heap_sz;
+        } else tm = world_tm; // not this process, ask GASNet
+      } else { // device segment
+        if (rank == backend::rank_me) { // local device, we have bounds
+          backend::heap_state *hs = backend::heap_state::get(heap_idx, true);
+          if_pf (!hs || !hs->alloc_base) {
+            ss << pretty_type() << " representation corrupted or stale pointer, "
+               << "heap_idx does not correspond to an active device segment\n";
+            error = true; break;
+          }
+          std::tie(owner_vbase, size) = hs->alloc_base->seg_.segment_range();
+          UPCXX_ASSERT(owner_vbase && size);
+        }
+        #if GEX_SPEC_VERSION_MINOR >= 12 || GEX_SPEC_VERSION_MAJOR 
+        else if (backend::heap_state::use_mk()) { // query GEX for remote device EP
+          UPCXX_ASSERT(endpoint0 != GEX_EP_INVALID);
+          tm = gex_TM_Pair(endpoint0, heap_idx);
+        }
+        #endif
+      }
+
+      if (tm != GEX_TM_INVALID &&
+       // issue #440: Cannot call in gex_Segment_QueryBound in AM handler context
+       #if UPCXX_TRACK_AM_CONTEXT
+          !inside_am_handler
+       #else
+          false // unknown context, conservative assumption
+       #endif
+       ) {
+        int result = gex_Segment_QueryBound(tm, rank, &owner_vbase, nullptr, &size);
+        if_pf (result != GASNET_OK) { // can only be remote device heap that does not exist
+          UPCXX_ASSERT(heap_idx > 0);
+          UPCXX_ASSERT(rank != backend::rank_me);
+          ss << pretty_type() << " representation corrupted or stale pointer, "
+             << "heap_idx does not correspond to an active device segment\n";
+          error = true; break;
+        }
+        UPCXX_ASSERT(owner_vbase && size);
+      }
+      if (owner_vbase) {
+        UPCXX_ASSERT(size);
+        void *owner_vlim = (void *)(((char*)owner_vbase) + size - 1);
+        if_pf (raw_ptr < owner_vbase || raw_ptr > owner_vlim) {
+          const char *seg = (heap_idx ? "device" : "host");
+          ss << pretty_type() << " out-of-bounds of " << seg << " segment [" 
+             << owner_vbase << ", " << owner_vlim << "]\n";
+          error = true; break;
+        }
       }
     }
 
@@ -1309,7 +1483,7 @@ void backend::validate_global_ptr(bool allow_null, intrank_t rank, void *raw_ptr
 
   if_pf (error) {
     if (short_context && *short_context) ss << " in " << short_context;
-    ss << "\n  rank = " << rank << ", raw_ptr = " << raw_ptr << ", device = " << device;
+    ss << "\n  rank = " << rank << ", raw_ptr = " << raw_ptr << ", heap_idx = " << heap_idx;
     fatal_error(ss.str(), "fatal global_ptr error", context);
   }
 }
@@ -1317,60 +1491,111 @@ void backend::validate_global_ptr(bool allow_null, intrank_t rank, void *raw_ptr
 ////////////////////////////////////////////////////////////////////////
 // from: upcxx/backend/gasnet/runtime.hpp
 
+void *gasnet::prepare_npam_medium(
+    intrank_t recipient, std::size_t buf_size, 
+    int numargs, std::uintptr_t &npam_nonce) {
+  UPCXX_ASSERT(numargs >= 0 && numargs <= UPCXX_MAX_RPC_AM_ARGS);
+  UPCXX_ASSERT(buf_size <= gex_AM_MaxRequestMedium(world_tm, recipient, GEX_EVENT_NOW, GEX_FLAG_AM_PREPARE_LEAST_ALLOC, numargs));
+
+  gex_AM_SrcDesc_t sd = 
+    gex_AM_PrepareRequestMedium(
+      world_tm, recipient,
+      /*gex buf*/nullptr, 
+      buf_size, buf_size, 
+      /*lc_opt*/nullptr, /*flags*/0, numargs);
+
+  UPCXX_ASSERT(sd != GEX_AM_SRCDESC_NO_OP);
+  UPCXX_ASSERT(gex_AM_SrcDescSize(sd) >= buf_size);
+  void *buf = gex_AM_SrcDescAddr(sd);
+  UPCXX_ASSERT(buf);
+  npam_nonce = reinterpret_cast<std::uintptr_t>(sd);
+  UPCXX_ASSERT(npam_nonce != 0);
+  return buf;
+}
+
+
+
 void gasnet::send_am_eager_restricted(
-    const team &tm,
     intrank_t recipient,
     void *buf,
     std::size_t buf_size,
-    std::size_t buf_align
+    std::size_t buf_align,
+    std::uintptr_t npam_nonce
   ) {
-  
-  gex_AM_RequestMedium1(
-    handle_of(tm), recipient,
-    id_am_eager_restricted, buf, buf_size,
-    GEX_EVENT_NOW, /*flags*/0,
-    buf_align
-  );
+ 
+  if (npam_nonce) {
+    gex_AM_CommitRequestMedium1(
+      reinterpret_cast<gex_AM_SrcDesc_t>(npam_nonce),
+      id_am_eager_restricted, buf_size,
+      buf_align
+    );
+  } else { // FPAM
+    gex_AM_RequestMedium1(
+      world_tm, recipient,
+      id_am_eager_restricted, buf, buf_size,
+      GEX_EVENT_NOW, /*flags*/0,
+      buf_align
+    );
+  }
   
   after_gasnet();
 }
 
 void gasnet::send_am_eager_master(
     progress_level level,
-    const team &tm,
     intrank_t recipient,
     void *buf,
     std::size_t buf_size,
-    std::size_t buf_align
+    std::size_t buf_align,
+    std::uintptr_t npam_nonce
   ) {
+  gex_AM_Arg_t const a0 = buf_align<<1 | (level == progress_level::user ? 1 : 0);
   
-  gex_AM_RequestMedium1(
-    handle_of(tm), recipient,
-    id_am_eager_master, buf, buf_size,
-    GEX_EVENT_NOW, /*flags*/0,
-    buf_align<<1 | (level == progress_level::user ? 1 : 0)
-  );
+  if (npam_nonce) {
+    gex_AM_CommitRequestMedium1(
+      reinterpret_cast<gex_AM_SrcDesc_t>(npam_nonce),
+      id_am_eager_master, buf_size,
+      a0
+    );
+  } else { // FPAM
+    gex_AM_RequestMedium1(
+      world_tm, recipient,
+      id_am_eager_master, buf, buf_size,
+      GEX_EVENT_NOW, /*flags*/0,
+      a0
+    );
+  }
   
   after_gasnet();
 }
 
 void gasnet::send_am_eager_persona(
     progress_level level,
-    const team &tm,
     intrank_t recipient_rank,
     persona *recipient_persona,
     void *buf,
     std::size_t buf_size,
-    std::size_t buf_align
+    std::size_t buf_align,
+    std::uintptr_t npam_nonce
   ) {
+  gex_AM_Arg_t const a0 = buf_align<<1 | (level == progress_level::user ? 1 : 0);
+  gex_AM_Arg_t const a1 = am_arg_encode_ptr_lo(recipient_persona);
+  gex_AM_Arg_t const a2 = am_arg_encode_ptr_hi(recipient_persona);
 
-  gex_AM_RequestMedium3(
-    handle_of(tm), recipient_rank,
-    id_am_eager_persona, buf, buf_size,
-    GEX_EVENT_NOW, /*flags*/0,
-    buf_align<<1 | (level == progress_level::user ? 1 : 0),
-    am_arg_encode_ptr_lo(recipient_persona), am_arg_encode_ptr_hi(recipient_persona)
-  );
+  if (npam_nonce) {
+    gex_AM_CommitRequestMedium3(
+      reinterpret_cast<gex_AM_SrcDesc_t>(npam_nonce),
+      id_am_eager_persona, buf_size,
+      a0, a1, a2
+    );
+  } else { // FPAM
+    gex_AM_RequestMedium3(
+      world_tm, recipient_rank,
+      id_am_eager_persona, buf, buf_size,
+      GEX_EVENT_NOW, /*flags*/0,
+      a0, a1, a2
+    );
+  }
   
   after_gasnet();
 }
@@ -1403,7 +1628,6 @@ namespace {
 
 void gasnet::send_am_rdzv(
     progress_level level,
-    const team &tm,
     intrank_t rank_d,
     persona *persona_d,
     void *buf_s,
@@ -1414,7 +1638,7 @@ void gasnet::send_am_rdzv(
   intrank_t rank_s = backend::rank_me;
   
   backend::send_am_persona<progress_level::internal>(
-    tm, rank_d, persona_d,
+    rank_d, persona_d,
     [=]() {
       if(backend::rank_is_local(rank_s)) {
         void *payload = backend::localize_memory_nonnull(rank_s, reinterpret_cast<std::uintptr_t>(buf_s));
@@ -1445,8 +1669,7 @@ void gasnet::send_am_rdzv(
             tls.enqueue(*tls.get_top_persona(), level, m, /*known_active=*/std::true_type());
             
             // Notify source rank it can free buffer.
-            gasnet::send_am_restricted(
-              upcxx::world(), rank_s,
+            gasnet::send_am_restricted( rank_s,
               [=]() { gasnet::deallocate(buf_s, &gasnet::sheap_footprint_rdzv); }
             );
           }
@@ -1565,7 +1788,7 @@ void gasnet::bcast_am_master_rdzv(
     intrank_t sub_ub = rank_d_ub - translate;
     
     backend::send_am_master<progress_level::internal>(
-      tm, sub_lb,
+      backend::team_rank_to_world(tm, sub_lb),
       [=]() {
         if(backend::rank_is_local(wrank_sender)) {
           bcast_payload_header *payload_target =
@@ -1622,8 +1845,7 @@ void gasnet::bcast_am_master_rdzv(
               tls.enqueue(*tls.get_top_persona(), level, m, /*known_active=*/std::true_type());
               
               // Notify source rank it can free buffer.
-              send_am_restricted(
-                upcxx::world(), wrank_owner,
+              send_am_restricted( wrank_owner,
                 [=]() {
                   if(0 == -1 + payload_owner->rdzv_refs.fetch_add(-1, std::memory_order_acq_rel))
                     gasnet::deallocate(payload_owner, &gasnet::sheap_footprint_rdzv);
@@ -1657,8 +1879,7 @@ namespace gasnet {
               backend::globalize_memory_nonnull(me->rdzv_rank_s, me->payload)
             );
            
-          send_am_restricted(
-            upcxx::world(), me->rdzv_rank_s,
+          send_am_restricted( me->rdzv_rank_s,
             [=]() { gasnet::deallocate(buf_s, &gasnet::sheap_footprint_rdzv); }
           );
           
@@ -1705,8 +1926,7 @@ namespace gasnet {
               backend::globalize_memory_nonnull(me->rdzv_rank_s, hdr)
             );
           
-          send_am_restricted(
-            upcxx::world(), me->rdzv_rank_s,
+          send_am_restricted( me->rdzv_rank_s,
             [=]() { gasnet::deallocate(buf_s, &gasnet::sheap_footprint_rdzv); }
           );
         }
@@ -1931,10 +2151,19 @@ namespace {
       std::memcpy((void**)tmp, (void**)buf, buf_size);
     }
 
+    #if UPCXX_TRACK_AM_CONTEXT // issue #440
+      UPCXX_ASSERT(!inside_am_handler);
+      inside_am_handler = true;
+    #endif
+
     gasnet::rpc_as_lpc dummy;
     dummy.payload = tmp;
     dummy.is_rdzv = false;
     command<detail::lpc_base*>::get_executor(detail::serialization_reader(tmp))(&dummy);
+
+    #if UPCXX_TRACK_AM_CONTEXT
+      inside_am_handler = false; 
+    #endif
 
     if(tmp != buf)
       std::free(tmp);
@@ -2041,14 +2270,13 @@ namespace {
 
 template<gasnet::rma_put_then_am_sync sync_lb, bool packed_protocol>
 gasnet::rma_put_then_am_sync gasnet::rma_put_then_am_master_protocol(
-    const team &tm, intrank_t rank_d,
+    intrank_t rank_d,
     void *buf_d, void const *buf_s, std::size_t buf_size,
     progress_level am_level, void *am_cmd, std::size_t am_size, std::size_t am_align,
     gasnet::handle_cb *src_cb,
     gasnet::reply_cb *rem_cb
   ) {
 
-  gex_TM_t tm_h = gasnet::handle_of(tm);
   gex_Event_t src_h = GEX_EVENT_INVALID, *src_ph;
 
   switch(sync_lb) {
@@ -2061,11 +2289,11 @@ gasnet::rma_put_then_am_sync gasnet::rma_put_then_am_master_protocol(
     break;
   }
   
-  size_t am_long_max = gex_AM_MaxRequestLong(tm_h, rank_d, src_ph, /*flags*/0, 16);
+  size_t am_long_max = gex_AM_MaxRequestLong(world_tm, rank_d, src_ph, /*flags*/0, 16);
   
   if(am_long_max < buf_size) {
     (void)gex_RMA_PutBlocking(
-      tm_h, rank_d,
+      world_tm, rank_d,
       buf_d, const_cast<void*>(buf_s), buf_size - am_long_max,
       /*flags*/0
     );
@@ -2082,7 +2310,7 @@ gasnet::rma_put_then_am_sync gasnet::rma_put_then_am_master_protocol(
     std::memcpy((void*)cmd_arg, am_cmd, am_size);
     
     gex_AM_RequestLong16(
-      tm_h, rank_d,
+      world_tm, rank_d,
       id_am_long_master_packed_cmd,
       const_cast<void*>(buf_s), buf_size, buf_d,
       src_ph,
@@ -2105,7 +2333,7 @@ gasnet::rma_put_then_am_sync gasnet::rma_put_then_am_master_protocol(
     std::memcpy(&nonce, &nonce_u, sizeof(gex_AM_Arg_t));
     
     (void)gex_AM_RequestLong5(
-      tm_h, rank_d,
+      world_tm, rank_d,
       id_am_long_master_payload_part,
       const_cast<void*>(buf_s), buf_size, buf_d,
       src_ph,
@@ -2115,7 +2343,7 @@ gasnet::rma_put_then_am_sync gasnet::rma_put_then_am_master_protocol(
     );
 
     size_t part_size_max = gex_AM_MaxRequestMedium(
-      tm_h, rank_d, GEX_EVENT_NOW, /*flags*/0, /*num_args*/6
+      world_tm, rank_d, GEX_EVENT_NOW, /*flags*/0, /*num_args*/4
     );
     size_t part_offset = 0;
     
@@ -2123,7 +2351,7 @@ gasnet::rma_put_then_am_sync gasnet::rma_put_then_am_master_protocol(
       size_t part_size = std::min(part_size_max, am_size - part_offset);
       
       (void)gex_AM_RequestMedium4(
-        tm_h, rank_d,
+        world_tm, rank_d,
         id_am_long_master_cmd_part,
         (char*)am_cmd + part_offset, part_size,
         GEX_EVENT_NOW,
@@ -2151,7 +2379,7 @@ gasnet::rma_put_then_am_sync gasnet::rma_put_then_am_master_protocol(
   template \
   gasnet::rma_put_then_am_sync \
   gasnet::rma_put_then_am_master_protocol<sync_lb, packed_protocol>( \
-      const team &tm, intrank_t rank_d, \
+      intrank_t rank_d, \
       void *buf_d, void const *buf_s, std::size_t buf_size, \
       progress_level am_level, void *am_cmd, std::size_t am_size, std::size_t am_align, \
       gasnet::handle_cb *src_cb, \
@@ -2437,4 +2665,11 @@ namespace upcxx {
 // Other library ident strings live in watermark.cpp
 
 GASNETT_IDENT(UPCXX_IdentString_Network, "$UPCXXNetwork: " _STRINGIFY(GASNET_CONDUIT_NAME) " $");
+
+// requires cuda_internal.hpp
+#if UPCXX_CUDA_USE_MK
+  GASNETT_IDENT(UPCXX_IdentString_CUDAGASNet, "$UPCXXCUDAGASNet: 1 $");
+#else
+  GASNETT_IDENT(UPCXX_IdentString_CUDAGASNet, "$UPCXXCUDAGASNet: 0 $");
+#endif
 

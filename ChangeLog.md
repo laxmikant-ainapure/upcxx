@@ -5,6 +5,106 @@ This is the ChangeLog for public releases of [UPC++](https://upcxx.lbl.gov).
 For information on using UPC++, see: [README.md](README.md)    
 For information on installing UPC++, see: [INSTALL.md](INSTALL.md)
 
+### PROTOTYPE BRANCH NOTICE
+
+This is the "memory\_kinds" feature branch of UPC++, intended only for use by
+developers with an interest in the memory kinds feature for CUDA GPU hardware.
+Other developers should consider use of the latest stable release.
+
+While it is intended that changes and capabilities introduced in this
+branch will make their way into a stable release of UPC++, this is
+only a prototype. All aspects of the APIs and capabilities first
+introduced on this branch are subject to non-trivial changes before
+the prototype stage ends.
+
+### 20XX.YY.ZZ: PENDING
+
+General features/enhancements: (see specification and programmer's guide for full details)
+
+* New `shared_segment_{size,used}` queries return snapshots of the host shared segment
+  size and utilization.
+
+Improvements to RPC and Serialization:
+
+* The RPC implementation has been tuned and now incurs one less payload copy on
+  ibv and aries networks on moderately sized RPCs. Additionally, internal
+  protocol cross-over points have been adjusted on all networks. These changes
+  may result in noticable performance improvement for RPCs with a total size 
+  (including serialized arguments) under about 64kb (exact limit varies with network).
+* The default aries-conduit max AM Medium size has been doubled to ~8kb to improve
+  performance of the RPC eager protocol. See aries-conduit README for details on
+  the available configure/envvar knobs to control this quantity.
+
+Infrastructure changes:
+
+* The `install` script, deprecated since 2020.3.0, has been removed.
+
+Requirements changes:
+
+* The PGI-branded C++ compiler (version <= 20.4) is conditionally supported
+  in this version. There is a known problem with the optimizer that breaks
+  `upcxx::copy()` (issue #421), so the affected function is disabled at
+  runtime. NVIDIA-branded compilers (20.7 and later) remain unsupported, due
+  to unrelated problems.
+
+Notable bug fixes:
+
+* issue #382: Expose shared heap usage at runtime
+* issue #428: Regression in `rpc(team,rank,..,view)` overload resolution
+* issue #429: upcxx library exposes dlmalloc symbols
+* issue #432: Some `upcxx::copy()` cases do not `discharge()` properly
+* issue #440: Invalid GASNet call while deserializing a global ptr
+
+### 2020.10.30: Memory Kinds Prototype 2020.11.0
+
+This is a **prototype** release of UPC++ demonstrating the new GPUDirect RDMA (GDR)
+native implementation of memory kinds for NVIDIA-branded CUDA devices with
+Mellanox-branded InfiniBand network adapters.
+
+As a prototype, it has not been validated as widely as normal stable releases,
+and may include features and behaviors that are subject to change without notice.
+This prototype is recommended for any users who want to exercise the memory kinds
+feature with CUDA-enabled GPUs. All other UPC++ users are recommended to use the
+latest stable release.
+
+See [INSTALL.md](INSTALL.md) for instructions to enable UPC++ CUDA support
+and for a list of caveats and known issues with the current GDR-accelerated
+implementation.
+
+Recent changes to the memory kinds feature:
+
+* Relax the restriction that a given CUDA device ID may only be opened once per process
+  using `cuda_device`.
+* Add a `device_allocator::is_active()` query, and fix several subtle defects with
+  inactive devices/allocators.
+* Resource exhaustion failures that occur while allocating a device segment now throw
+  `upcxx::bad_segment_alloc`, a new subclass of `std::bad_alloc`.
+* Debug-mode `global_ptr` checking for device pointers has been strengthened when
+  using GDR-accelerated memory kinds.
+
+Requirements changes:
+
+* The PGI/NVIDIA C++ compiler is not supported in this prototype release, due to a
+  known problem with the optimizer. Users are advised to use a supported version
+  of the Intel, GNU or LLVM/Clang C++ compiler instead. See [INSTALL.md](INSTALL.md)
+  for details on supported compilers.
+
+Notable bug fixes:
+
+* issue #221: `upcxx::copy()` mishandling of private memory arguments
+* issue #421: Regression with `upcxx::copy(remote_cx::as_rpc)`
+
+This prototype library release conforms to the
+[UPC++ v1.0 Specification, Revision 2020.11.0-draft](docs/spec.pdf).
+All currently specified features are fully implemented.
+See the [UPC++ issue tracker](https://upcxx-bugs.lbl.gov) for status of known bugs.
+
+Breaking changes:
+
+* `device_allocator` construction is now a collective operation with user-level progress.
+* `device_allocator::device_id()` is now restricted to `global_ptr` arguments
+  with affinity to the calling process.
+
 ### 2020.10.30: Release 2020.10.0
 
 General features/enhancements: (see specification and programmer's guide for full details)
@@ -30,9 +130,9 @@ General features/enhancements: (see specification and programmer's guide for ful
 Improvements to RPC and Serialization:
 
 * Added support for serialization of reference types where the referent is Serializable.
-* Rpc's which return future values experience one less heap allocation and
+* RPC's which return future values experience one less heap allocation and
   virtual dispatch in the runtime's critical path.
-* Rpc's which return future values no longer copy the underlying data prior to serialization.
+* RPC's which return future values no longer copy the underlying data prior to serialization.
 * `dist_object<T>::fetch()` no longer copies the remote object prior to serialization.
 * Added `deserializing_iterator<T>::deserialize_into` to avoid copying large
   objects when iterating over a `view` of non-TriviallySerializable elements.
@@ -67,7 +167,7 @@ Notable bug fixes:
 * issue #345: configure with single-dash arguments
 * issue #346: `configure --cross=cray*` ignores `--with-cc/--with-cxx`
 * issue #355: `upcxx::view<T>` broken with asymmetric deserialization of `T`
-* issue #361: upcxx::rpc broken when mixing arguments of `T&&` and `dist_object&`
+* issue #361: `upcxx::rpc` broken when mixing arguments of `T&&` and `dist_object&`
 * issue #364: Stray "-e" output on macOS and possibly elsewhere
 * issue #375: Improve error message for C array types by-value arguments to RPC
 * issue #376: warnings from GCC 10.1 in reduce.hpp for boolean reductions
@@ -95,7 +195,7 @@ Notable bug fixes:
 * spec issue 170: Implement `upcxx::in_progress()` query
 
 This library release conforms to the
-[UPC++ v1.0 Specification, Revision 2020.10.0](docs/spec.pdf).
+[UPC++ v1.0 Specification, Revision 2020.10.0](https://bitbucket.org/berkeleylab/upcxx/downloads/upcxx-spec-2020.10.0.pdf).
 All currently specified features are fully implemented.
 See the [UPC++ issue tracker](https://upcxx-bugs.lbl.gov) for status of known bugs.
 
@@ -111,7 +211,7 @@ Breaking changes:
   with a runtime error.  Most such calls previously led to silent deadlock.
 * Initiating collective operations with a progress level of `internal` or `none` from within
   the restricted context (within a callback running inside progress) is now a deprecated
-  behavior, and diagnosted with a runtime warning. For details, see spec issue 169.
+  behavior, and diagnosed with a runtime warning. For details, see spec issue 169.
 
 ### 2020.07.17: Bug-fix release 2020.3.2
 
@@ -214,7 +314,7 @@ New features/enhancements: (see specification and programmer's guide for full de
 
 * `upcxx` has several new convenience options (see `upcxx -help`)
 * `upcxx::rput(..., remote_cx::as_rpc(...))` has received an improved implementation
-  for remote peers where the dependent rpc is injected immediately following
+  for remote peers where the dependent RPC is injected immediately following
   the put. This pipelining reduces latency and sensitivity to initiator attentiveness,
   improving performance in most cases (for the exception, see issue #261).
 * Accounting measures have been added to track the shared-heap utilization of the
@@ -314,7 +414,7 @@ New features/enhancements: (see specification and programmer's guide for full de
 Notable bug fixes:
 
 * issue #100: Fix shared heap setting propagation on loosely-coupled clusters
-* issue #118: Enforce GEX version interlock at compile time
+* issue #118: Enforce GASNet-EX version interlock at compile time
 * issue #177: Completion broken for non-fetching binary AMOs
 * issue #183: `bench/{put_flood,nebr_exchange}` were failing to compile
 * issue #185: Fix argument order for `dist_object` constructor to match spec
@@ -427,7 +527,7 @@ New features/enhancements:
  * Generalized completion. This allows the application to be notified about the
    status of UPC\+\+ operations in a handful of ways. For each event, the user
    is free to choose among: futures, promises, callbacks, delivery of remote
-   rpc, and in some cases even blocking until the event has occurred.
+   procedure calls, and in some cases even blocking until the event has occurred.
  * Internal use of lock-free datastructures for `lpc` queues.
  * Improvements to the `upcxx-run` command.
  * Improvements to internal assertion checking and diagnostics.
@@ -466,9 +566,9 @@ This release is not performant, and may be unstable or buggy.
 
 ### 2017.09.01: Release v1.0-pre
 
-This is a prerelease of v1.0. This prerelease supports most of the functionality
+This is a pre-release of v1.0. This pre-release supports most of the functionality
 covered in the UPC++ specification, except personas, promise-based completion,
-teams, serialization, and non-contiguous transfers. This prerelease is not
+teams, serialization, and non-contiguous transfers. This pre-release is not
 performant, and may be unstable or buggy. Please notify us of issues by sending
 email to `upcxx@googlegroups.com`.
 
