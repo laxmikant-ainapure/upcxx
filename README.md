@@ -1,17 +1,5 @@
 # UPC\+\+: a PGAS library for C\+\+ #
 
-## PROTOTYPE BRANCH NOTICE
-
-This is the "memory\_kinds" feature branch of UPC++, intended only for use by
-developers with an interest in the memory kinds feature for CUDA GPU hardware.
-Other developers should consider use of the latest stable release.
-
-While it is intended that changes and capabilities introduced in this
-branch will make their way into a stable release of UPC++, this is
-only a prototype. All aspects of the APIs and capabilities first
-introduced on this branch are subject to non-trivial changes before
-the prototype stage ends.
-
 ## Overview
 
 [UPC++](https://upcxx.lbl.gov) is a parallel programming library for developing
