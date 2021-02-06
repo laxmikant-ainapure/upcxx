@@ -369,6 +369,11 @@ namespace upcxx {
     
       /* This is the poorly performing but most likely bug-free implementation of
        * a mpsc intru_queue. There is a single global lock, yuck.
+       *
+       * NOTE: This implementation actually uses one lock PER instantiation of this class.
+       * This means we get slightly improved concurrency for queues of different types, 
+       * but also means it is NOT safe to type-pun this intru_queue and use it, 
+       * even if the T's share an inheritance hierarchy or are structurally equivalent unequal types.
        */
       template<typename T, intru_queue_intruder<T> T::*next>
       class intru_queue<T, intru_queue_safety::mpsc, next> {
