@@ -37,6 +37,7 @@ Requirements changes:
 
 Notable bug fixes:
 
+* issue #245: persona-example deadlocks when --with-mpsc-queue=biglock
 * issue #382: Expose shared heap usage at runtime
 * issue #428: Regression in `rpc(team,rank,..,view)` overload resolution
 * issue #429: upcxx library exposes dlmalloc symbols
