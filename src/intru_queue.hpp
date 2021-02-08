@@ -1,13 +1,7 @@
 #ifndef _dbba940a_54c7_48a3_a31f_66676be3cca4
 #define _dbba940a_54c7_48a3_a31f_66676be3cca4
 
-#ifndef UPCXX_MPSC_QUEUE_ATOMIC
-  #define UPCXX_MPSC_QUEUE_ATOMIC 0
-#endif
-
-#ifndef UPCXX_MPSC_QUEUE_BIGLOCK
-  #define UPCXX_MPSC_QUEUE_BIGLOCK 0
-#endif
+#include <upcxx/upcxx_config.hpp>
 
 #include <atomic>
 #include <cstdint>
