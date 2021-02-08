@@ -1418,7 +1418,8 @@ void backend::validate_global_ptr(bool allow_null, intrank_t rank, void *raw_ptr
 
       gex_TM_t tm = GEX_TM_INVALID;
       if (heap_idx == 0) { // host memory segment
-        if (rank == backend::rank_me) { // local device, bounds are trivially available
+        if (rank == backend::rank_me // optimization: local device, bounds are trivially available
+            && !upcxx_upc_is_linked()) {  // avoid complications with UPCXX_USE_UPC_ALLOC=0
           owner_vbase = shared_heap_base;
           size = shared_heap_sz;
         } else tm = world_tm; // not this process, ask GASNet
