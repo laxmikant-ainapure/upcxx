@@ -254,6 +254,14 @@ namespace detail {
   void destruct(T &x) noexcept { destruct_dispatch<T>()(x); }
   
   //////////////////////////////////////////////////////////////////////////////
+  // detail::is_aligned
+
+  inline bool is_aligned(void const *x, std::size_t align) {
+    UPCXX_ASSERT((align & (align-1)) == 0, "align must be a power of 2");
+    return 0 == (reinterpret_cast<std::uintptr_t>(x) & (align-1));
+  }
+  
+  //////////////////////////////////////////////////////////////////////////////
   // detail::alloc_aligned
 
   inline void* alloc_aligned(std::size_t size, std::size_t align) noexcept {
@@ -278,17 +286,10 @@ namespace detail {
     UPCXX_ASSERT_ALWAYS(err == 0,
       "upcxx::detail::alloc_aligned: posix_memalign(align="<<align<<", size="<<size<<"): failed with return="<<err
     );
+    UPCXX_ASSERT(is_aligned(p, align));
     return p;
   }
 
-  //////////////////////////////////////////////////////////////////////////////
-  // detail::is_aligned
-
-  inline bool is_aligned(void const *x, std::size_t align) {
-    UPCXX_ASSERT((align & (align-1)) == 0, "align must be a power of 2");
-    return 0 == (reinterpret_cast<std::uintptr_t>(x) & (align-1));
-  }
-  
   //////////////////////////////////////////////////////////////////////////////
   // xaligned_storage: like std::aligned_storage::type except:
   //   1. Supports extended alignemnts greater than alignof(std::max_align_t)
@@ -311,8 +312,14 @@ namespace detail {
   struct xaligned_storage<size, align, /*valid=*/true, /*extended=*/false> {
     typename std::aligned_storage<(size + align-1) & -align, align>::type storage_;
 
-    void const* storage() const noexcept { return &storage_; }
-    void*       storage()       noexcept { return &storage_; }
+    void const* storage() const noexcept { 
+      UPCXX_ASSERT(is_aligned(&storage_, align));
+      return &storage_; 
+    }
+    void*       storage()       noexcept { 
+      UPCXX_ASSERT(is_aligned(&storage_, align));
+      return &storage_; 
+    }
   };
   
   template<std::size_t size, std::size_t align>
@@ -321,11 +328,15 @@ namespace detail {
     
     void const* storage() const noexcept {
       std::uintptr_t u = reinterpret_cast<std::uintptr_t>(&xbuf_);
-      return &xbuf_[-u & (align-1)];
+      void const *p = &xbuf_[-u & (align-1)];
+      UPCXX_ASSERT(is_aligned(p, align));
+      return p;
     }
     void*       storage()       noexcept {
       std::uintptr_t u = reinterpret_cast<std::uintptr_t>(&xbuf_);
-      return &xbuf_[-u & (align-1)];
+      void       *p = &xbuf_[-u & (align-1)];
+      UPCXX_ASSERT(is_aligned(p, align));
+      return p;
     }
 
     xaligned_storage() noexcept = default;

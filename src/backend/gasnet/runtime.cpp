@@ -1955,6 +1955,7 @@ RpcAsLpc* rpc_as_lpc::build_eager(
     std::size_t cmd_alignment
   ) {
   
+  UPCXX_ASSERT(cmd_alignment >= alignof(RpcAsLpc));
   std::size_t msg_size = cmd_size;
   msg_size = (msg_size + alignof(RpcAsLpc)-1) & -alignof(RpcAsLpc);
   
@@ -1966,10 +1967,14 @@ RpcAsLpc* rpc_as_lpc::build_eager(
   if(cmd_buf != nullptr) {
     // The (void**) casts *might* inform memcpy that it can assume word
     // alignment.
+    UPCXX_ASSERT(detail::is_aligned(msg_buf, alignof(void *)));
+    UPCXX_ASSERT(detail::is_aligned(cmd_buf, alignof(void *)));
     std::memcpy((void**)msg_buf, (void**)cmd_buf, cmd_size);
   }
 
-  RpcAsLpc *m = ::new((char*)msg_buf + msg_offset) RpcAsLpc;
+  char *p = (char*)msg_buf + msg_offset;
+  UPCXX_ASSERT(detail::is_aligned(p, alignof(RpcAsLpc)));
+  RpcAsLpc *m = ::new(p) RpcAsLpc;
   m->payload = msg_buf;
   m->vtbl = &m->the_vtbl;
   m->is_rdzv = false;
@@ -1996,8 +2001,10 @@ RpcAsLpc* rpc_as_lpc::build_rdzv_lz(
   else
     buf = detail::alloc_aligned(buf_size, buf_align);
   UPCXX_ASSERT_ALWAYS(buf != nullptr);
-  
-  RpcAsLpc *m = ::new((char*)buf + offset) RpcAsLpc;
+
+  char *p = (char*)buf + offset;
+  UPCXX_ASSERT(detail::is_aligned(p, alignof(RpcAsLpc)));
+  RpcAsLpc *m = ::new(p) RpcAsLpc;
   m->the_vtbl.execute_and_delete = nullptr; // filled in when GET completes
   m->vtbl = &m->the_vtbl;
   m->payload = buf;
