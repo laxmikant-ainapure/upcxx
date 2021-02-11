@@ -1965,11 +1965,8 @@ RpcAsLpc* rpc_as_lpc::build_eager(
   void *msg_buf = detail::alloc_aligned(msg_size, cmd_alignment);
   
   if(cmd_buf != nullptr) {
-    // The (void**) casts *might* inform memcpy that it can assume word
-    // alignment.
-    UPCXX_ASSERT(detail::is_aligned(msg_buf, alignof(void *)));
-    UPCXX_ASSERT(detail::is_aligned(cmd_buf, alignof(void *)));
-    std::memcpy((void**)msg_buf, (void**)cmd_buf, cmd_size);
+    // NOTE: we CANNOT safely assume the cmd_buf source has any particular alignment
+    std::memcpy(msg_buf, cmd_buf, cmd_size);
   }
 
   char *p = (char*)msg_buf + msg_offset;
