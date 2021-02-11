@@ -43,6 +43,7 @@ Notable bug fixes:
 * issue #429: upcxx library exposes dlmalloc symbols
 * issue #432: Some `upcxx::copy()` cases do not `discharge()` properly
 * issue #440: Invalid GASNet call while deserializing a global ptr
+* issue #447: REGRESSION: bulk upcxx::rput with l-value completions
 
 ### 2020.10.30: Memory Kinds Prototype 2020.11.0
 
