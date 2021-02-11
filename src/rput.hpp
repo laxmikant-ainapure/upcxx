@@ -493,7 +493,7 @@ namespace upcxx {
     detail::completions_returner<
         /*EventPredicate=*/detail::event_is_here,
         /*EventValues=*/detail::rput_event_values,
-        Cxs
+        CxsDecayed
       > returner(o->cx_state_here);
     
     detail::rma_put_sync sync_done = o->inject(
