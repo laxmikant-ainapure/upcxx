@@ -529,7 +529,21 @@ namespace detail {
     typedef std::tuple<typename std::decay<T>::type...> type;
   };
   #endif
-  
+ 
+  //////////////////////////////////////////////////////////////////////
+  // decay_tupled_rrefs: decay elements of a tuple, preserving lvalue refs but not rvalue refs
+  template<typename Tup>
+  struct decay_tupled_rrefs;
+  template<typename ...T>
+  struct decay_tupled_rrefs<std::tuple<T...>> {
+    typedef std::tuple<
+      typename std::conditional<
+        std::is_lvalue_reference<T>::value,
+        T,
+        typename std::decay<T>::type
+      >::type...> type;
+  };
+
   //////////////////////////////////////////////////////////////////////
   // get_or_void & tuple_element_or_void: analogs of std::get &
   // std::tuple_elemenet which return void for out-of-range indices
