@@ -29,7 +29,7 @@ testprograms_par = \
 
 ###
 # Section 2: developer tests
-# Built by 'make tests-dev` and `make check-dev`
+# Built by 'make dev-tests` and `make dev-check`
 #
 # The logic which follows sets variables which controls what is tested.
 # The list of tests is constructed as follows:
@@ -66,7 +66,7 @@ test_dirs = \
 
 #
 # Section 2. Step 2.
-# Exclusion of files with .cpp suffix which are not suited to `make check`
+# Exclusion of files with .cpp suffix which are not suited to `make dev-check`
 # Some are pieces of a multi-file test or example.
 # Others are not UPC++ tests, are intended to fail, or are not intended to be run.
 #
