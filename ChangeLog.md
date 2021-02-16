@@ -44,6 +44,8 @@ Notable bug fixes:
 * issue #432: Some `upcxx::copy()` cases do not `discharge()` properly
 * issue #440: Invalid GASNet call while deserializing a global ptr
 * issue #447: REGRESSION: bulk upcxx::rput with l-value completions
+* issue #450: `upcxx::lpc` callback return of rvalue reference not decayed as specified
+
 
 ### 2020.10.30: Memory Kinds Prototype 2020.11.0
 
