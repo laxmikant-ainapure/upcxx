@@ -2,6 +2,7 @@
 #include <thread>
 #include <sstream>
 #include <vector>
+#include <cassert>
 #include "util.hpp"
 
 // NOTE: This test is carefully written to be safe in either SEQ or PAR THREADMODE
@@ -14,6 +15,7 @@
 using std::uint64_t;
 
 long done;
+long errors;
 
 struct msg {
   uint64_t words[WORDS];
@@ -26,22 +28,46 @@ struct msg {
       words[i] = v;
     }
   }
-  void operator()() {
+  void check(const char *context = "forward") const {
+    bool first = true;
+    retry:
     msg tmp = *this; // read all
     uint64_t check = 0;
     for (int i=0; i<WORDS; i++) {
       check += tmp.words[i]; // validate
     }
     if (check != tmp.sum || check <= 0) {
+      errors++;
       std::ostringstream oss;
-      oss << "ERROR: Data corruption detected: proc="<<upcxx::rank_me() << " sum=" << tmp.sum << " words: ";
+      oss << "ERROR: Data corruption detected " << context << (first?" first":" second")
+          << ": proc="<<upcxx::rank_me() << " sum=" << tmp.sum << " words: ";
       for (int i=0; i<WORDS; i++) oss << tmp.words[i] << " ";
       oss << "\n";
       std::cerr << oss.str() << std::flush;
-      std::abort();
+      if (first) { // retry the check at most once, to help diagnose timing-related races
+        first = false;
+        goto retry;
+      } else {
+        std::cerr << "Retry DID NOT clear the problem!\n";
+        std::abort();
+      }
+    } else if (!first) {
+      std::cerr << "Retry DID clear the problem!\n";
     }
-    done--;
   }
+#if UPCXX_VERSION < 20201109 // issue 450: lpc returning rvalue ref is miscompiled
+  msg operator()() {
+    check();
+    done--;
+    return *this;
+  }
+#else
+  msg&& operator()() {
+    check();
+    done--;
+    return std::move(*this);
+  }
+#endif
 };
 
 int main (int argc, char ** argv) {
@@ -76,7 +102,14 @@ int main (int argc, char ** argv) {
       while (!go.load(std::memory_order_relaxed)) sched_yield();
 
       for (long i=0; i<iters; i++) {
-        upcxx::master_persona().lpc(msg(i)).wait();
+        upcxx::future<msg> f = upcxx::master_persona().lpc(msg(i));
+        assert(!f.ready());
+        #if UPCXX_VERSION < 20200300 || FORCE_WAIT
+          msg result = f.wait();
+        #else
+          const msg &result = f.wait_reference();
+        #endif
+        result.check("reverse");
       }
 
     }));
@@ -93,7 +126,7 @@ int main (int argc, char ** argv) {
   }
   upcxx::barrier();
 
-  print_test_success();
+  print_test_success(errors == 0);
 
   upcxx::finalize();
 
