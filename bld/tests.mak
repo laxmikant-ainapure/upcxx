@@ -162,10 +162,8 @@ test_exclude_par += \
 # PAR-only tests:
 test_exclude_seq += \
 	test/hello_threads.cpp \
-	test/lpc_barrier.cpp \
 	test/rput_thread.cpp \
 	test/rput_omp.cpp \
-	test/view.cpp \
 	test/regression/issue142.cpp \
 	test/regression/issue168.cpp \
 	test/uts/uts_hybrid.cpp \
@@ -225,6 +223,14 @@ ifeq ($(strip $(UPCXX_PLATFORM_IBV_CUDA_HAS_BUG_4150)),1)
   # Compile-time measure(s) to avoid known failures attributable to GASNet bug 4150
   export TEST_FLAGS_COPY_COVER:=$(TEST_FLAGS_COPY_COVER) -DSKIP_KILL
 endif
+
+# Some tests use std::thread in both SEQ and PAR
+test_seq_threaded = \
+	VIEW \
+	LPC_BARRIER \
+	LPC_STRESS
+$(foreach test,$(test_seq_threaded), \
+  $(eval export TEST_FLAGS_$(test):=$(TEST_FLAGS_$(test)) $(TEST_THREADED_FLAGS)))
 
 # 
 # Section 4. 
