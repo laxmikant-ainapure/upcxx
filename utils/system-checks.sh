@@ -293,7 +293,7 @@ platform_sanity_checks() {
         local EXTRA_RECOMMEND=
         if echo "$CXXVERS" | egrep 'Apple LLVM version [1-7]\.' 2>&1 > /dev/null ; then
             COMPILER_BAD=1
-        elif echo "$CXXVERS" | egrep 'Apple LLVM version ([8-9]\.|[1-9][0-9])' 2>&1 > /dev/null ; then
+        elif echo "$CXXVERS" | egrep 'Apple (LLVM|clang) version ([8-9]\.|[1-9][0-9])' 2>&1 > /dev/null ; then
             COMPILER_GOOD=1
         elif echo "$CXXVERS" | egrep 'PGI Compilers and Tools'  > /dev/null ; then
             if [[ $UPCXX_CROSS =~ ^cray-aries- ]]; then
