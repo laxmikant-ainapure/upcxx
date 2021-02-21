@@ -145,7 +145,7 @@ int main() {
     auto f = target.lpc([&t]() -> T&& { return std::move(t); });
     f.wait_reference();
   }
-  SHOW("lpc([]&&) T& -> T&&", 1, 0, 2);
+  SHOW("lpc([]&&) T& -> T&&", 1, 0, 3);
 
   { 
     T t;

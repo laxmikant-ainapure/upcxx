@@ -19,6 +19,15 @@ namespace upcxx {
     struct persona_scope_raw;
     struct persona_scope_redundant;
     struct persona_tls;
+
+
+    template<typename Fn>
+    using lpc_raw_results_type = // std::tuple wrapping the raw results of an lpc callable
+      typename decltype(upcxx::apply_as_future(typename std::decay<Fn>::type(std::declval<Fn>())))::results_type;
+
+    template<typename Fn>
+    using lpc_results_type = // std::tuple wrapping the decayed results of an lpc callable
+      typename decay_tupled_rrefs<lpc_raw_results_type<Fn>>::type;
   }
 
   // This type is contained within `__thread` storage, so it must be:
@@ -105,11 +114,7 @@ namespace upcxx {
       
       template<typename ...Args>
       void operator()(Args &&...args) {
-        using results_t = std::tuple<typename std::conditional<
-            !std::is_lvalue_reference<Args>::value,
-            typename std::decay<Args>::type,
-            Args
-          >::type...>;
+        using results_t = typename detail::decay_tupled_rrefs<std::tuple<Args...>>::type;
         
         initiator_->lpc_ff(
           lpc_initiator_finish<results_t, Promise>{
@@ -138,7 +143,7 @@ namespace upcxx {
     auto lpc(Fn &&fn)
       -> typename detail::future_from_tuple_t<
         detail::future_kind_shref<detail::future_header_ops_general>, // the default future kind
-        typename decltype(upcxx::apply_as_future(typename std::decay<Fn>::type(fn)))::results_type
+        typename detail::lpc_results_type<Fn>
       >;
   };
   
@@ -417,12 +422,11 @@ namespace upcxx {
   auto persona::lpc(Fn &&fn)
     -> typename detail::future_from_tuple_t<
       detail::future_kind_shref<detail::future_header_ops_general>, // the default future kind
-      typename decltype(upcxx::apply_as_future(typename std::decay<Fn>::type(fn)))::results_type
+      typename detail::lpc_results_type<Fn>
     > {
     UPCXX_ASSERT_INIT();
     
-    using decay_fn = typename std::decay<Fn>::type;
-    using results_type = typename decltype(upcxx::apply_as_future(decay_fn(fn)))::results_type;
+    using results_type = typename detail::lpc_results_type<Fn>;
     using results_promise = detail::tuple_types_into_t<results_type, promise>;
     
     detail::persona_tls &tls = detail::the_persona_tls;
