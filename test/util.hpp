@@ -24,6 +24,15 @@
   #define KLBLUE ""
 #endif
 
+// backwards-compatibility hack for convenience of defect archaeology:
+// ensure up-to-date versions of this header still compile with older releases lacking say(prefix)
+#if UPCXX_VERSION < 20200308
+namespace upcxx {
+  using say_ = say;
+  say_ &&say(const char *_discard, say_ &&s=say_()) { return std::move(s); } 
+}
+#endif
+
 template<typename=void>
 std::string test_name(const char *file) {
     size_t pos = std::string{file}.rfind("/");
