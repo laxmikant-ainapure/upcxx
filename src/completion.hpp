@@ -879,7 +879,7 @@ namespace upcxx {
       };
       
       template<typename Event>
-      event_bound bind_event() {
+      event_bound bind_event() const {
         static_assert(std::is_same<Event, remote_cx_event>::value,
                       "internal error: bind_event() currently only "
                       "supported for remote_cx_event");
@@ -894,7 +894,7 @@ namespace upcxx {
         return event_bound{};
       }
 
-      std::tuple<> get_remote_fns() { return {}; }
+      std::tuple<> get_remote_fns() const { return {}; }
       static std::tuple<> get_remote_fns(completions<>) { return {}; }
 
       template<typename Event>
@@ -938,7 +938,7 @@ namespace upcxx {
       template<typename Event, typename ...V>
       void operator()(V&&...) {/*nop*/}
 
-      std::tuple<> get_remote_fn() { return {}; }
+      std::tuple<> get_remote_fn() const { return {}; }
       static std::tuple<> get_remote_fn(const Cx &) { return {}; }
     };
 
@@ -983,7 +983,7 @@ namespace upcxx {
         );
       }
 
-      auto get_remote_fn() UPCXX_RETURN_DECLTYPE(cx_get_remote_fn(state_)) {
+      auto get_remote_fn() const UPCXX_RETURN_DECLTYPE(cx_get_remote_fn(state_)) {
         return cx_get_remote_fn(state_);
       }
 
@@ -1073,7 +1073,7 @@ namespace upcxx {
         tail_t::template operator()<Event>(static_cast<V&&>(vals)...);
       }
 
-      auto get_remote_fns()
+      auto get_remote_fns() const
         UPCXX_RETURN_DECLTYPE(std::tuple_cat(head().get_remote_fn(),
                                              tail().get_remote_fns())) {
         return std::tuple_cat(head().get_remote_fn(),
@@ -1088,7 +1088,7 @@ namespace upcxx {
       }
 
       template<typename Event>
-      auto bind_event()
+      auto bind_event() const
         UPCXX_RETURN_DECLTYPE(cx_bind_remote_fns(get_remote_fns())) {
         static_assert(std::is_same<Event, remote_cx_event>::value,
                       "internal error: bind_event() currently only "
