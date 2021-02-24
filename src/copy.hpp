@@ -185,6 +185,10 @@ namespace upcxx {
     }
     else if(rank_d == rank_s) { // fully loopback on the calling process
       UPCXX_ASSERT(rank_d == initiator); 
+      // Issue #421: synchronously deserialize remote completions into the heap to avoid a PGI optimizer problem
+      deserialized_type_t<cxs_remote_t> *cxs_remote_heaped = (
+        copy_traits::want_remote ?
+          new deserialized_type_t<cxs_remote_t>(serialization_traits<cxs_remote_t>::deserialized_value(cxs_remote)) : nullptr);
       if (copy_traits::want_remote) initiator_per->undischarged_n_++;
       detail::rma_copy_local(heap_d, buf_d, heap_s, buf_s, size,
         cuda::make_event_cb([=]() {
@@ -193,7 +197,8 @@ namespace upcxx {
           delete cxs_here;
           if (copy_traits::want_remote) {
             initiator_per->undischarged_n_--;
-            serialization_traits<cxs_remote_t>::deserialized_value(cxs_remote).template operator()<remote_cx_event>();
+            cxs_remote_heaped->template operator()<remote_cx_event>();
+            delete cxs_remote_heaped;
           }
         })
       );
