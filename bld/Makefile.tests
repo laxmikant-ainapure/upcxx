@@ -21,9 +21,17 @@ $(upcxx_src)/bld/%.mak: ; @: # empty rule
 
 BLDDIR = $(upcxx_bld)/bld
 
+# Pick 'debug' for building tests, unless --enable-single=opt
+ifeq ($(strip $(UPCXX_DBGOPT)),opt)
+UPCXX_CODEMODE  = opt
+else
+UPCXX_CODEMODE  = debug
+endif
+GASNET_CODEMODE = $(UPCXX_CODEMODE)
+
 ## GASNet ##
 include $(upcxx_src)/bld/gasnet.mak
-GASNET_BLDDIR = $(BLDDIR)/gasnet.$(firstword $(UPCXX_CODEMODE) $(UPCXX_DBGOPT))
+GASNET_BLDDIR = $(BLDDIR)/gasnet.$(UPCXX_CODEMODE)
 
 # public-facing targets don't use GASNet "conduit" terminology
 # using "target-specific variable values" for the defaults
@@ -32,13 +40,6 @@ check dev-check dev-check-debug dev-check-opt: NETWORKS = $(UPCXX_DEFAULT_NETWOR
 NETWORKS ?= $(filter-out $(UNOFFICIAL_CONDUITS),$(CONDUITS))
 ifneq ($(strip $(NETWORKS)),)
 export NETWORKS
-endif
-
-# Pick 'debug' for building tests, unless --enable-single=opt
-ifeq ($(strip $(UPCXX_DBGOPT)),opt)
-UPCXX_CODEMODE       = opt
-else
-UPCXX_CODEMODE       = debug
 endif
 
 ## Compiler features ##
