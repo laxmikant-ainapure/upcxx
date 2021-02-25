@@ -449,9 +449,40 @@ elif [ -r "$GASNET/gasnetex.h" ]; then
   echo_and_die "GASNET='$GASNET' appears to be an un-bootstraped source tree.  Please run '$GASNET/Bootstrap'"
 elif expr "$GASNET" : '.*\.tar\.gz' >/dev/null; then
   # Unpack tarball into bld/
-  gex_dir="$PWD/bld/`basename $GASNET .tar.gz`"
-  gex_tmp=''
 
+  # Fetch if URL, check access if PATH
+  unset gex_tmp
+  if [[ "$GASNET" =~ ^http ]]; then
+      if [[ -n "$URL_CAT" ]] ; then
+        : # keep defn
+      elif [[ -n "$(type -p curl)" ]]; then
+        URL_CAT='curl --retry 5 -LsSf'
+      elif [[ -n "$(type -p wget)" ]]; then
+        URL_CAT='wget --tries=5 -nv -O -'
+      fi
+      if [ -z "$URL_CAT" ]; then
+        bad_gasnet_fetch "Do not know how to fetch a URL (did not find wget or curl in \$PATH)"
+      fi
+      gex_tmp="${GASNET##*/}"
+      echo Fetching $GASNET
+      eval "$URL_CAT '$GASNET' >'$gex_tmp'"
+      [[ $? -eq 0 && -r "$gex_tmp" ]] || bad_gasnet_fetch "Failed to fetch '$GASNET'"
+  else
+      if [[ ! -r "$GASNET" ]]; then
+        if [[ ! -e "$GASNET" ]]; then
+          failure='does not exist'
+        else
+          failure='cannot be read'
+        fi
+        echo_and_die "GASNET='$GASNET' specifies a file which $failure. Please unset \`GASNET\` in your environment to use the default, or provide a correct value using \`--with-gasnet=...\`"
+      fi
+  fi
+
+  GASNET="${gex_tmp:-$GASNET}"
+  unset gex_dir
+  gex_dir=$(gzip -cd "$GASNET" | tar tf - | head -1 | cut -d/ -f1)
+  [[ -n $gex_dir ]] || echo_and_die "Could not read TOC from GASNET='$GASNET' (corrupted or truncated?)"
+  gex_dir="$PWD/bld/$gex_dir"
   if [[ -r "$gex_dir" ]]; then
     # Sort out what to do about a conflicting destination
     if [[ -n "$gasnet_help" ]]; then
@@ -467,32 +498,6 @@ elif expr "$GASNET" : '.*\.tar\.gz' >/dev/null; then
   if [[ ! -r "$gex_dir" ]]; then
     trap - ERR # suspend error handler for detailed diagnostics
     mkdir -p bld
-    if expr "$GASNET" : http >/dev/null; then
-      if [[ -n "$URL_CAT" ]] ; then
-        : # keep defn
-      elif [[ -n "$(type -p curl)" ]]; then
-        URL_CAT='curl --retry 5 -LsSf'
-      elif [[ -n "$(type -p wget)" ]]; then
-        URL_CAT='wget --tries=5 -nv -O -'
-      fi
-      if [ -z "$URL_CAT" ]; then
-        bad_gasnet_fetch "Do not know how to fetch a URL (did not find wget or curl in \$PATH)"
-      fi
-      gex_tmp="$gex_dir.tar.gz"
-      echo Fetching $GASNET
-      eval "$URL_CAT '$GASNET' >'$gex_tmp'"
-      [[ $? -eq 0 && -r "$gex_tmp" ]] || bad_gasnet_fetch "Failed to fetch '$GASNET'"
-      GASNET="$gex_tmp"
-    else
-      if [[ ! -r "$GASNET" ]]; then
-        if [[ ! -e "$GASNET" ]]; then
-          failure='does not exist'
-        else
-          failure='cannot be read'
-        fi
-        echo_and_die "GASNET='$GASNET' specifies a file which $failure. Please unset \`GASNET\` in your environment to use the default, or provide a correct value using \`--with-gasnet=...\`"
-      fi
-    fi
     echo Unpacking $GASNET
     gzip -cd "$GASNET" | ( cd bld && tar xf - )
     rc1=${PIPESTATUS[0]} rc2=${PIPESTATUS[1]}
