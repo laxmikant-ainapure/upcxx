@@ -29,19 +29,12 @@ Infrastructure changes:
 * `make check` (and similar) now accept comma-delimited `NETWORKS` settings,
   in addition to space-delimited.
 
-Requirements changes:
-
-* The PGI-branded C++ compiler (version <= 20.4) is conditionally supported
-  in this version. There is a known problem with the optimizer that breaks
-  `upcxx::copy()` (issue #421), so the affected function is disabled at
-  runtime. NVIDIA-branded compilers (20.7 and later) remain unsupported, due
-  to unrelated problems.
-
 Notable bug fixes:
 
 * issue #245: persona-example deadlocks when --with-mpsc-queue=biglock
 * issue #382: Expose shared heap usage at runtime
 * issue #408: Cannot register multiple completions against a non-copyable results type
+* issue #421: upcxx::copy() breaks with PGI optimizer
 * issue #422: Improve configure behavior for GASNet archives lacking Bootstrap
 * issue #428: Regression in `rpc(team,rank,..,view)` overload resolution
 * issue #429: upcxx library exposes dlmalloc symbols
