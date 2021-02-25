@@ -449,9 +449,40 @@ elif [ -r "$GASNET/gasnetex.h" ]; then
   echo_and_die "GASNET='$GASNET' appears to be an un-bootstraped source tree.  Please run '$GASNET/Bootstrap'"
 elif expr "$GASNET" : '.*\.tar\.gz' >/dev/null; then
   # Unpack tarball into bld/
-  gex_dir="$PWD/bld/`basename $GASNET .tar.gz`"
-  gex_tmp=''
 
+  # Fetch if URL, check access if PATH
+  unset gex_tmp
+  if [[ "$GASNET" =~ ^http ]]; then
+      if [[ -n "$URL_CAT" ]] ; then
+        : # keep defn
+      elif [[ -n "$(type -p curl)" ]]; then
+        URL_CAT='curl --retry 5 -LsSf'
+      elif [[ -n "$(type -p wget)" ]]; then
+        URL_CAT='wget --tries=5 -nv -O -'
+      fi
+      if [ -z "$URL_CAT" ]; then
+        bad_gasnet_fetch "Do not know how to fetch a URL (did not find wget or curl in \$PATH)"
+      fi
+      gex_tmp="${GASNET##*/}"
+      echo Fetching $GASNET
+      eval "$URL_CAT '$GASNET' >'$gex_tmp'"
+      [[ $? -eq 0 && -r "$gex_tmp" ]] || bad_gasnet_fetch "Failed to fetch '$GASNET'"
+  else
+      if [[ ! -r "$GASNET" ]]; then
+        if [[ ! -e "$GASNET" ]]; then
+          failure='does not exist'
+        else
+          failure='cannot be read'
+        fi
+        echo_and_die "GASNET='$GASNET' specifies a file which $failure. Please unset \`GASNET\` in your environment to use the default, or provide a correct value using \`--with-gasnet=...\`"
+      fi
+  fi
+
+  GASNET="${gex_tmp:-$GASNET}"
+  unset gex_dir
+  gex_dir=$(gzip -cd "$GASNET" | tar tf - | head -1 | cut -d/ -f1)
+  [[ -n $gex_dir ]] || echo_and_die "Could not read TOC from GASNET='$GASNET' (corrupted or truncated?)"
+  gex_dir="$PWD/bld/$gex_dir"
   if [[ -r "$gex_dir" ]]; then
     # Sort out what to do about a conflicting destination
     if [[ -n "$gasnet_help" ]]; then
@@ -467,38 +498,17 @@ elif expr "$GASNET" : '.*\.tar\.gz' >/dev/null; then
   if [[ ! -r "$gex_dir" ]]; then
     trap - ERR # suspend error handler for detailed diagnostics
     mkdir -p bld
-    if expr "$GASNET" : http >/dev/null; then
-      if [[ -n "$URL_CAT" ]] ; then
-        : # keep defn
-      elif [[ -n "$(type -p curl)" ]]; then
-        URL_CAT='curl --retry 5 -LsSf'
-      elif [[ -n "$(type -p wget)" ]]; then
-        URL_CAT='wget --tries=5 -nv -O -'
-      fi
-      if [ -z "$URL_CAT" ]; then
-        bad_gasnet_fetch "Do not know how to fetch a URL (did not find wget or curl in \$PATH)"
-      fi
-      gex_tmp="$gex_dir.tar.gz"
-      echo Fetching $GASNET
-      eval "$URL_CAT '$GASNET' >'$gex_tmp'"
-      [[ $? -eq 0 && -r "$gex_tmp" ]] || bad_gasnet_fetch "Failed to fetch '$GASNET'"
-      GASNET="$gex_tmp"
-    else
-      if [[ ! -r "$GASNET" ]]; then
-        if [[ ! -e "$GASNET" ]]; then
-          failure='does not exist'
-        else
-          failure='cannot be read'
-        fi
-        echo_and_die "GASNET='$GASNET' specifies a file which $failure. Please unset \`GASNET\` in your environment to use the default, or provide a correct value using \`--with-gasnet=...\`"
-      fi
-    fi
     echo Unpacking $GASNET
     gzip -cd "$GASNET" | ( cd bld && tar xf - )
     rc1=${PIPESTATUS[0]} rc2=${PIPESTATUS[1]}
     [ $rc1 -eq 0 ] || echo_and_die "Failed to gunzip '$GASNET' (corrupted or truncated?)"
     [ $rc2 -eq 0 ] || echo_and_die "Failed to untar '$GASNET' (corrupted or truncated?)"
     [ -r "$gex_dir/gasnet.h" ] || echo_and_die "GASNET='$ORIG_GASNET' does not appear to contain GASNet"
+    if [[ ! -r "$gex_dir/version.git" && -n $(type -p git) ]]; then
+      # Attempt to fill a missing version.git using commit id, if available
+      gex_hash=$(gzip -cd "$GASNET" | git get-tar-commit-id 2> /dev/null || echo INVALID)
+      [[ $gex_hash =~ (^[0-9a-fA-F]{40}$) ]] && echo "gex-archive-g${gex_hash:0:8}" > "$gex_dir/version.git"
+    fi
     trap failure_and_die ERR  # restore error handler
     [ -n "$gex_tmp" ] && rm -f "$gex_tmp"
     GASNET_UNPACKED=$gex_dir
@@ -538,9 +548,17 @@ WANT_MIN=${BASH_REMATCH[2]}
 [[ ($HAVE_MAJ -gt $WANT_MAJ) || (($HAVE_MAJ -eq $WANT_MAJ) && ($HAVE_MIN -ge $WANT_MIN)) ]] || \
     echo_and_die "GASNET='$ORIG_GASNET' does not contain GASNet-EX implementing specification version $WANT_MAJ.$WANT_MIN or newer"
 
-# verify that sources (if applicable) are bootstrapped
-[[ -r "$GASNET/gasnet_config.h.in" || "$GASNET_TYPE" == 'build' ]] || \
-    echo_and_die "GASNET='$ORIG_GASNET' appears to contain an un-bootstraped source tree.  If you wish to use these sources, please unpack the archive, run './Bootstrap' in its top-level directory, and then re-run this configure passing '--with-gasnet=...' pointing at the unpacked sources."
+#
+# Bootstrap GASNet-EX sources, if needed
+#
+if [[ "$GASNET_TYPE" == 'source' && ! -r "$GASNET/gasnet_config.h.in" ]]; then
+  echo 'Bootstrapping GASNet-EX sources (please be patient)'
+  rm -f bootstrap.log
+  $GASNET/Bootstrap &> bootstrap.log || \
+    echo_and_die "GASNET='$ORIG_GASNET' appears to contain an un-bootstraped source tree and an attempt to bootstrap the sources has failed.  This most often occurs when 'autoconf' or 'automake' are not available.  Please see 'bootstrap.log' for the output of the failed GASNet-EX bootstrap."
+  rm -f bootstrap.log
+  echo
+fi
 
 #
 # GASNet's help message if requested
