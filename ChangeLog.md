@@ -40,6 +40,7 @@ Notable bug fixes:
 * issue #245: persona-example deadlocks when --with-mpsc-queue=biglock
 * issue #382: Expose shared heap usage at runtime
 * issue #408: Cannot register multiple completions against a non-copyable results type
+* issue #422: Improve configure behavior for GASNet archives lacking Bootstrap
 * issue #428: Regression in `rpc(team,rank,..,view)` overload resolution
 * issue #429: upcxx library exposes dlmalloc symbols
 * issue #432: Some `upcxx::copy()` cases do not `discharge()` properly
