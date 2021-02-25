@@ -301,7 +301,6 @@ int main() {
   );
   while (!done) { upcxx::progress(); }
   done = false;
-  upcxx::barrier();
   SHOW("(rpc_ff) T&& ->", 2, 0, 0);
 
   upcxx::rpc_ff(target,
@@ -312,7 +311,6 @@ int main() {
   );
   while (!done) { upcxx::progress(); }
   done = false;
-  upcxx::barrier();
   SHOW("(rpc_ff) T& ->", 1, 0, 0);
 
   upcxx::rpc_ff(target,
@@ -323,7 +321,6 @@ int main() {
   );
   while (!done) { upcxx::progress(); }
   done = false;
-  upcxx::barrier();
   SHOW("(rpc_ff) T const& ->", 1, 0, 0);
 
   {
@@ -332,13 +329,11 @@ int main() {
   }
   while (!done) { upcxx::progress(); }
   done = false;
-  upcxx::barrier();
   SHOW("(rpc_ff) Fn& ->", 3, 0, 0);
 
   upcxx::rpc_ff(target, Fn());
   while (!done) { upcxx::progress(); }
   done = false;
-  upcxx::barrier();
   SHOW("(rpc_ff) Fn&& ->", 3, 0, 0);
 
 
@@ -356,7 +351,6 @@ int main() {
     }
     while (!done) { upcxx::progress(); }
     done = false;
-    upcxx::barrier();
     SHOW("as_rpc(Fn&)&& ->", 3, 0, 0);
 
     { Fn fn;
@@ -365,7 +359,6 @@ int main() {
     }
     while (!done) { upcxx::progress(); }
     done = false;
-    upcxx::barrier();
     SHOW("as_rpc(Fn&)& ->", 3, 0, 0);
 
     { Fn fn;
@@ -374,13 +367,11 @@ int main() {
     }
     while (!done) { upcxx::progress(); }
     done = false;
-    upcxx::barrier();
     SHOW("as_rpc(Fn&) const & ->", 3, 0, 0);
 
     upcxx::rput(42, gp, remote_cx::as_rpc(Fn()));
     while (!done) { upcxx::progress(); }
     done = false;
-    upcxx::barrier();
     SHOW("as_rpc(Fn&&)&& ->", 3, 0, 2);
 
     { auto cx = remote_cx::as_rpc(Fn());
@@ -388,7 +379,6 @@ int main() {
     }
     while (!done) { upcxx::progress(); }
     done = false;
-    upcxx::barrier();
     SHOW("as_rpc(Fn&&)& ->", 3, 0, 2);
 
     { auto const cx = remote_cx::as_rpc(Fn());
@@ -396,7 +386,6 @@ int main() {
     }
     while (!done) { upcxx::progress(); }
     done = false;
-    upcxx::barrier();
     SHOW("as_rpc(Fn&&) const & ->", 3, 0, 2);
 
     {
@@ -405,7 +394,6 @@ int main() {
     }
     while (!done) { upcxx::progress(); }
     done = false;
-    upcxx::barrier();
     SHOW("as_rpc() T& -> const T&", 2, 0, 0);
 
     {
@@ -413,7 +401,6 @@ int main() {
     }
     while (!done) { upcxx::progress(); }
     done = false;
-    upcxx::barrier();
     SHOW("as_rpc() T&& -> const T&", 2, 0, 2);
 
     {
@@ -421,7 +408,6 @@ int main() {
     }
     while (!done) { upcxx::progress(); }
     done = false;
-    upcxx::barrier();
     SHOW("as_rpc() T&& -> T&&", 2, 0, 3);
 
     {
@@ -430,7 +416,6 @@ int main() {
     }
     while (!done) { upcxx::progress(); }
     done = false;
-    upcxx::barrier();
     SHOW("as_rpc()|... T& -> const T&", 2, 0, 0);
 
     {
@@ -438,7 +423,6 @@ int main() {
     }
     while (!done) { upcxx::progress(); }
     done = false;
-    upcxx::barrier();
     SHOW("as_rpc()|... T&& -> const T&", 2, 0, 3);
 
     {
@@ -448,7 +432,6 @@ int main() {
     }
     while (!done) { upcxx::progress(); }
     done = false;
-    upcxx::barrier();
     SHOW("as_rpc()|...& T& -> const T&", 2, 0, 0);
 
     {
@@ -457,7 +440,6 @@ int main() {
     }
     while (!done) { upcxx::progress(); }
     done = false;
-    upcxx::barrier();
     SHOW("as_rpc()|...& T&& -> const T&", 2, 0, 3);
 
     {
@@ -467,7 +449,6 @@ int main() {
     }
     while (!done) { upcxx::progress(); }
     done = false;
-    upcxx::barrier();
     SHOW("as_rpc()&|...& T&& -> const T&", 2, 1, 2);
 
     {
@@ -476,7 +457,6 @@ int main() {
     }
     while (!done) { upcxx::progress(); }
     done = false;
-    upcxx::barrier();
     SHOW("...|as_rpc() T& -> const T&", 2, 0, 0);
 
     {
@@ -484,7 +464,6 @@ int main() {
     }
     while (!done) { upcxx::progress(); }
     done = false;
-    upcxx::barrier();
     SHOW("...|as_rpc() T&& -> const T&", 2, 0, 3);
 
     {
@@ -494,7 +473,6 @@ int main() {
     }
     while (!done) { upcxx::progress(); }
     done = false;
-    upcxx::barrier();
     SHOW("...|as_rpc()& T& -> const T&", 2, 0, 0);
 
     {
@@ -503,7 +481,6 @@ int main() {
     }
     while (!done) { upcxx::progress(); }
     done = false;
-    upcxx::barrier();
     SHOW("...|as_rpc()& T&& -> const T&", 2, 0, 3);
 
     {
@@ -513,7 +490,6 @@ int main() {
     }
     while (!done) { upcxx::progress(); }
     done = false;
-    upcxx::barrier();
     SHOW("...&|as_rpc()& T&& -> const T&", 2, 0, 3);
   }
  
