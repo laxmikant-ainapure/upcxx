@@ -132,8 +132,10 @@ namespace upcxx {
       Fn fn_;
       
       void operator()() {
-        upcxx::apply_as_future(fn_)
-          .then(lpc_recipient_executed<Promise>{initiator_, pro_});
+        upcxx::apply_as_future_then_lazy(
+          fn_,
+          lpc_recipient_executed<Promise>{initiator_, pro_}
+        );
       }
     };
   

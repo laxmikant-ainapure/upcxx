@@ -384,12 +384,12 @@ namespace upcxx {
       
       using fn_bound_t = typename detail::bind<const Fn&, const Arg&...>::return_type;
 
-      backend::template send_am_master<progress_level::user>( recipient,
+      backend::template send_am_master<progress_level::user>(
+        recipient,
         upcxx::bind_rvalue_as_lvalue(
           [=](deserialized_type_t<fn_bound_t> &&fn_bound) {
-            return upcxx::apply_as_future(
-                static_cast<deserialized_type_t<fn_bound_t>&&>(fn_bound)
-              ).then_lazy(
+            return upcxx::apply_as_future_then_lazy(
+                static_cast<deserialized_type_t<fn_bound_t>&&>(fn_bound),
                 // Wish we could just use a lambda here, but since it has
                 // to take variadic Arg... we have to call to an outlined
                 // class. I'm not sure if even C++14's allowance of `auto`

@@ -44,6 +44,16 @@ namespace detail {
       static_cast<FnRef>(fn)(static_cast<ArgRef>(arg)...);
       return return_type(future_impl_result<>());
     }
+
+    template<typename ThenFn>
+    using then_lazy_return_type =
+      typename apply_variadic_as_future<ThenFn>::return_type;
+
+    template<typename ThenFn>
+    then_lazy_return_type<ThenFn&&> call_then_lazy(FnRef fn, ThenFn &&then_fn, ArgRef ...arg) {
+      static_cast<FnRef>(fn)(static_cast<ArgRef>(arg)...);
+      return apply_variadic_as_future<ThenFn&&>()(static_cast<ThenFn&&>(then_fn));
+    }
   };
   
   //////////////////////////////////////////////////////////////////////////////
@@ -80,6 +90,18 @@ namespace detail {
         )
       );
     }
+
+    template<typename ThenFn>
+    using then_lazy_return_type =
+      typename apply_variadic_as_future<ThenFn, Return&&>::return_type;
+
+    template<typename ThenFn>
+    then_lazy_return_type<ThenFn&&> call_then_lazy(FnRef fn, ThenFn &&then_fn, ArgRef ...arg) {
+      return apply_variadic_as_future<ThenFn&&, Return&&>()(
+        static_cast<ThenFn&&>(then_fn),
+        static_cast<FnRef>(fn)(static_cast<ArgRef>(arg)...)
+      );
+    }
   };
   
   //////////////////////////////////////////////////////////////////////////////
@@ -106,6 +128,18 @@ namespace detail {
 
     return_type operator()(FnRef fn, ArgRef ...arg) {
       return static_cast<FnRef>(fn)(static_cast<ArgRef>(arg)...);
+    }
+
+    template<typename ThenFn>
+    using then_lazy_return_type =
+      decltype(std::declval<return_type>().then_lazy(std::declval<ThenFn>()));
+
+    template<typename ThenFn>
+    then_lazy_return_type<ThenFn&&>
+    call_then_lazy(FnRef fn, ThenFn &&then_fn, ArgRef ...arg) {
+      return static_cast<FnRef>(fn)(static_cast<ArgRef>(arg)...).then_lazy(
+        static_cast<ThenFn&&>(then_fn)
+      );
     }
   };
 
@@ -184,6 +218,20 @@ namespace upcxx {
   apply_as_future(Fn &&fn, Arg &&...arg) {
     return detail::apply_variadic_as_future<Fn&&, Arg&&...>()(
       static_cast<Fn&&>(fn),
+      static_cast<Arg&&>(arg)...
+    );
+  }
+
+  // similar to apply_as_future(fn, arg...).then_lazy(then_fn), but
+  // avoids future overheads when apply_as_future(fn, arg...) does not
+  // return a future
+  template<typename Fn, typename ThenFn, typename ...Arg>
+  typename detail::apply_variadic_as_future<Fn&&, Arg&&...>
+    ::template then_lazy_return_type<ThenFn&&>
+  apply_as_future_then_lazy(Fn &&fn, ThenFn&& then_fn, Arg &&...arg) {
+    return detail::apply_variadic_as_future<Fn&&, Arg&&...>().call_then_lazy(
+      static_cast<Fn&&>(fn),
+      static_cast<ThenFn&&>(then_fn),
       static_cast<Arg&&>(arg)...
     );
   }

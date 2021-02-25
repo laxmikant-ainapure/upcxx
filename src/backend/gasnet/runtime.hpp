@@ -605,10 +605,10 @@ namespace backend {
   template<typename ...T, typename ...U>
   void send_awaken_lpc(intrank_t recipient, detail::lpc_dormant<T...> *lpc, std::tuple<U...> &&vals) {
     auto am_buf(prepare_am<1>(
-      upcxx::bind([=](std::tuple<T...> &&vals) {
+        upcxx::bind([=](detail::deserialized_raw_tuple<U...> &&vals) {
           lpc->awaken(std::move(vals));
         },
-        std::move(vals)
+        detail::serialized_raw_tuple<U...>{vals}
       ),
       recipient,
       /*restricted=*/std::true_type()
