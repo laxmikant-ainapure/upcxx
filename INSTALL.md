@@ -200,7 +200,7 @@ make check
 ```
 
 This compiles all available tests for the default network and then runs them.
-One can override the default network by appending `NETWORKS='net1 net2'`
+One can override the default network by appending `NETWORKS=net1,net2`
 to this command, with network names (such as `smp`, `udp`, `ibv` or `aries`)
 substituted for the `netN` placeholders.
 
