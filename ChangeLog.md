@@ -26,6 +26,8 @@ Improvements to RPC and Serialization:
 Infrastructure changes:
 
 * The `install` script, deprecated since 2020.3.0, has been removed.
+* `make check` (and similar) now accept comma-delimited `NETWORKS` settings,
+  in addition to space-delimited.
 
 Requirements changes:
 
