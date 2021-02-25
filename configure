@@ -543,9 +543,17 @@ WANT_MIN=${BASH_REMATCH[2]}
 [[ ($HAVE_MAJ -gt $WANT_MAJ) || (($HAVE_MAJ -eq $WANT_MAJ) && ($HAVE_MIN -ge $WANT_MIN)) ]] || \
     echo_and_die "GASNET='$ORIG_GASNET' does not contain GASNet-EX implementing specification version $WANT_MAJ.$WANT_MIN or newer"
 
-# verify that sources (if applicable) are bootstrapped
-[[ -r "$GASNET/gasnet_config.h.in" || "$GASNET_TYPE" == 'build' ]] || \
-    echo_and_die "GASNET='$ORIG_GASNET' appears to contain an un-bootstraped source tree.  If you wish to use these sources, please unpack the archive, run './Bootstrap' in its top-level directory, and then re-run this configure passing '--with-gasnet=...' pointing at the unpacked sources."
+#
+# Bootstrap GASNet-EX sources, if needed
+#
+if [[ "$GASNET_TYPE" == 'source' && ! -r "$GASNET/gasnet_config.h.in" ]]; then
+  echo 'Bootstrapping GASNet-EX sources (please be patient)'
+  rm -f bootstrap.log
+  $GASNET/Bootstrap &> bootstrap.log || \
+    echo_and_die "GASNET='$ORIG_GASNET' appears to contain an un-bootstraped source tree and an attempt to bootstrap the sources has failed.  This most often occurs when 'autoconf' or 'automake' are not available.  Please see 'bootstrap.log' for the output of the failed GASNet-EX bootstrap."
+  rm -f bootstrap.log
+  echo
+fi
 
 #
 # GASNet's help message if requested
