@@ -268,6 +268,10 @@ namespace upcxx {
     else if (backend::heap_state::use_mk()) { // MK-enabled GASNet backend
       // GASNet will do a direct source-to-dest memory transfer.
       // No bounce buffering, we just need to orchestrate the completions
+      // Spill remote completion into heap to avoid possible issue #421 problem seen with value capture of completion using PGI
+      cxs_remote_t *cxs_remote_heaped = (
+        copy_traits::want_remote ?
+          new cxs_remote_t(std::move(cxs_remote)) : nullptr);
       if (copy_traits::want_remote) initiator_per->undischarged_n_++;
       detail::rma_copy_remote(heap_s, rank_s, buf_s, heap_d, rank_d, buf_d, size,
         backend::gasnet::make_handle_cb([=]() {
@@ -281,14 +285,15 @@ namespace upcxx {
               if (copy_traits::want_remote) {
                 initiator_per->undischarged_n_--;
                 if (rank_d == initiator) { // in-place RC
-                  serialization_traits<cxs_remote_t>::deserialized_value(cxs_remote).template operator()<remote_cx_event>();
+                  serialization_traits<cxs_remote_t>::deserialized_value(*cxs_remote_heaped).template operator()<remote_cx_event>();
                 } else { // initiator-chained RC
                   backend::send_am_master<progress_level::internal>( rank_d,
                     upcxx::bind([=](deserialized_type_t<cxs_remote_t> &&cxs_remote) {
                       cxs_remote.template operator()<remote_cx_event>();
-                    }, std::move(cxs_remote))
+                    }, std::move(*cxs_remote_heaped))
                   );
                 }
+                delete cxs_remote_heaped;
               } // want_remote
             }, /*known_active=*/std::false_type()); // during(initiator_per,internal)
         })
