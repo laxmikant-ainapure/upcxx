@@ -106,8 +106,8 @@ TEST_TARGETS = check tests tests-clean test_install run-tests run-tests-installe
 	       dev-tests dev-tests-opt dev-tests-debug dev-run-tests \
 	       dev-check dev-check-opt dev-check-debug dev-tests-clean
 $(TEST_TARGETS): force
-	@$(MAKE) -f $(upcxx_src)/bld/Makefile.tests $@ \
-		NETWORKS='$(shell tr ",.:;/" " " <<<"$(NETWORKS)")'
+	@env NETWORKS='$(shell tr ",.:;/" " " <<<"$(NETWORKS)")' \
+	$(MAKE) -f $(upcxx_src)/bld/Makefile.tests $@ $${NETWORKS:+NETWORKS='$$NETWORKS'}
 .PHONY: $(TEST_TARGETS)
 
 ## GASNet pass-through
