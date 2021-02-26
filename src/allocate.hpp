@@ -107,7 +107,10 @@ namespace upcxx {
     template<bool throws, typename T, typename ...Args>
     global_ptr<T> new_(Args &&...args) {
       static_assert(!std::is_array<T>::value,
-                    "T cannot be an array type in upcxx::new_");
+                    "The element type to upcxx::new_ currently may not "
+                    "itself be an array type -- use upcxx::new_array "
+                    "instead. Please contact us if you have a need for "
+                    "this functionality in upcxx::new_.");
 
       void *ptr = allocate(sizeof(T), alignof(T));
       
@@ -154,7 +157,9 @@ namespace upcxx {
       static_assert(std::is_default_constructible<T>::value,
                     "T must be default constructible");
       static_assert(!std::is_array<T>::value,
-                    "T cannot be an array type in upcxx::new_array");
+                    "The element type to upcxx::new_array currently "
+                    "may not itself be an array type. Please contact us "
+                    "if you have a need for this functionality.");
       
       std::size_t size = sizeof(std::size_t);
       size = (size + alignof(T)-1) & -alignof(T);
