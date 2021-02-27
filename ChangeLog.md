@@ -50,6 +50,11 @@ Notable bug fixes:
 * issue #447: REGRESSION: bulk upcxx::rput with l-value completions
 * issue #450: `upcxx::lpc` callback return of rvalue reference not decayed as specified
 
+Breaking changes:
+
+* Array types are now prohibited as template arguments to `upcxx::new_` and
+  `upcxx::new_array`.
+
 
 ### 2020.10.30: Memory Kinds Prototype 2020.11.0
 
