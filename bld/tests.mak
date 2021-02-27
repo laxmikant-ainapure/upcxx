@@ -185,17 +185,6 @@ test_exclude_fail_seq =
 
 test_exclude_fail_par =
 
-# issue #421: upcxx::copy unsupported on PGI, exclude all tests that use cuda_device or upcxx::copy
-ifeq ($(strip $(GASNET_CXX_FAMILY)),PGI)
-test_exclude_all += \
-	$(test_requires_cuda_device) \
-	test/copy-cover.cpp \
-	test/copy.cpp \
-	test/regression/issue405.cpp \
-	test/regression/issue421.cpp \
-	test/regression/issue421b.cpp 
-endif
-
 # 
 # Section 3. 
 # Flags to add to specific tests
