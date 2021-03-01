@@ -84,12 +84,7 @@ namespace upcxx {
 
       void send_remote() {
         backend::send_am_master<progress_level::user>( rank_s,
-          upcxx::bind(
-            [](deserialized_type_t<CxStateRemote> &&st) {
-              return st.template operator()<remote_cx_event>();
-            },
-            std::move(state_remote)
-          )
+          state_remote.template bind_event<remote_cx_event>()
         );
         
         upcxx::current_persona().undischarged_n_ -= 1;
