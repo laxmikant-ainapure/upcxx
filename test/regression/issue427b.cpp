@@ -5,7 +5,7 @@
 struct CtgInfo {
   size_t cid;
   char c;
-  UPCXX_SERIALIZED_FIELDS(cid, c);
+  UPCXX_SERIALIZED_FIELDS(cid, c)
 };
 using std::vector;
 

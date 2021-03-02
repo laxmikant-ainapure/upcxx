@@ -5,6 +5,7 @@
 #include <upcxx/backend_fwd.hpp>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 
 #include <tuple>
