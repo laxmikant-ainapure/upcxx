@@ -43,6 +43,9 @@ int main() {
 
     fut.then([](Data data) {
          assert(data.size() == count_returned);
+         for (auto &v : data) {
+           assert(v.size() == count_returned);
+         }
          std::cout << "Got return " << data.size() << std::endl;
          count_returned++;
        })

@@ -5,7 +5,6 @@
 #include <upcxx/backend_fwd.hpp>
 
 #include <algorithm>
-#include <cmath>
 #include <cstdint>
 
 #include <tuple>
@@ -537,9 +536,11 @@ namespace upcxx {
           
           std::size_t size0 = size_;
           size0 = (size0 + elt_ub.align-1) & -elt_ub.align;
-          // size per element including alignment constraints
-          std::size_t elt_size = (std::size_t)
-            std::ceil(elt_ub.size/(double)elt_ub.align)*elt_ub.align;
+          // size per element including alignment constraints;
+          // round up to next multiplie of alignment
+          std::size_t elt_size = elt_ub.size +
+            (elt_ub.size % elt_ub.align == 0 ? 0 :
+             elt_ub.align - elt_ub.size % elt_ub.align);
           
           std::size_t n0 = (edge_ - size0)/elt_size;
           n0 = n < n0 ? n : n0;
