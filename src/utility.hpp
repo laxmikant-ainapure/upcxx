@@ -109,7 +109,7 @@ namespace detail {
   template<typename T>
   T* launder_unconstructed(T *p) noexcept {
     #if __INTEL_COMPILER
-      // the intel compiler ICEs on gnu-style extended asm below,
+      // issue 400: the intel compiler ICEs on gnu-style extended asm below,
       // so use this more convoluted variant that means the same thing:
       // (Note in particular that C++ [basic.lval] aliasing rules permit
       // modification via char type, which we exploit here)
