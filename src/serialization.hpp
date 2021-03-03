@@ -536,8 +536,13 @@ namespace upcxx {
           
           std::size_t size0 = size_;
           size0 = (size0 + elt_ub.align-1) & -elt_ub.align;
+          // size per element including alignment constraints;
+          // round up to next multiplie of alignment
+          std::size_t elt_size = elt_ub.size +
+            (elt_ub.size % elt_ub.align == 0 ? 0 :
+             elt_ub.align - elt_ub.size % elt_ub.align);
           
-          std::size_t n0 = (edge_ - size0)/elt_ub.size;
+          std::size_t n0 = (edge_ - size0)/elt_size;
           n0 = n < n0 ? n : n0;
           
           beg = this->template write_elts_bounded_<T,Iter>(beg, n0, trivial_and_contiguous);
@@ -545,7 +550,7 @@ namespace upcxx {
           
           if(n != 0) {
             size0 = size_;
-            std::size_t size1 = size0 + n*elt_ub.size;
+            std::size_t size1 = size0 + n*elt_size;
             this->grow(size0, size1);
             
             this->template write_elts_bounded_<T,Iter>(beg, n, trivial_and_contiguous);

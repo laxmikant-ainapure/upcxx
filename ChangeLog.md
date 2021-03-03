@@ -36,6 +36,8 @@ Notable bug fixes:
 * issue #408: Cannot register multiple completions against a non-copyable results type
 * issue #421: upcxx::copy() breaks with PGI optimizer
 * issue #422: Improve configure behavior for GASNet archives lacking Bootstrap
+* issue #427: Crash after `write_sequence()` where serialized element size is
+  not a multiple of alignment
 * issue #428: Regression in `rpc(team,rank,..,view)` overload resolution
 * issue #429: upcxx library exposes dlmalloc symbols
 * issue #432: Some `upcxx::copy()` cases do not `discharge()` properly
